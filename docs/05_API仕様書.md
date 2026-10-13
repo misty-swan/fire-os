@@ -1,184 +1,178 @@
-# 05 API仕様書（ドラフト）
+# 05 API仕様書
 
-## 1. 前提
+版：v0.3 / 2026-10-13 / 設計契約ドラフト。API-01〜32を保全、欠落操作/統合機能を追加。未実装。権限は10、状態は11、データは04、未承認条件は14。
 
-- APIベースパス（案）：`/api/v1`
-- データ交換：JSON、認証済みの同一オリジンリクエストを基本とする。
-- 認証方式の細部はBetter Auth等の技術検証後に確定。**クライアントが送るロールやユーザーIDをそのまま信用しない**。
-- 正式な出動指令・119番通報等のAPIは設けない。
-- 以下はインターフェース設計案であり、実装済みエンドポイントではない。
+## 1. 共通入出力・検証
 
-## 2. 標準レスポンス（案）
+業務ベース`/api/v1`、同一originのHTTPS/JSON。API-36のみ認証base path。クライアントのunit/actor/roleを信用しない。成功`{data:DTO,meta:{requestId,nextCursor?,snapshotRevision?}}`、失敗`{error:{code,message,details:[{field,reason}]},meta:{requestId}}`。binary/CSV/stream/204はJSON envelope外。Inspection DTOは原本＋seriesId/seriesVersion＋明細/添付ID、Template DTOは項目schemaと承認版。その他DTOは04の同名モデルのcamelCase＋version＋10の許可列、Secret/内部token/R2キーを返さない。ResourceUsageListのPUTはoperation版をガードし全有効集合を更新、抜けた既存行はcancelled＋イベントで保持。全件編集権がなければ拒否する。Detailは親＋認可された子PageとnextCursorを返し、子一覧の件数を黙って切り捨てない。
 
-成功時：
+IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-MM-DD業務日を区別。未知JSON列・列挙外を拒否。文字上限案：件名200、note/body20,000、AI/RAG質問4,000文字、JSON要求256 KiB（binary別）、limit既定50/最大200、配列最大100。大きいCSV/多数対象はimport/job分割、D1 bound parameter上限100を越えない。値は負荷検証で固定するB案で機能上限の無断削減を意味しない。
 
-```json
-{
-  "data": { "id": "example-id", "status": "open" },
-  "meta": { "requestId": "req_example" }
-}
-```
-
-失敗時：
-
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "入力内容を確認してほしい",
-    "details": [{ "field": "latitude", "reason": "範囲外" }]
-  },
-  "meta": { "requestId": "req_example" }
-}
-```
-
-| HTTP | 用途 |
+| HTTP / code | 意味 |
 |---|---|
-| 200 / 201 | 取得・更新成功 / 作成成功 |
-| 204 | 削除/無効化処理成功（本文なし） |
-| 400 | 入力不正 |
-| 401 | 未認証 |
-| 403 | 権限なし |
-| 404 | 対象なし（権限不足を明かさない必要がある場合を含む） |
-| 409 | 競合、重複、更新バージョン不一致 |
-| 422 | 業務ルール不適合 |
-| 429 | レート制限 |
-| 500 / 503 | 内部障害 / 外部依存サービス障害 |
+| 200/201/202/204 | 取得/更新、作成、永続job受付、本文なし。202は業務完了と表示しない |
+| 400 VALIDATION_ERROR | 型/範囲/未知列/形式違反 |
+| 401 UNAUTHENTICATED | セッションなし/失効 |
+| 403 FORBIDDEN、404 NOT_FOUND | 既知対象の操作不可/存在を明かさない対象不可 |
+| 409 VERSION_CONFLICT / IDEMPOTENCY_MISMATCH / DUPLICATE | 旧版、同キー別本文、競合リンク/番号 |
+| 422 INVALID_TRANSITION / UNAPPROVED_POLICY / ATTACHMENT_NOT_READY | 業務前提/採用未決/未検査添付 |
+| 429 RATE_LIMITED | 認証/AI/検索/アップロード上限、Retry-After |
+| 500 INTERNAL_ERROR、503 DEPENDENCY_UNAVAILABLE | rollback済か結果不明かをoperation照会で確認。内部本文を漏らさない |
 
-一覧は原則 `limit` と `cursor` でページングする。操作ログに残す相関IDとして `requestId` を返す。
+## 2. 冪等性・同時更新（全業務変更へ適用）
 
-## 3. エンドポイント一覧
+API-36はライブラリ契約を別検証。その他POST/PUT/PATCH/DELETEのJSON変更には`Idempotency-Key`必須、GETには不要。キーはuser＋operation code＋keyで一意、正規化した本文（method/path、対象、baseVersion含む）のSHA256を保存。形式を変えても意味が同じJSONは同hash、別本文は409。保存7日案、通知/AI承認/同期effectは別UNIQUEを恒久保持し期限後も二重効果を防ぐ。下書きの自動再送は7日を上限とし、超過時は結果確認＋人が新操作を作る（D14）。
 
-| ID | メソッド / パス | 操作 | 主な権限 | 優先 |
+同じキー/本文の再送は元HTTP status/dataを返し、現在の認可は再検査する（失権後に旧レスポンスのPIIを返さない）。応答不明時は同キー照会/再送。既存rowはversion必須、未作成PUTは0を指定してINSERT UNIQUEをガード。version欠落400、旧版409。競合では履歴/監査成功行/通知を残さない。02のassertion方式で確認し、処理不成立ログは業務成功監査と分離する。
+
+binary upload API-83はintent/attempt ID＋content hashで再送を判定し、試行ごとに不変一時キーを使用。既にreadyになった実体は上書きしない。notification delivery keyとAI job dedupe、端末clientOperationIdはAPI冪等キーと役割が異なる。
+
+## 3. リソース入力DTO
+
+`version`は変更時必須、作成入力には含めない。?は省略可、null可は04の?列のみ。PATCHの省略は不変更、nullは許可列のみ消去。入力者/登録者/確認者/監査時刻はサーバー決定。新規entityに添付を同時確定する要求はattachmentDraftIdを省略可で持ち、予約/所有者/親/意図種別をガードして一回consumeする。既存の親への添付は予約不要。
+
+| DTO | 必須入力・構造 | 検証/返却の補足 |
+|---|---|---|
+| ActivityInput | title,kind,plannedStartsAt,locationText,ownerMemberId,audienceMemberIds;plannedEndsAt?,responseDueAt? | 対象snapshot、日時順序/担当権限。ActivityはoperationId/status/versionも返す |
+| ActualInput | content,actualStartsAt?,actualEndsAt?,participants[{memberId,actualStatus,individualStartsAt?,individualEndsAt?}],attachmentIds | 未知時刻は欠落表示、実参加と予定回答は別。D05の記録義務 |
+| Target | type=facility/vehicle/equipment,id | 一つのみ。entityType/entityIdのAPI表現を04の片側FKへ変換 |
+| AttachmentTarget | type=facility/activity/vehicle/equipment/inspection/issue/announcement/report_version/document/import_batch/attachment_draft,id | draftはAPI-98で予約、親作成権/分類/同unitと最終link先を検査 |
+| FacilityInput | type,latitude,longitude,locationSource,locationNote,managementNumberまたはidentifyingName;metadata?,attachmentIds? | 重複範囲D19、数値有限/範囲、verificationStatusは作成時unverified固定。確認専用API45 |
+| InspectionInput | templateVersionId,inspectedAt,inspectorMemberId,result,checkItems[{code,result,value?,note?}],note,createIssue,attachmentIds | 承認様式版・必須明細・対象・実施者指定権、createIssue時同一batchで起点参照。原文をAI入力で置換しない |
+| ReviewInput | version,sourceVersion,decision=approve/approve_with_edit/reject,confirmedPayload,reviewNote | D03/D07/D12の承認権、元版/質問版/効果差分、却下も一回の決定 |
+| SyncCommand | clientOperationId,deviceId,operationCode,targetId,baseVersion,payload,payloadHash | 許可リストAPIのみ、ユーザーIDはsession、version衝突自動merge禁止 |
+| Citation | documentId,documentVersionId,chunkId,pageNo?,section?,quotedSpan | 原文の現在ACLを検査、出典なし/失効文書を正当な根拠にしない |
+
+## 4. API一覧（権限は操作＋対象scope＋項目を併用）
+
+表の入力列は共通規約/DTOと合わせて必須契約。全変更は同一unit/FK/版/冪等/状態検証、共通400/401/403/404/409/422/429/500/503を適用。GETは409/422を通常返さず、snapshot失効や採用未決の該当操作だけに適用する。業務規則未承認は14のDを参照し、未承認データで成功させない。
+
+| API-ID | method / path | 権限 | 入力と固有検証 | 成功data |
 |---|---|---|---|---|
-| API-01 | `GET /me` | 自分のプロフィールと有効ロール | 全ログイン者 | P0 |
-| API-02 | `GET /members` | 団員一覧 | 権限に応じた項目制限 | P0 |
-| API-03 | `POST /members` | 団員登録 | 管理者 | P0 |
-| API-04 | `PATCH /members/:id` | 団員変更/無効化 | 管理者等 | P0 |
-| API-05 | `GET /activities` | 予定・活動一覧 | 全ログイン者 | P0 |
-| API-06 | `POST /activities` | 予定作成 | 担当者/幹部 | P0 |
-| API-07 | `GET /activities/:id` | 予定詳細・出欠 | 全ログイン者（可視範囲のみ） | P0 |
-| API-08 | `PUT /activities/:id/attendance/me` | 自分の出欠の登録/変更 | 本人 | P0 |
-| API-09 | `POST /activities/:id/actual-results` | 実績記録 | 担当者/幹部 | P0 |
-| API-10 | `GET /facilities` | 施設一覧・地図表示範囲検索 | 全ログイン者 | P0 |
-| API-11 | `POST /facilities` | 施設登録 | 権限ある担当者/幹部 | P0 |
-| API-12 | `GET /facilities/:id` | 施設詳細・履歴 | 全ログイン者 | P0 |
-| API-13 | `PATCH /facilities/:id` | 施設情報変更 | 権限ある担当者/幹部 | P0 |
-| API-14 | `POST /facilities/:id/inspections` | 点検記録登録 | ログイン者（担当ルール適用） | P0 |
-| API-15 | `GET /issues` | 異常・対応一覧 | ログイン者（可視範囲のみ） | P0 |
-| API-16 | `POST /issues` | 異常報告 | ログイン者 | P0 |
-| API-17 | `PATCH /issues/:id` | 担当/進捗更新 | 担当者/幹部 | P0 |
-| API-18 | `GET /vehicles` | 車両一覧 | ログイン者 | P0 |
-| API-19 | `GET /equipment` | 資機材一覧 | ログイン者 | P0 |
-| API-20 | `POST /asset-inspections` | 車両・資機材点検 | ログイン者（担当ルール適用） | P0 |
-| API-21 | `GET /incidents` | 出動イベント履歴 | ログイン者 | P0 |
-| API-22 | `POST /incidents` | イベント登録（模擬/訓練/実績） | 担当者/幹部 | P0 |
-| API-23 | `PUT /incidents/:id/participants/:memberId` | 参加・参集記録 | 本人/担当者（詳細ルール要確定） | P0 |
-| API-24 | `GET /announcements` | お知らせ一覧 | ログイン者 | P0 |
-| API-25 | `POST /announcements` | お知らせ作成 | 担当者/幹部 | P0 |
-| API-26 | `POST /attachments/upload-intents` | 非公開添付アップロード準備 | 認証・対象権限必須 | P0 |
-| API-27 | `GET /attachments/:id/content` | 非公開添付の取得 | 対象データの閲覧権限必須 | P0 |
-| API-28 | `GET /dashboard` | 次回予定・要対応集計 | ログイン者 | P0 |
-| API-29 | `POST /ai/classifications` | 分類ジョブ作成 | 登録権限のあるユーザー | P1 |
-| API-30 | `GET /ai/reviews` | AI候補一覧 | 担当者/幹部 | P1 |
-| API-31 | `POST /ai/reviews/:id/decision` | AI候補承認・却下 | 権限あるレビュアー | P1 |
-| API-32 | `POST /reports/drafts` | 報告書下書き生成 | 担当者/幹部 | P1 |
+| API-01 | GET /me | PER-01 | なし | Me(profile,roles,authzVersion,policyVersion) |
+| API-02 | GET /members | PER-06 | q/status/limit/cursor;項目許可で投影 | Page<Member> |
+| API-03 | POST /members | PER-06 | displayName,status,rank?,privateFields?;承認列のみ | Member |
+| API-04 | PATCH /members/:id | PER-06/07 | version,変更列;停止はusers状態/失効と連動 | Member |
+| API-05 | GET /activities | PER-01 | from/to/kind/memberId/status/limit/cursor;実参加検索はactual=true | Page<Activity> |
+| API-06 | POST /activities | PER-03 | ActivityInput＋audienceMemberIds;同unit/日時順序 | Activity |
+| API-07 | GET /activities/:id | PER-01 | なし;可視出欠と現在実績を含む | ActivityDetail |
+| API-08 | PUT /activities/:id/attendance/me | PER-02 | version(未作成0),response;締切/対象検査 | Attendance |
+| API-09 | POST /activities/:id/actual-results | PER-04 | activityVersion,ActualInput;未作成のみ | ActivityResult |
+| API-10 | GET /facilities | PER-01 | FacilityQuery;範囲/型/状態を別検証 | SnapshotPage<Facility> |
+| API-11 | POST /facilities | PER-03 | FacilityInput;番号か識別名必須/出典/座標 | Facility |
+| API-12 | GET /facilities/:id | PER-01 | なし;概要と履歴取得cursor/添付ID | FacilityDetail |
+| API-13 | PATCH /facilities/:id | PER-03 | version,変更列;座標/出典変更は確認失効 | Facility |
+| API-14 | POST /facilities/:id/inspections | PER-04 | InspectionInput;様式/明細/添付ready/実施者 | Inspection |
+| API-15 | GET /issues | PER-01 | targetType/targetId/status/assigneeMemberId/limit/cursor | Page<Issue> |
+| API-16 | POST /issues | PER-04 | Target,title,description,originInspectionId?,attachmentIds;起点一致 | Issue |
+| API-17 | PATCH /issues/:id | PER-05 | version,status?,assigneeMemberId?,reason;遷移検査 | Issue＋events |
+| API-18 | GET /vehicles | PER-01 | q/status/limit/cursor | Page<Vehicle> |
+| API-19 | GET /equipment | PER-01 | q/status/storage/limit/cursor | Page<Equipment> |
+| API-20 | POST /asset-inspections | PER-04 | Target(vehicle/equipment)＋InspectionInput | Inspection |
+| API-21 | GET /incidents | PER-01 | kind/from/to/status/limit/cursor;機微scope | Page<Incident> |
+| API-22 | POST /incidents | PER-04 | kind,occurredAt,summary,activityId?,resourceUsages?;operation生成/共用 | Incident |
+| API-23 | PUT /incidents/:id/participants/:memberId | PER-04 | version(未作成0),attendanceStatus,times?,reason?;本人/代理/時刻 | Participant |
+| API-24 | GET /announcements | PER-01 | status/limit/cursor;可視公開対象のみ | Page<Announcement> |
+| API-25 | POST /announcements | PER-03 | title,body,audienceMemberIds,publishAt?;最初draft | Announcement |
+| API-26 | POST /attachments/upload-intents | PER-04 | AttachmentTarget,contentType,byteSize,sha256?;対象/上限 | UploadIntent(id,uploadPath,uploadToken,expiresAt,version) |
+| API-27 | GET /attachments/:id/content | 元対象ACL | なし;ready/最新認可;署名GETへredirectしない | binary(stream,Content-Type,Content-Disposition) |
+| API-28 | GET /dashboard | PER-01 | period?;全指標に同scope、元一覧filter返却 | Dashboard |
+| API-29 | POST /ai/classifications | PER-09 | sourceType,sourceId,sourceVersion,questionVersion;送信許可 | Job(202) |
+| API-30 | GET /ai/reviews | PER-10 | status/sourceType/limit/cursor | Page<AiEvaluation> |
+| API-31 | POST /ai/reviews/:id/decision | PER-10 | ReviewInput;元版/提案版/反映先権限 | ReviewDecision＋effectIds |
+| API-32 | POST /reports/drafts | PER-09 | activityId,resultVersion,templateVersion;読取/送信可 | Job(202) |
+| API-33 | POST /invitations | PER-07 | memberId,email,expiresInHours;未リンク団員/対象認証 | Invitation（生token一回だけ返す） |
+| API-34 | POST /invitations/:id/cancel | PER-07 | version,reason;未消費のみ | Invitation |
+| API-35 | POST /invitations/accept | token＋認証所有確認 | token,verifiedAuthIdentity;一回/期限/名簿一致 | AccountLinkResult |
+| API-36 | ALL /api/auth/*（v1外） | 認証ライブラリ | login/logout/reset/MFA/recovery;D04固定版の公式スキーマ | ライブラリResponse（業務data envelope外） |
+| API-37 | PUT /members/:id/roles | PER-07 | version,expectedAuthzVersion,roleCodes,scopes,reason;自己昇格/最終管理者禁止 | MemberRoles＋authzVersion |
+| API-38 | POST /users/:id/session-revocations | PER-07/本人 | expectedAuthzVersion,reason;全セッション失効 | RevocationResult |
+| API-39 | PATCH /activities/:id | PER-03 | version,ActivityInputの変更列,status?;公開済の変更理由/許可遷移 | Activity |
+| API-40 | POST /activities/:id/cancellation | PER-03 | version,reason;出欠保持/通知は別承認 | Activity |
+| API-41 | PUT /activities/:id/attendance/:memberId | PER-02代理許可 | version,response,reason;D05承認済scope | Attendance |
+| API-42 | POST /activities/:id/actual-results/corrections | PER-04 | resultVersion,ActualInput,reason;新revision | ActivityResult |
+| API-43 | GET /activities/:id/actual-results | PER-01 | revision?;旧版も認可 | ActivityResult＋revisions |
+| API-44 | GET /facilities/:id/inspections | PER-01 | from/to/result/limit/cursor;最新有効版 | Page<Inspection> |
+| API-45 | POST /facilities/:id/location-reviews | PER-03確認許可 | version,locationVersion,decision=request/verify/reject,reason;座標版一致 | Facility＋LocationRevision |
+| API-46 | POST /inspections/:type/:id/corrections | PER-04 | seriesVersion,InspectionInput,supersedesId,reason;series版/同対象/分岐拒否 | Inspection |
+| API-47 | POST /vehicles | PER-03 | assetCode,name,status,storageFacilityId?;番号一意 | Vehicle |
+| API-48 | PATCH /vehicles/:id | PER-03 | version,変更列;参照中物理削除なし | Vehicle |
+| API-49 | POST /equipment | PER-03 | assetCode,name,quantity,quantityUnit,storage;保管先排他 | Equipment |
+| API-50 | PATCH /equipment/:id | PER-03 | version,変更列;数量非負/保管先 | Equipment |
+| API-51 | GET /assets/:type/:id | PER-01 | type vehicle/equipment;点検/異常/使用履歴cursor | AssetDetail |
+| API-52 | GET /analytics | PER-01 | from/to/fiscalYear/memberId/kind;distinct operation、D05年度 | Analytics＋sourceFilters |
+| API-53 | POST /facilities/imports | PER-03 | csvAttachmentId,templateVersion;UTF8/列/座標/重複プレビュー | ImportBatch(202) |
+| API-54 | POST /facilities/imports/:id/commit | PER-03 | version,previewHash,conflictResolution;元台帳版一致 | ImportResult(202可) |
+| API-55 | GET /facilities/export | PER-03閲覧＋出力 | FacilityQuery;同ACL/CSV式注入escape | CSV＋exportVersion |
+| API-56 | PUT /assets/:type/:id/inspection-schedule | PER-03 | version(未作成0),nextDueDate,intervalDays?,timezone;日付規則D06 | InspectionSchedule |
+| API-57 | PUT /operations/:id/resource-usages | PER-04 | version,usages[{id?,Target,quantity,from?,to?}],reason;有効全件/同unit/全対象編集権 | ResourceUsageList＋operationVersion |
+| API-58 | GET /reports/:id | PER-11 | revision?;未承認版は担当のみ | Report＋ReportVersion |
+| API-59 | POST /reports/:id/versions | PER-10 | version,text,missingFields,sourceVersions,reason;新draft版 | ReportVersion |
+| API-60 | POST /reports/:id/decision | PER-10 | version,reportVersion,decision=request_review/approve/changes_requested,sourceVersions,reason | request_reviewはVersion＋submissionEvent、最終審査はReviewDecision＋Version |
+| API-61 | GET /reports/:id/content | PER-11 | format=pdf/csv;承認版のみ/D20 | binary/CSV |
+| API-62 | POST /reports/manual | PER-04 | activityId,resultVersion,templateVersion,text;AI停止時 | Report(draft) |
+| API-63 | POST /notifications/drafts | PER-12 | source,body,audienceMemberIds,channels,expiresAt? | Notification(draft) |
+| API-64 | POST /notifications/:id/approval | PER-12 | version,bodyHash,audienceHash,decision;送信明示承認 | Notification＋Job(202) |
+| API-65 | GET /notifications/:id | PER-12/対象者 | なし;送信者と本人で項目投影 | Notification＋Deliveries |
+| API-66 | PUT /announcements/:id/read | 本人 | revisionNo;対象・公開版 | ReadReceipt |
+| API-67 | GET /notifications/me | PER-01 | status/limit/cursor;本人のみ | Page<Notification> |
+| API-68 | POST /tasks | PER-04/10 | title,assigneeMemberId?,dueDate?,sourceDecisionId?;AI効果は承認済 | Task |
+| API-69 | PATCH /incidents/:id | PER-04 | version,status?,kind?,summary?,reason;許可遷移 | Incident |
+| API-70 | GET /incidents/:id | PER-01限定 | なし;参集/活動/使用履歴/イベント | IncidentDetail |
+| API-71 | PUT /incidents/:id/activity | PER-04 | version,activityId,activityVersion,operationVersions,reason;両rootロック | Incident＋OperationLink |
+| API-72 | PATCH /announcements/:id | PER-03 | version,title?,body?,status?,audienceMemberIds?;新revision | Announcement |
+| API-73 | POST /documents | PER-11管理 | title,classification,acl;D20許諾 | Document |
+| API-74 | POST /documents/:id/versions | PER-11管理 | version,attachmentId,licenseRef;ready原本/抽出job | DocumentVersion＋Job(202) |
+| API-75 | POST /documents/:id/decision | PER-10文書承認 | version,documentVersion,decision=request_review/approve/changes_requested,reason;出典許諾 | request_reviewはVersion＋submissionEvent、approve時Decision＋indexJob |
+| API-76 | POST /search/rag | PER-11/09 | query,maxSources?,documentIds?;ACL前置/引用必須 | RagAnswer(answer,citations,abstained) |
+| API-77 | POST /ai/assistant | PER-09 | query,contextRefs;許可読取/書込はproposalだけ | AssistantProposal＋references |
+| API-78 | POST /patrol-plans | PER-14 | facilityIds,date,objective;D01設計案で検証、正式対象は提案時確認 | PatrolPlan(draft) |
+| API-79 | POST /patrol-plans/:id/decision | PER-14 | version,orderedFacilityIds,decision,reason;人が確定 | PatrolPlan |
+| API-80 | GET /events | PER-13 | entityType/entityId/afterSequence;再接続認可 | 認可イベントstreamまたは同等poll DTO（D16） |
+| API-81 | POST /sync/commands | PER-13＋元操作 | SyncCommand;許可元API/同requestHash/baseVersion | SyncOperation(200/202/409) |
+| API-82 | GET /sync/operations/:id | PER-13本人 | なし;本人/端末operation | SyncOperation |
+| API-83 | PUT /attachments/:id/upload | PER-04本人申請 | uploadToken,bytes;実測容量、試行専用キー | UploadAttempt(id,sha256,size,version) |
+| API-84 | POST /attachments/:id/completion | PER-04 | version,uploadAttemptId,sha256;実体HEAD/検査job | Attachment＋Job(202) |
+| API-85 | DELETE /attachments/:id | PER-04管理 | version,reason;有効リンクがある場合422 | 204（D1 tombstone後R2削除job） |
+| API-86 | GET /jobs/:id | 依頼者/担当 | なし;機微入力/内部error本文なし | Job(status,attempts,errorCode,resultRef) |
+| API-87 | PATCH /tasks/:id | PER-04/10 | version,status?,assigneeMemberId?,reason;業務対象権限 | Task |
+| API-88 | GET /ai/evaluation-runs | PER-08 | modelId/datasetVersion/limit/cursor | Page<EvaluationRun> |
+| API-89 | POST /ai/evaluation-runs | PER-08運用 | datasetVersion,questionVersion,modelId;架空/許諾済dataset | Job(202) |
+| API-90 | GET /documents | PER-11 | q/status/limit/cursor;文書ACL前置 | Page<Document> |
+| API-91 | GET /documents/:id | PER-11 | revision?;原文添付参照/引用元版 | DocumentDetail |
+| API-92 | POST /documents/:id/withdrawal | PER-11管理 | version,reason;即時検索除外/旧引用失効 | Document＋deindexJob |
+| API-93 | GET /audit-logs | PER-08 | entityType/entityId/from/to/actorId/limit/cursor | Page<AuditLog> |
+| API-94 | GET /inspection-templates | PER-04 | targetType/status/limit/cursor;承認版一覧を担当範囲で取得 | Page<InspectionTemplate> |
+| API-95 | POST /inspection-templates | PER-03様式管理 | name,targetType,itemSchema;code一意/型/必須/結果列挙,D06 | InspectionTemplate(draft) |
+| API-96 | POST /inspection-templates/:id/versions | PER-03様式管理 | version,itemSchema,reason;新draft版/旧版不変 | InspectionTemplateVersion |
+| API-97 | POST /inspection-templates/:id/decision | PER-10様式承認 | version,templateVersionId,decision,reason;D06承認者/現版 | InspectionTemplateVersion |
+| API-98 | POST /attachment-drafts | PER-04＋対象作成権 | intendedEntityType,parentType?,parentId?;作成権/同unit、15分期限案 | AttachmentDraft(id,version,expiresAt) |
+| API-99 | PATCH /documents/:id/access-policy | PER-11管理 | version,classification,acl[{memberIdまたはroleId,permission,effect}];引下げ承認/同unit | Document＋policyVersion＋reindexJob |
+| API-100 | PUT /notifications/:id/read | 本人recipient | notificationVersion;本人/対象/可視版 | ReadReceipt（recipient.readAt） |
+| API-101 | DELETE /attachments/:id/links/:linkId | 元対象編集権 | version,reason;同unit/分類/保持方針D10、link tombstone | 204＋attachmentEvent |
 
-**注記**: 招待、ログイン、セッション更新のエンドポイントは採用する認証ライブラリの仕様に従うため、ここでは固定しない。
+## 5. GIS・ページング・集計契約
 
-## 4. 施設一覧APIの例
+FacilityQueryは`bbox=west,south,east,north`、type、managementNumber(q)、verificationStatus、inspectionResult、hasOpenIssue、limit/cursor。点検状態は最新有効点検のresult、位置確認はverificationStatusで別列。bbox境界包含、南<=北、経度跨ぎ対応。cursorはfilterHash/sortKey/snapshotRevisionを含むサーバー署名値、条件変更で破棄。順序はid（GIS）または日時＋id、同一snapshotで抜け/重複を防ぐ。
 
-`GET /api/v1/facilities?type=hydrant&verificationStatus=verified&bbox=139.70,35.65,139.78,35.72&limit=100`
+GIS可変root/点検/異常変更はunitsのdataset_revisionも同batchで増分。続き取得でrevisionが変われば409 SNAPSHOT_CHANGED、UIは再取得し一部取得表示。クライアントは全cursor完走してから「取得済み」、地図移動時は前世代応答を破棄。クラスタリングは描画最適化だけで取得漏れを隠さない。大量データはサーバー集約との仕様を実測して確定し、未取得部分を空白事実としない。
 
-- `bbox` は `west,south,east,north` の順で、経緯度の妥当性を検証する。
-- `type`：`hydrant | cistern | box`
-- `verificationStatus`：`unverified | pending | verified`
-- 表示地図範囲が大きい場合はページングまたはクラスタリングで対応する。
+一般一覧も安定keysetと重複ID除去を行い、厳密snapshotが必要な帳票/CSVはexport job時に元版snapshotを固定する。集計は10のACLを先に適用。未回答はactivity_audience－回答済、確認待ちはreported/under_review、点検期限は業務日、活動と出動はdistinct operationで数える。期間はfrom包含/to排他、年度開始月はD05。
 
-返却イメージ：
+## 6. 形式・既存名称対応
 
-```json
-{
-  "data": [
-    {
-      "id": "fac_demo_001",
-      "type": "hydrant",
-      "managementNumber": "H-001",
-      "latitude": 35.685,
-      "longitude": 139.75,
-      "verificationStatus": "verified",
-      "lastInspectedAt": "2026-09-12T01:00:00Z",
-      "openIssueCount": 1
-    }
-  ],
-  "meta": { "nextCursor": null, "requestId": "req_example" }
-}
-```
+DB planned_starts_at ↔ API plannedStartsAt ↔ UI予定開始、actual_starts_at↔actualStartsAt↔実開始、location_source↔locationSource↔位置出典、verification_status↔verificationStatus↔位置確認、result↔inspectionResult（検索）↔点検結果、confirmed_category↔confirmedCategory↔人確認分類。v0.2のsource/starts_at/actual_statusは04の新分離へ移行する設計変更。user/status/roleの自己申告をbodyから採用しない。
 
-※ 数値・座標・管理番号は架空のサンプルであり、実データではない。
+## 7. 機械可読化と技術確認
 
-### 施設登録の例
+本書は詳細設計契約でありOpenAPI実装済みではない。該当API実装前にOpenAPI 3.1/Zodの同一スキーマへ転記し、全API-ID/DTO/拒否/再送をCI検査する（V03、13）。API-36の固定版認証スキーマ、SSE/poll/DO選択、生成/索引モデルの実呼出しは未検証。未検証を全機能正式リリースからの延期理由にしない。
 
-`POST /api/v1/facilities`
+## 8. リアルタイムsnapshotと再開cursor
 
-```json
-{
-  "type": "cistern",
-  "managementNumber": "C-TEST-002",
-  "latitude": 35.68,
-  "longitude": 139.74,
-  "locationNote": "架空地点の試験データ",
-  "locationSource": "manual_demo",
-  "verificationStatus": "unverified"
-}
-```
+API-70等の同期対象snapshotは、親/子データとunits.event_sequenceを同一D1 read batchで取得しsnapshotCursorを返す。API-80はそのcursor以後のoutboxを走査して現在のACLでfilterするため、snapshotと接続間のcommitも回収する。cursorはunit/認可版/対象filter/走査済sequence/期限を暗号化・認証したopaque値で、利用者に全イベント件数や非可視行を示さない。
 
-必須検証：管理番号重複、緯度経度範囲、登録権限、施設種別、施設登録対象の分団範囲。
+単調採番はunit内、一mutation一event、UNIQUE(unit_id,sequence)。各業務mutationと同batchでunits.event_sequence増分→event保存。配信はevent payloadの最小ID/対象版、重複/順序逆はentityVersionで検知。非可視イベントは走査位置だけ進め、heartbeat/resumeCursorで伝えるため番号飛びを通信欠落と誤認しない。cursorの認可版不一致/保持期間外は409 RESYNC_REQUIREDでsnapshotを再取得。更新後はdomain_eventを失ってもD1 outbox再読で回収できる。D16/V06で実方式と負荷を検証する。
 
-## 5. 点検/異常登録APIの例
+## 9. 完成後の提案に向けた検証
 
-`POST /api/v1/facilities/fac_demo_001/inspections`
-
-```json
-{
-  "inspectedAt": "2026-10-13T02:20:00Z",
-  "result": "needs_review",
-  "checkItems": [
-    { "code": "lid", "result": "needs_review" }
-  ],
-  "note": "蓋の開閉時に抵抗を感じた（デモ）",
-  "createIssue": true,
-  "attachmentIds": []
-}
-```
-
-**処理案**：受信→認証認可→必須項目検証→点検履歴保存→必要なら `issues` に確認待ちチケット生成→監査記録。P1では別ジョブでJev分類を行い、確定情報ではなく分類候補を追加する。
-
-## 6. AIレビューAPI例（P1）
-
-`POST /api/v1/ai/reviews/eval_demo_001/decision`
-
-```json
-{
-  "decision": "approve_with_edit",
-  "confirmedCategory": "equipment_issue",
-  "reviewNote": "現地で再確認すること",
-  "version": 1
-}
-```
-
-承認はAIによる判定を「設備が使えないという確定事実」にする処理ではない。担当者が確認済みの業務分類・対応依頼として確定する。
-
-## 7. セキュリティ・共通規約
-
-- すべての更新APIは対象レコードの分団・権限をサーバー側で検証する。
-- `GET /members` などのレスポンスは閲覧ロールに応じてフィールドを制限する。
-- 重要な `POST` は `Idempotency-Key` を導入する方針とし、二重登録を防止する。
-- 編集は `version` フィールド等で楽観ロックを行い、競合時409とする。
-- ファイル名は信用せず、容量・種類・マルウェア対策・R2参照権限を検証する。
-- エラーログにはパスワード、トークン、個人情報、AIへの全文入力を残さない。
-- 外部から無制限に利用できる公開APIはP0で提供しない。
-
-## 8. OpenAPI化の方針
-
-この文書は設計ドラフトであり、実装開始前に上記のAPIをOpenAPI 3.1で機械可読に定義する。ZodスキーマとOpenAPIの不整合をCIで検出できる構成を目指す。
+架空データの開発/試験では14の推奨設定を明示的な検証設定として使用する。実団体の役割や情報利用が了承済みであると偽装しない。UNAPPROVED_POLICYは実データ/正式運用に必要な設定が未承認のときの拒否条件であり、消防団からの事前了承なしに設計案を架空環境で作ることを禁止しない。
