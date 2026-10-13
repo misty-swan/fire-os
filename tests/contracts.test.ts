@@ -239,6 +239,29 @@ describe("http layer (T002)", () => {
     expect(extraQuery.status).toBe(400);
   });
 
+  it("content_type_must_be_exactly_json_and_binary_bodies_are_left_to_the_handler", async () => {
+    const body = JSON.stringify({ version: 0, response: "attending" });
+    const put = (type: string) =>
+      app.request(`/attendance/${ID}`, { method: "PUT", headers: { "content-type": type, "idempotency-key": "k" }, body });
+    expect((await put("application/json; charset=utf-8")).status).toBe(200);
+    expect((await put("APPLICATION/JSON")).status).toBe(200);
+    expect((await put("application/jsonx")).status).toBe(400);
+    expect((await put("text/plain")).status).toBe(400);
+    // バイナリ(API-83)は本文を契約で読まず、ハンドラが読めるように残す
+    const bin = new Hono<AppBindings>();
+    bin.use("*", async (c, next) => { c.set("requestId", "r"); await next(); });
+    bin.put("/attachments/:id/upload", async (c) => {
+      await parseApiRequest(c, "API-83");
+      return c.json({ size: (await c.req.arrayBuffer()).byteLength });
+    });
+    bin.onError(onError);
+    const upload = await bin.request(`/attachments/${ID}/upload`, {
+      method: "PUT", headers: { "x-upload-token": "t", "content-type": "image/jpeg" }, body: new Uint8Array(1000),
+    });
+    expect(upload.status).toBe(200);
+    expect(((await upload.json()) as { size: number }).size).toBe(1000);
+  });
+
   it("requests_without_query_contract_reject_unknown_query", async () => {
     // 本文の契約が無いAPIはGETだけ(fetchの仕様でGETは本文を持てない)なので、ここではqueryの拒否を確かめる
     const getApp = new Hono<AppBindings>();

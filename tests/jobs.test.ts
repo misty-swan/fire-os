@@ -130,6 +130,28 @@ describe("persistent jobs (T006)", () => {
     expect((await findJob(env, job.id))).toMatchObject({ status: "succeeded", resultRef: "ok-1" });
   });
 
+  it("cron_keeps_recovering_jobs_even_if_the_idempotency_expiry_fails", async () => {
+    const ran: string[] = [];
+    registerJobHandler("test.ok", async (job) => { ran.push(job.id); return { kind: "succeeded" }; });
+    const job = await enqueueJob(env, input({ kind: "test.ok" }), new Date());
+    const db = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "prepare") {
+          return (sql: string) => {
+            if (sql.startsWith("UPDATE idempotency_records")) throw new Error("D1 temporarily unavailable");
+            return target.prepare(sql);
+          };
+        }
+        const v = Reflect.get(target, prop);
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    });
+    const ctx = createExecutionContext();
+    await worker.scheduled(createScheduledController({ cron: "* * * * *", scheduledTime: new Date() }), { ...env, DB: db } as typeof env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(ran).toEqual([job.id]);
+  });
+
   it("enqueue_sends_job_id_only_and_does_not_resend_duplicates", async () => {
     const queue = queueStub();
     const e = { DB: env.DB, JOBS_QUEUE: queue as never };

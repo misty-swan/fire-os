@@ -16,15 +16,15 @@
 
 | ID | 重大度 | 分類 | 対応 |
 |---|---|---|---|
-| A-F1 状態不一致・業務UNIQUEが500→利用者に「再送可」と表示 | 中 | 確認済み | diagnoseに422 INVALID_TRANSITION / 409 DUPLICATE を追加（第2回でエラー文からの推測をやめ、操作の宣言 allowedStates / duplicateTables による判定に変更）。試験 `matching_version_but_wrong_state_is_invalid_transition_not_500` / `business_unique_violation_is_duplicate_not_500` |
+| A-F1 状態不一致・業務UNIQUEが500→利用者に「再送可」と表示 | 中 | 確認済み | diagnoseに422 INVALID_TRANSITION / 409 DUPLICATE を追加（第2回でエラー文からの推測をやめ、操作の宣言 allowedStates / duplicateTables（第3回で duplicateOn に改名・列単位化）による判定に変更）。試験 `matching_version_but_wrong_state_is_invalid_transition_not_500` / `business_unique_violation_is_duplicate_not_500` |
 | A-F2 conditionsの評価時点がbatch内と失敗判定で不一致 | 中 | 確認済み | 前提条件として業務書込の前に評価するよう移動。試験 `conditions_are_preconditions_evaluated_before_the_writes` |
 | A-F3 INSERT OR REPLACEで追記専用表を上書きできる | 中 | 確認済み（D1でも再現） | drizzle/0003 で衝突するINSERTを拒否するトリガー。試験 `append_only_tables_cannot_be_overwritten_with_insert_or_replace` |
-| A-F4 結果不明→401で鍵を捨て二重登録 | 中 | 確認済み | 確定拒否(400/403/404/409/422)まで鍵を保持。試験 `the_key_survives_401_after_an_unknown_result_so_a_retry_cannot_double_register` |
+| A-F4 結果不明→401で鍵を捨て二重登録 | 中 | 確認済み | 確定拒否(400/403/404/409/422)まで鍵を保持。試験 `the_key_survives_401_and_429_after_an_unknown_result_so_a_retry_cannot_double_register`（第2回で429を加え改名） |
 | A-F5 日時の文字列比較が精度差で逆転／DB形式と不一致 | 中 | 確認済み | Instantをミリ秒3桁Zへ正規化。試験 `instants_are_normalized_before_comparison_and_ids_must_be_lowercase` |
 | A-F6 content-lengthなし本文を全量読み込み | 中 | 確認済み | 逐次読みで上限超過時に打ち切り。試験 `chunked_body_without_content_length_is_cut_at_the_limit` |
 | A-F7 タイムアウト後もhandlerが動き外部効果が二重になり得る | 低 | 方針で残す | 外部効果の一回性はhandlerの責務と docs/02・docs/16・runner.ts に明記（Workersでは処理を中断できない） |
 | A-F8 errorCode/resultRefがCHECK違反でループ停止・内部文の露出 | 低 | 確認済み | コード形式の検証と置換（試験 `handler_error_codes_are_sanitized_and_dedupe_does_not_cross_units`）、確定失敗でもループ継続（第2回で試験 `one_failing_completion_does_not_stop_the_rest_of_the_run` を追加） |
-| A-F9 dedupeで他の依頼者/他unitのjobが返る | 低 | 一部確認済み | unitをまたぐ返却を禁止（同上の試験）。同unit内の別依頼者の照会権限はPH4（通知/AI）で判断＝対象外 |
+| A-F9 dedupeで他の依頼者/他unitのjobが返る | 低 | 一部確認済み | 第2回で独自dedupeKeyを`${unitId}|`で始める決まりを強制して衝突自体を防止（試験は接頭辞の強制を検査。読み直しのunit限定は保険で、通常経路からは到達しない）。同unit内の別依頼者の照会権限はPH4（通知/AI）で判断＝対象外 |
 | A-F10 `/api`（末尾スラッシュなし）がSPAに渡る | 低 | 確認済み（Bが実測） | `run_worker_first=["/api","/api/*"]`。e2e `api_paths_return_json_never_the_spa` |
 | A-F11 契約に無いquery/本文を無視、Content-Type未検査 | 低 | 確認済み | 拒否に変更、本文はapplication/json必須（試験 `parseApiRequest_validates_params_body_and_headers`）。本文の契約が無いAPIはGETとバイナリだけで、GETはfetchの仕様上本文を持てないため、未知queryの拒否のみ試験（`requests_without_query_contract_reject_unknown_query`、第2回で名前を実態に合わせた） |
 | A-F12 大文字UUIDを受理 | 低 | 確認済み | 小文字UUIDのみ（同上の試験） |
@@ -104,7 +104,7 @@
 | M1 drizzle/0003（REPLACE防止）を外す | `append_only_tables_cannot_be_overwritten_with_insert_or_replace` |
 | M2 再送で認可を後に確認 | `replay_after_only_an_authz_version_bump_is_forbidden_before_revealing_mismatch` |
 | M3 状態不一致の422分類を外す | `matching_version_but_wrong_state_is_invalid_transition_not_500` |
-| M4 401で鍵を捨てる（旧挙動） | `the_key_survives_401_after_an_unknown_result_so_a_retry_cannot_double_register` |
+| M4 401で鍵を捨てる（旧挙動） | `the_key_survives_401_and_429_after_an_unknown_result_so_a_retry_cannot_double_register`（第2回で429を加え改名） |
 | M5 本文を全量読みしてから判定 | `chunked_body_without_content_length_is_cut_at_the_limit` |
 
 PH0本体の変異確認（記録の補完、B-F05）: strict解除→`contract_registry_is_complete_and_strict`失敗／API-101削除→同失敗／root検査除去→`losing_update...`ほか3件失敗／再送時の認可再検査除去→`replay_rechecks...`失敗／lease期限条件除去→`a_late_runner...`失敗／lease token条件除去→`lease_expiry...`失敗／試験用認証の環境限定除去→`test_identity_injection...`失敗／202を「保存しました」表示→`accepted_job...`失敗／誤り欄フォーカス除去→`server_validation_error...`失敗／useMutationの二重送信防止除去→`useMutation_ignores_a_second_run...`失敗。いずれも修正を戻した後に全件成功を確認。
@@ -129,7 +129,7 @@ PH0本体の変異確認（記録の補完、B-F05）: strict解除→`contract_
 | UI-R2-05 シート/モーダルの登場アニメ・幕クリック | 低 | 確認済み | fo-in、幕を押すと「編集に戻る」 |
 | CODE-R2-1 401→ログイン画面でフォームが消え鍵も消える（第1回A-F4が画面では効かない） | 中 | 確認済み | 鍵を部品の外（API＋内容ごと）に保持。試験 `the_key_survives_leaving_to_the_login_screen_and_coming_back`。401の文言も「同じ内容なら二重登録されない」に |
 | CODE-R2-2 / DOC-R2-04 エラー文だけで422にし、実装の誤りを利用者の誤りに見せる | 中 | 確認済み | roots[].allowedStates の宣言で判定、宣言外は500。試験 `a_handler_bug_is_reported_as_500_not_disguised_as_a_user_error` |
-| CODE-R2-3 UNIQUE違反を全部DUPLICATEにする | 中〜低 | 確認済み | duplicateTables で宣言した表だけ。宣言外は500（他unitの存在を推測させない）。重複時の巻き戻しも試験 |
+| CODE-R2-3 UNIQUE違反を全部DUPLICATEにする | 中〜低 | 確認済み | 宣言した一意制約だけ（第3回で表単位から「表.列/index:名前」単位の duplicateOn に変更）。宣言外は500（他unitの存在を推測させない）。重複時の巻き戻しも試験 |
 | CODE-R2-4 batch内のjob登録でunitまたぎの衝突が黙って抜ける | 低 | 確認済み | 独自dedupeKeyは`${unitId}|`で始める決まりを強制（docs/02） |
 | CODE-R2-5 本文の契約が無いバイナリAPIで本文を読んで拒否 | 低 | 確認済み | kind=binaryは本文を読まない（T015のAPI-83のため） |
 | CODE-R2-6 冪等の期限切れ処理の失敗でジョブ回収が止まる | 低 | 確認済み | try/catchで継続 |
@@ -151,3 +151,35 @@ PH0本体の変異確認（記録の補完、B-F05）: strict解除→`contract_
 
 ### 第2回修正後の実行結果
 - `npx tsc --noEmit`: 成功／`npm run check:contracts`: OK／`npx vitest --run`: 6ファイル90件成功／`npm run build`: 成功／`npm run test:e2e`: 7件成功＋1件スキップ（スマホ専用試験をPC幅で除外）
+
+## 第3回（2026-10-14）
+
+範囲: 第2回の修正差分 `17ce7dd..d9eca2d`。新しいサブエージェント2体（コード／UIと記録）。**両者とも高・中の指摘なし**（終了条件を満たした）。第2回の各行は記録どおり実装・試験されていることを確認。低の指摘への対応:
+
+| ID | 分類 | 対応 |
+|---|---|---|
+| L-1 重複の宣言が表単位で、同じ表の「全体で一意」の列まで重複と答える | 確認済み | `duplicateOn`（「表.列」「index:名前」単位）に変更 |
+| L-2 allowedStatesとUPDATEの条件の二重管理 | 方針で残す | 宣言からWHERE句を組み立てる共通部品は、最初の業務更新を作るPH1（T011/T012）で導入を検討 |
+| L-3 同じ内容を2つの部品から同時送信すると鍵が早く消え得る | 方針で残す | 通常の画面では起きない組み合わせ。同期(PH6 T076)の端末操作IDで扱う |
+| L-4 別アカウントで再送すると「二重にならない」案内が成り立たない | 確認済み | 案内文を「同じ人が同じ内容で送れば」「別のアカウントを除く」に修正 |
+| L-5 結果不明の鍵がタブを開いている間残る | 方針で残す | 7日以内は重複防止として意図どおり、7日後は1回の409の後に消える。端末下書き(PH6)で整理 |
+| L-6 バイナリAPIで本文上限が効かない | 確認済み | ハンドラ側の責務とdocs/02に明記（T015で実装時に確認） |
+| L-7 シート内ドラッグで幕クリックとなり閉じる | 方針で残す | 結果は既定の「編集に戻る」でデータは失われない |
+| L-8 確定失敗後の回収（期限切れ）までは試験していない | 方針で残す | 期限切れの回収は別試験 `expired_lease_on_the_last_attempt_goes_to_manual_review` で確認済み |
+| R3-01 トースト位置の記述（マップは110px） | 確認済み | docs/03・ui.tsxのコメントを修正 |
+| R3-02 PCの幕のアニメ（fo-fade） | 確認済み | `fo-fade`を追加しPCで使用 |
+| R3-03 シート/PCトーストのイージング・PCの移動量8px・PCトーストの行間 | 確認済み | スマホのシートはease、PCは`fo-in-desktop`(8px)、PCトーストはleading-normal |
+| R3-04 改名した試験名が記録に古いまま | 確認済み | 記録を更新 |
+| R3-05 3つの修正に回帰試験が無い | 確認済み | 試験 `content_type_must_be_exactly_json_and_binary_bodies_are_left_to_the_handler`、`cron_keeps_recovering_jobs_even_if_the_idempotency_expiry_fails` を追加。変異M9（前方一致に戻す）・M10（バイナリでも本文を読む）・M11（Cronのtry/catch除去）でそれぞれ失敗を確認 |
+| R3-06 A-F9の記録の言い過ぎ | 確認済み | 記録を修正 |
+| R3-07 docs/07・08・READMEの版行 | 確認済み | 実装状況を反映 |
+
+### サイクルの終了
+第3回で高・中の確認済み指摘が0件となったため、レビュー・修正サイクルを終了する（上限3回以内）。残した低の指摘は上表のとおり。
+
+### 最終の実行結果
+- `npx tsc --noEmit`: 成功
+- `npm run check:contracts`: 101 API / docs/05 101行 / OpenAPI一致
+- `npx vitest --run`: 6ファイル92件成功
+- `npm run build`: 成功
+- `npm run test:e2e`: 7件成功＋1件スキップ（スマホ専用試験をPC幅で除外）

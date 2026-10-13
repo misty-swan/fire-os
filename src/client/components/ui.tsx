@@ -150,7 +150,7 @@ export function Notice({ tone = "warning", icon, children, role }: { tone?: "war
 
 /**
  * トースト（prototypeの明るい面）。成功だけに使い、2.6秒で一度だけ消える。
- * スマホは左右16px・下からの位置は画面ごと（prototype toastBottom: 既定110、タブ画面100、ホーム/AI 160）、PCは下28pxの中央。
+ * スマホは左右16px・下からの位置は画面ごと（prototype toastBottom: 予定・活動/メニュー100、マップとその他110、ホーム/AI 160）、PCは下28pxの中央。
  */
 export function Toast({ children, onDone, bottom = 110 }: { children: ReactNode; onDone?: () => void; bottom?: number }) {
   const done = useRef(onDone);
@@ -168,6 +168,7 @@ export function Toast({ children, onDone, bottom = 110 }: { children: ReactNode;
         "fixed inset-x-4 z-[120] flex items-center gap-2.5 rounded-[18px] bg-ink px-4 py-3.5 text-[13px] font-bold leading-[1.5] text-night",
         "shadow-[0_16px_40px_rgba(0,0,0,.5)] animate-[fo-in_.3s_cubic-bezier(.2,.8,.2,1)_both]",
         "lg:inset-x-auto lg:!bottom-7 lg:left-1/2 lg:-translate-x-1/2 lg:whitespace-nowrap lg:rounded-2xl lg:px-[18px] lg:py-[13px]",
+        "lg:animate-[fo-in-desktop_.3s_ease_both] lg:leading-normal",
       )}
     >
       <Icon name="check_circle" className="text-[20px] text-[#1f9e66] lg:text-[19px]" />

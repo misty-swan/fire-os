@@ -7,7 +7,7 @@
 |---|---|---|
 | 型検査 | `npm run typecheck` | 成功 |
 | 契約検査 | `npm run check:contracts` | 101 API / docs/05 101行 / OpenAPI一致 |
-| 単体・結合試験 | `npx vitest --run` | 6ファイル 90件成功（PH0レビュー第2回の修正後）（workers: runtime/contracts/schema/mutation/jobs、client: client-shell） |
+| 単体・結合試験 | `npx vitest --run` | 6ファイル 92件成功（PH0レビュー第3回の後）（workers: runtime/contracts/schema/mutation/jobs、client: client-shell） |
 | ブラウザ試験 | `npm run test:e2e` | 7件成功＋1件スキップ（スマホ専用試験をPC幅で除外） |
 | ビルド | `npm run build` | 成功（dist/client） |
 | 手動確認 | `npx wrangler dev` | `/app/unknown`=HTML、`/api/v1/x`・`/api/auth/x`=JSON 404 |

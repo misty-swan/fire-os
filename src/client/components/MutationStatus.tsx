@@ -42,7 +42,7 @@ export function MutationStatus({ state, toastBottom }: { state: MutationState; t
     case "unauthenticated":
       return (
         <Banner tone="error" eyebrow="SESSION" role="alert" title="ログインが必要です">
-          ログインし直してから、もう一度送ってください。同じ内容なら二重には登録されません。
+          ログインし直してから、もう一度送ってください。同じ人が同じ内容で送れば二重には登録されません。
         </Banner>
       );
     case "forbidden":
@@ -72,7 +72,7 @@ export function MutationStatus({ state, toastBottom }: { state: MutationState; t
     case "unknown":
       return (
         <Banner tone="warning" eyebrow="UNKNOWN" role="alert" title="結果を確認できませんでした">
-          保存されたか分かりません。同じ内容でもう一度送っても、二重には登録されません。
+          保存されたか分かりません。同じ内容でもう一度送っても、二重には登録されません（別のアカウントで送った場合を除く）。
         </Banner>
       );
   }

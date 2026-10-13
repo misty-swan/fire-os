@@ -62,7 +62,7 @@ async function transitionSpec(p: Principal, issueId: string, o: SpecOpts = {}): 
     requestHash,
     expectedAuthzVersion: p.authzVersion,
     roots: [{ table: "t_issues", id: issueId, expectedVersion, allowedStates: { column: "status", values: ["reported"] } }],
-    duplicateTables: ["t_issue_events"],
+    duplicateOn: ["t_issue_events.id"],
     statements: (ctx) => {
       const stmts = [
         env.DB.prepare(
@@ -361,8 +361,8 @@ describe("executeMutation review fixes (PH0 review round 1)", () => {
     const before = await snapshot(p.unitId, issueId);
     expect(await attempt(() => executeMutation(env, p, spec))).toMatchObject({ status: 409, code: "DUPLICATE" });
     expect(await snapshot(p.unitId, issueId)).toEqual(before); // 重複でも何も残さない
-    // 宣言していない表の一意違反は「重複」と言わず内部障害（他unitの存在などを推測させない）
-    spec.duplicateTables = [];
+    // 宣言していない制約の一意違反は「重複」と言わず内部障害（他unitの存在などを推測させない）
+    spec.duplicateOn = ["t_issue_events.mutation_id"];
     expect(await attempt(() => executeMutation(env, p, spec))).toMatchObject({ status: 500 });
   });
 

@@ -63,10 +63,12 @@ export interface MutationSpec<T> {
     payload?: Record<string, string | number | boolean | null>;
   };
   /**
-   * 業務上の重複として 409 DUPLICATE にしてよい一意制約の表名（例: ["member_roles"]）。
-   * ここに無い表のUNIQUE違反（全体で一意の列・内部表）は内部障害として扱い、他unitの存在を推測させない。
+   * 業務上の重複として 409 DUPLICATE にしてよい一意制約。「表.列」（複合なら全列）または部分索引の「index:索引名」で宣言する
+   * （例: ["member_roles.member_id", "member_roles.role_id"]、["index:uq_member_roles_active"]）。
+   * 失敗した制約の列が全て宣言に含まれる場合だけDUPLICATE。表単位にしないのは、同じ表に「分団内で一意」と
+   * 「全体で一意（例: members.user_id）」が混在し、後者を重複と答えると他unitの存在を推測させるため。宣言外は500。
    */
-  duplicateTables?: readonly string[];
+  duplicateOn?: readonly string[];
   /** 応答はbatch内のSQLが組み立てる。sqlは1行1列(JSON文字列)を返すSELECT */
   response: { status: 200 | 201; sql: string; binds?: unknown[]; decode: (json: unknown) => T };
 }
@@ -258,7 +260,7 @@ const principalUnit = (p: Principal) => p.unitId;
  * batchが失敗した後（全て取り消し済み）の状態を読み直し、理由を判別する。
  *  権限 → 403 / 同じ鍵の勝者 → その結果 / root無し・別unit → 404 / 版違い → 409 / 前提条件 → failCode /
  *  版は合っているが状態が許可された前の状態でない（allowedStatesで宣言）→ 422 INVALID_TRANSITION /
- *  duplicateTables に宣言した業務表のUNIQUE違反 → 409 DUPLICATE。
+ *  duplicateOn に宣言した一意制約（表.列 / index:名前）のUNIQUE違反 → 409 DUPLICATE。
  *  エラー文だけから推測しない（全ての検査は同じ文言で失敗するため、内部の不具合を利用者の誤りに見せてしまう）。
  * どれでもなければ内部障害として扱い、409に偽装しない。
  */
@@ -291,9 +293,13 @@ async function diagnose<T>(
   }
 
   const message = String(err);
-  // 宣言された業務表の一意制約だけを重複とする（例: "UNIQUE constraint failed: member_roles.member_id, ..."）
-  const uniqueTable = message.match(/UNIQUE constraint failed: (\w+)\./)?.[1];
-  if (uniqueTable && spec.duplicateTables?.includes(uniqueTable)) throw new HttpError("DUPLICATE");
+  // 宣言された一意制約だけを重複とする
+  // 例: "UNIQUE constraint failed: member_roles.member_id, member_roles.role_id: SQLITE_CONSTRAINT" / "...failed: index 'uq_x': ..."
+  const failed = message.match(/UNIQUE constraint failed: (.+?)(?:: SQLITE|$)/)?.[1];
+  if (failed && spec.duplicateOn?.length) {
+    const tokens = failed.split(", ").map((t) => t.replace(/^index '([^']+)'$/, "index:$1").trim());
+    if (tokens.every((t) => spec.duplicateOn!.includes(t))) throw new HttpError("DUPLICATE");
+  }
 
   // 理由が見つからない失敗は業務上の競合ではない。内部障害として扱う（詳細はログのみ）
   console.error(JSON.stringify({ operation: spec.operationCode, error: String(err) }));
