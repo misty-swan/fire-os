@@ -7,7 +7,7 @@
 |---|---|---|
 | 型検査 | `npm run typecheck` | 成功 |
 | 契約検査 | `npm run check:contracts` | 101 API / docs/05 101行 / OpenAPI一致 |
-| 単体・結合試験 | `npx vitest --run` | 6ファイル 66件成功（workers: runtime/contracts/schema/mutation/jobs、client: client-shell） |
+| 単体・結合試験 | `npx vitest --run` | 6ファイル 68件成功（workers: runtime/contracts/schema/mutation/jobs、client: client-shell） |
 | ブラウザ試験 | `npm run test:e2e` | 7件成功＋1件スキップ（スマホ専用試験をPC幅で除外） |
 | ビルド | `npm run build` | 成功（dist/client） |
 | 手動確認 | `npx wrangler dev` | `/app/unknown`=HTML、`/api/v1/x`・`/api/auth/x`=JSON 404 |
@@ -26,6 +26,9 @@ T001・T003・T004・T006は先にテストを書き「未実装/表なし」で
 - 応答DTOの多くは`provisional`（各機能タスクで04/10に合わせて厳密化）
 - API-80（events）の方式、API-36（認証ライブラリ）の固定版スキーマは未確定（D16/V01）
 - OpenAPIは契約の生成物であり、業務処理の実装を意味しない（業務APIはAPI-86を除き未実装＝PH1以降）
+
+## prototype準拠（2026-10-13 追記）
+画面構成・導線・見た目の正本はprototypeとし、React（`src/client`）をprototypeのHTMLに合わせて作り直し、docs/03・README・docs/14・docs/16をprototypeに合わせて改訂した。数値はHTMLから読み取って実ブラウザ試験で確認（下部ナビ84px、サイドバー248px、ヘッダー64px、最下部の出動管理/利用者の固定）。prototypeから意図して変えた点（同期済み表示、PHASEタグ、実在名の不使用、未実装機能の無効表示、アクセシビリティ追加）はdocs/03に理由つきで記載。**画面の中身（ホームのダイヤル、マップ、点検登録など）はprototypeに合わせて各機能タスクで実装する**（PH0はシェル・共通部品まで）。
 
 ## スクリーンショット
 `docs/evidence/ph0/shell-phone-360.png`、`shell-desktop-1280.png`（prototypeの配色・形に合わせた共通shell。内容はプレースホルダー）。

@@ -1,17 +1,22 @@
 import type { ReactNode } from "react";
 import { Navigate, createBrowserRouter, createMemoryRouter, type RouteObject } from "react-router";
-import { AppShell } from "./components/AppShell";
+import { AppShell, useOnline } from "./components/AppShell";
+import { MenuPage } from "./components/MenuPage";
+import { MobileTopRow, PageTitle } from "./components/Page";
 import { Card, Chip, Icon } from "./components/ui";
-import { screens, type ScreenDef } from "./screens";
+import { screens, shellScreens, type ScreenDef } from "./screens";
 
 /** 未実装画面の仮表示。どのタスクで作るかを示し、成功したように見せない。 */
 export function ScreenPlaceholder({ screen }: { screen: ScreenDef }) {
+  const online = useOnline();
   return (
     <div className="flex max-w-[720px] flex-col gap-4">
-      <p className="font-mono text-[11px] font-semibold tracking-[.14em] text-ember-soft">
-        {screen.id} · {screen.phase}
-      </p>
-      <h2 className="text-[26px] font-bold leading-snug">{screen.title}</h2>
+      {/* ホームだけ最上段に通信状態/DEMO/通知（prototype ホーム） */}
+      {screen.id === "SCR-02" && <MobileTopRow online={online} />}
+      {/* PCは見出しがヘッダーに出るので、本文の大見出しはスマホのみ */}
+      <PageTitle eyebrow={`${screen.id} · ${screen.phase}`} className="lg:[&_h2]:hidden">
+        {screen.title}
+      </PageTitle>
       <Card className="flex flex-col gap-3 p-4">
         <Chip tone="neutral" icon="construction">
           未実装
@@ -32,12 +37,9 @@ export function ScreenPlaceholder({ screen }: { screen: ScreenDef }) {
  */
 export const screenElements: Partial<Record<string, ReactNode>> = {};
 
-function toRoute(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject {
-  return {
-    path: sc.path,
-    handle: { screen: sc },
-    element: overrides[sc.id] ?? screenElements[sc.id] ?? <ScreenPlaceholder screen={sc} />,
-  };
+function toRoutes(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject[] {
+  const element = overrides[sc.id] ?? screenElements[sc.id] ?? <ScreenPlaceholder screen={sc} />;
+  return [sc.path, ...(sc.aliases ?? [])].map((path) => ({ path, handle: { screen: sc }, element }));
 }
 
 function NotFound() {
@@ -54,10 +56,16 @@ export function buildRoutes(overrides: Record<string, ReactNode> = {}): RouteObj
   const loginScreen = screens.find((s) => s.id === "SCR-01")!;
   return [
     { path: "/", element: <Navigate to="/app" replace /> },
-    toRoute(loginScreen, overrides),
+    ...toRoutes(loginScreen, overrides),
     {
       element: <AppShell />,
-      children: [...screens.filter((s) => s.id !== "SCR-01").map((s) => toRoute(s, overrides)), { path: "*", element: <NotFound /> }],
+      children: [
+        ...screens.filter((s) => s.id !== "SCR-01").flatMap((s) => toRoutes(s, overrides)),
+        // シェルの画面（SCR番号なし）。メニューはスマホの「メニュー」タブ
+        { path: "/app/menu", handle: { screen: shellScreens[0] }, element: overrides["SHELL-MENU"] ?? <MenuPage /> },
+        ...toRoutes(shellScreens[1]!, overrides),
+        { path: "*", element: <NotFound /> },
+      ],
     },
   ];
 }

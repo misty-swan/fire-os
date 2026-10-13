@@ -207,42 +207,87 @@ describe("client shell (T005)", () => {
     await user.tab();
     expect(document.activeElement?.textContent).toBe("メインコンテンツへ移動");
     // 下部ナビに5つの入口（docs/03 §1）
-    const navs = screen.getAllByRole("navigation", { name: "主要メニュー" });
-    const bottom = navs.find((n) => within(n).queryByText("出動") !== null && within(n).queryAllByRole("link").length === 5)!;
+    const bottom = screen.getByTestId("bottom-nav");
     // アイコン(aria-hidden)を除いた「読み上げ時の名前」で5つの入口を確認する
     const names = bottomTabs.map((t) => within(bottom).getByRole("link", { name: t.label }).getAttribute("href"));
-    expect(names).toEqual(["/app", "/app/map", "/app/activities", "/app/incidents", "/app/admin"]);
+    expect(bottomTabs.map((t) => t.label)).toEqual(["ホーム", "マップ", "予定・活動", "AI", "メニュー"]); // prototype navDef
+    expect(names).toEqual(["/app", "/app/map", "/app/activities", "/app/assistant", "/app/menu"]);
     expect(within(bottom).getByRole("link", { name: "ホーム" }).getAttribute("aria-current")).toBe("page");
-    // キーボードだけで「地図」へ移動できる
-    const map = within(bottom).getByRole("link", { name: "地図" });
+    // キーボードだけで「マップ」へ移動できる
+    const map = within(bottom).getByRole("link", { name: "マップ" });
     map.focus();
     await user.keyboard("{Enter}");
     await waitFor(() => expect(router.state.location.pathname).toBe("/app/map"));
-    expect(screen.getByRole("heading", { level: 1, name: "地図" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "マップ" })).toBeTruthy();
     // 画面が変わったら本文へフォーカスが移る
     await waitFor(() => expect(document.activeElement?.id).toBe("main"));
-    expect(within(bottom).getByRole("link", { name: "地図" }).getAttribute("aria-current")).toBe("page");
+    expect(within(bottom).getByRole("link", { name: "マップ" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("sub_screens_highlight_their_parent_tab", () => {
     renderShell("/app/facilities/abc");
     const bottom = screen.getAllByRole("navigation", { name: "主要メニュー" }).find((n) => within(n).queryAllByRole("link").length === 5)!;
-    expect(within(bottom).getByRole("link", { name: "地図" }).getAttribute("aria-current")).toBe("page");
+    expect(within(bottom).getByRole("link", { name: "マップ" }).getAttribute("aria-current")).toBe("page");
     expect(within(bottom).getByRole("link", { name: "ホーム" }).getAttribute("aria-current")).toBeNull();
+    // 活動・報告書は「予定・活動」、出動や名簿などその他は「メニュー」、点検登録は下部ナビなしの全画面フロー
+    cleanup();
+    renderShell("/app/activities/xyz");
+    const b2 = screen.getAllByRole("navigation", { name: "主要メニュー" }).find((n) => within(n).queryAllByRole("link").length === 5)!;
+    expect(within(b2).getByRole("link", { name: "予定・活動" }).getAttribute("aria-current")).toBe("page");
+    cleanup();
+    renderShell("/app/members");
+    const b3 = screen.getAllByRole("navigation", { name: "主要メニュー" }).find((n) => within(n).queryAllByRole("link").length === 5)!;
+    expect(within(b3).getByRole("link", { name: "メニュー" }).getAttribute("aria-current")).toBe("page");
+    cleanup();
+    renderShell("/app/facilities/abc/inspections/new");
+    expect(screen.queryByTestId("bottom-nav")).toBeNull();
   });
 
-  it("menu_sheet_opens_lists_screens_and_returns_focus_on_close", async () => {
-    const user = userEvent.setup();
-    renderShell("/app");
-    const opener = screen.getByRole("button", { name: "メニューを開く" });
-    await user.click(opener);
-    const dialog = screen.getByRole("dialog", { name: "メニュー" });
-    expect(within(dialog).getByRole("link", { name: /団員名簿/ }).getAttribute("href")).toBe("/app/members");
-    expect(within(dialog).getByRole("link", { name: /同期の状況/ }).getAttribute("href")).toBe("/app/sync");
-    expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "メニューを閉じる" }));
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.activeElement).toBe(opener); // 押したボタンへ戻る
+  it("menu_tab_is_a_screen_with_profile_tiles_and_a_disabled_logout_until_auth_exists", () => {
+    renderShell("/app/menu");
+    expect(screen.getByRole("heading", { level: 2, name: "メニュー" })).toBeTruthy();
+    // prototype modules の8項目（順序どおり）
+    const tiles = screen.getAllByRole("link").filter((l) => l.closest("ul.grid"));
+    expect(tiles.slice(0, 8).map((l) => l.textContent?.replace(/^[a-z_0-9]+/, ""))).toEqual([
+      "団員名簿", "車両・資機材", "お知らせ", "文書・規程", "出動履歴", "活動分析", "設定・通知", "使い方ガイド",
+    ]);
+    expect(tiles.find((l) => l.textContent?.includes("団員名簿"))!.getAttribute("href")).toBe("/app/members");
+    // docs/03の画面は全て到達できる（prototypeに入口が無かった分は追加タイルで）
+    const hrefs = tiles.map((l) => l.getAttribute("href"));
+    for (const path of ["/app/issues", "/app/patrol-plans", "/app/ai/reviews", "/app/sync", "/app/admin"]) expect(hrefs).toContain(path);
+    expect(screen.getByRole("button", { name: /ログアウト/ }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getAllByText("一般団員").length).toBeGreaterThan(0); // メニューのカードとPCサイドバー
+  });
+
+  it("desktop_sidebar_and_header_follow_the_prototype_desktop_structure", () => {
+    renderShell("/app/map");
+    const side = screen.getAllByRole("navigation", { name: "主要メニュー" }).find((n) => within(n).queryByText("OVERVIEW") !== null)!;
+    const text = side.textContent!;
+    // 見出しと項目の順序（prototype navGroups）
+    const order = ["OVERVIEW", "ダッシュボード", "OPERATIONS", "マップ・水利", "予定・出欠", "活動記録", "点検管理", "お知らせ", "ORGANIZATION", "団員", "車両・資機材", "文書・規程", "活動分析"];
+    let at = -1;
+    for (const t of order) {
+      const idx = text.indexOf(t, at + 1);
+      expect(idx, t).toBeGreaterThan(at);
+      at = idx;
+    }
+    expect(within(side).getByRole("link", { name: "マップ・水利" }).getAttribute("aria-current")).toBe("page");
+    // 赤枠の出動管理ボタン・利用者ブロック・分団カード
+    expect(screen.getByRole("link", { name: "出動管理" }).getAttribute("href")).toBe("/app/incidents");
+    expect(screen.getByText("架空 団員")).toBeTruthy();
+    expect(screen.getByText("第一分団", { selector: "span.font-bold" })).toBeTruthy();
+    // ヘッダー: パンくず＋画面名(PC用の名前)、検索欄(後続まで無効)、AIアシスタント
+    expect(screen.getByRole("heading", { level: 1, name: "消防水利・施設マップ" })).toBeTruthy();
+    expect(screen.getByText("第一分団 / 運用")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /団員・施設・記録を検索/ }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("link", { name: "AIアシスタント" }).getAttribute("href")).toBe("/app/assistant");
+  });
+
+  it("home_has_the_mobile_top_row_with_status_demo_and_notifications", () => {
+    renderShell("/app", {});
+    expect(screen.getAllByText("DEMO")).toHaveLength(2); // PCサイドバーのロゴ横＋スマホ最上段
+    expect(screen.getAllByText("オンライン").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "タスク・通知" })[0]!.getAttribute("href")).toBe("/app/tasks-notifications");
   });
 
   it("leaving_with_unsaved_changes_asks_first_and_returns_focus", async () => {
@@ -250,7 +295,7 @@ describe("client shell (T005)", () => {
     const router = renderShell("/app");
     await user.type(screen.getByLabelText("件名"), "書きかけ");
     const bottom = screen.getAllByRole("navigation", { name: "主要メニュー" }).find((n) => within(n).queryAllByRole("link").length === 5)!;
-    await user.click(within(bottom).getByRole("link", { name: "地図" }));
+    await user.click(within(bottom).getByRole("link", { name: "マップ" }));
     const dialog = await screen.findByRole("dialog", { name: "保存されていない変更があります" });
     expect(router.state.location.pathname).toBe("/app"); // まだ移動しない
     expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "編集に戻る" })); // 既定は安全側
@@ -258,7 +303,7 @@ describe("client shell (T005)", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(router.state.location.pathname).toBe("/app");
     // 離れると決めた場合は移動する
-    await user.click(within(bottom).getByRole("link", { name: "地図" }));
+    await user.click(within(bottom).getByRole("link", { name: "マップ" }));
     await user.click(await screen.findByRole("button", { name: "保存せずに移動する" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/app/map"));
   });
@@ -276,7 +321,7 @@ describe("client shell (T005)", () => {
 describe("screen registry (T005)", () => {
   it("registers_all_28_screens_with_the_paths_in_docs_03", () => {
     const doc = readFileSync("docs/03_画面設計・遷移.md", "utf8");
-    const rows = [...doc.matchAll(/^\| (SCR-\d{2}) (\/\S*) \|/gm)].map((m) => [m[1], m[2]] as const);
+    const rows = [...doc.matchAll(/^\| (SCR-\d{2}) (\/\S*) \|/gm)].map((m) => [m[1], m[2]!.replace(/（.*$/, "")] as const); // 「（PCは別入口…）」の注記は除く
     expect(rows).toHaveLength(28);
     expect(screens).toHaveLength(28);
     for (const [id, path] of rows) {
@@ -293,6 +338,7 @@ describe("screen registry (T005)", () => {
     expect(matchScreen("/app/assets/vehicle/abc/inspection")?.id).toBe("SCR-23");
     expect(matchScreen("/app/assets/vehicle/abc")?.id).toBe("SCR-14");
     expect(matchScreen("/app/nothing")).toBeUndefined();
+    expect(matchScreen("/app/incidents/xyz/extra")).toBeUndefined();
   });
 
   it("every_screen_renders_a_visible_not_implemented_placeholder", () => {
@@ -305,7 +351,11 @@ describe("screen registry (T005)", () => {
       expect(screen.getByText(new RegExp(sc.ownerTask)), sc.id).toBeTruthy();
       unmount();
     }
-    expect(bottomTabs.map((t) => t.label)).toEqual(["ホーム", "地図", "予定・活動", "出動", "管理"]);
+    // シェルの画面（メニュー/使い方ガイド）とPCの別入口 /app/reports
+    expect(matchScreen("/app/menu")?.id).toBe("SHELL-MENU");
+    expect(matchScreen("/app/help")?.id).toBe("SHELL-HELP");
+    expect(matchScreen("/app/reports")?.id).toBe("SCR-19");
+    expect(matchScreen("/app/reports/abc/draft")?.id).toBe("SCR-19");
   });
 });
 
