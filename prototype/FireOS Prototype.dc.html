@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=block" rel="stylesheet">
+<style>
+body{margin:0;background:#05080e;color:#edf1f7;font-family:'Zen Kaku Gothic New',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#ff8a66;text-decoration:none}a:hover{color:#ffb39a}
+*{box-sizing:border-box}
+.ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;direction:ltr;font-feature-settings:'liga';user-select:none}
+.fo-scroll::-webkit-scrollbar{display:none}.fo-scroll{scrollbar-width:none}
+textarea,input,button{font-family:inherit}
+@keyframes fo-spin{to{transform:rotate(360deg)}}
+@keyframes fo-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes fo-pulse{0%{box-shadow:0 0 0 0 rgba(255,59,47,.6)}100%{box-shadow:0 0 0 22px rgba(255,59,47,0)}}
+@keyframes fo-ring{0%{transform:translate(-50%,-50%) scale(.6);opacity:.7}100%{transform:translate(-50%,-50%) scale(1.9);opacity:0}}
+@keyframes fo-blink{50%{opacity:.25}}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-wrap:wrap;gap:56px;justify-content:center;align-items:flex-start;padding:48px 28px 64px;background:radial-gradient(1200px 700px at 70% -10%,#121b2c,#05080e 60%)">
+
+<aside style="width:300px;max-width:100%;display:flex;flex-direction:column;gap:28px;padding-top:12px">
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="position:relative;flex:none;width:32px;height:32px;border-radius:10px;background:linear-gradient(180deg,#16223a,#0c1526);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><span style="position:absolute;width:19px;height:19px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(255,106,61,.25)"></span><span style="position:absolute;width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(255,106,61,.55)"></span><span style="width:4px;height:4px;border-radius:50%;background:#ff5a2e;box-shadow:0 0 8px rgba(255,90,46,.9)"></span></span>
+      <span style="font:900 26px/1 'Zen Kaku Gothic New';letter-spacing:-.01em">FireOS</span>
+    </div>
+    <div style="font:500 11px 'IBM Plex Mono';letter-spacing:.12em;color:#7d889b">MOBILE PROTOTYPE · v0.2 · BEACON</div>
+    <p style="margin:4px 0 0;font:400 13px/1.8 'Zen Kaku Gothic New';color:#a9b3c4;text-wrap:pretty">一般団員「佐藤 健太」視点。画面内はすべて操作できます。下のショートカットで各フローの起点へ移動できます。</p>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="font:600 10px 'IBM Plex Mono';letter-spacing:.16em;color:#5f6a7d">FLOWS</div>
+    <sc-for list="{{ railFlows }}" as="f" hint-placeholder-count="4">
+      <button onClick="{{ f.onClick }}" style="all:unset;cursor:pointer;display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);transition:background .2s" style-hover="background:rgba(255,255,255,.08)">
+        <span style="flex:none;width:24px;height:24px;border-radius:50%;background:{{ f.bg }};color:#fff;display:flex;align-items:center;justify-content:center;font:600 11px 'IBM Plex Mono'">{{ f.n }}</span>
+        <span style="display:flex;flex-direction:column;gap:3px"><span style="font:700 14px 'Zen Kaku Gothic New';color:#edf1f7">{{ f.t }}</span><span style="font:400 12px/1.5 'Zen Kaku Gothic New';color:#8792a5">{{ f.d }}</span></span>
+      </button>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="font:600 10px 'IBM Plex Mono';letter-spacing:.16em;color:#5f6a7d">STATE</div>
+    <button onClick="{{ toggleOnline }}" style="all:unset;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)">
+      <span style="font:500 13px 'Zen Kaku Gothic New';color:#edf1f7">通信状態</span>
+      <span style="display:flex;align-items:center;gap:8px;font:600 11px 'IBM Plex Mono';color:{{ syncDot }}"><span style="width:7px;height:7px;border-radius:50%;background:{{ syncDot }}"></span>{{ onlineLabel }}</span>
+    </button>
+    <button onClick="{{ logout }}" style="all:unset;cursor:pointer;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);font:500 13px 'Zen Kaku Gothic New';color:#edf1f7">ログイン画面から始める</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;font:400 12px/1.7 'Zen Kaku Gothic New';color:#7d889b">
+    <a href="FireOS Design System.dc.html" style="font:700 13px 'Zen Kaku Gothic New'">デザインシステムを見る →</a>
+    <a href="FireOS Directions.dc.html">方向性の比較（1a〜1c）</a>
+    <span>地図はプレースホルダー。実装時は Google Maps JavaScript API（ダークスタイル）に差し替え。</span>
+  </div>
+</aside>
+
+<div style="position:relative;width:390px;height:844px;flex:none;border-radius:50px;overflow:hidden;background:#08101c;box-shadow:0 0 0 10px #10141c,0 0 0 11px rgba(255,255,255,.08),0 60px 120px -30px rgba(0,0,0,.8);font-family:'Zen Kaku Gothic New',sans-serif;color:#edf1f7" data-screen-label="Phone">
+
+  <sc-if value="{{ showGlow }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute;left:50%;top:190px;width:560px;height:560px;transform:translate(-50%,-50%);background:radial-gradient(closest-side,rgba(255,96,48,.22),rgba(255,96,48,.06) 55%,transparent);pointer-events:none"></div>
+  </sc-if>
+
+  <!-- LOGIN -->
+  <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+    <div data-screen-label="Login" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:120px 28px 40px;animation:fo-in .5s ease both">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:18px">
+        <span style="position:relative;width:76px;height:76px;border-radius:24px;background:linear-gradient(180deg,#16223a,#0c1526);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 20px 40px -12px rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center">
+          <span style="position:absolute;width:46px;height:46px;border-radius:50%;box-shadow:inset 0 0 0 1.5px rgba(255,106,61,.22)"></span>
+          <span style="position:absolute;width:28px;height:28px;border-radius:50%;box-shadow:inset 0 0 0 1.5px rgba(255,106,61,.5)"></span>
+          <span style="width:10px;height:10px;border-radius:50%;background:#ff5a2e;box-shadow:0 0 14px rgba(255,90,46,.9)"></span>
+        </span>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+          <span style="font:900 40px/1 'Zen Kaku Gothic New';letter-spacing:-.02em">FireOS</span>
+          <span style="font:500 14px 'Zen Kaku Gothic New';color:#a9b3c4;white-space:nowrap">消防団のすべてを、ひとつに。</span>
+        </div>
+      </div>
+      <div style="margin-top:52px;display:flex;flex-direction:column;gap:14px">
+        <label style="display:flex;flex-direction:column;gap:8px">
+          <span style="font:700 12px 'Zen Kaku Gothic New';color:#a9b3c4">団員ID</span>
+          <input value="{{ loginId }}" onChange="{{ onLoginId }}" style="height:54px;border-radius:16px;border:none;outline:none;padding:0 16px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);color:#edf1f7;font:500 16px 'IBM Plex Mono'">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:8px">
+          <span style="font:700 12px 'Zen Kaku Gothic New';color:#a9b3c4">パスワード</span>
+          <input type="password" value="{{ loginPw }}" onChange="{{ onLoginPw }}" placeholder="パスワードを入力" style="height:54px;border-radius:16px;border:none;outline:none;padding:0 16px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px {{ loginRing }};color:#edf1f7;font:500 16px 'IBM Plex Mono'">
+        </label>
+        <sc-if value="{{ loginError }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:8px;font:500 13px 'Zen Kaku Gothic New';color:#ff7a66"><span class="ms" style="font-size:18px">error</span>パスワードを入力してください（デモ：任意の文字でOK）</div>
+        </sc-if>
+        <button onClick="{{ doLogin }}" style="all:unset;cursor:pointer;margin-top:10px;height:56px;border-radius:99px;background:#ff5a2e;color:#fff;display:flex;align-items:center;justify-content:center;gap:10px;font:700 16px 'Zen Kaku Gothic New';box-shadow:0 14px 34px -10px rgba(255,90,46,.7)" style-active="transform:scale(.98)">{{ loginSpin }}{{ loginBtnText }}</button>
+        <button onClick="{{ doLogin }}" style="all:unset;cursor:pointer;height:52px;border-radius:99px;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;gap:8px;font:700 14px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:20px">fingerprint</span>生体認証でログイン</button>
+      </div>
+      <div style="margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:10px">
+        <span style="font:600 10px 'IBM Plex Mono';letter-spacing:.12em;color:#a9b3c4;padding:5px 9px;border-radius:99px;border:1px dashed rgba(255,255,255,.25)">DEMO · 架空のデータで動作しています</span>
+        <span style="font:400 12px 'Zen Kaku Gothic New';color:#7d889b">パスワードを忘れた場合は分団の管理者へ</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- HOME -->
+  <sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Home" class="fo-scroll" style="position:absolute;top:54px;left:0;right:0;bottom:0;overflow-y:auto;padding-bottom:170px;animation:fo-in .4s ease both">
+      <div style="padding:8px 20px 0;display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 11px 6px 9px;border-radius:99px;background:rgba(255,255,255,.06);font:500 12px 'Zen Kaku Gothic New';color:#a9b3c4"><span style="width:7px;height:7px;border-radius:50%;background:{{ syncDot }}"></span>{{ syncText }}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font:600 10px 'IBM Plex Mono';letter-spacing:.12em;color:#a9b3c4;padding:5px 8px;border-radius:99px;border:1px dashed rgba(255,255,255,.25)">DEMO</span>
+          <span style="position:relative;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:21px">notifications</span><span style="position:absolute;top:9px;right:10px;width:8px;height:8px;border-radius:50%;background:#ff5a2e;box-shadow:0 0 0 2px #0d1626"></span></span>
+        </div>
+      </div>
+      <div style="padding:18px 20px 0;display:flex;flex-direction:column;gap:2px">
+        <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">10月13日（火）· 川辺町消防団 第三分団</span>
+        <span style="font:700 22px/1.35 'Zen Kaku Gothic New'">こんばんは、佐藤さん</span>
+      </div>
+      <button onClick="{{ goDrill }}" style="all:unset;cursor:pointer;position:relative;margin:20px auto 0;width:236px;height:236px;border-radius:50%;background:conic-gradient(#ff6a3d 0 {{ dial.a }}%,#ffc35c {{ dial.a }}% {{ dial.b }}%,rgba(255,255,255,.08) {{ dial.b }}% 100%);display:flex;align-items:center;justify-content:center;transition:background .6s">
+        <span style="width:214px;height:214px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#13203a,#0a1424);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)">
+          <span style="font:600 11px 'IBM Plex Mono';letter-spacing:.14em;color:#ff8a66">あと4日 · 訓練</span>
+          <span style="font:700 20px/1.3 'Zen Kaku Gothic New';text-align:center">ポンプ車<br>操法訓練</span>
+          <span style="font:500 13px 'IBM Plex Mono';color:#a9b3c4">10/17 sat 19:00</span>
+          <span style="margin-top:4px;font:500 11px 'Zen Kaku Gothic New';color:#8792a5">参加 {{ counts.yes }} · 未定 {{ counts.maybe }} · 未回答 {{ counts.none }}</span>
+        </span>
+      </button>
+      <div style="margin:18px 20px 0;padding:14px;border-radius:22px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);display:flex;align-items:center;gap:12px">
+        <sc-if value="{{ rsvpNone }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:700 14px 'Zen Kaku Gothic New'">あなたは未回答です</span><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">締切 10/15（木）</span></div>
+          <button onClick="{{ quickYes }}" style="all:unset;cursor:pointer;height:46px;padding:0 20px;border-radius:99px;background:#ff5a2e;color:#fff;display:flex;align-items:center;font:700 14px 'Zen Kaku Gothic New';box-shadow:0 8px 24px -6px rgba(255,90,46,.6)" style-active="transform:scale(.96)">参加する</button>
+          <button onClick="{{ openRsvp }}" aria-label="ほかの回答" style="all:unset;cursor:pointer;width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:20px">more_horiz</span></button>
+        </sc-if>
+        <sc-if value="{{ rsvpDone }}" hint-placeholder-val="{{ false }}">
+          <span style="width:36px;height:36px;border-radius:50%;background:rgba(58,208,143,.15);color:#3ad08f;display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:20px">check</span></span>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:700 14px 'Zen Kaku Gothic New'">「{{ rsvpLabel }}」で回答済み</span><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">締切まで変更できます</span></div>
+          <button onClick="{{ openRsvp }}" style="all:unset;cursor:pointer;height:44px;padding:0 16px;border-radius:99px;background:rgba(255,255,255,.08);display:flex;align-items:center;font:700 13px 'Zen Kaku Gothic New'">変更</button>
+        </sc-if>
+      </div>
+      <div style="margin:26px 20px 10px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:700 14px 'Zen Kaku Gothic New'">やること</span><span style="font:500 12px 'IBM Plex Mono';color:#8792a5">{{ tasksCount }}</span></div>
+      <div class="fo-scroll" style="display:flex;gap:10px;padding:0 20px;overflow-x:auto">
+        <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="2">
+          <button onClick="{{ t.onClick }}" style="all:unset;cursor:pointer;flex:none;width:164px;padding:14px;border-radius:20px;background:#101a2b;box-shadow:inset 0 0 0 1px {{ t.ring }};display:flex;flex-direction:column;gap:10px;animation:fo-in .4s ease both">
+            <span style="width:30px;height:30px;border-radius:{{ t.radius }};background:{{ t.color }};display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:17px;color:#fff;font-variation-settings:'FILL' 1">{{ t.icon }}</span></span>
+            <span style="font:700 14px/1.4 'Zen Kaku Gothic New';color:#edf1f7;white-space:normal">{{ t.title }}</span>
+            <span style="font:600 11px 'IBM Plex Mono';color:{{ t.subColor }}">{{ t.sub }}</span>
+          </button>
+        </sc-for>
+        <sc-if value="{{ noTasks }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1;padding:18px;border-radius:20px;border:1px dashed rgba(255,255,255,.14);display:flex;align-items:center;gap:10px;font:500 13px 'Zen Kaku Gothic New';color:#8792a5"><span class="ms" style="font-size:20px;color:#3ad08f">task_alt</span>やることはすべて完了しています</div>
+        </sc-if>
+      </div>
+      <div style="margin:26px 20px 10px;font:700 14px 'Zen Kaku Gothic New'">お知らせ</div>
+      <div style="margin:0 20px;border-radius:20px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);overflow:hidden">
+        <div style="display:flex;gap:12px;padding:14px 16px;align-items:flex-start;background:linear-gradient(90deg,rgba(255,90,70,.10),transparent 70%)">
+          <span style="flex:none;font:700 11px 'Zen Kaku Gothic New';color:#fff;background:#e5402c;padding:3px 8px;border-radius:6px;display:flex;align-items:center;gap:3px"><span class="ms" style="font-size:13px">priority_high</span>重要</span>
+          <div style="display:flex;flex-direction:column;gap:3px"><span style="font:700 14px/1.5 'Zen Kaku Gothic New'">秋季火災予防運動の巡回日程が10/25（日）に変更されました</span><span style="font:500 11px 'IBM Plex Mono';color:#8792a5">分団長 田中 · 10/12</span></div>
+        </div>
+        <div style="display:flex;gap:12px;padding:14px 16px;align-items:flex-start;border-top:1px solid rgba(255,255,255,.06)">
+          <span style="flex:none;font:700 11px 'Zen Kaku Gothic New';color:#c3cad6;background:rgba(255,255,255,.08);padding:3px 8px;border-radius:6px">連絡</span>
+          <div style="display:flex;flex-direction:column;gap:3px"><span style="font:500 14px/1.5 'Zen Kaku Gothic New';color:#c3cad6">10月の詰所清掃当番表を掲載しました</span><span style="font:500 11px 'IBM Plex Mono';color:#7d889b">班長 高橋 · 10/09 · 既読</span></div>
+        </div>
+      </div>
+    </div>
+    <button onClick="{{ goAiPrefill }}" style="all:unset;cursor:pointer;position:absolute;left:12px;right:12px;bottom:96px;height:54px;border-radius:99px;background:rgba(20,30,50,.86);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 0 0 1px rgba(170,150,255,.32),0 14px 30px -8px rgba(0,0,0,.7);display:flex;align-items:center;gap:10px;padding:0 8px 0 16px;z-index:20">
+      <span class="ms" style="font-size:20px;color:#b9a9ff">auto_awesome</span>
+      <span style="flex:1;font:500 13px 'Zen Kaku Gothic New';color:#a9b3c4">訓練の準備状況を確認する？</span>
+      <span style="width:38px;height:38px;border-radius:50%;background:#b9a9ff;color:#0b1220;display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:20px">arrow_upward</span></span>
+    </button>
+  </sc-if>
+
+  <!-- MAP -->
+  <sc-if value="{{ isMap }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Map" style="position:absolute;inset:0;background:#0b1422;overflow:hidden">
+      <div style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(255,255,255,.028) 0 2px,transparent 2px 14px),radial-gradient(800px 500px at 50% 40%,#122036,#0a121e)"></div>
+      <div style="position:absolute;left:50%;top:51%;transform:translate(-50%,-50%);font:500 10px/1.7 'IBM Plex Mono';letter-spacing:.08em;color:#4b5870;text-align:center;pointer-events:none">MAP PLACEHOLDER<br>Google Maps JS API · ダークスタイル</div>
+      <sc-if value="{{ mapIsMap }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;left:46%;top:52%;width:16px;height:16px">
+          <span style="position:absolute;left:50%;top:50%;width:40px;height:40px;border-radius:50%;background:rgba(84,160,255,.35);animation:fo-ring 2.2s ease-out infinite"></span>
+          <span style="position:absolute;inset:0;border-radius:50%;background:#4f9bff;box-shadow:0 0 0 3px #fff"></span>
+        </div>
+        <sc-for list="{{ markers }}" as="m" hint-placeholder-count="8">
+          <button onClick="{{ m.onClick }}" aria-label="{{ m.name }}" style="all:unset;cursor:pointer;position:absolute;left:{{ m.x }}%;top:{{ m.y }}%;transform:translate(-50%,-50%) scale({{ m.scale }});transition:transform .25s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;align-items:center;gap:5px;z-index:{{ m.z }}">
+            <span style="position:relative;width:38px;height:38px;display:flex;align-items:center;justify-content:center">
+              <span style="position:absolute;inset:2px;background:{{ m.color }};border-radius:{{ m.radius }};transform:{{ m.tf }};clip-path:{{ m.clip }};box-shadow:0 0 0 2px #08101c,0 0 0 {{ m.ring }}px rgba(255,255,255,.9),0 6px 14px rgba(0,0,0,.5)"></span>
+              <span class="ms" style="position:relative;font-size:19px;color:#fff;font-variation-settings:'FILL' 1">{{ m.icon }}</span>
+              <span style="position:absolute;top:-4px;right:-5px;min-width:16px;height:16px;border-radius:99px;background:{{ m.badgeBg }};color:#0b1220;display:{{ m.badgeDisplay }};align-items:center;justify-content:center;font:700 10px 'IBM Plex Mono';box-shadow:0 0 0 2px #08101c">{{ m.badgeText }}</span>
+            </span>
+            <span style="font:600 10px 'IBM Plex Mono';color:#edf1f7;background:rgba(8,16,28,.8);padding:1px 5px;border-radius:4px">{{ m.id }}</span>
+          </button>
+        </sc-for>
+      </sc-if>
+      <sc-if value="{{ mapIsList }}" hint-placeholder-val="{{ false }}">
+        <div class="fo-scroll" style="position:absolute;top:172px;left:0;right:0;bottom:84px;overflow-y:auto;background:#08101c;padding:0 20px 30px;animation:fo-in .3s ease both">
+          <sc-for list="{{ facList }}" as="f" hint-placeholder-count="6">
+            <button onClick="{{ f.onOpen }}" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06);width:100%">
+              <span style="width:34px;height:34px;flex:none;display:flex;align-items:center;justify-content:center;position:relative"><span style="position:absolute;inset:3px;background:{{ f.color }};border-radius:{{ f.radius }};transform:{{ f.tf }};clip-path:{{ f.clip }}"></span><span class="ms" style="position:relative;font-size:17px;color:#fff;font-variation-settings:'FILL' 1">{{ f.icon }}</span></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font:700 14px 'Zen Kaku Gothic New'">{{ f.name }}</span><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">{{ f.addr }}</span></span>
+              <span style="font:700 11px 'Zen Kaku Gothic New';padding:4px 8px;border-radius:99px;background:{{ f.pill.bg }};color:{{ f.pill.fg }}">{{ f.pill.t }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <div style="position:absolute;top:54px;left:0;right:0;padding:8px 16px 14px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(180deg,rgba(8,16,28,.95) 60%,rgba(8,16,28,0));z-index:30">
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;height:50px;border-radius:99px;background:rgba(20,30,50,.9);backdrop-filter:blur(14px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);display:flex;align-items:center;gap:8px;padding:0 16px">
+            <span class="ms" style="font-size:20px;color:#8792a5">search</span>
+            <input value="{{ q }}" onChange="{{ onQ }}" placeholder="施設名・管理番号で検索" style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:#edf1f7;font:500 14px 'Zen Kaku Gothic New'">
+          </div>
+          <button onClick="{{ toggleView }}" style="all:unset;cursor:pointer;height:50px;padding:0 16px;border-radius:99px;background:rgba(20,30,50,.9);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);display:flex;align-items:center;gap:6px;font:700 13px 'Zen Kaku Gothic New';white-space:nowrap"><span class="ms" style="font-size:19px">{{ viewIcon }}</span>{{ viewLabel }}</button>
+        </div>
+        <sc-if value="{{ hasQResults }}" hint-placeholder-val="{{ false }}">
+          <div style="border-radius:18px;background:#101a2b;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);overflow:hidden">
+            <sc-for list="{{ qResults }}" as="r" hint-placeholder-count="2">
+              <button onClick="{{ r.onOpen }}" style="all:unset;cursor:pointer;display:flex;justify-content:space-between;width:100%;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font:700 13px 'Zen Kaku Gothic New'">{{ r.name }}</span><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">{{ r.typeLabel }}</span></button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <div class="fo-scroll" style="display:flex;gap:6px;overflow-x:auto">
+          <sc-for list="{{ chips }}" as="c" hint-placeholder-count="4">
+            <button onClick="{{ c.onClick }}" style="all:unset;cursor:pointer;flex:none;height:36px;padding:0 12px 0 8px;border-radius:99px;background:{{ c.bg }};box-shadow:inset 0 0 0 1px {{ c.ring }};display:flex;align-items:center;gap:7px;font:700 12px 'Zen Kaku Gothic New';color:{{ c.fg }};transition:all .2s">
+              <span style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;position:relative"><span style="position:absolute;inset:2px;background:{{ c.color }};border-radius:{{ c.radius }};transform:{{ c.tf }};clip-path:{{ c.clip }};opacity:{{ c.op }}"></span></span>{{ c.label }}<span style="font:500 11px 'IBM Plex Mono';color:#8792a5">{{ c.count }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+      <sc-if value="{{ mapIsMap }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ locate }}" aria-label="現在地" style="all:unset;cursor:pointer;position:absolute;right:16px;bottom:{{ fabBottom }}px;width:50px;height:50px;border-radius:50%;background:rgba(20,30,50,.92);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 8px 20px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;transition:bottom .35s cubic-bezier(.2,.8,.2,1);z-index:25"><span class="ms" style="font-size:22px;color:#4f9bff">my_location</span></button>
+      </sc-if>
+      <div style="position:absolute;left:10px;right:10px;bottom:94px;border-radius:28px;background:rgba(14,22,38,.97);backdrop-filter:blur(20px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 -10px 40px rgba(0,0,0,.5);transform:translateY({{ sheetY }});opacity:{{ sheetOp }};transition:transform .4s cubic-bezier(.2,.8,.2,1),opacity .3s;z-index:40;padding:10px 18px 18px">
+        <div style="width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);margin:0 auto 12px"></div>
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <span style="width:46px;height:46px;flex:none;display:flex;align-items:center;justify-content:center;position:relative"><span style="position:absolute;inset:4px;background:{{ sel.color }};border-radius:{{ sel.radius }};transform:{{ sel.tf }};clip-path:{{ sel.clip }}"></span><span class="ms" style="position:relative;font-size:21px;color:#fff;font-variation-settings:'FILL' 1">{{ sel.icon }}</span></span>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">{{ sel.typeLabel }} · {{ sel.id }}</span>
+            <span style="font:700 18px 'Zen Kaku Gothic New'">{{ sel.name }}</span>
+            <span style="font:500 12px 'Zen Kaku Gothic New';color:#a9b3c4">{{ sel.addr }}</span>
+          </div>
+          <button onClick="{{ closeSel }}" aria-label="閉じる" style="all:unset;cursor:pointer;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:19px">close</span></button>
+        </div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;border-radius:14px;overflow:hidden;background:rgba(255,255,255,.07)">
+          <div style="background:#0e1626;padding:10px 12px;display:flex;flex-direction:column;gap:4px"><span style="font:500 10px 'Zen Kaku Gothic New';color:#8792a5">状態</span><span style="font:700 12px 'Zen Kaku Gothic New';color:{{ sel.pill.fg }}">{{ sel.pill.t }}</span></div>
+          <div style="background:#0e1626;padding:10px 12px;display:flex;flex-direction:column;gap:4px"><span style="font:500 10px 'Zen Kaku Gothic New';color:#8792a5">最終点検</span><span style="font:600 12px 'IBM Plex Mono'">{{ sel.last }}</span></div>
+          <div style="background:#0e1626;padding:10px 12px;display:flex;flex-direction:column;gap:4px"><span style="font:500 10px 'Zen Kaku Gothic New';color:#8792a5">次回期限</span><span style="font:600 12px 'IBM Plex Mono'">{{ sel.due }}</span></div>
+        </div>
+        <sc-if value="{{ sel.hasNote }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:10px;display:flex;align-items:center;gap:8px;font:500 12px 'Zen Kaku Gothic New';color:#ff9a88"><span class="ms" style="font-size:17px">report</span>{{ sel.note }}</div>
+        </sc-if>
+        <div style="margin-top:14px;display:flex;gap:8px">
+          <button onClick="{{ selInspect }}" style="all:unset;cursor:pointer;flex:1;height:52px;border-radius:99px;background:#ff5a2e;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font:700 15px 'Zen Kaku Gothic New';box-shadow:0 10px 24px -8px rgba(255,90,46,.7)" style-active="transform:scale(.98)"><span class="ms" style="font-size:20px">fact_check</span>点検する</button>
+          <button onClick="{{ selDetail }}" style="all:unset;cursor:pointer;height:52px;padding:0 18px;border-radius:99px;background:rgba(255,255,255,.08);display:flex;align-items:center;font:700 14px 'Zen Kaku Gothic New'">詳細</button>
+          <button onClick="{{ selRoute }}" aria-label="経路" style="all:unset;cursor:pointer;width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:21px">directions</span></button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- FACILITY DETAIL -->
+  <sc-if value="{{ isFac }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Facility" class="fo-scroll" style="position:absolute;top:0;left:0;right:0;bottom:0;overflow-y:auto;padding-bottom:120px;background:#08101c;animation:fo-in .35s ease both">
+      <div style="position:relative;height:280px;background:repeating-linear-gradient(135deg,rgba(255,255,255,.035) 0 2px,transparent 2px 12px),linear-gradient(180deg,#16233a,#0b1422);display:flex;align-items:center;justify-content:center">
+        <span style="font:500 10px 'IBM Plex Mono';letter-spacing:.1em;color:#5a6780">施設写真 · FACILITY PHOTO</span>
+        <div style="position:absolute;left:0;right:0;bottom:0;height:120px;background:linear-gradient(180deg,transparent,#08101c)"></div>
+        <button onClick="{{ backToMap }}" aria-label="戻る" style="all:unset;cursor:pointer;position:absolute;top:58px;left:16px;width:44px;height:44px;border-radius:50%;background:rgba(8,16,28,.7);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:22px">arrow_back</span></button>
+        <span style="position:absolute;top:66px;right:16px;font:600 10px 'IBM Plex Mono';color:#a9b3c4;padding:5px 8px;border-radius:99px;background:rgba(8,16,28,.7)">1 / 3</span>
+      </div>
+      <div style="padding:0 20px;margin-top:-30px;position:relative;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font:700 11px 'Zen Kaku Gothic New';padding:4px 10px;border-radius:99px;background:{{ fd.color }};color:#fff">{{ fd.typeLabel }}</span>
+          <span style="font:700 11px 'Zen Kaku Gothic New';padding:4px 10px;border-radius:99px;background:{{ fd.pill.bg }};color:{{ fd.pill.fg }}">{{ fd.pill.t }}</span>
+        </div>
+        <span style="font:700 26px/1.3 'Zen Kaku Gothic New'">{{ fd.name }}</span>
+        <span style="font:500 13px 'Zen Kaku Gothic New';color:#a9b3c4">{{ fd.addr }}</span>
+      </div>
+      <sc-if value="{{ fd.hasNote }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:16px 20px 0;padding:14px 16px;border-radius:18px;background:rgba(255,90,70,.1);box-shadow:inset 0 0 0 1px rgba(255,90,70,.3);display:flex;gap:10px;align-items:flex-start"><span class="ms" style="font-size:20px;color:#ff7a66">report</span><div style="display:flex;flex-direction:column;gap:3px"><span style="font:700 14px 'Zen Kaku Gothic New';color:#ffb0a4">異常報告あり</span><span style="font:500 13px/1.6 'Zen Kaku Gothic New';color:#e7c9c4">{{ fd.note }}</span></div></div>
+      </sc-if>
+      <div style="margin:18px 20px 0;display:grid;grid-template-columns:1fr 1fr;gap:1px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.07)">
+        <div style="background:#0d1626;padding:14px;display:flex;flex-direction:column;gap:5px"><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">管理番号</span><span style="font:600 15px 'IBM Plex Mono'">{{ fd.id }}</span></div>
+        <div style="background:#0d1626;padding:14px;display:flex;flex-direction:column;gap:5px"><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">規格</span><span style="font:700 14px 'Zen Kaku Gothic New'">{{ fd.spec }}</span></div>
+        <div style="background:#0d1626;padding:14px;display:flex;flex-direction:column;gap:5px"><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">最終点検</span><span style="font:600 15px 'IBM Plex Mono'">{{ fd.last }}</span></div>
+        <div style="background:#0d1626;padding:14px;display:flex;flex-direction:column;gap:5px"><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">次回期限</span><span style="font:600 15px 'IBM Plex Mono'">{{ fd.due }}</span></div>
+      </div>
+      <div style="margin:26px 20px 6px;font:700 14px 'Zen Kaku Gothic New'">点検履歴</div>
+      <div style="margin:0 20px;display:flex;flex-direction:column">
+        <sc-for list="{{ fd.history }}" as="h" hint-placeholder-count="2">
+          <div style="display:grid;grid-template-columns:18px 1fr;gap:12px;padding:12px 0">
+            <span style="margin-top:4px;width:10px;height:10px;border-radius:50%;background:{{ h.dot }};box-shadow:0 0 0 4px rgba(255,255,255,.04)"></span>
+            <div style="display:flex;flex-direction:column;gap:3px"><span style="font:600 12px 'IBM Plex Mono';color:#8792a5">{{ h.d }} · {{ h.who }}</span><span style="font:500 14px/1.55 'Zen Kaku Gothic New'">{{ h.r }}</span></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 20px 30px;background:linear-gradient(180deg,rgba(8,16,28,0),#08101c 35%);display:flex;gap:8px;z-index:20">
+      <button onClick="{{ fdInspect }}" style="all:unset;cursor:pointer;flex:1;height:56px;border-radius:99px;background:#ff5a2e;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font:700 16px 'Zen Kaku Gothic New';box-shadow:0 12px 28px -8px rgba(255,90,46,.7)"><span class="ms" style="font-size:21px">fact_check</span>この施設を点検する</button>
+    </div>
+  </sc-if>
+
+  <!-- INSPECT -->
+  <sc-if value="{{ isInspect }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Inspection" style="position:absolute;inset:0;background:#08101c;display:flex;flex-direction:column;padding-top:54px">
+      <div style="padding:6px 16px 0;display:flex;align-items:center;gap:10px">
+        <button onClick="{{ exitInspect }}" aria-label="閉じる" style="all:unset;cursor:pointer;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:21px">close</span></button>
+        <div style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font:700 16px 'Zen Kaku Gothic New'">点検登録</span><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">{{ insFac.name }} · {{ insFac.addr }}</span></div>
+        <span style="font:600 11px 'IBM Plex Mono';color:#a9b3c4">{{ stepLabel }}</span>
+      </div>
+      <div style="padding:14px 20px 0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        <sc-for list="{{ stepBars }}" as="b" hint-placeholder-count="3">
+          <div style="display:flex;flex-direction:column;gap:6px"><span style="height:4px;border-radius:2px;background:{{ b.bg }};transition:background .3s"></span><span style="font:700 11px 'Zen Kaku Gothic New';color:{{ b.fg }}">{{ b.t }}</span></div>
+        </sc-for>
+      </div>
+      <div class="fo-scroll" style="flex:1;overflow-y:auto;padding:18px 20px 130px">
+        <sc-if value="{{ insStep1 }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:10px;animation:fo-in .3s ease both">
+            <sc-for list="{{ items }}" as="it" hint-placeholder-count="5">
+              <div style="padding:14px;border-radius:20px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px {{ it.ring }};display:flex;flex-direction:column;gap:12px;transition:box-shadow .2s">
+                <div style="display:flex;gap:10px;align-items:flex-start">
+                  <span style="font:600 11px 'IBM Plex Mono';color:#5f6a7d;padding-top:3px">{{ it.n }}</span>
+                  <div style="display:flex;flex-direction:column;gap:2px"><span style="font:700 15px 'Zen Kaku Gothic New'">{{ it.t }}<span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5;margin-left:6px">{{ it.opt }}</span></span><span style="font:500 12px/1.5 'Zen Kaku Gothic New';color:#8792a5">{{ it.d }}</span></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                  <button onClick="{{ it.onOk }}" style="all:unset;cursor:pointer;height:48px;border-radius:14px;background:{{ it.okBg }};color:{{ it.okFg }};display:flex;align-items:center;justify-content:center;gap:6px;font:700 14px 'Zen Kaku Gothic New';transition:all .15s"><span class="ms" style="font-size:19px">check_circle</span>良好</button>
+                  <button onClick="{{ it.onNg }}" style="all:unset;cursor:pointer;height:48px;border-radius:14px;background:{{ it.ngBg }};color:{{ it.ngFg }};display:flex;align-items:center;justify-content:center;gap:6px;font:700 14px 'Zen Kaku Gothic New';transition:all .15s"><span class="ms" style="font-size:19px">warning</span>異常あり</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ insStep2 }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:14px;animation:fo-in .3s ease both">
+            <div style="font:700 14px 'Zen Kaku Gothic New'">写真</div>
+            <div style="display:flex;gap:10px">
+              <button onClick="{{ togglePhoto }}" style="all:unset;cursor:pointer;width:104px;height:104px;border-radius:18px;border:1.5px dashed rgba(255,255,255,.22);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font:700 12px 'Zen Kaku Gothic New';color:#a9b3c4"><span class="ms" style="font-size:26px">photo_camera</span>撮影・追加</button>
+              <sc-if value="{{ ins.photo }}" hint-placeholder-val="{{ false }}">
+                <div style="position:relative;width:104px;height:104px;border-radius:18px;background:repeating-linear-gradient(135deg,rgba(255,255,255,.05) 0 2px,transparent 2px 10px),#16233a;display:flex;align-items:flex-end;padding:8px;font:500 9px 'IBM Plex Mono';color:#7d889b;animation:fo-in .3s ease both">IMG_2041.jpg<span style="position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:#3ad08f;color:#08101c;display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:14px">check</span></span></div>
+              </sc-if>
+            </div>
+            <div style="font:700 14px 'Zen Kaku Gothic New';margin-top:6px">メモ</div>
+            <textarea value="{{ ins.memo }}" onChange="{{ onMemo }}" placeholder="気づいたことを入力（例：蓋の周辺に錆、地下から漏れる音）" style="min-height:96px;resize:none;border:none;outline:none;border-radius:18px;padding:14px 16px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);color:#edf1f7;font:500 14px/1.7 'Zen Kaku Gothic New'"></textarea>
+            <sc-if value="{{ hasIssue }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:16px;border-radius:22px;background:linear-gradient(180deg,rgba(185,169,255,.10),rgba(185,169,255,.03));box-shadow:inset 0 0 0 1px rgba(185,169,255,.3);display:flex;flex-direction:column;gap:12px;animation:fo-in .4s ease both">
+                <div style="display:flex;align-items:center;gap:8px"><span class="ms" style="font-size:19px;color:#b9a9ff">auto_awesome</span><span style="font:700 14px 'Zen Kaku Gothic New'">AIによる分類候補</span><span style="margin-left:auto;font:600 10px 'IBM Plex Mono';color:#b9a9ff;padding:3px 6px;border-radius:5px;background:rgba(185,169,255,.14)">JEV</span></div>
+                <span style="font:500 12px/1.6 'Zen Kaku Gothic New';color:#a9b3c4">チェック結果とメモから分類しました。最終判断はあなたが行います。</span>
+                <sc-for list="{{ cands }}" as="c" hint-placeholder-count="2">
+                  <button onClick="{{ c.onPick }}" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;background:{{ c.bg }};box-shadow:inset 0 0 0 1.5px {{ c.ring }};transition:all .15s">
+                    <span style="width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 2px {{ c.ring }};display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:{{ c.dot }}"></span></span>
+                    <span style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font:700 14px 'Zen Kaku Gothic New'">{{ c.t }}</span><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">緊急度 {{ c.u }} · 根拠：{{ c.why }}</span></span>
+                    <span style="font:600 12px 'IBM Plex Mono';color:#b9a9ff">{{ c.p }}</span>
+                  </button>
+                </sc-for>
+                <button onClick="{{ toggleTask }}" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:4px 2px">
+                  <span style="width:42px;height:26px;border-radius:99px;background:{{ taskBg }};position:relative;transition:background .2s"><span style="position:absolute;top:3px;left:{{ taskKnob }}px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s"></span></span>
+                  <span style="font:500 13px 'Zen Kaku Gothic New'">班長への確認タスクを作成する</span>
+                </button>
+                <sc-if value="{{ needConfirm }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ confirmCat }}" style="all:unset;cursor:pointer;height:48px;border-radius:99px;background:#b9a9ff;color:#0b1220;display:flex;align-items:center;justify-content:center;font:700 14px 'Zen Kaku Gothic New'">この分類で確定する</button>
+                </sc-if>
+                <sc-if value="{{ ins.confirmed }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;justify-content:center;gap:6px;height:48px;font:700 13px 'Zen Kaku Gothic New';color:#3ad08f"><span class="ms" style="font-size:19px">verified</span>「{{ catLabel }}」で確定しました</div>
+                </sc-if>
+              </div>
+            </sc-if>
+            <sc-if value="{{ noIssue }}" hint-placeholder-val="{{ true }}">
+              <div style="padding:16px;border-radius:20px;background:rgba(58,208,143,.07);box-shadow:inset 0 0 0 1px rgba(58,208,143,.22);display:flex;gap:10px;align-items:center;font:500 13px/1.6 'Zen Kaku Gothic New';color:#bfe9d6"><span class="ms" style="font-size:20px;color:#3ad08f">task_alt</span>異常の記録はありません。AI分類は不要です。</div>
+            </sc-if>
+          </div>
+        </sc-if>
+        <sc-if value="{{ insStep3 }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:14px;animation:fo-in .3s ease both">
+            <span style="font:700 20px 'Zen Kaku Gothic New'">内容を確認してください</span>
+            <div style="border-radius:20px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)">
+              <sc-for list="{{ summary }}" as="s" hint-placeholder-count="5">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font:500 14px 'Zen Kaku Gothic New'">{{ s.t }}</span><span style="font:700 13px 'Zen Kaku Gothic New';color:{{ s.fg }};display:flex;align-items:center;gap:5px"><span class="ms" style="font-size:17px">{{ s.icon }}</span>{{ s.v }}</span></div>
+              </sc-for>
+              <div style="display:flex;justify-content:space-between;padding:13px 16px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font:500 14px 'Zen Kaku Gothic New'">写真</span><span style="font:600 13px 'IBM Plex Mono';color:#a9b3c4">{{ photoCount }}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:13px 16px;gap:16px"><span style="font:500 14px 'Zen Kaku Gothic New';flex:none">分類</span><span style="font:700 13px 'Zen Kaku Gothic New';color:#b9a9ff;text-align:right">{{ catSummary }}</span></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font:500 12px 'IBM Plex Mono';color:#8792a5"><span>担当 佐藤 健太</span><span>2026.10.13 19:48</span></div>
+            <sc-if value="{{ offline }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:12px 14px;border-radius:16px;background:rgba(255,195,92,.1);box-shadow:inset 0 0 0 1px rgba(255,195,92,.3);display:flex;gap:10px;align-items:center;font:500 12px/1.6 'Zen Kaku Gothic New';color:#ffdca0"><span class="ms" style="font-size:19px;color:#ffc35c">cloud_off</span>オフラインです。端末に保存し、通信が戻ると自動で送信します。</div>
+            </sc-if>
+          </div>
+        </sc-if>
+        <sc-if value="{{ insDone }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding-top:60px;text-align:center;animation:fo-in .4s ease both">
+            <span style="width:96px;height:96px;border-radius:50%;background:radial-gradient(circle,rgba(58,208,143,.25),rgba(58,208,143,.05));box-shadow:inset 0 0 0 2px #3ad08f;display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:48px;color:#3ad08f">check</span></span>
+            <span style="font:700 22px 'Zen Kaku Gothic New'">{{ doneTitle }}</span>
+            <span style="font:500 14px/1.7 'Zen Kaku Gothic New';color:#a9b3c4;max-width:290px">{{ doneSub }}</span>
+          </div>
+        </sc-if>
+      </div>
+      <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 20px 30px;background:linear-gradient(180deg,rgba(8,16,28,0),#08101c 30%);display:flex;gap:8px">
+        <sc-if value="{{ showBack }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ insBack }}" style="all:unset;cursor:pointer;height:56px;padding:0 22px;border-radius:99px;background:rgba(255,255,255,.08);display:flex;align-items:center;font:700 15px 'Zen Kaku Gothic New'">戻る</button>
+        </sc-if>
+        <button onClick="{{ insPrimary }}" style="all:unset;cursor:{{ primaryCursor }};flex:1;height:56px;border-radius:99px;background:{{ primaryBg }};color:{{ primaryFg }};display:flex;align-items:center;justify-content:center;gap:10px;font:700 16px 'Zen Kaku Gothic New';transition:all .2s">{{ insSpin }}{{ primaryLabel }}</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- SCHEDULE -->
+  <sc-if value="{{ isSchedule }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Schedule" class="fo-scroll" style="position:absolute;top:54px;left:0;right:0;bottom:0;overflow-y:auto;padding-bottom:110px;animation:fo-in .4s ease both">
+      <div style="padding:10px 20px 0;display:flex;justify-content:space-between;align-items:flex-end">
+        <div style="display:flex;flex-direction:column;gap:2px"><span style="font:600 12px 'IBM Plex Mono';color:#8792a5">2026 · OCT</span><span style="font:700 26px 'Zen Kaku Gothic New'">予定・活動</span></div>
+        <span style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:21px">calendar_month</span></span>
+      </div>
+      <div style="margin:18px 14px 0;display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+        <sc-for list="{{ week }}" as="w" hint-placeholder-count="7">
+          <div style="height:68px;border-radius:18px;background:{{ w.bg }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="font:500 10px 'Zen Kaku Gothic New';color:{{ w.dc }}">{{ w.dow }}</span>
+            <span style="font:600 17px 'IBM Plex Mono';color:{{ w.fg }}">{{ w.d }}</span>
+            <span style="width:5px;height:5px;border-radius:50%;background:{{ w.dot }}"></span>
+          </div>
+        </sc-for>
+      </div>
+      <sc-for list="{{ events }}" as="g" hint-placeholder-count="2">
+        <div style="margin:24px 20px 8px;font:600 11px 'IBM Plex Mono';letter-spacing:.14em;color:#7d889b">{{ g.h }}</div>
+        <div style="margin:0 20px;display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ g.items }}" as="e" hint-placeholder-count="2">
+            <button onClick="{{ e.onClick }}" style="all:unset;cursor:pointer;display:grid;grid-template-columns:52px 1fr auto;gap:14px;align-items:center;padding:14px;border-radius:20px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)" style-hover="background:rgba(255,255,255,.07)">
+              <span style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border-radius:14px;background:rgba(255,255,255,.05)"><span style="font:600 18px 'IBM Plex Mono'">{{ e.d }}</span><span style="font:500 10px 'Zen Kaku Gothic New';color:#8792a5">{{ e.dow }}</span></span>
+              <span style="display:flex;flex-direction:column;gap:4px"><span style="display:flex;gap:6px;align-items:center"><span style="width:7px;height:7px;border-radius:2px;background:{{ e.color }}"></span><span style="font:500 11px 'Zen Kaku Gothic New';color:#a9b3c4">{{ e.kind }} · {{ e.time }}</span></span><span style="font:700 15px/1.4 'Zen Kaku Gothic New';color:#edf1f7">{{ e.t }}</span></span>
+              <span style="font:700 11px 'Zen Kaku Gothic New';padding:4px 9px;border-radius:99px;background:{{ e.pill.bg }};color:{{ e.pill.fg }}">{{ e.pill.t }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- ACTIVITY DETAIL -->
+  <sc-if value="{{ isActivity }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Activity" class="fo-scroll" style="position:absolute;top:54px;left:0;right:0;bottom:0;overflow-y:auto;padding-bottom:130px;background:#08101c;animation:fo-in .35s ease both">
+      <div style="padding:6px 16px 0;display:flex;align-items:center;justify-content:space-between">
+        <button onClick="{{ toSchedule }}" aria-label="戻る" style="all:unset;cursor:pointer;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:22px">arrow_back</span></button>
+        <span style="font:700 11px 'Zen Kaku Gothic New';padding:5px 10px;border-radius:99px;background:{{ act.pill.bg }};color:{{ act.pill.fg }}">{{ act.pill.t }}</span>
+      </div>
+      <div style="padding:18px 20px 0;display:flex;flex-direction:column;gap:8px">
+        <span style="display:flex;gap:6px;align-items:center;font:600 11px 'IBM Plex Mono';letter-spacing:.1em;color:{{ act.color }}"><span style="width:8px;height:8px;border-radius:2px;background:{{ act.color }}"></span>{{ act.kind }}</span>
+        <span style="font:700 28px/1.3 'Zen Kaku Gothic New'">{{ act.t }}</span>
+      </div>
+      <div style="margin:18px 20px 0;border-radius:20px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)">
+        <div style="display:flex;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06)"><span class="ms" style="font-size:20px;color:#8792a5">schedule</span><span style="font:600 14px 'IBM Plex Mono'">{{ act.when }}</span></div>
+        <div style="display:flex;gap:12px;align-items:center;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06)"><span class="ms" style="font-size:20px;color:#8792a5">location_on</span><span style="font:500 14px 'Zen Kaku Gothic New'">{{ act.place }}</span></div>
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px"><span class="ms" style="font-size:20px;color:#8792a5">backpack</span><span style="font:500 14px/1.6 'Zen Kaku Gothic New'">{{ act.bring }}</span></div>
+      </div>
+      <sc-if value="{{ actIsDrill }}" hint-placeholder-val="{{ true }}">
+        <div style="margin:22px 20px 10px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:700 14px 'Zen Kaku Gothic New'">あなたの出欠</span><span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">締切 10/15（木）</span></div>
+        <div style="margin:0 20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <sc-for list="{{ rsvpOpts }}" as="o" hint-placeholder-count="3">
+            <button onClick="{{ o.onClick }}" style="all:unset;cursor:pointer;height:64px;border-radius:18px;background:{{ o.bg }};color:{{ o.fg }};box-shadow:inset 0 0 0 1.5px {{ o.ring }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;transition:all .2s"><span class="ms" style="font-size:20px">{{ o.icon }}</span><span style="font:700 13px 'Zen Kaku Gothic New'">{{ o.label }}</span></button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <div style="margin:24px 20px 10px;display:flex;justify-content:space-between;align-items:baseline"><span style="font:700 14px 'Zen Kaku Gothic New'">{{ act.peopleTitle }}</span><span style="font:500 12px 'IBM Plex Mono';color:#8792a5">{{ act.peopleSum }}</span></div>
+      <div style="margin:0 20px;display:flex;flex-wrap:wrap;gap:6px">
+        <sc-for list="{{ people }}" as="p" hint-placeholder-count="8">
+          <span style="display:flex;align-items:center;gap:7px;height:34px;padding:0 11px 0 4px;border-radius:99px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px {{ p.ring }}"><span style="width:26px;height:26px;border-radius:50%;background:#1a2740;display:flex;align-items:center;justify-content:center;font:700 11px 'Zen Kaku Gothic New';color:#c3cad6">{{ p.i }}</span><span style="font:500 12px 'Zen Kaku Gothic New';color:#c3cad6">{{ p.n }}</span><span style="width:6px;height:6px;border-radius:50%;background:{{ p.dot }}"></span></span>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ actIsPast }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 20px 30px;background:linear-gradient(180deg,rgba(8,16,28,0),#08101c 35%);z-index:20">
+        <button onClick="{{ openReport }}" style="all:unset;cursor:pointer;width:100%;height:56px;border-radius:99px;background:#b9a9ff;color:#0b1220;display:flex;align-items:center;justify-content:center;gap:8px;font:700 15px 'Zen Kaku Gothic New';box-shadow:0 12px 30px -10px rgba(185,169,255,.7)"><span class="ms" style="font-size:20px">auto_awesome</span>{{ reportCta }}</button>
+      </div>
+    </sc-if>
+  </sc-if>
+
+  <!-- REPORT -->
+  <sc-if value="{{ isReport }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Report" style="position:absolute;inset:0;padding-top:54px;background:#08101c;display:flex;flex-direction:column;animation:fo-in .35s ease both">
+      <div style="padding:6px 16px 0;display:flex;align-items:center;gap:10px">
+        <button onClick="{{ backToPast }}" aria-label="戻る" style="all:unset;cursor:pointer;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:22px">arrow_back</span></button>
+        <div style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font:700 16px 'Zen Kaku Gothic New'">活動記録</span><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">10/4 担当区域 水利点検</span></div>
+        <span style="font:700 11px 'Zen Kaku Gothic New';padding:5px 10px;border-radius:99px;background:{{ repPill.bg }};color:{{ repPill.fg }}">{{ repPill.t }}</span>
+      </div>
+      <div style="padding:16px 20px 0;display:flex;align-items:center;gap:0">
+        <sc-for list="{{ repSteps }}" as="r" hint-placeholder-count="3">
+          <span style="display:flex;align-items:center;gap:6px;font:700 11px 'Zen Kaku Gothic New';color:{{ r.fg }}"><span style="width:18px;height:18px;border-radius:50%;background:{{ r.bg }};color:#08101c;display:flex;align-items:center;justify-content:center;font:600 10px 'IBM Plex Mono'">{{ r.n }}</span>{{ r.t }}</span>
+          <span style="flex:1;min-width:14px;height:1px;background:rgba(255,255,255,.12);margin:0 8px;display:{{ r.line }}"></span>
+        </sc-for>
+      </div>
+      <div class="fo-scroll" style="flex:1;overflow-y:auto;padding:16px 20px 130px;display:flex;flex-direction:column;gap:12px">
+        <sc-if value="{{ repGen }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:10px;font:500 13px 'Zen Kaku Gothic New';color:#b9a9ff">{{ spinV }}出欠・点検記録・写真から下書きを作成中…</div>
+        </sc-if>
+        <div style="position:relative;border-radius:20px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px {{ repRing }}">
+          <textarea value="{{ report.text }}" onChange="{{ onRepText }}" readOnly="{{ repLocked }}" style="width:100%;min-height:330px;resize:none;border:none;outline:none;background:transparent;padding:16px;color:#edf1f7;font:500 14px/1.85 'Zen Kaku Gothic New'"></textarea>
+          <span style="position:absolute;right:14px;bottom:10px;font:500 10px 'IBM Plex Mono';color:#7d889b">{{ repMeta }}</span>
+        </div>
+        <sc-if value="{{ repFlag }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:14px;border-radius:18px;background:rgba(185,169,255,.07);box-shadow:inset 0 0 0 1px rgba(185,169,255,.26);display:flex;gap:10px;align-items:flex-start;animation:fo-in .4s ease both">
+            <span class="ms" style="font-size:19px;color:#b9a9ff">rule</span>
+            <div style="flex:1;display:flex;flex-direction:column;gap:8px"><span style="font:700 13px 'Zen Kaku Gothic New'">入力不足の可能性</span><span style="font:500 12px/1.6 'Zen Kaku Gothic New';color:#a9b3c4">「使用した資機材」が未記入です。点検記録から候補：スタンドパイプ 2・消火栓開閉器 2</span>
+              <button onClick="{{ addMaterials }}" style="all:unset;cursor:pointer;align-self:flex-start;height:36px;padding:0 14px;border-radius:99px;background:rgba(185,169,255,.18);color:#d6ccff;display:flex;align-items:center;gap:6px;font:700 12px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:16px">add</span>候補を追記する</button>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ repPending }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:14px;border-radius:18px;background:rgba(255,195,92,.08);box-shadow:inset 0 0 0 1px rgba(255,195,92,.28);display:flex;gap:10px;align-items:center;font:500 13px/1.6 'Zen Kaku Gothic New';color:#ffdca0;animation:fo-in .4s ease both"><span class="ms" style="font-size:20px;color:#ffc35c">hourglass_top</span>班長 高橋さんの確認待ちです。承認されると活動履歴に保存されます。</div>
+        </sc-if>
+      </div>
+      <sc-if value="{{ repDraft }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:0;right:0;bottom:0;padding:14px 20px 30px;background:linear-gradient(180deg,rgba(8,16,28,0),#08101c 30%);display:flex;gap:8px">
+          <button onClick="{{ saveDraft }}" style="all:unset;cursor:pointer;height:56px;padding:0 20px;border-radius:99px;background:rgba(255,255,255,.08);display:flex;align-items:center;font:700 14px 'Zen Kaku Gothic New'">下書き保存</button>
+          <button onClick="{{ submitReport }}" style="all:unset;cursor:pointer;flex:1;height:56px;border-radius:99px;background:#ff5a2e;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font:700 15px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:19px">send</span>班長に確認を依頼</button>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- AI -->
+  <sc-if value="{{ isAi }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="AI" style="position:absolute;inset:0;padding-top:54px;display:flex;flex-direction:column;background:radial-gradient(500px 400px at 50% 0%,rgba(185,169,255,.10),transparent 70%),#08101c">
+      <div style="padding:8px 20px 10px;display:flex;align-items:center;gap:10px">
+        <span class="ms" style="font-size:22px;color:#b9a9ff">auto_awesome</span>
+        <span style="font:700 18px 'Zen Kaku Gothic New'">AIアシスタント</span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:5px;font:500 11px 'Zen Kaku Gothic New';color:#8792a5"><span class="ms" style="font-size:15px">shield_person</span>団員権限で参照</span>
+      </div>
+      <div class="fo-scroll" style="flex:1;overflow-y:auto;padding:6px 16px 170px;display:flex;flex-direction:column;gap:12px">
+        <sc-if value="{{ aiEmpty }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:14px;padding:70px 6px 0;animation:fo-in .4s ease both">
+            <span style="font:700 26px/1.4 'Zen Kaku Gothic New'">予定・点検・記録を<br>横断して答えます。</span>
+            <span style="font:500 13px/1.7 'Zen Kaku Gothic New';color:#8792a5;text-wrap:pretty">データの変更や通知の送信は、必ずあなたの確認を経てから実行します。</span>
+          </div>
+        </sc-if>
+        <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="0">
+          <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
+            <div style="align-self:flex-end;max-width:80%;padding:12px 16px;border-radius:20px 20px 6px 20px;background:#1d2a44;font:500 14px/1.6 'Zen Kaku Gothic New';animation:fo-in .3s ease both">{{ m.text }}</div>
+          </sc-if>
+          <sc-if value="{{ m.isThink }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:8px;padding:6px 4px;animation:fo-in .3s ease both">
+              <sc-for list="{{ m.steps }}" as="s" hint-placeholder-count="3">
+                <span style="display:flex;align-items:center;gap:8px;font:500 12px 'Zen Kaku Gothic New';color:#a9b3c4;animation:fo-in .3s ease both"><span class="ms" style="font-size:16px;color:#b9a9ff">{{ s.icon }}</span>{{ s.t }}</span>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ m.isText }}" hint-placeholder-val="{{ false }}">
+            <div style="max-width:92%;padding:4px 4px;font:500 14px/1.8 'Zen Kaku Gothic New';color:#dfe4ec;white-space:pre-line;animation:fo-in .3s ease both">{{ m.text }}</div>
+          </sc-if>
+          <sc-if value="{{ m.isBrief }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:10px;animation:fo-in .4s ease both">
+              <span style="font:500 14px/1.8 'Zen Kaku Gothic New';color:#dfe4ec;padding:0 4px">10/17（土）ポンプ車操法訓練の準備状況です。確認が必要な項目が<b style="color:#fff">2件</b>あります。</span>
+              <div style="border-radius:20px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);overflow:hidden">
+                <div style="display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06)"><span class="ms" style="font-size:20px;color:#ffc35c">how_to_reg</span><div style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font:700 14px 'Zen Kaku Gothic New'">出欠：参加 {{ counts.yes }} / 27名</span><span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">未回答 {{ counts.none }}名 · 操法に必要な5名は確保済み</span></div></div>
+                <div style="display:flex;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06)"><span class="ms" style="font-size:20px;color:#ff7a66">inventory_2</span><div style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font:700 14px 'Zen Kaku Gothic New'">格納箱 H-07：ホース 1本不足</span><span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">9/28 点検記録より · 訓練で使用予定</span></div></div>
+                <div style="display:flex;gap:12px;padding:14px 16px"><span class="ms" style="font-size:20px;color:#3ad08f">local_shipping</span><div style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font:700 14px 'Zen Kaku Gothic New'">ポンプ車 第3号：点検済み</span><span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">10/06 月例点検 · 異常なし</span></div></div>
+              </div>
+              <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5;padding:0 4px">次の対応を選んでください</span>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <button onClick="{{ m.onDraftTask }}" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:13px 16px;border-radius:16px;background:rgba(185,169,255,.12);box-shadow:inset 0 0 0 1px rgba(185,169,255,.3);font:700 13px 'Zen Kaku Gothic New';color:#e4ddff"><span class="ms" style="font-size:18px">add_task</span>H-07 の確認タスクを下書き<span class="ms" style="font-size:18px;margin-left:auto">chevron_right</span></button>
+                <button onClick="{{ m.onRemind }}" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:13px 16px;border-radius:16px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);font:700 13px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:18px">campaign</span>未回答者へのリマインド文を作成<span class="ms" style="font-size:18px;margin-left:auto">chevron_right</span></button>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ m.isTask }}" hint-placeholder-val="{{ false }}">
+            <div style="border-radius:22px;background:#0f1a2d;box-shadow:inset 0 0 0 1px rgba(185,169,255,.32);padding:16px;display:flex;flex-direction:column;gap:12px;animation:fo-in .4s ease both">
+              <div style="display:flex;align-items:center;gap:8px"><span style="font:700 11px 'Zen Kaku Gothic New';padding:3px 8px;border-radius:99px;background:{{ m.pill.bg }};color:{{ m.pill.fg }}">{{ m.pill.t }}</span><span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">タスク</span></div>
+              <span style="font:700 16px 'Zen Kaku Gothic New'">格納箱 H-07 ホース補充の確認</span>
+              <div style="display:grid;grid-template-columns:64px 1fr;row-gap:8px;font:500 13px 'Zen Kaku Gothic New'"><span style="color:#8792a5">担当</span><span>佐藤 健太（自分）</span><span style="color:#8792a5">期限</span><span style="font-family:'IBM Plex Mono'">10/16（金）</span><span style="color:#8792a5">関連</span><span>10/17 操法訓練 · H-07</span></div>
+              <sc-if value="{{ m.pending }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;gap:8px"><button onClick="{{ m.onApprove }}" style="all:unset;cursor:pointer;flex:1;height:46px;border-radius:99px;background:#b9a9ff;color:#0b1220;display:flex;align-items:center;justify-content:center;font:700 14px 'Zen Kaku Gothic New'">確認して作成</button><button onClick="{{ m.onDiscard }}" style="all:unset;cursor:pointer;height:46px;padding:0 18px;border-radius:99px;background:rgba(255,255,255,.07);display:flex;align-items:center;font:700 13px 'Zen Kaku Gothic New'">破棄</button></div>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ m.isNote }}" hint-placeholder-val="{{ false }}">
+            <div style="border-radius:22px;background:#0f1a2d;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);padding:16px;display:flex;flex-direction:column;gap:12px;animation:fo-in .4s ease both">
+              <span style="font:500 11px 'Zen Kaku Gothic New';color:#8792a5">連絡文の下書き</span>
+              <span style="font:500 14px/1.8 'Zen Kaku Gothic New';color:#dfe4ec">お疲れさまです。10/17（土）19:00〜のポンプ車操法訓練について、出欠の回答がまだの方は10/15（木）までにアプリからご回答ください。</span>
+              <div style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:14px;background:rgba(255,195,92,.08);font:500 12px/1.6 'Zen Kaku Gothic New';color:#ffdca0"><span class="ms" style="font-size:17px;color:#ffc35c">lock</span>全体への送信は班長以上の権限が必要です。班長に送信を依頼できます。</div>
+              <sc-if value="{{ m.pending }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ m.onApprove }}" style="all:unset;cursor:pointer;height:46px;border-radius:99px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font:700 14px 'Zen Kaku Gothic New'">班長 高橋さんに送信を依頼</button>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ m.isDone }}" hint-placeholder-val="{{ false }}">
+            <span style="display:flex;align-items:center;gap:6px;padding:2px 4px;font:700 12px 'Zen Kaku Gothic New';color:#3ad08f;animation:fo-in .3s ease both"><span class="ms" style="font-size:17px">check_circle</span>{{ m.text }}</span>
+          </sc-if>
+        </sc-for>
+      </div>
+      <div style="position:absolute;left:0;right:0;bottom:84px;padding:10px 12px 10px;display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,rgba(8,16,28,0),#08101c 30%)">
+        <sc-if value="{{ showSugg }}" hint-placeholder-val="{{ true }}">
+          <div class="fo-scroll" style="display:flex;gap:6px;overflow-x:auto">
+            <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="3">
+              <button onClick="{{ s.onClick }}" style="all:unset;cursor:pointer;flex:none;height:38px;padding:0 14px;border-radius:99px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);display:flex;align-items:center;font:500 12px 'Zen Kaku Gothic New';color:#dfe4ec">{{ s.t }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <div style="height:54px;border-radius:99px;background:rgba(20,30,50,.92);box-shadow:inset 0 0 0 1px rgba(170,150,255,.32);display:flex;align-items:center;gap:8px;padding:0 8px 0 18px">
+          <input value="{{ aiInput }}" onChange="{{ onAiInput }}" onKeyDown="{{ onAiKey }}" placeholder="質問や依頼を入力" style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:#edf1f7;font:500 14px 'Zen Kaku Gothic New'">
+          <button onClick="{{ aiSend }}" aria-label="送信" style="all:unset;cursor:pointer;width:40px;height:40px;border-radius:50%;background:#b9a9ff;color:#0b1220;display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:20px">arrow_upward</span></button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- MENU -->
+  <sc-if value="{{ isMenu }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Menu" class="fo-scroll" style="position:absolute;top:54px;left:0;right:0;bottom:0;overflow-y:auto;padding:10px 20px 110px;animation:fo-in .4s ease both">
+      <span style="font:700 26px 'Zen Kaku Gothic New'">メニュー</span>
+      <div style="margin-top:16px;padding:16px;border-radius:22px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);display:flex;align-items:center;gap:14px">
+        <span style="width:52px;height:52px;border-radius:50%;background:#1a2740;display:flex;align-items:center;justify-content:center;font:700 18px 'Zen Kaku Gothic New'">佐</span>
+        <div style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font:700 16px 'Zen Kaku Gothic New'">佐藤 健太</span><span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">第三分団 第2班 · 団員 · 入団4年目</span></div>
+        <span style="font:700 11px 'Zen Kaku Gothic New';padding:4px 9px;border-radius:99px;background:rgba(255,255,255,.08);color:#c3cad6">一般団員</span>
+      </div>
+      <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <sc-for list="{{ modules }}" as="md" hint-placeholder-count="6">
+          <button onClick="{{ md.onClick }}" style="all:unset;cursor:pointer;min-height:96px;padding:14px;border-radius:20px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px {{ md.ring }};display:flex;flex-direction:column;justify-content:space-between;gap:10px" style-hover="background:rgba(255,255,255,.07)">
+            <span style="display:flex;justify-content:space-between;align-items:flex-start"><span class="ms" style="font-size:24px;color:{{ md.color }}">{{ md.icon }}</span><span style="font:600 9px 'IBM Plex Mono';color:#7d889b;display:{{ md.tagShow }}">{{ md.tag }}</span></span>
+            <span style="font:700 14px 'Zen Kaku Gothic New';color:#edf1f7">{{ md.t }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <button onClick="{{ logout }}" style="all:unset;cursor:pointer;margin-top:16px;width:100%;height:52px;border-radius:99px;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;gap:8px;font:700 14px 'Zen Kaku Gothic New';color:#a9b3c4"><span class="ms" style="font-size:19px">logout</span>ログアウト</button>
+    </div>
+  </sc-if>
+
+  <!-- NAV -->
+  <sc-if value="{{ showNav }}" hint-placeholder-val="{{ false }}">
+    <nav style="position:absolute;left:0;right:0;bottom:0;height:84px;display:grid;grid-template-columns:repeat(5,1fr);padding-top:9px;background:linear-gradient(180deg,rgba(8,16,28,.6),rgba(8,16,28,.96));backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-top:1px solid rgba(255,255,255,.06);z-index:50">
+      <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="5">
+        <button onClick="{{ n.onClick }}" style="all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;color:{{ n.color }};transition:color .2s">
+          <span style="width:56px;height:30px;border-radius:99px;background:{{ n.pillBg }};display:flex;align-items:center;justify-content:center;transition:background .25s"><span class="ms" style="font-size:23px;font-variation-settings:'FILL' {{ n.fill }}">{{ n.icon }}</span></span>
+          <span style="font:{{ n.weight }} 10px 'Zen Kaku Gothic New'">{{ n.label }}</span>
+        </button>
+      </sc-for>
+    </nav>
+  </sc-if>
+
+  <!-- RSVP SHEET -->
+  <sc-if value="{{ rsvpOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeRsvp }}" style="position:absolute;inset:0;background:rgba(3,6,12,.6);z-index:60;animation:fo-in .2s ease both"></div>
+    <div style="position:absolute;left:0;right:0;bottom:0;z-index:61;padding:12px 20px 34px;border-radius:30px 30px 0 0;background:#0f1828;box-shadow:inset 0 1px 0 rgba(255,255,255,.1);animation:fo-in .3s ease both">
+      <div style="width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);margin:0 auto 16px"></div>
+      <span style="font:700 18px 'Zen Kaku Gothic New'">10/17 操法訓練の出欠</span>
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ rsvpOpts }}" as="o" hint-placeholder-count="3">
+          <button onClick="{{ o.onClick }}" style="all:unset;cursor:pointer;height:58px;padding:0 18px;border-radius:18px;background:{{ o.bg }};color:{{ o.fg }};box-shadow:inset 0 0 0 1.5px {{ o.ring }};display:flex;align-items:center;gap:12px;font:700 15px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:21px">{{ o.icon }}</span>{{ o.label }}<span style="margin-left:auto;font:500 12px 'Zen Kaku Gothic New';opacity:.75">{{ o.sub }}</span></button>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- DISPATCH -->
+  <sc-if value="{{ disp.active }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Dispatch" style="position:absolute;inset:0;z-index:90;background:radial-gradient(600px 420px at 50% 0%,rgba(255,59,47,.28),transparent 70%),#0d0709;display:flex;flex-direction:column;padding-top:54px;animation:fo-in .3s ease both">
+      <div style="margin:4px 16px 0;height:40px;border-radius:12px;background:#ff3b2f;display:flex;align-items:center;justify-content:space-between;padding:0 14px;color:#fff">
+        <span style="display:flex;align-items:center;gap:8px;font:900 14px 'Zen Kaku Gothic New';letter-spacing:.06em;white-space:nowrap">{{ dispDot }}出動モード</span>
+        <span style="font:600 11px 'IBM Plex Mono';letter-spacing:.08em;white-space:nowrap;background:rgba(0,0,0,.22);padding:3px 7px;border-radius:5px">訓練想定 · DEMO</span>
+      </div>
+      <div class="fo-scroll" style="flex:1;overflow-y:auto;padding:18px 20px 40px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span style="font:600 12px 'IBM Plex Mono';color:#ff8a7f">19:52 受信 · 分団長 田中</span>
+          <span style="font:900 34px/1.2 'Zen Kaku Gothic New';color:#fff">建物火災<br>出動要請</span>
+          <span style="font:700 16px 'Zen Kaku Gothic New';color:#ffd9d4">川辺町3丁目 付近 → 第三分団詰所へ参集</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.08)">
+          <sc-for list="{{ board }}" as="b" hint-placeholder-count="4">
+            <div style="background:#170c0f;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font:600 26px 'IBM Plex Mono';color:{{ b.c }};transition:color .3s">{{ b.v }}</span><span style="font:700 11px 'Zen Kaku Gothic New';color:#d8c3c0">{{ b.t }}</span></div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ dispAlert }}" hint-placeholder-val="{{ true }}">
+          <span style="font:700 14px 'Zen Kaku Gothic New';color:#fff">あなたの応答を選んでください</span>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ dispOpts }}" as="o" hint-placeholder-count="3">
+              <button onClick="{{ o.onClick }}" style="all:unset;cursor:pointer;height:64px;padding:0 18px;border-radius:18px;background:{{ o.bg }};box-shadow:inset 0 0 0 2px {{ o.ring }};display:flex;align-items:center;gap:14px;color:#fff;transition:all .15s">
+                <span style="width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 2px {{ o.ring }};display:flex;align-items:center;justify-content:center"><span style="width:12px;height:12px;border-radius:50%;background:{{ o.dot }}"></span></span>
+                <span style="font:900 18px 'Zen Kaku Gothic New';white-space:nowrap">{{ o.t }}</span><span style="margin-left:auto;font:500 12px 'Zen Kaku Gothic New';color:#d8c3c0">{{ o.sub }}</span>
+              </button>
+            </sc-for>
+          </div>
+          <button onPointerDown="{{ holdStart }}" onPointerUp="{{ holdEnd }}" onPointerLeave="{{ holdEnd }}" style="all:unset;cursor:{{ holdCursor }};position:relative;overflow:hidden;height:66px;border-radius:99px;background:{{ holdBg }};display:flex;align-items:center;justify-content:center;gap:10px;color:#fff;font:900 17px 'Zen Kaku Gothic New';touch-action:none;user-select:none">
+            <span style="position:absolute;left:0;top:0;bottom:0;width:{{ disp.hold }}%;background:#ff3b2f"></span>
+            <span class="ms" style="position:relative;font-size:22px">touch_app</span><span style="position:relative">{{ holdLabel }}</span>
+          </button>
+        </sc-if>
+        <sc-if value="{{ dispLive }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;border-radius:20px;background:#170c0f;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);padding:6px 16px">
+            <sc-for list="{{ dSteps }}" as="s" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:22px 1fr auto;gap:12px;align-items:center;padding:11px 0">
+                <span style="width:18px;height:18px;border-radius:50%;background:{{ s.bg }};box-shadow:inset 0 0 0 2px {{ s.ring }};display:flex;align-items:center;justify-content:center"><span class="ms" style="font-size:13px;color:#0d0709;display:{{ s.check }}">check</span></span>
+                <span style="font:700 15px 'Zen Kaku Gothic New';color:{{ s.fg }}">{{ s.t }}</span>
+                <span style="font:600 13px 'IBM Plex Mono';color:#d8c3c0">{{ s.time }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{ canAdvance }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ advance }}" style="all:unset;cursor:pointer;height:68px;border-radius:99px;background:{{ advBg }};box-shadow:inset 0 0 0 2px #ff3b2f;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#fff;transition:background .2s">
+              <span style="font:900 18px 'Zen Kaku Gothic New'">{{ advLabel }}</span><span style="font:500 11px 'Zen Kaku Gothic New';color:#ffd9d4">{{ advSub }}</span>
+            </button>
+          </sc-if>
+          <sc-if value="{{ dispFinished }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ endDispatch }}" style="all:unset;cursor:pointer;height:60px;border-radius:99px;background:#fff;color:#0d0709;display:flex;align-items:center;justify-content:center;gap:8px;font:900 16px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:21px">task_alt</span>出動モードを終了</button>
+          </sc-if>
+        </sc-if>
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.05);font:500 12px/1.7 'Zen Kaku Gothic New';color:#d8c3c0"><span class="ms" style="font-size:18px;color:#fff">info</span>現場の指揮は団長・消防署の指示に従ってください。本アプリは応答と記録の共有のための補助です。</div>
+        <sc-if value="{{ dispAlert }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ endDispatch }}" style="all:unset;cursor:pointer;align-self:center;padding:8px 12px;font:500 12px 'Zen Kaku Gothic New';color:#a58e8b;text-decoration:underline;text-underline-offset:3px">デモを閉じる</button>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- STATUS BAR -->
+  <div style="position:absolute;top:0;left:0;right:0;height:54px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 32px 9px;font:600 15px 'IBM Plex Mono';z-index:100;pointer-events:none;color:#fff">
+    <span>19:48</span>
+    <span style="position:absolute;left:50%;top:11px;transform:translateX(-50%);width:120px;height:34px;border-radius:20px;background:#000"></span>
+    <span style="display:flex;gap:5px;align-items:center"><span class="ms" style="font-size:17px">{{ netIcon }}</span><span class="ms" style="font-size:17px">battery_5_bar</span></span>
+  </div>
+  <sc-if value="{{ offlineBanner }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:54px;left:50%;transform:translateX(-50%);z-index:95;height:30px;padding:0 12px;border-radius:99px;background:#ffc35c;color:#1a1204;display:flex;align-items:center;gap:6px;font:700 11px 'Zen Kaku Gothic New';white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.4)"><span class="ms" style="font-size:15px">cloud_off</span>オフライン · 未送信 {{ pending }}件</div>
+  </sc-if>
+
+  <!-- TOAST -->
+  <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:16px;right:16px;bottom:{{ toastBottom }}px;z-index:120;padding:14px 16px;border-radius:18px;background:#edf1f7;color:#08101c;display:flex;align-items:center;gap:10px;font:700 13px/1.5 'Zen Kaku Gothic New';box-shadow:0 16px 40px rgba(0,0,0,.5);animation:fo-in .3s cubic-bezier(.2,.8,.2,1) both"><span class="ms" style="font-size:20px;color:#1f9e66">check_circle</span>{{ toast }}</div>
+  </sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;initialScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;login&quot;,&quot;home&quot;,&quot;map&quot;,&quot;schedule&quot;,&quot;ai&quot;,&quot;dispatch&quot;],&quot;default&quot;:&quot;login&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;startOffline&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const TYPES = {
+  hydrant:{label:'消火栓',color:'#e8432a',icon:'fire_hydrant',radius:'50%',tf:'none',clip:'none'},
+  tank:{label:'防火水槽',color:'#2f7fe0',icon:'water_drop',radius:'9px',tf:'none',clip:'none'},
+  box:{label:'格納箱',color:'#f08a24',icon:'inventory_2',radius:'7px',tf:'rotate(45deg) scale(.86)',clip:'none'},
+  station:{label:'団施設',color:'#2fae6a',icon:'home',radius:'0',tf:'none',clip:'polygon(25% 4%,75% 4%,100% 50%,75% 96%,25% 96%,0 50%)'}
+};
+const PILL = {
+  ok:{t:'点検済み',bg:'rgba(58,208,143,.14)',fg:'#3ad08f'},
+  due:{t:'期限間近',bg:'rgba(255,195,92,.14)',fg:'#ffc35c'},
+  alert:{t:'異常報告あり',bg:'rgba(255,90,70,.16)',fg:'#ff7a66'},
+  draft:{t:'下書き',bg:'rgba(255,255,255,.08)',fg:'#c3cad6'},
+  pending:{t:'確認待ち',bg:'rgba(255,195,92,.14)',fg:'#ffc35c'},
+  approved:{t:'承認済み',bg:'rgba(58,208,143,.14)',fg:'#3ad08f'},
+  none:{t:'未作成',bg:'rgba(255,255,255,.08)',fg:'#c3cad6'},
+  rsvpNone:{t:'出欠 未回答',bg:'rgba(255,195,92,.14)',fg:'#ffc35c'},
+  rsvpDone:{t:'回答済み',bg:'rgba(58,208,143,.14)',fg:'#3ad08f'},
+  event:{t:'行事',bg:'rgba(255,255,255,.08)',fg:'#c3cad6'}
+};
+const FAC0 = [
+  {id:'K-112',type:'hydrant',name:'消火栓 K-112',addr:'川辺町3丁目12 先',x:36,y:36,status:'due',last:'26.04.14',due:'10/16',spec:'地上式 単口 φ65',history:[{d:'2026.04.14',who:'佐藤 健太',r:'異常なし',s:'ok'},{d:'2025.10.09',who:'山本 翔',r:'標識の汚れを清掃',s:'ok'}]},
+  {id:'K-108',type:'hydrant',name:'消火栓 K-108',addr:'川辺町2丁目4 先',x:64,y:27,status:'ok',last:'26.09.28',due:'27/03',spec:'地下式 単口 φ65',history:[{d:'2026.09.28',who:'伊藤 拓也',r:'異常なし',s:'ok'}]},
+  {id:'K-115',type:'hydrant',name:'消火栓 K-115',addr:'川辺町1丁目20 先',x:76,y:60,status:'alert',last:'26.10.04',due:'—',spec:'地下式 単口 φ65',note:'蓋の開閉不良 · 市担当課へ修繕依頼済み',history:[{d:'2026.10.04',who:'渡辺 優',r:'蓋の開閉不良（AI分類：開閉不良／緊急度 高）',s:'alert'}]},
+  {id:'S-04',type:'tank',name:'防火水槽 S-04',addr:'川辺小学校 東側',x:22,y:63,status:'due',last:'25.10.24',due:'10/24',spec:'地下式 40㎥',history:[{d:'2025.10.24',who:'高橋 亮',r:'水位良好・異常なし',s:'ok'}]},
+  {id:'S-02',type:'tank',name:'防火水槽 S-02',addr:'川辺町公民館 裏',x:82,y:40,status:'ok',last:'26.08.30',due:'27/08',spec:'地下式 40㎥',history:[{d:'2026.08.30',who:'中村 光',r:'異常なし',s:'ok'}]},
+  {id:'H-07',type:'box',name:'ホース格納箱 H-07',addr:'川辺町3丁目 児童公園',x:52,y:72,status:'alert',last:'26.09.28',due:'—',spec:'ホース 4本 / 管鎗 1',note:'ホース 1本不足（3/4本）',history:[{d:'2026.09.28',who:'伊藤 拓也',r:'ホース1本不足（AI分類：資機材の欠品／緊急度 中）',s:'alert'}]},
+  {id:'H-03',type:'box',name:'ホース格納箱 H-03',addr:'川辺町2丁目 集会所前',x:18,y:31,status:'ok',last:'26.09.28',due:'27/03',spec:'ホース 4本 / 管鎗 1',history:[{d:'2026.09.28',who:'伊藤 拓也',r:'異常なし',s:'ok'}]},
+  {id:'D-01',type:'station',name:'第三分団詰所',addr:'川辺町2丁目8',x:58,y:45,status:'ok',last:'26.10.06',due:'—',spec:'車庫1 · ポンプ車 第3号',history:[{d:'2026.10.06',who:'高橋 亮',r:'車両月例点検 · 異常なし',s:'ok'}]}
+];
+const ITEMS = [
+  {k:'look',t:'外観',d:'破損・腐食・塗装はがれがない'},
+  {k:'lid',t:'蓋・開閉',d:'蓋がスムーズに開閉できる'},
+  {k:'area',t:'周辺状況',d:'駐車車両・植栽などの障害物がない'},
+  {k:'sign',t:'標識',d:'標識が見やすく、汚れていない'},
+  {k:'water',t:'放水・水圧',d:'試験を行った場合のみ回答',opt:'任意'}
+];
+const CAT = {look:{t:'腐食・劣化',u:'中'},lid:{t:'開閉不良',u:'高'},area:{t:'周辺障害（駐車・植栽）',u:'低'},sign:{t:'標識の汚損・不明瞭',u:'低'},water:{t:'放水・水圧不良',u:'高'}};
+const NAMES = ['田中 誠','鈴木 大輔','高橋 亮','伊藤 拓也','渡辺 優','山本 翔','中村 光','小林 悠真','加藤 蓮','吉田 陽介','山田 海斗','佐々木 颯','松本 大和','井上 樹','木村 湊','林 晴斗','清水 陸','山崎 蒼','森 大翔','池田 悠','橋本 新','阿部 律','石川 碧','前田 奏','藤田 朝陽','岡田 結翔'];
+const REPORT = `【活動報告】担当区域 水利点検
+日時：2026年10月4日（日）9:00〜11:30
+場所：川辺町1〜3丁目 担当区域
+参加者：12名（田中分団長 ほか11名）
+
+内容：
+担当区域の消火栓8基・防火水槽3基・格納箱4基を点検した。消火栓 K-115 で蓋の開閉不良を確認し、異常報告を登録した。その他の施設に異常はなかった。
+
+特記事項：
+K-115 は市担当課へ修繕を依頼済み。修繕完了後に再点検を行う。`;
+const DSTEPS = ['応答','詰所に到着','活動開始','活動終了','帰還確認'];
+const DTIMES = ['19:53','20:04','20:11','21:36','22:02'];
+
+class Component extends DCLogic {
+  state = {
+    screen:'login', online:true, pending:0,
+    loginId:'KWB-03-0142', loginPw:'firedemo', loginState:'idle',
+    rsvp:null, rsvpOpen:false,
+    facs:FAC0, sel:null, fd:null, filters:{hydrant:true,tank:true,box:true,station:true}, mapView:'map', q:'',
+    tasks:[{id:'t1',fac:'K-112',title:'消火栓 K-112 の点検',sub:'期限 10/16 · あと3日',urgent:true},{id:'t2',fac:'S-04',title:'防火水槽 S-04 の点検',sub:'期限 10/24 · あと11日'}],
+    ins:null, act:'drill',
+    report:{status:'none',text:'',flag:false},
+    msgs:[], aiInput:'', aiBusy:false,
+    disp:{active:false}, toast:null
+  };
+  componentDidMount(){ const s=this.props.initialScreen; if(s&&s!=='login'){ if(s==='dispatch'){this.setState({screen:'home'});this.startDispatch();} else this.setState({screen:s}); } if(this.props.startOffline) this.setState({online:false}); }
+  componentWillUnmount(){ [this._t,this._lt,this._rt,this._bt,this._ht,this._at,this._st].forEach(t=>{clearTimeout(t);clearInterval(t);}); }
+  toast(t){ clearTimeout(this._t); this.setState({toast:t}); this._t=setTimeout(()=>this.setState({toast:null}),2600); }
+  go(screen,extra){ this.setState(Object.assign({screen,rsvpOpen:false},extra||{})); }
+
+  doLogin(){ if(this.state.loginState==='loading')return; if(!this.state.loginPw){this.setState({loginState:'error'});return;} this.setState({loginState:'loading'}); this._lt=setTimeout(()=>this.setState({loginState:'idle',screen:'home'}),1100); }
+  setRsvp(v){ const L={yes:'参加',maybe:'未定',no:'不参加'}; this.setState({rsvp:v,rsvpOpen:false}); this.toast(`出欠を「${L[v]}」で回答しました`); }
+  counts(){ const c={yes:14,maybe:3,no:0,none:10}; const r=this.state.rsvp; if(r){c.none--;c[r]++;} return c; }
+
+  openFac(id){ this.go('map',{sel:id,mapView:'map',q:''}); }
+  startInspect(id){ this.go('inspect',{ins:{fac:id,step:1,ans:{},memo:'',photo:false,pick:0,confirmed:false,task:true,saving:false,done:false}}); }
+  answer(k,v){ this.setState(s=>{const a=Object.assign({},s.ins.ans); a[k]=a[k]===v?undefined:v; return {ins:Object.assign({},s.ins,{ans:a,confirmed:false,pick:0})};}); }
+  setIns(p){ this.setState(s=>({ins:Object.assign({},s.ins,p)})); }
+  cands(ins){
+    const out=[]; const m=ins.memo||'';
+    ITEMS.forEach(it=>{ if(ins.ans[it.k]==='ng') out.push({k:it.k,t:CAT[it.k].t,u:CAT[it.k].u,why:`チェック「${it.t}」`}); });
+    if(/漏/.test(m)) out.unshift({k:'leak',t:'漏水',u:'高',why:'メモ「漏」'});
+    if(/錆|さび|腐/.test(m)&&!out.find(o=>o.k==='look')) out.push({k:'look',t:'腐食・劣化',u:'中',why:'メモ「錆」'});
+    if(out.length===1) out.push({k:'other',t:'その他（要確認）',u:'低',why:'候補の補完'});
+    const P=['0.92','0.71','0.38','0.21','0.12']; return out.slice(0,4).map((o,i)=>Object.assign(o,{p:P[i]}));
+  }
+  saveInspect(){
+    const ins=this.state.ins; if(ins.saving)return; this.setIns({saving:true});
+    this._st=setTimeout(()=>{
+      const cs=this.cands(ins); const issue=cs.length>0; const cat=issue?cs[ins.pick]:null;
+      const facs=this.state.facs.map(f=>f.id!==ins.fac?f:Object.assign({},f,{status:issue?'alert':'ok',last:'26.10.13',due:issue?'—':'27/04',note:issue?`${cat.t}（緊急度 ${cat.u}）· 班長確認待ち`:undefined,history:[{d:'2026.10.13',who:'佐藤 健太',r:issue?`${cat.t}（AI分類／担当者確定）`:'異常なし',s:issue?'alert':'ok'}].concat(f.history)}));
+      const tasks=this.state.tasks.filter(t=>t.fac!==ins.fac);
+      this.setState(s=>({facs,tasks,sel:ins.fac,pending:s.online?s.pending:s.pending+1,ins:Object.assign({},s.ins,{saving:false,done:true,issue})}));
+    },1000);
+  }
+  genReport(){
+    const r=this.state.report; if(r.status!=='none'){ this.go('report'); return; }
+    this.go('report',{report:{status:'gen',text:'',flag:false}});
+    let i=0; clearInterval(this._rt);
+    this._rt=setInterval(()=>{ i+=5; if(i>=REPORT.length){clearInterval(this._rt);this.setState({report:{status:'draft',text:REPORT,flag:true}});return;} this.setState(s=>({report:Object.assign({},s.report,{text:REPORT.slice(0,i)})})); },22);
+  }
+  aiSend(text){
+    text=(text||this.state.aiInput).trim(); if(!text||this.state.aiBusy)return;
+    const steps=[{icon:'event',t:'予定を参照しています'},{icon:'how_to_reg',t:'出欠状況を参照しています'},{icon:'fact_check',t:'点検記録を参照しています'}];
+    this.setState(s=>({aiInput:'',aiBusy:true,msgs:s.msgs.concat([{kind:'user',text},{kind:'think',steps:[steps[0]]}])}));
+    let k=1; this._at=setInterval(()=>{ if(k<3){ const n=k; this.setState(s=>{const m=s.msgs.slice(); m[m.length-1]={kind:'think',steps:steps.slice(0,n+1)}; return {msgs:m};}); k++; return; }
+      clearInterval(this._at);
+      let reply;
+      if(/訓練|準備/.test(text)) reply={kind:'brief'};
+      else if(/タスク|未完了|やること/.test(text)) reply={kind:'text',text:`未完了のタスクは${this.state.tasks.length}件です。\n${this.state.tasks.map(t=>'・'+t.title+'（'+t.sub+'）').join('\n')||'・なし'}\n\nマップから点検を始められます。`};
+      else if(/実績|まとめ|先月/.test(text)) reply={kind:'text',text:'9月の第三分団の活動は4件でした。\n・訓練 2件（平均参加 15.5名）\n・水利点検 1件（15施設、異常 1件）\n・広報活動 1件\n\nあなたの参加は3件です。前月より訓練参加が2名増えています。'};
+      else reply={kind:'text',text:'デモ版では「訓練の準備状況」「未完了タスク」「先月の実績」に回答できます。下の候補からお試しください。'};
+      this.setState(s=>{const m=s.msgs.slice(0,-1).concat([reply]); return {msgs:m,aiBusy:false};});
+    },650);
+  }
+  aiAppend(msg){ this.setState(s=>({msgs:s.msgs.concat([msg])})); }
+  aiResolve(i,doneText,addTask){
+    this.setState(s=>{ const m=s.msgs.slice(); m[i]=Object.assign({},m[i],{pending:false,approved:!!addTask}); m.splice(i+1,0,{kind:'done',text:doneText});
+      const tasks=addTask&&!s.tasks.find(t=>t.id==='t3')?s.tasks.concat([{id:'t3',fac:'H-07',title:'格納箱 H-07 ホース補充の確認',sub:'期限 10/16 · AIで作成',ai:true}]):s.tasks; return {msgs:m,tasks}; });
+  }
+  startDispatch(){
+    clearInterval(this._bt);
+    this.setState({rsvpOpen:false,disp:{active:true,phase:'alert',choice:null,hold:0,step:0,arm:false,board:{ok:6,late:2,no:1,none:18}}});
+    this._bt=setInterval(()=>{ this.setState(s=>{ const d=s.disp; if(!d.active)return null; const b=Object.assign({},d.board); if(b.none<=11)return null; b.none--; if(Math.random()<.7)b.ok++; else b.late++; return {disp:Object.assign({},d,{board:b})}; }); },2000);
+  }
+  setDisp(p){ this.setState(s=>({disp:Object.assign({},s.disp,p)})); }
+  holdStart(){ const d=this.state.disp; if(!d.choice||d.phase!=='alert')return; clearInterval(this._ht);
+    this._ht=setInterval(()=>{ const h=this.state.disp.hold+4; if(h>=100){ clearInterval(this._ht); const c=this.state.disp.choice; const b=Object.assign({},this.state.disp.board); b.none--; b[c==='go'?'ok':c==='late'?'late':'no']++; this.setDisp({hold:100,phase:'live',step:1,board:b}); this.toast('応答を送信しました'); return;} this.setDisp({hold:h}); },28); }
+  holdEnd(){ clearInterval(this._ht); if(this.state.disp.phase==='alert'&&this.state.disp.hold<100) this.setDisp({hold:0}); }
+  advance(){ const d=this.state.disp; if(!d.arm){ this.setDisp({arm:true}); clearTimeout(this._dt); this._dt=setTimeout(()=>this.setDisp({arm:false}),3000); return; } clearTimeout(this._dt); this.setDisp({arm:false,step:d.step+1}); }
+  endDispatch(){ clearInterval(this._bt); clearInterval(this._ht); const done=this.state.disp.phase==='live'; this.setState({disp:{active:false}}); if(done) this.toast('出動記録を保存しました。報告書はAIで下書きできます'); }
+
+  renderVals(){
+    const s=this.state, sc=s.screen;
+    const spin=(c)=>React.createElement('span',{style:{width:16,height:16,flex:'none',border:`2px solid ${c}33`,borderTopColor:c,borderRadius:'50%',display:'inline-block',animation:'fo-spin .8s linear infinite'}});
+    const counts=this.counts(); const tot=27;
+    const facs=s.facs.map(f=>Object.assign({},TYPES[f.type],f,{typeLabel:TYPES[f.type].label,pill:PILL[f.status],hasNote:!!f.note}));
+    const selF=facs.find(f=>f.id===s.sel);
+    const blank={id:'',name:'',addr:'',typeLabel:'',icon:'',color:'transparent',radius:'0',tf:'none',clip:'none',pill:PILL.ok,last:'',due:'',hasNote:false};
+    const fdF=facs.find(f=>f.id===s.fd)||blank;
+    const L={yes:'参加',maybe:'未定',no:'不参加'};
+    const rsvpOpts=[['yes','参加','check_circle','#3ad08f','行けます'],['maybe','未定','help','#ffc35c','わかり次第回答'],['no','不参加','cancel','#ff7a66','欠席します']].map(([k,l,ic,c,sub])=>{const on=s.rsvp===k; return {label:l,icon:ic,sub,bg:on?c+'26':'rgba(255,255,255,.05)',fg:on?c:'#edf1f7',ring:on?c:'rgba(255,255,255,.08)',onClick:()=>this.setRsvp(k)};});
+    const navDef=[['home','ホーム','home'],['map','マップ','map'],['schedule','予定・活動','calendar_month'],['ai','AI','auto_awesome'],['menu','メニュー','menu']];
+    const navKey={facility:'map',activity:'schedule',report:'schedule'}[sc]||sc;
+    const ins=s.ins||{ans:{},step:1,memo:''};
+    const cands=s.ins?this.cands(ins):[];
+    const hasIssue=cands.length>0;
+    const answered=ITEMS.slice(0,4).filter(i=>ins.ans[i.k]).length;
+    const insFacF=facs.find(f=>f.id===ins.fac)||blank;
+    let primaryLabel='次へ', canPrimary=true, insPrimary=()=>{};
+    if(ins.done){ primaryLabel='マップで確認'; insPrimary=()=>this.go('map',{sel:ins.fac,mapView:'map'}); }
+    else if(ins.step===1){ canPrimary=answered===4; primaryLabel=canPrimary?'次へ：写真・メモ':`必須項目に回答（${answered}/4）`; insPrimary=()=>canPrimary&&this.setIns({step:2}); }
+    else if(ins.step===2){ canPrimary=!hasIssue||ins.confirmed; primaryLabel=canPrimary?'次へ：確認':'分類を確定してください'; insPrimary=()=>canPrimary&&this.setIns({step:3}); }
+    else { primaryLabel=ins.saving?'保存しています…':(s.online?'この内容で保存':'端末に保存'); insPrimary=()=>this.saveInspect(); }
+    const reportStatus=s.report.status;
+    const repPill=PILL[reportStatus==='gen'?'draft':reportStatus]||PILL.none;
+    const pastPill=PILL[reportStatus==='gen'?'draft':reportStatus]||PILL.none;
+    const drillPill=s.rsvp?PILL.rsvpDone:PILL.rsvpNone;
+    const people=s.act==='drill'
+      ? [{n:'佐藤 健太（自分）',i:'佐',dot:s.rsvp==='yes'?'#3ad08f':s.rsvp==='maybe'?'#ffc35c':s.rsvp==='no'?'#ff7a66':'#4a5568',ring:'rgba(255,90,46,.5)'}].concat(NAMES.map((n,i)=>({n,i:n[0],dot:i<14?'#3ad08f':i<17?'#ffc35c':'#4a5568',ring:'rgba(255,255,255,.06)'})))
+      : NAMES.slice(0,11).map(n=>({n,i:n[0],dot:'#3ad08f',ring:'rgba(255,255,255,.06)'})).concat([{n:'佐藤 健太（自分）',i:'佐',dot:'#3ad08f',ring:'rgba(255,90,46,.5)'}]);
+    const act=s.act==='drill'
+      ? {kind:'TRAINING · 訓練',color:'#ff6a3d',t:'ポンプ車操法訓練',when:'10/17（土）19:00 – 21:00',place:'第三分団詰所・前庭',bring:'活動服・ヘルメット・手袋・長靴',pill:drillPill,peopleTitle:'参加予定者',peopleSum:`参加 ${counts.yes} · 未定 ${counts.maybe} · 未回答 ${counts.none}`}
+      : {kind:'INSPECTION · 点検',color:'#4f9bff',t:'担当区域 水利点検',when:'10/4（日）9:00 – 11:30',place:'川辺町1〜3丁目 担当区域',bring:'点検15施設 · 異常 1件（K-115）',pill:pastPill,peopleTitle:'参加者（実績）',peopleSum:'12名'};
+    const msgs=s.msgs.map((m,i)=>Object.assign({},m,{
+      isUser:m.kind==='user',isThink:m.kind==='think',isText:m.kind==='text',isBrief:m.kind==='brief',isTask:m.kind==='task',isNote:m.kind==='note',isDone:m.kind==='done',
+      pending:m.pending!==false, pill:m.pending===false?(m.approved?PILL.approved:PILL.draft):PILL.draft,
+      onDraftTask:()=>this.aiAppend({kind:'task'}), onRemind:()=>this.aiAppend({kind:'note'}),
+      onApprove:()=>m.kind==='task'?(this.aiResolve(i,'タスクを作成しました（ホームの「やること」に追加）',true),this.toast('タスクを作成しました')):(this.aiResolve(i,'班長 高橋さんに送信を依頼しました',false),this.toast('班長に送信を依頼しました')),
+      onDiscard:()=>this.aiResolve(i,'下書きを破棄しました',false)
+    }));
+    const d=s.disp||{};
+    const dOpts=[['go','出動可能','すぐ向かえます','#3ad08f'],['late','遅れて参集','30分以内','#ffc35c'],['no','出動不可','今回は不可','#a58e8b']].map(([k,t,sub,c])=>{const on=d.choice===k; return {t,sub,bg:on?c+'22':'rgba(255,255,255,.04)',ring:on?c:'rgba(255,255,255,.14)',dot:on?c:'transparent',onClick:()=>this.setDisp({choice:k,hold:0})};});
+    const isNo=d.choice==='no';
+    const maxStep=isNo?1:5;
+    const dSteps=(isNo?['応答（出動不可）']:DSTEPS).map((t,i)=>{const done=i<d.step, cur=i===d.step; return {t,time:done?DTIMES[i]:'--:--',bg:done?'#ff3b2f':'transparent',ring:done?'#ff3b2f':cur?'#fff':'rgba(255,255,255,.2)',fg:done||cur?'#fff':'#7d6764',check:done?'block':'none'};});
+    const fabBottom=selF?330:104;
+    const tasks=s.tasks.map(t=>{const f=facs.find(x=>x.id===t.fac)||TYPES.hydrant; return Object.assign({},t,{icon:f.icon,color:f.color,radius:f.type==='box'?'7px':f.radius,ring:t.urgent?'rgba(255,106,61,.4)':t.ai?'rgba(185,169,255,.35)':'rgba(255,255,255,.07)',subColor:t.urgent?'#ff8a66':t.ai?'#b9a9ff':'#8792a5',onClick:()=>this.openFac(t.fac)});});
+    const qv=s.q.trim().toLowerCase();
+    const qResults=qv?facs.filter(f=>(f.id+f.name+f.addr).toLowerCase().includes(qv)).slice(0,4).map(f=>Object.assign({},f,{onOpen:()=>this.setState({sel:f.id,q:'',mapView:'map'})})):[];
+    const order={alert:0,due:1,ok:2};
+    const week=[['月',12],['火',13],['水',14],['木',15],['金',16],['土',17],['日',18]].map(([dow,dd])=>{const today=dd===13; return {dow,d:dd,bg:today?'#edf1f7':'rgba(255,255,255,.04)',fg:today?'#08101c':'#edf1f7',dc:today?'#08101c':'#8792a5',dot:dd===17?'#ff6a3d':dd===16||dd===15?'#ffc35c':'transparent'};});
+    const evDrill={d:17,dow:'土',kind:'訓練',time:'19:00',t:'ポンプ車操法訓練',color:'#ff6a3d',pill:drillPill,onClick:()=>this.go('activity',{act:'drill'})};
+    const evPr={d:25,dow:'日',kind:'行事',time:'9:00',t:'秋季火災予防 広報巡回',color:'#c3cad6',pill:PILL.event,onClick:()=>this.toast('行事の詳細はPhase 2で作成予定です')};
+    const evPast={d:4,dow:'日',kind:'点検',time:'9:00',t:'担当区域 水利点検',color:'#4f9bff',pill:{t:'記録 '+pastPill.t,bg:pastPill.bg,fg:pastPill.fg},onClick:()=>this.go('activity',{act:'past'})};
+    const toastBottom=({home:160,map:110,schedule:100,ai:160,menu:100}[sc])||110;
+    return {
+      railFlows:[
+        {n:'1',t:'消防水利の点検',d:'マップ → 施設 → チェックリスト → AI分類 → 保存',bg:'#e8432a',onClick:()=>{this.endDispatch();this.go('map',{sel:'K-112',mapView:'map'});}},
+        {n:'2',t:'訓練の出欠・活動記録',d:'予定 → 出欠回答 → 過去の活動 → AI報告書',bg:'#ff6a3d',onClick:()=>{this.endDispatch();this.go('schedule');}},
+        {n:'3',t:'AIによる運営支援',d:'準備状況の確認 → タスク下書き → 承認',bg:'#7d6bd6',onClick:()=>{this.endDispatch();this.go('ai');}},
+        {n:'!',t:'出動モード（訓練想定）',d:'通知 → 応答（長押し確定）→ 参集・帰還記録',bg:'#ff3b2f',onClick:()=>{if(s.screen==='login')this.setState({screen:'home'});this.startDispatch();}}
+      ],
+      toggleOnline:()=>{ this.setState(st=>({online:!st.online,pending:st.online?st.pending:0})); if(!s.online&&s.pending) this.toast(`未送信の ${s.pending}件 を送信しました`); },
+      onlineLabel:s.online?'ONLINE':'OFFLINE', syncDot:s.online?'#3ad08f':'#ffc35c', syncText:s.online?'第三分団 · 同期済み':`オフライン · 未送信 ${s.pending}件`,
+      offline:!s.online, offlineBanner:!s.online&&sc!=='login'&&sc!=='home'&&!d.active, pending:s.pending, netIcon:s.online?'signal_cellular_alt':'signal_cellular_off',
+      logout:()=>{this.endDispatch();this.go('login',{loginState:'idle'});},
+      isLogin:sc==='login',isHome:sc==='home',isMap:sc==='map',isFac:sc==='facility',isInspect:sc==='inspect',isSchedule:sc==='schedule',isActivity:sc==='activity',isReport:sc==='report',isAi:sc==='ai',isMenu:sc==='menu',
+      showGlow:sc==='login'||sc==='home', showNav:['home','map','schedule','ai','menu'].includes(sc),
+      loginId:s.loginId, loginPw:s.loginPw, onLoginId:e=>this.setState({loginId:e.target.value}), onLoginPw:e=>this.setState({loginPw:e.target.value,loginState:'idle'}),
+      doLogin:()=>this.doLogin(), loginError:s.loginState==='error', loginRing:s.loginState==='error'?'#ff7a66':'rgba(255,255,255,.1)',
+      loginSpin:s.loginState==='loading'?spin('#ffffff'):null, loginBtnText:s.loginState==='loading'?'認証しています…':'ログイン',
+      dial:{a:Math.round(counts.yes/tot*100),b:Math.round((counts.yes+counts.maybe)/tot*100)}, counts,
+      rsvpNone:!s.rsvp, rsvpDone:!!s.rsvp, rsvpLabel:L[s.rsvp]||'', quickYes:()=>this.setRsvp('yes'), openRsvp:()=>this.setState({rsvpOpen:true}), closeRsvp:()=>this.setState({rsvpOpen:false}), rsvpOpen:s.rsvpOpen, rsvpOpts,
+      tasks, tasksCount:`${s.tasks.length}件`, noTasks:s.tasks.length===0,
+      goDrill:()=>this.go('activity',{act:'drill'}), goAiPrefill:()=>{this.go('ai'); if(!s.msgs.length) setTimeout(()=>this.aiSend('次回の訓練の準備状況を確認して'),250);},
+      navItems:navDef.map(([k,l,ic])=>{const on=navKey===k; return {label:l,icon:ic,color:on?'#edf1f7':'#7d889b',fill:on?1:0,weight:on?700:500,pillBg:on?(k==='ai'?'rgba(185,169,255,.18)':'rgba(255,106,61,.18)'):'transparent',onClick:()=>this.go(k,k==='map'?{}:{})};}),
+      markers:facs.filter(f=>s.filters[f.type]).map(f=>{const on=f.id===s.sel; return Object.assign({},f,{scale:on?1.25:1,z:on?20:10,ring:on?4:0,badgeDisplay:f.status==='ok'?'none':'flex',badgeBg:f.status==='alert'?'#ff7a66':'#ffc35c',badgeText:f.status==='alert'?'!':'·',onClick:()=>this.setState({sel:f.id})});}),
+      chips:Object.keys(TYPES).map(k=>{const on=s.filters[k]; const T=TYPES[k]; return Object.assign({},T,{label:T.label,count:facs.filter(f=>f.type===k).length,bg:on?'rgba(20,30,50,.92)':'rgba(20,30,50,.6)',ring:on?T.color+'88':'rgba(255,255,255,.08)',fg:on?'#edf1f7':'#7d889b',op:on?1:.3,tf:k==='box'?'rotate(45deg) scale(.8)':'none',radius:k==='tank'?'4px':k==='box'?'3px':T.radius,onClick:()=>this.setState(st=>({filters:Object.assign({},st.filters,{[k]:!st.filters[k]})}))});}),
+      mapIsMap:s.mapView==='map', mapIsList:s.mapView==='list', toggleView:()=>this.setState(st=>({mapView:st.mapView==='map'?'list':'map',sel:null})),
+      viewIcon:s.mapView==='map'?'list':'map', viewLabel:s.mapView==='map'?'一覧':'地図',
+      facList:facs.slice().sort((a,b)=>order[a.status]-order[b.status]).map(f=>Object.assign({},f,{onOpen:()=>this.go('facility',{fd:f.id})})),
+      q:s.q, onQ:e=>this.setState({q:e.target.value}), qResults, hasQResults:qResults.length>0,
+      sel:selF||blank, sheetY:selF?'0':'calc(100% + 120px)', sheetOp:selF?1:0, fabBottom, closeSel:()=>this.setState({sel:null}),
+      selInspect:()=>selF&&this.startInspect(selF.id), selDetail:()=>selF&&this.go('facility',{fd:selF.id}), selRoute:()=>this.toast('Googleマップで経路を開きます（デモ）'),
+      locate:()=>this.toast('現在地を表示しました'),
+      fd:Object.assign({},fdF,{history:(fdF.history||[]).map(h=>Object.assign({},h,{dot:h.s==='alert'?'#ff7a66':'#3ad08f'}))}),
+      backToMap:()=>this.go('map',{sel:s.fd}), fdInspect:()=>this.startInspect(s.fd),
+      ins, insFac:insFacF, insStep1:!ins.done&&ins.step===1, insStep2:!ins.done&&ins.step===2, insStep3:!ins.done&&ins.step===3, insDone:!!ins.done,
+      stepLabel:ins.done?'完了':`${ins.step} / 3`,
+      stepBars:['チェック','写真・メモ','確認'].map((t,i)=>({t,bg:ins.done||i+1<=ins.step?'#ff6a3d':'rgba(255,255,255,.1)',fg:ins.done||i+1<=ins.step?'#edf1f7':'#7d889b'})),
+      items:ITEMS.map((it,i)=>{const a=ins.ans[it.k]; return {n:String(i+1).padStart(2,'0'),t:it.t,d:it.d,opt:it.opt||'',ring:a==='ng'?'rgba(255,122,102,.5)':a==='ok'?'rgba(58,208,143,.3)':'rgba(255,255,255,.07)',
+        okBg:a==='ok'?'#3ad08f':'rgba(255,255,255,.06)',okFg:a==='ok'?'#06231a':'#c3cad6',ngBg:a==='ng'?'#ff7a66':'rgba(255,255,255,.06)',ngFg:a==='ng'?'#2a0b06':'#c3cad6',
+        onOk:()=>this.answer(it.k,'ok'),onNg:()=>this.answer(it.k,'ng')};}),
+      togglePhoto:()=>this.setIns({photo:!ins.photo}), onMemo:e=>this.setIns({memo:e.target.value,confirmed:false}),
+      hasIssue, noIssue:!hasIssue,
+      cands:cands.map((c,i)=>{const on=ins.pick===i; return Object.assign({},c,{bg:on?'rgba(185,169,255,.14)':'rgba(255,255,255,.03)',ring:on?'#b9a9ff':'rgba(255,255,255,.12)',dot:on?'#b9a9ff':'transparent',onPick:()=>this.setIns({pick:i,confirmed:false})});}),
+      needConfirm:hasIssue&&!ins.confirmed, confirmCat:()=>this.setIns({confirmed:true}), catLabel:hasIssue?(cands[ins.pick]||{}).t:'',
+      toggleTask:()=>this.setIns({task:!ins.task}), taskBg:ins.task?'#b9a9ff':'rgba(255,255,255,.15)', taskKnob:ins.task?19:3,
+      summary:ITEMS.map(it=>{const a=ins.ans[it.k]; return {t:it.t,v:a==='ok'?'良好':a==='ng'?'異常あり':'未実施',fg:a==='ok'?'#3ad08f':a==='ng'?'#ff7a66':'#7d889b',icon:a==='ok'?'check_circle':a==='ng'?'warning':'remove'};}),
+      photoCount:ins.photo?'1枚':'なし', catSummary:hasIssue?`${(cands[ins.pick]||{}).t}（緊急度 ${(cands[ins.pick]||{}).u}）${ins.task?' · 班長へタスク':''}`:'異常なし',
+      showBack:!ins.done&&ins.step>1, insBack:()=>this.setIns({step:ins.step-1}), exitInspect:()=>this.go(ins.done?'map':'facility',{fd:ins.fac,sel:ins.fac}),
+      insPrimary, primaryLabel, primaryBg:canPrimary?(ins.done?'#edf1f7':'#ff5a2e'):'rgba(255,255,255,.08)', primaryFg:canPrimary?(ins.done?'#08101c':'#fff'):'#7d889b', primaryCursor:canPrimary?'pointer':'not-allowed',
+      insSpin:ins.saving?spin('#ffffff'):null,
+      doneTitle:ins.issue?'異常報告を保存しました':'点検を保存しました',
+      doneSub:(ins.issue?`${insFacF.id} は「異常報告あり」に更新され、${ins.task?'班長 高橋さんに確認タスクが送られました。':'履歴に記録されました。'}`:`${insFacF.id} は「点検済み」に更新され、次回期限は 2027/04 です。`)+(s.online?'':' 通信が戻り次第、自動で送信します。'),
+      week, events:[{h:'これから',items:[evDrill,evPr]},{h:'終了した活動',items:[evPast]}],
+      toSchedule:()=>this.go('schedule'), act, actIsDrill:s.act==='drill', actIsPast:s.act!=='drill', people,
+      openReport:()=>this.genReport(), reportCta:reportStatus==='none'?'AIで活動記録の下書きを作成':'活動記録を開く',
+      report:s.report, repPill, repGen:reportStatus==='gen', repDraft:reportStatus==='draft', repPending:reportStatus==='pending', repLocked:reportStatus!=='draft',
+      repFlag:reportStatus==='draft'&&s.report.flag, repRing:reportStatus==='gen'?'rgba(185,169,255,.4)':'rgba(255,255,255,.08)',
+      repMeta:reportStatus==='gen'?'生成中':`${s.report.text.length}字 · AI下書き`,
+      repSteps:[['下書き','draft'],['確認待ち','pending'],['承認済み','approved']].map(([t,k],i)=>{const idx={gen:0,draft:0,pending:1,approved:2}[reportStatus]||0; const on=i<=idx; return {n:i+1,t,bg:on?(i===1?'#ffc35c':i===2?'#3ad08f':'#c3cad6'):'rgba(255,255,255,.12)',fg:on?'#edf1f7':'#7d889b',line:i<2?'block':'none'};}),
+      onRepText:e=>this.setState(st=>({report:Object.assign({},st.report,{text:e.target.value})})),
+      addMaterials:()=>{this.setState(st=>({report:Object.assign({},st.report,{flag:false,text:st.report.text.replace('\n\n特記事項：','\n使用資機材：スタンドパイプ 2・消火栓開閉器 2\n\n特記事項：')})}));this.toast('使用資機材を追記しました');},
+      saveDraft:()=>this.toast('下書きを保存しました'),
+      submitReport:()=>{this.setState(st=>({report:Object.assign({},st.report,{status:'pending',flag:false})}));this.toast('班長 高橋さんに確認を依頼しました');},
+      backToPast:()=>{clearInterval(this._rt); if(s.report.status==='gen')this.setState({report:{status:'draft',text:REPORT,flag:true}}); this.go('activity',{act:'past'});},
+      spinV:spin('#b9a9ff'),
+      msgs, aiEmpty:s.msgs.length===0, showSugg:!s.aiBusy,
+      suggestions:['次回の訓練の準備状況を確認して','自分の未完了タスクは？','先月の活動実績をまとめて'].map(t=>({t,onClick:()=>this.aiSend(t)})),
+      aiInput:s.aiInput, onAiInput:e=>this.setState({aiInput:e.target.value}), onAiKey:e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing)this.aiSend();}, aiSend:()=>this.aiSend(),
+      modules:[['groups','団員名簿','','#c3cad6'],['local_shipping','車両・資機材','PHASE 2','#c3cad6'],['campaign','お知らせ','PHASE 2','#c3cad6'],['folder','文書・規程','PHASE 2','#c3cad6'],['e911_emergency','出動履歴','PHASE 3','#ff7a66'],['insights','活動分析','PHASE 3','#c3cad6'],['settings','設定・通知','','#c3cad6'],['help','使い方ガイド','','#c3cad6']].map(([ic,t,tag,c])=>({icon:ic,t,tag,color:c,tagShow:tag?'block':'none',ring:'rgba(255,255,255,.07)',onClick:()=>this.toast(`${t}は次のラウンドで作成します`)})),
+      disp:Object.assign({hold:0},d), dispAlert:d.phase==='alert', dispLive:d.phase==='live',
+      dispDot:React.createElement('span',{style:{width:10,height:10,borderRadius:'50%',background:'#fff',display:'inline-block',animation:'fo-blink 1s steps(1) infinite'}}),
+      board:d.board?[['出動可','ok','#3ad08f'],['遅参','late','#ffc35c'],['不可','no','#a58e8b'],['未応答','none','#ffffff']].map(([t,k,c])=>({t,v:d.board[k],c})):[],
+      dispOpts:dOpts, holdStart:()=>this.holdStart(), holdEnd:()=>this.holdEnd(),
+      holdBg:d.choice?'rgba(255,59,47,.25)':'rgba(255,255,255,.06)', holdCursor:d.choice?'pointer':'not-allowed',
+      holdLabel:!d.choice?'応答を選んでください':d.hold>0?'そのまま押し続けて…':'長押しで応答を送信',
+      dSteps, canAdvance:d.phase==='live'&&d.step<maxStep, dispFinished:d.phase==='live'&&d.step>=maxStep,
+      advance:()=>this.advance(), advBg:d.arm?'#ff3b2f':'rgba(255,59,47,.12)',
+      advLabel:d.arm?'もう一度タップで確定':`「${DSTEPS[d.step]||''}」を記録`, advSub:d.arm?'3秒以内に確定しないと取り消されます':'誤操作防止のため2回タップで記録',
+      endDispatch:()=>this.endDispatch(),
+      hasToast:!!s.toast, toast:s.toast, toastBottom
+    };
+  }
+}
+</script>
+</body>
+</html>

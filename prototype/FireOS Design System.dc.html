@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=block" rel="stylesheet">
+<style>
+body{margin:0;background:#08101c;color:#edf1f7;font-family:'Zen Kaku Gothic New',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#ff8a66;text-decoration:none}a:hover{color:#ffb39a}
+*{box-sizing:border-box}
+.ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;line-height:1;white-space:nowrap;font-feature-settings:'liga'}
+@keyframes fo-spin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div style="max-width:1180px;margin:0 auto;padding:64px 32px 120px;display:flex;flex-direction:column;gap:88px">
+
+<header style="position:relative;display:flex;flex-direction:column;gap:22px;padding-bottom:40px;border-bottom:1px solid rgba(255,255,255,.08)">
+  <div style="position:absolute;right:-120px;top:-160px;width:520px;height:520px;background:radial-gradient(closest-side,rgba(255,96,48,.25),transparent);pointer-events:none"></div>
+  <div style="display:flex;align-items:center;gap:12px"><span style="position:relative;flex:none;width:36px;height:36px;border-radius:11px;background:linear-gradient(180deg,#16223a,#0c1526);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center"><span style="position:absolute;width:22px;height:22px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(255,106,61,.25)"></span><span style="position:absolute;width:13px;height:13px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(255,106,61,.55)"></span><span style="width:5px;height:5px;border-radius:50%;background:#ff5a2e;box-shadow:0 0 8px rgba(255,90,46,.9)"></span></span><span style="font:600 11px 'IBM Plex Mono';letter-spacing:.16em;color:#8792a5">FIREOS DESIGN SYSTEM · BEACON · v0.2</span></div>
+  <h1 style="margin:0;font:900 clamp(40px,7vw,84px)/1.1 'Zen Kaku Gothic New';letter-spacing:-.02em;text-wrap:balance">夜の詰所に灯る、<br><span style="color:#ff6a3d">ひとつの明かり。</span></h1>
+  <p style="margin:0;max-width:640px;font:500 16px/1.9 'Zen Kaku Gothic New';color:#a9b3c4;text-wrap:pretty">深い夜色の上に、赤色灯のような暖色をただ一点だけ置く。色は「意味」にだけ使い、装飾には使わない。久しぶりに開いても、今やるべきことが光って見える——それがBeaconの原則です。</p>
+  <div style="display:flex;flex-wrap:wrap;gap:10px">
+    <a href="FireOS Prototype.dc.html" style="height:46px;padding:0 20px;border-radius:99px;background:#ff5a2e;color:#fff;display:flex;align-items:center;gap:8px;font:700 14px 'Zen Kaku Gothic New'">プロトタイプを開く<span class="ms" style="font-size:18px">arrow_forward</span></a>
+  </div>
+</header>
+
+<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+  <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:10px"><span style="font:600 11px 'IBM Plex Mono';color:#ff8a66">01</span><span style="font:700 18px 'Zen Kaku Gothic New'">一点だけ光らせる</span><span style="font:500 13px/1.8 'Zen Kaku Gothic New';color:#a9b3c4">1画面に主要アクションは1つ。暖色の塗りはその1つだけに使う。</span></div>
+  <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:10px"><span style="font:600 11px 'IBM Plex Mono';color:#ff8a66">02</span><span style="font:700 18px 'Zen Kaku Gothic New'">色＋形＋文字で伝える</span><span style="font:500 13px/1.8 'Zen Kaku Gothic New';color:#a9b3c4">施設種別・状態は色だけに頼らず、形状とラベルを必ず併記する。</span></div>
+  <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:10px"><span style="font:600 11px 'IBM Plex Mono';color:#b9a9ff">03</span><span style="font:700 18px 'Zen Kaku Gothic New'">AIは紫、決めるのは人</span><span style="font:500 13px/1.8 'Zen Kaku Gothic New';color:#a9b3c4">AI由来の提案は常に紫で示し、確定・送信は必ず人の操作で行う。</span></div>
+  <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:10px"><span style="font:600 11px 'IBM Plex Mono';color:#ff3b2f">04</span><span style="font:700 18px 'Zen Kaku Gothic New'">出動時は世界ごと変える</span><span style="font:500 13px/1.8 'Zen Kaku Gothic New';color:#a9b3c4">出動モードは背景色から切り替え、通常画面と取り違えない。確定は長押し／2回タップ。</span></div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:baseline;gap:14px"><span style="font:600 11px 'IBM Plex Mono';letter-spacing:.16em;color:#7d889b">COLOR</span><span style="font:700 24px 'Zen Kaku Gothic New'">カラー</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px">
+    <sc-for list="{{ colors }}" as="c" hint-placeholder-count="12">
+      <div style="border-radius:20px;overflow:hidden;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)">
+        <div style="height:92px;background:{{ c.hex }};box-shadow:inset 0 -1px 0 rgba(255,255,255,.06)"></div>
+        <div style="padding:12px 14px;display:flex;flex-direction:column;gap:3px"><span style="font:700 13px 'Zen Kaku Gothic New'">{{ c.name }}</span><span style="font:500 11px 'IBM Plex Mono';color:#8792a5">{{ c.token }} · {{ c.hex }}</span><span style="font:500 11px/1.5 'Zen Kaku Gothic New';color:#a9b3c4">{{ c.use }}</span></div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:baseline;gap:14px"><span style="font:600 11px 'IBM Plex Mono';letter-spacing:.16em;color:#7d889b">TYPE</span><span style="font:700 24px 'Zen Kaku Gothic New'">タイポグラフィ</span></div>
+  <p style="margin:0;max-width:720px;font:500 14px/1.8 'Zen Kaku Gothic New';color:#a9b3c4">和文・欧文ともに <b style="color:#edf1f7">Zen Kaku Gothic New</b>。数値・管理番号・時刻は <b style="color:#edf1f7">IBM Plex Mono</b> で桁を揃え、読み違いを防ぐ。本文の最小は14px、補足の最小は11px。</p>
+  <div style="border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)">
+    <sc-for list="{{ types }}" as="t" hint-placeholder-count="7">
+      <div style="display:grid;grid-template-columns:minmax(120px,180px) 1fr;gap:20px;align-items:baseline;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.06)">
+        <span style="font:500 11px/1.6 'IBM Plex Mono';color:#8792a5">{{ t.name }}<br>{{ t.spec }}</span>
+        <span style="font:{{ t.font }};color:#edf1f7;text-wrap:pretty">{{ t.sample }}</span>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:baseline;gap:14px"><span style="font:600 11px 'IBM Plex Mono';letter-spacing:.16em;color:#7d889b">MAP</span><span style="font:700 24px 'Zen Kaku Gothic New'">施設マーカー</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+    <sc-for list="{{ markers }}" as="m" hint-placeholder-count="4">
+      <div style="padding:22px;border-radius:24px;background:repeating-linear-gradient(135deg,rgba(255,255,255,.025) 0 2px,transparent 2px 12px),#0c1626;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:18px">
+        <div style="display:flex;gap:22px;align-items:center">
+          <span style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center"><span style="position:absolute;inset:3px;background:{{ m.color }};border-radius:{{ m.radius }};transform:{{ m.tf }};clip-path:{{ m.clip }};box-shadow:0 0 0 2px #08101c"></span><span class="ms" style="position:relative;font-size:21px;color:#fff;font-variation-settings:'FILL' 1">{{ m.icon }}</span></span>
+          <span style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center"><span style="position:absolute;inset:3px;background:{{ m.color }};border-radius:{{ m.radius }};transform:{{ m.tf }};clip-path:{{ m.clip }}"></span><span class="ms" style="position:relative;font-size:21px;color:#fff;font-variation-settings:'FILL' 1">{{ m.icon }}</span><span style="position:absolute;top:-3px;right:-4px;width:17px;height:17px;border-radius:99px;background:#ffc35c;box-shadow:0 0 0 2px #0c1626;display:flex;align-items:center;justify-content:center;font:700 10px 'IBM Plex Mono';color:#0b1220">·</span></span>
+          <span style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center"><span style="position:absolute;inset:3px;background:{{ m.color }};border-radius:{{ m.radius }};transform:{{ m.tf }};clip-path:{{ m.clip }}"></span><span class="ms" style="position:relative;font-size:21px;color:#fff;font-variation-settings:'FILL' 1">{{ m.icon }}</span><span style="position:absolute;top:-3px;right:-4px;width:17px;height:17px;border-radius:99px;background:#ff7a66;box-shadow:0 0 0 2px #0c1626;display:flex;align-items:center;justify-content:center;font:700 10px 'IBM Plex Mono';color:#0b1220">!</span></span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px"><span style="font:700 15px 'Zen Kaku Gothic New'">{{ m.label }}</span><span style="font:500 12px 'Zen Kaku Gothic New';color:#a9b3c4">{{ m.shape }} · {{ m.hex }}</span><span style="font:500 11px 'IBM Plex Mono';color:#7d889b">通常 / 期限間近 / 異常</span></div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:baseline;gap:14px"><span style="font:600 11px 'IBM Plex Mono';letter-spacing:.16em;color:#7d889b">STATUS</span><span style="font:700 24px 'Zen Kaku Gothic New'">状態ラベル</span></div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px">
+    <sc-for list="{{ pills }}" as="p" hint-placeholder-count="8">
+      <span style="display:flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:99px;background:{{ p.bg }};color:{{ p.fg }};font:700 13px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:16px">{{ p.icon }}</span>{{ p.t }}</span>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+    <span style="display:flex;align-items:center;gap:4px;font:700 12px 'Zen Kaku Gothic New';color:#fff;background:#e5402c;padding:4px 10px;border-radius:6px"><span class="ms" style="font-size:14px">priority_high</span>重要</span>
+    <span style="font:700 12px 'Zen Kaku Gothic New';color:#c3cad6;background:rgba(255,255,255,.08);padding:4px 10px;border-radius:6px">連絡</span>
+    <span style="font:600 11px 'IBM Plex Mono';letter-spacing:.12em;color:#a9b3c4;padding:5px 9px;border-radius:99px;border:1px dashed rgba(255,255,255,.25)">DEMO</span>
+    <span style="font:600 10px 'IBM Plex Mono';color:#b9a9ff;padding:3px 6px;border-radius:5px;background:rgba(185,169,255,.14)">JEV</span>
+    <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">← 緊急連絡は角型・塗り。一般連絡は中立。架空データは破線のDEMOで常時明示。</span>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:baseline;gap:14px"><span style="font:600 11px 'IBM Plex Mono';letter-spacing:.16em;color:#7d889b">ACTIONS</span><span style="font:700 24px 'Zen Kaku Gothic New'">ボタン</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+    <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:12px">
+      <button style="all:unset;cursor:pointer;height:56px;border-radius:99px;background:#ff5a2e;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font:700 16px 'Zen Kaku Gothic New';box-shadow:0 12px 28px -8px rgba(255,90,46,.7)" style-hover="background:#ff6d45" style-active="transform:scale(.98)"><span class="ms" style="font-size:20px">fact_check</span>点検する</button>
+      <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">Primary · 56px · 1画面に1つ</span>
+    </div>
+    <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:12px">
+      <button style="all:unset;cursor:pointer;height:52px;border-radius:99px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font:700 15px 'Zen Kaku Gothic New'" style-hover="background:rgba(255,255,255,.12)">下書き保存</button>
+      <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">Secondary · 52px</span>
+    </div>
+    <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:12px">
+      <button style="all:unset;cursor:pointer;height:52px;border-radius:99px;background:#b9a9ff;color:#0b1220;display:flex;align-items:center;justify-content:center;gap:8px;font:700 15px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:19px">auto_awesome</span>確認して作成</button>
+      <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">AI承認 · AI提案を人が確定する時だけ</span>
+    </div>
+    <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:12px">
+      <button style="all:unset;position:relative;overflow:hidden;height:60px;border-radius:99px;background:rgba(255,59,47,.25);display:flex;align-items:center;justify-content:center;gap:8px;color:#fff;font:900 16px 'Zen Kaku Gothic New'"><span style="position:absolute;left:0;top:0;bottom:0;width:58%;background:#ff3b2f"></span><span class="ms" style="position:relative;font-size:21px">touch_app</span><span style="position:relative">長押しで応答を送信</span></button>
+      <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">Hold-to-confirm · 出動応答専用（0.8秒）</span>
+    </div>
+    <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:12px">
+      <button style="all:unset;cursor:not-allowed;height:56px;border-radius:99px;background:rgba(255,255,255,.08);color:#7d889b;display:flex;align-items:center;justify-content:center;font:700 15px 'Zen Kaku Gothic New'">必須項目に回答（3/4）</button>
+      <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">Disabled · 理由をラベル自体で伝える</span>
+    </div>
+    <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:12px">
+      <button style="all:unset;height:56px;border-radius:99px;background:#ff5a2e;color:#fff;display:flex;align-items:center;justify-content:center;gap:10px;font:700 15px 'Zen Kaku Gothic New'">{{ spin }}保存しています…</button>
+      <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">Loading · ラベルを進行形に</span>
+    </div>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:baseline;gap:14px"><span style="font:600 11px 'IBM Plex Mono';letter-spacing:.16em;color:#7d889b">FORMS</span><span style="font:700 24px 'Zen Kaku Gothic New'">入力・選択</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+    <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:14px">
+      <label style="display:flex;flex-direction:column;gap:8px"><span style="font:700 12px 'Zen Kaku Gothic New';color:#a9b3c4">団員ID</span><input value="KWB-03-0142" readOnly="{{ true }}" style="height:54px;border-radius:16px;border:none;outline:none;padding:0 16px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);color:#edf1f7;font:500 16px 'IBM Plex Mono'"></label>
+      <label style="display:flex;flex-direction:column;gap:8px"><span style="font:700 12px 'Zen Kaku Gothic New';color:#a9b3c4">パスワード</span><input placeholder="パスワードを入力" readOnly="{{ true }}" style="height:54px;border-radius:16px;border:none;outline:none;padding:0 16px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px #ff7a66;color:#edf1f7;font:500 16px 'Zen Kaku Gothic New'"></label>
+      <span style="display:flex;align-items:center;gap:6px;font:500 13px 'Zen Kaku Gothic New';color:#ff7a66"><span class="ms" style="font-size:17px">error</span>パスワードを入力してください</span>
+    </div>
+    <div style="padding:22px;border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,90,70,.4);display:flex;flex-direction:column;gap:12px">
+      <span style="font:700 15px 'Zen Kaku Gothic New'">蓋・開閉<span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5;margin-left:8px">チェック項目</span></span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <span style="height:48px;border-radius:14px;background:rgba(255,255,255,.06);color:#c3cad6;display:flex;align-items:center;justify-content:center;gap:6px;font:700 14px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:19px">check_circle</span>良好</span>
+        <span style="height:48px;border-radius:14px;background:#ff7a66;color:#2a0b06;display:flex;align-items:center;justify-content:center;gap:6px;font:700 14px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:19px">warning</span>異常あり</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <span style="height:60px;border-radius:18px;background:rgba(58,208,143,.15);color:#3ad08f;box-shadow:inset 0 0 0 1.5px #3ad08f;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:700 13px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:19px">check_circle</span>参加</span>
+        <span style="height:60px;border-radius:18px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:700 13px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:19px">help</span>未定</span>
+        <span style="height:60px;border-radius:18px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:700 13px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:19px">cancel</span>不参加</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:baseline;gap:14px"><span style="font:600 11px 'IBM Plex Mono';letter-spacing:.16em;color:#7d889b">STATES</span><span style="font:700 24px 'Zen Kaku Gothic New'">状態の表現</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px">
+    <div style="padding:20px;border-radius:24px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:flex;flex-direction:column;gap:12px"><span style="font:600 10px 'IBM Plex Mono';letter-spacing:.14em;color:#7d889b">LOADING · AI</span><span style="display:flex;align-items:center;gap:10px;font:500 13px 'Zen Kaku Gothic New';color:#b9a9ff">{{ spinV }}点検記録を参照しています</span><span style="height:10px;border-radius:5px;background:rgba(255,255,255,.07);width:90%"></span><span style="height:10px;border-radius:5px;background:rgba(255,255,255,.07);width:70%"></span></div>
+    <div style="padding:20px;border-radius:24px;border:1px dashed rgba(255,255,255,.16);display:flex;flex-direction:column;gap:10px"><span style="font:600 10px 'IBM Plex Mono';letter-spacing:.14em;color:#7d889b">EMPTY</span><span style="display:flex;align-items:center;gap:10px;font:500 14px 'Zen Kaku Gothic New';color:#a9b3c4"><span class="ms" style="font-size:22px;color:#3ad08f">task_alt</span>やることはすべて完了しています</span><span style="font:500 12px 'Zen Kaku Gothic New';color:#7d889b">空状態は「良い知らせ」として緑で伝える</span></div>
+    <div style="padding:20px;border-radius:24px;background:rgba(255,90,70,.08);box-shadow:inset 0 0 0 1px rgba(255,90,70,.3);display:flex;flex-direction:column;gap:10px"><span style="font:600 10px 'IBM Plex Mono';letter-spacing:.14em;color:#ff9a88">ERROR</span><span style="font:700 14px 'Zen Kaku Gothic New';color:#ffb0a4">保存できませんでした</span><span style="font:500 12px/1.6 'Zen Kaku Gothic New';color:#e7c9c4">入力内容は端末に残っています。通信状態を確認して再送してください。</span><span style="align-self:flex-start;height:36px;padding:0 14px;border-radius:99px;background:rgba(255,255,255,.1);display:flex;align-items:center;font:700 12px 'Zen Kaku Gothic New'">再送する</span></div>
+    <div style="padding:20px;border-radius:24px;background:rgba(255,195,92,.08);box-shadow:inset 0 0 0 1px rgba(255,195,92,.3);display:flex;flex-direction:column;gap:10px"><span style="font:600 10px 'IBM Plex Mono';letter-spacing:.14em;color:#ffc35c">OFFLINE</span><span style="align-self:flex-start;height:30px;padding:0 12px;border-radius:99px;background:#ffc35c;color:#1a1204;display:flex;align-items:center;gap:6px;font:700 11px 'Zen Kaku Gothic New'"><span class="ms" style="font-size:15px">cloud_off</span>オフライン · 未送信 2件</span><span style="font:500 12px/1.6 'Zen Kaku Gothic New';color:#ffdca0">入力は止めない。端末に保存し、復帰時に自動送信。</span></div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+    <div style="padding:14px 16px;border-radius:18px;background:#edf1f7;color:#08101c;display:flex;align-items:center;gap:10px;font:700 13px 'Zen Kaku Gothic New';box-shadow:0 16px 40px rgba(0,0,0,.5)"><span class="ms" style="font-size:20px;color:#1f9e66">check_circle</span>点検を保存しました</div>
+    <span style="font:500 12px 'Zen Kaku Gothic New';color:#8792a5">Toast · 2.6秒で自動消去・暗い面の上で唯一の明色面</span>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:24px">
+  <div style="display:flex;align-items:baseline;gap:14px"><span style="font:600 11px 'IBM Plex Mono';letter-spacing:.16em;color:#7d889b">DISPATCH</span><span style="font:700 24px 'Zen Kaku Gothic New'">出動モード</span></div>
+  <div style="border-radius:28px;padding:28px;background:radial-gradient(600px 300px at 30% 0%,rgba(255,59,47,.3),transparent 70%),#0d0709;box-shadow:inset 0 0 0 1px rgba(255,59,47,.3);display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span style="align-self:flex-start;height:36px;padding:0 14px;border-radius:10px;background:#ff3b2f;color:#fff;display:flex;align-items:center;gap:8px;font:900 13px 'Zen Kaku Gothic New';letter-spacing:.06em"><span style="width:9px;height:9px;border-radius:50%;background:#fff"></span>出動モード</span>
+      <span style="font:900 36px/1.2 'Zen Kaku Gothic New';color:#fff">建物火災<br>出動要請</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;font:500 13px/1.8 'Zen Kaku Gothic New';color:#d8c3c0">
+      <span>· 背景を #0D0709 に切り替え、通常画面と即座に区別</span>
+      <span>· 文字は純白、最小16px・極太。屋外・夜間で読める</span>
+      <span>· 応答は長押し、進捗記録は2回タップで確定</span>
+      <span>· 指揮・命令は行わない旨を常時表示</span>
+    </div>
+  </div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals(){
+    const spin=c=>React.createElement('span',{style:{width:16,height:16,border:`2px solid ${c}44`,borderTopColor:c,borderRadius:'50%',display:'inline-block',animation:'fo-spin .8s linear infinite'}});
+    return {
+      spin:spin('#ffffff'), spinV:spin('#b9a9ff'),
+      colors:[
+        {name:'Night',token:'bg/base',hex:'#08101C',use:'基本の背景'},
+        {name:'Surface',token:'bg/raised',hex:'#101A2B',use:'カード・シート'},
+        {name:'Ink',token:'fg/primary',hex:'#EDF1F7',use:'本文・見出し'},
+        {name:'Ink Muted',token:'fg/muted',hex:'#8792A5',use:'補足（背景比 6.1:1）'},
+        {name:'Ember',token:'accent/primary',hex:'#FF5A2E',use:'主要アクション・次の予定'},
+        {name:'Signal Green',token:'state/ok',hex:'#3AD08F',use:'完了・良好・参加'},
+        {name:'Amber',token:'state/attention',hex:'#FFC35C',use:'期限間近・確認待ち・未回答'},
+        {name:'Alert Coral',token:'state/alert',hex:'#FF7A66',use:'異常報告・エラー'},
+        {name:'AI Violet',token:'ai/primary',hex:'#B9A9FF',use:'AI由来の提案・生成'},
+        {name:'Location Blue',token:'map/self',hex:'#4F9BFF',use:'現在地'},
+        {name:'Dispatch Red',token:'dispatch/primary',hex:'#FF3B2F',use:'出動モード専用'},
+        {name:'Dispatch Night',token:'dispatch/bg',hex:'#0D0709',use:'出動モード背景'}
+      ],
+      types:[
+        {name:'Display',spec:'900 · 34–40 / 1.2',font:"900 36px/1.2 'Zen Kaku Gothic New'",sample:'建物火災 出動要請'},
+        {name:'Title L',spec:'700 · 26–28 / 1.3',font:"700 26px/1.3 'Zen Kaku Gothic New'",sample:'ポンプ車操法訓練'},
+        {name:'Title M',spec:'700 · 18–22 / 1.35',font:"700 20px/1.35 'Zen Kaku Gothic New'",sample:'こんばんは、佐藤さん'},
+        {name:'Body',spec:'500 · 14–15 / 1.7',font:"500 14px/1.7 'Zen Kaku Gothic New'",sample:'担当区域の消火栓8基・防火水槽3基を点検した。'},
+        {name:'Caption',spec:'500 · 11–12 / 1.5',font:"500 12px/1.5 'Zen Kaku Gothic New'",sample:'締切 10/15（木）· 分団長 田中'},
+        {name:'Numeric',spec:'Plex Mono 600 · 13–26',font:"600 24px 'IBM Plex Mono'",sample:'K-112 · 10/17 19:00'},
+        {name:'Label',spec:'Plex Mono 600 · 10–11 · +.14em',font:"600 11px 'IBM Plex Mono';letter-spacing:.14em",sample:'NEXT · TRAINING · DEMO'}
+      ],
+      markers:[
+        {label:'消火栓',shape:'円',hex:'#E8432A',color:'#e8432a',icon:'fire_hydrant',radius:'50%',tf:'none',clip:'none'},
+        {label:'防火水槽',shape:'角丸四角',hex:'#2F7FE0',color:'#2f7fe0',icon:'water_drop',radius:'9px',tf:'none',clip:'none'},
+        {label:'ホース格納箱',shape:'ひし形',hex:'#F08A24',color:'#f08a24',icon:'inventory_2',radius:'7px',tf:'rotate(45deg) scale(.86)',clip:'none'},
+        {label:'団施設（詰所・車庫）',shape:'六角形',hex:'#2FAE6A',color:'#2fae6a',icon:'home',radius:'0',tf:'none',clip:'polygon(25% 4%,75% 4%,100% 50%,75% 96%,25% 96%,0 50%)'}
+      ],
+      pills:[
+        {t:'下書き',icon:'edit_note',bg:'rgba(255,255,255,.08)',fg:'#c3cad6'},
+        {t:'確認待ち',icon:'hourglass_top',bg:'rgba(255,195,92,.14)',fg:'#ffc35c'},
+        {t:'承認済み',icon:'verified',bg:'rgba(58,208,143,.14)',fg:'#3ad08f'},
+        {t:'異常報告あり',icon:'report',bg:'rgba(255,90,70,.16)',fg:'#ff7a66'},
+        {t:'点検済み',icon:'check_circle',bg:'rgba(58,208,143,.14)',fg:'#3ad08f'},
+        {t:'期限間近',icon:'schedule',bg:'rgba(255,195,92,.14)',fg:'#ffc35c'},
+        {t:'出欠 未回答',icon:'help',bg:'rgba(255,195,92,.14)',fg:'#ffc35c'},
+        {t:'AI提案',icon:'auto_awesome',bg:'rgba(185,169,255,.14)',fg:'#b9a9ff'}
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
