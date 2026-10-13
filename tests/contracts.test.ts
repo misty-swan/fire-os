@@ -239,7 +239,8 @@ describe("http layer (T002)", () => {
     expect(extraQuery.status).toBe(400);
   });
 
-  it("requests_without_body_contract_reject_query_and_body", async () => {
+  it("requests_without_query_contract_reject_unknown_query", async () => {
+    // 本文の契約が無いAPIはGETだけ(fetchの仕様でGETは本文を持てない)なので、ここではqueryの拒否を確かめる
     const getApp = new Hono<AppBindings>();
     getApp.use("*", async (c, next) => { c.set("requestId", "r"); await next(); });
     getApp.get("/jobs/:id", async (c) => c.json(await parseApiRequest(c, "API-86")));

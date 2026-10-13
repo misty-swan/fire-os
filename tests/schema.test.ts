@@ -137,14 +137,18 @@ describe("core schema (T003)", () => {
     await audit("INSERT", "original");
     await expect(audit("INSERT OR REPLACE", "tampered")).rejects.toThrow(/append-only/);
     expect((await fx.rows("audit_logs", { id }))[0]!.action).toBe("original");
-    const mutation = uuid();
-    const event = (verb: string, eventId: string, seq: number) => run(
+    const event = (verb: string, eventId: string, mutation: string, seq: number) => run(
       `${verb} INTO domain_events (id, unit_id, mutation_id, entity_type, entity_id, entity_version, event_type, payload_minimal, sequence, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
       eventId, unit, mutation, "member", uuid(), 1, "member.created", "{}", seq, NOW,
     );
-    await event("INSERT", uuid(), 2_000_001);
-    // 別IDでも、同じ unit+sequence や unit+mutation_id で上書き(REPLACE)しようとすれば拒否
-    await expect(event("INSERT OR REPLACE", uuid(), 2_000_001)).rejects.toThrow(/append-only/);
+    const eventId = uuid();
+    const mutation = uuid();
+    await event("INSERT", eventId, mutation, 2_000_001);
+    // 衝突の種類ごとに個別に拒否されること（トリガーの各条件を1つずつ確かめる）
+    await expect(event("INSERT OR REPLACE", eventId, uuid(), 2_000_002), "同じid").rejects.toThrow(/append-only/);
+    await expect(event("INSERT OR REPLACE", uuid(), mutation, 2_000_003), "同じmutation_id").rejects.toThrow(/append-only/);
+    await expect(event("INSERT OR REPLACE", uuid(), uuid(), 2_000_001), "同じsequence").rejects.toThrow(/append-only/);
+    expect(await fx.rows("domain_events", { id: eventId })).toHaveLength(1);
   });
 
   it("indexes_required_by_docs_04_exist", async () => {

@@ -4,8 +4,12 @@ import { runDueJobs } from "./runner";
 
 /** Cron(毎分,UTC)：待機明け/期限切れ/Queueへ送れなかったjobを回収して実行する。Queueが止まっていても進む。 */
 export async function handleScheduled(env: AppEnv): Promise<void> {
-  // 期限切れの冪等レコードから応答本文を消す（鍵とhashは残る）
-  await expireIdempotencyRecords(env, new Date().toISOString());
+  // 期限切れの冪等レコードから応答本文を消す（鍵とhashは残る）。失敗してもジョブの回収は止めない
+  try {
+    await expireIdempotencyRecords(env, new Date().toISOString());
+  } catch (err) {
+    console.error(JSON.stringify({ event: "idempotency_expire_failed", error: String(err) }));
+  }
   const summary = await runDueJobs(env);
   if (summary.leased > 0) console.log(JSON.stringify({ event: "jobs_run", via: "cron", ...summary }));
 }

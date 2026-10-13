@@ -22,7 +22,10 @@ export interface JobInput {
   configVersion: string;
   /** 依頼者(user)。システム起動はnull */
   requestedBy: string | null;
-  /** 省略時は unit|kind|source|版|config から作る。同じ値の再登録は1件にまとまる */
+  /**
+   * 省略時は unit|kind|source|版|config から作る。同じ値の再登録は1件にまとまる。
+   * 独自に指定する場合は必ず `${unitId}|` で始める（別unitと衝突して登録が黙って抜けるのを防ぐ。満たさなければ例外）
+   */
   dedupeKey?: string;
 }
 
@@ -91,6 +94,7 @@ export const defaultDedupeKey = (i: JobInput) =>
 export function enqueueJobStatement(env: Pick<AppEnv, "DB">, input: JobInput, now: Date = new Date()) {
   const nowIso = now.toISOString();
   const dedupeKey = input.dedupeKey ?? defaultDedupeKey(input);
+  if (!dedupeKey.startsWith(`${input.unitId}|`)) throw new Error("dedupeKey は `${unitId}|` で始めてください（別unitとの衝突防止）");
   const id = crypto.randomUUID();
   const statement = env.DB.prepare(
     "INSERT INTO jobs (id, unit_id, kind, source_type, source_id, source_version, config_version, dedupe_key, status, attempts, max_attempts, next_attempt_at, requested_by, created_at, updated_at) " +

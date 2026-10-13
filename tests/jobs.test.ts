@@ -201,10 +201,37 @@ describe("persistent jobs (T006)", () => {
     expect(run.committed).toBe(2); // 不正な値でもループは止まらず確定できる
     expect((await findJob(env, leaky.id))!.errorCode).toBe("invalid_error_code");
     expect((await findJob(env, big.id))).toMatchObject({ status: "manual_review", errorCode: "invalid_result_ref" });
-    // 独自のdedupeKeyにunitが含まれていなくても、別unitのjobは返さない
-    await enqueueJob(env, input({ dedupeKey: "custom-key-1" }), fx.clock.now());
-    await expect(enqueueJob(env, input({ unitId: fx.units.b.id, requestedBy: fx.units.b.people.admin.userId, dedupeKey: "custom-key-1" }), fx.clock.now()))
-      .rejects.toThrow(/別unit/);
+    // 独自のdedupeKeyはunitで始める決まり。守らないと登録できない（別unitと衝突して黙って抜けるのを防ぐ）
+    await expect(enqueueJob(env, input({ dedupeKey: "custom-key-1" }), fx.clock.now())).rejects.toThrow(/unitId/);
+    const ok = await enqueueJob(env, input({ dedupeKey: `${fx.units.a.id}|custom-key-1` }), fx.clock.now());
+    expect(ok.unitId).toBe(fx.units.a.id);
+  });
+
+  it("one_failing_completion_does_not_stop_the_rest_of_the_run", async () => {
+    registerJobHandler("test.ok", async () => ({ kind: "succeeded", resultRef: "ok" }));
+    const a = await enqueueJob(env, input({ kind: "test.ok" }), fx.clock.now());
+    const b = await enqueueJob(env, input({ kind: "test.ok" }), fx.clock.now());
+    // 最初の確定(UPDATE ... 'succeeded')だけDB障害にする
+    let failOnce = true;
+    const db = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "prepare") {
+          return (sql: string) => {
+            if (failOnce && sql.includes("status = 'succeeded'")) {
+              failOnce = false;
+              throw new Error("D1 temporarily unavailable");
+            }
+            return target.prepare(sql);
+          };
+        }
+        const v = Reflect.get(target, prop);
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    });
+    const run = await runDueJobs({ ...env, DB: db } as typeof env, { clock: fx.clock });
+    expect(run).toMatchObject({ leased: 2, committed: 1, rejected: 1 });
+    const statuses = [(await findJob(env, a.id))!.status, (await findJob(env, b.id))!.status].sort();
+    expect(statuses).toEqual(["running", "succeeded"]); // 失敗した方は作業権の期限切れ後に回収される
   });
 
   it("a_late_runner_cannot_commit_even_before_the_reaper_runs", async () => {

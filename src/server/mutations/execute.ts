@@ -25,6 +25,11 @@ export interface RootGuard {
   table: string;
   id: string;
   expectedVersion: number;
+  /**
+   * 比較更新が許す「前の状態」（例: status IN ('reported')）。失敗後の判定で、版は一致するのに
+   * 状態がこの一覧に無ければ 422 INVALID_TRANSITION にする。指定が無い/一覧内なのに失敗した場合は内部障害。
+   */
+  allowedStates?: { column: string; values: readonly string[] };
 }
 
 /**
@@ -57,6 +62,11 @@ export interface MutationSpec<T> {
     eventType: string;
     payload?: Record<string, string | number | boolean | null>;
   };
+  /**
+   * 業務上の重複として 409 DUPLICATE にしてよい一意制約の表名（例: ["member_roles"]）。
+   * ここに無い表のUNIQUE違反（全体で一意の列・内部表）は内部障害として扱い、他unitの存在を推測させない。
+   */
+  duplicateTables?: readonly string[];
   /** 応答はbatch内のSQLが組み立てる。sqlは1行1列(JSON文字列)を返すSELECT */
   response: { status: 200 | 201; sql: string; binds?: unknown[]; decode: (json: unknown) => T };
 }
@@ -162,7 +172,10 @@ export async function executeMutation<T>(
   const nowIso = now.toISOString();
 
   // 開発者の誤用を、何も書く前に検出する
-  for (const r of spec.roots) assertIdent(r.table, "root.table");
+  for (const r of spec.roots) {
+    assertIdent(r.table, "root.table");
+    if (r.allowedStates) assertIdent(r.allowedStates.column, "root.allowedStates.column");
+  }
   if (spec.roots.length === 0) throw new Error("roots が空です。更新対象のrootを1つ以上指定してください");
   if (spec.key.length < 1 || spec.key.length > 128) throw new Error("Idempotency-Key は1〜128文字です");
   assertSmallPrimitives("audit.metadata", spec.audit.metadata);
@@ -244,7 +257,9 @@ const principalUnit = (p: Principal) => p.unitId;
 /**
  * batchが失敗した後（全て取り消し済み）の状態を読み直し、理由を判別する。
  *  権限 → 403 / 同じ鍵の勝者 → その結果 / root無し・別unit → 404 / 版違い → 409 / 前提条件 → failCode /
- *  版は合っているのに比較更新が0行（状態の条件が外れた）→ 422 INVALID_TRANSITION / 業務表のUNIQUE違反 → 409 DUPLICATE。
+ *  版は合っているが状態が許可された前の状態でない（allowedStatesで宣言）→ 422 INVALID_TRANSITION /
+ *  duplicateTables に宣言した業務表のUNIQUE違反 → 409 DUPLICATE。
+ *  エラー文だけから推測しない（全ての検査は同じ文言で失敗するため、内部の不具合を利用者の誤りに見せてしまう）。
  * どれでもなければ内部障害として扱い、409に偽装しない。
  */
 async function diagnose<T>(
@@ -261,12 +276,14 @@ async function diagnose<T>(
   if (winner) return resolveExisting(env, p, spec, winner, nowIso);
 
   for (const r of spec.roots) {
-    const row = await env.DB.prepare(`SELECT unit_id, version FROM ${assertIdent(r.table, "root.table")} WHERE id = ?`)
+    const stateCol = r.allowedStates ? `, ${r.allowedStates.column} AS state` : "";
+    const row = await env.DB.prepare(`SELECT unit_id, version${stateCol} FROM ${assertIdent(r.table, "root.table")} WHERE id = ?`)
       .bind(r.id)
-      .first<{ unit_id: string; version: number }>();
+      .first<{ unit_id: string; version: number; state?: string }>();
     // 存在しない/別unit: 存在を明かさないため同じ404
     if (!row || row.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
     if (row.version !== r.expectedVersion) throw new HttpError("VERSION_CONFLICT");
+    if (r.allowedStates && !r.allowedStates.values.includes(String(row.state))) throw new HttpError("INVALID_TRANSITION");
   }
   for (const c of spec.conditions ?? []) {
     const ok = await env.DB.prepare(c.existsSql).bind(...c.binds).first();
@@ -274,10 +291,9 @@ async function diagnose<T>(
   }
 
   const message = String(err);
-  // 版は一致しているのに検査(ok=1)が落ちた＝rootのUPDATEの追加条件（許可された前の状態など）が成り立たなかった
-  if (message.includes("CHECK constraint failed: ok = 1")) throw new HttpError("INVALID_TRANSITION");
-  // 業務表の一意制約（冪等表は上で勝者として処理済み）
-  if (message.includes("UNIQUE constraint failed") && !message.includes("idempotency_records")) throw new HttpError("DUPLICATE");
+  // 宣言された業務表の一意制約だけを重複とする（例: "UNIQUE constraint failed: member_roles.member_id, ..."）
+  const uniqueTable = message.match(/UNIQUE constraint failed: (\w+)\./)?.[1];
+  if (uniqueTable && spec.duplicateTables?.includes(uniqueTable)) throw new HttpError("DUPLICATE");
 
   // 理由が見つからない失敗は業務上の競合ではない。内部障害として扱う（詳細はログのみ）
   console.error(JSON.stringify({ operation: spec.operationCode, error: String(err) }));

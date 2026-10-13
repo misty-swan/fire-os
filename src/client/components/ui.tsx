@@ -1,4 +1,4 @@
-import { useEffect, useId, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ComponentProps, type ReactNode } from "react";
 import { clsx } from "clsx";
 
 // 共通の見た目部品。寸法・色は prototype（Beacon）に合わせる。
@@ -37,9 +37,11 @@ export function Button({ variant = "primary", busy, className, children, disable
         onClick?.(e);
       }}
       className={clsx(
-        "inline-flex w-full items-center justify-center rounded-pill font-bold transition active:scale-[0.98]",
-        busy ? "gap-2.5 text-[15px]" : "gap-2",
-        variant === "primary" && "h-14 bg-ember text-white shadow-[0_12px_28px_-8px_rgba(255,90,46,.7)]",
+        "inline-flex w-full items-center justify-center rounded-pill font-bold transition",
+        // 実行中(Loading)は影も押下の縮みも無し（prototype Design System）
+        busy ? "gap-2.5 text-[15px]" : "gap-2 active:scale-[0.98]",
+        variant === "primary" && "h-14 bg-ember text-white",
+        variant === "primary" && !busy && "shadow-[0_12px_28px_-8px_rgba(255,90,46,.7)]",
         variant === "primary" && !busy && "text-[16px] hover:bg-ember-hover",
         variant === "secondary" && "h-[52px] bg-white/[.08] text-[15px] text-ink hover:bg-white/[.12]",
         // 無効: prototype Disabled（.08 / #7d889b / 15px / not-allowed）
@@ -146,19 +148,26 @@ export function Notice({ tone = "warning", icon, children, role }: { tone?: "war
   );
 }
 
-/** トースト（prototypeの明るい面）。成功だけに使い、2.6秒で消える。スマホは左右16px、PCは下28pxの中央 */
-export function Toast({ children, onDone }: { children: ReactNode; onDone?: () => void }) {
+/**
+ * トースト（prototypeの明るい面）。成功だけに使い、2.6秒で一度だけ消える。
+ * スマホは左右16px・下からの位置は画面ごと（prototype toastBottom: 既定110、タブ画面100、ホーム/AI 160）、PCは下28pxの中央。
+ */
+export function Toast({ children, onDone, bottom = 110 }: { children: ReactNode; onDone?: () => void; bottom?: number }) {
+  const done = useRef(onDone);
+  done.current = onDone;
   useEffect(() => {
-    const t = setTimeout(() => onDone?.(), 2600);
+    // 親の再描画で計測をやり直さないよう、表示した時点から一度だけ数える
+    const t = setTimeout(() => done.current?.(), 2600);
     return () => clearTimeout(t);
-  }, [onDone]);
+  }, []);
   return (
     <div
       role="status"
+      style={{ bottom }}
       className={clsx(
-        "fixed inset-x-4 bottom-24 z-[120] flex items-center gap-2.5 rounded-[18px] bg-ink px-4 py-3.5 text-[13px] font-bold leading-[1.5] text-night",
+        "fixed inset-x-4 z-[120] flex items-center gap-2.5 rounded-[18px] bg-ink px-4 py-3.5 text-[13px] font-bold leading-[1.5] text-night",
         "shadow-[0_16px_40px_rgba(0,0,0,.5)] animate-[fo-in_.3s_cubic-bezier(.2,.8,.2,1)_both]",
-        "lg:inset-x-auto lg:bottom-7 lg:left-1/2 lg:-translate-x-1/2 lg:whitespace-nowrap lg:rounded-2xl lg:px-[18px] lg:py-[13px]",
+        "lg:inset-x-auto lg:!bottom-7 lg:left-1/2 lg:-translate-x-1/2 lg:whitespace-nowrap lg:rounded-2xl lg:px-[18px] lg:py-[13px]",
       )}
     >
       <Icon name="check_circle" className="text-[20px] text-[#1f9e66] lg:text-[19px]" />

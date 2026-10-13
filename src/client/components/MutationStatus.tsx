@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { MutationState } from "../useMutation";
 import { Banner, Notice, Toast } from "./ui";
 
@@ -7,9 +7,10 @@ import { Banner, Notice, Toast } from "./ui";
  * 受付(202)・競合(409)・通信断/応答不明を、保存済みと混同しない（docs/03 §1、docs/05 §1）。
  * エラーは Design System の状態ブロック、途中経過は1行の案内で示す。
  */
-export function MutationStatus({ state }: { state: MutationState }) {
-  const [toastFor, setToastFor] = useState<MutationState | null>(null);
-  if (state.kind === "saved" && toastFor !== state) setToastFor(state);
+export function MutationStatus({ state, toastBottom }: { state: MutationState; toastBottom?: number }) {
+  // 同じ保存結果(stateオブジェクト)のトーストは一度だけ出す。2.6秒後に閉じたら、stateがsavedのままでも出し直さない
+  const [dismissed, setDismissed] = useState<MutationState | null>(null);
+  const dismiss = useCallback(() => setDismissed(state), [state]);
 
   switch (state.kind) {
     case "idle":
@@ -27,7 +28,11 @@ export function MutationStatus({ state }: { state: MutationState }) {
         </Notice>
       );
     case "saved":
-      return toastFor === state ? <Toast onDone={() => setToastFor(null)}>保存しました</Toast> : null;
+      return dismissed === state ? null : (
+        <Toast onDone={dismiss} bottom={toastBottom}>
+          保存しました
+        </Toast>
+      );
     case "conflict":
       return (
         <Banner tone="warning" eyebrow="CONFLICT" role="alert" title="他の操作で更新されています">
@@ -37,7 +42,7 @@ export function MutationStatus({ state }: { state: MutationState }) {
     case "unauthenticated":
       return (
         <Banner tone="error" eyebrow="SESSION" role="alert" title="ログインが必要です">
-          ログインし直してください。入力した内容は保存されていません。
+          ログインし直してから、もう一度送ってください。同じ内容なら二重には登録されません。
         </Banner>
       );
     case "forbidden":
@@ -50,6 +55,12 @@ export function MutationStatus({ state }: { state: MutationState }) {
       return (
         <Banner tone="error" eyebrow="ERROR" role="alert" title="入力内容を確認してください">
           赤く表示された項目を直してから、もう一度保存してください。
+        </Banner>
+      );
+    case "rejected":
+      return (
+        <Banner tone="warning" eyebrow="STATE" role="alert" title="この状態では実行できません">
+          対象の状態が変わっているか、必要な準備（承認・添付の検査など）が済んでいません。最新の内容を確認してください。
         </Banner>
       );
     case "limited":

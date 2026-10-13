@@ -130,11 +130,12 @@ export async function parseApiRequest<I extends ApiId>(c: Ctx, id: I): Promise<P
   }
   if ("body" in shape) {
     const type = c.req.header("content-type") ?? "";
-    if (!type.toLowerCase().startsWith("application/json")) {
+    if (!/^application\/json\s*(;|$)/i.test(type)) {
       throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(content-type)", reason: "application/json が必要です" }]);
     }
     input.body = await readJsonBody(c);
-  } else if ((await readCapped(c)) !== "") {
+  } else if (apiDef(id).kind !== "binary" && (await readCapped(c)) !== "") {
+    // バイナリ(API-83等)は本文をハンドラが読むので、ここでは読まない
     throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "unknown_field" }]);
   }
   if ("headers" in shape) input.headers = Object.fromEntries(c.req.raw.headers.entries());

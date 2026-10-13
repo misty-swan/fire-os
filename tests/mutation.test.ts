@@ -61,7 +61,8 @@ async function transitionSpec(p: Principal, issueId: string, o: SpecOpts = {}): 
     key: o.key ?? uuid(),
     requestHash,
     expectedAuthzVersion: p.authzVersion,
-    roots: [{ table: "t_issues", id: issueId, expectedVersion }],
+    roots: [{ table: "t_issues", id: issueId, expectedVersion, allowedStates: { column: "status", values: ["reported"] } }],
+    duplicateTables: ["t_issue_events"],
     statements: (ctx) => {
       const stmts = [
         env.DB.prepare(
@@ -357,7 +358,26 @@ describe("executeMutation review fixes (PH0 review round 1)", () => {
       env.DB.prepare("INSERT INTO t_issue_events (id, issue_id, unit_id, mutation_id, from_status, to_status) VALUES (?, ?, ?, ?, 'reported', 'under_review')")
         .bind(dupId, issueId, p.unitId, ctx.mutationId),
     ];
+    const before = await snapshot(p.unitId, issueId);
     expect(await attempt(() => executeMutation(env, p, spec))).toMatchObject({ status: 409, code: "DUPLICATE" });
+    expect(await snapshot(p.unitId, issueId)).toEqual(before); // 重複でも何も残さない
+    // 宣言していない表の一意違反は「重複」と言わず内部障害（他unitの存在などを推測させない）
+    spec.duplicateTables = [];
+    expect(await attempt(() => executeMutation(env, p, spec))).toMatchObject({ status: 500 });
+  });
+
+  it("a_handler_bug_is_reported_as_500_not_disguised_as_a_user_error", async () => {
+    const p = principalOf(fx.units.a.people.admin);
+    const issueId = await newIssue(p.unitId);
+    const before = await snapshot(p.unitId, issueId);
+    const spec = await transitionSpec(p, issueId);
+    // 実装の誤り: 比較更新で今回の印(last_mutation_token)を付け忘れる → root検査が落ちる
+    spec.statements = () => [
+      env.DB.prepare("UPDATE t_issues SET status = 'under_review', version = version + 1 WHERE id = ? AND version = 1").bind(issueId),
+    ];
+    // 版も状態も正しいので利用者の誤りではない。422(INVALID_TRANSITION)でなく500にする
+    expect(await attempt(() => executeMutation(env, p, spec))).toMatchObject({ status: 500, code: "INTERNAL_ERROR" });
+    expect(await snapshot(p.unitId, issueId)).toEqual(before);
   });
 
   it("resending_an_old_base_version_with_a_new_key_after_a_real_update_conflicts", async () => {
@@ -407,8 +427,14 @@ describe("executeMutation review fixes (PH0 review round 1)", () => {
     expect(await expireIdempotencyRecords(env, fx.clock.now().toISOString())).toBeGreaterThanOrEqual(1);
     const rec = (await fx.rows("idempotency_records", { actor_user_id: p.userId, idempotency_key: key }))[0]!;
     expect(rec).toMatchObject({ state: "expired", response_json: null, response_status: null });
-    const out = await attempt(async () => executeMutation(env, p, await transitionSpec(p, issueId, { key }), { clock: fx.clock }));
-    expect(out).toMatchObject({ status: 409, code: "IDEMPOTENCY_MISMATCH" });
+    let detail: unknown;
+    try {
+      await executeMutation(env, p, await transitionSpec(p, issueId, { key }), { clock: fx.clock });
+    } catch (e) {
+      detail = e;
+    }
+    // 同じ本文でも期限切れは拒否し、別本文の不一致と区別できる理由を返す
+    expect(detail).toMatchObject({ code: "IDEMPOTENCY_MISMATCH", details: [{ field: "idempotency-key", reason: "key_expired" }] });
   });
 });
 

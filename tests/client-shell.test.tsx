@@ -11,7 +11,7 @@ import { MutationStatus } from "../src/client/components/MutationStatus";
 import { Button, TextField } from "../src/client/components/ui";
 import { buildRoutes } from "../src/client/routes";
 import { bottomTabs, matchScreen, screens } from "../src/client/screens";
-import { useMutation } from "../src/client/useMutation";
+import { _resetPendingKeysForTest, useMutation } from "../src/client/useMutation";
 
 const ID = "11111111-1111-4111-8111-111111111111";
 
@@ -38,6 +38,7 @@ const fail = (status: number, code: string, details: { field: string; reason: st
 
 beforeEach(() => {
   vi.unstubAllGlobals();
+  _resetPendingKeysForTest();
 });
 afterEach(() => cleanup());
 
@@ -124,16 +125,79 @@ describe("client shell (T005)", () => {
     expect(focusedField).toBe(firstInvalidField);
   });
 
-  it("the_key_survives_401_after_an_unknown_result_so_a_retry_cannot_double_register", async () => {
-    const fetchMock = stubFetch(new TypeError("Failed to fetch"), fail(401, "UNAUTHENTICATED"), ok({ id: ID }, 201));
+  it("the_key_survives_401_and_429_after_an_unknown_result_so_a_retry_cannot_double_register", async () => {
+    const fetchMock = stubFetch(new TypeError("Failed to fetch"), fail(429, "RATE_LIMITED"), fail(401, "UNAUTHENTICATED"), ok({ id: ID }, 201));
     const { result } = renderHook(() => useMutation("API-25"));
     const input = { body: { title: "t", body: "b", audienceMemberIds: [ID] } };
     await act(async () => { await result.current.run(input); }); // 応答消失（実は反映済みかもしれない）
-    await act(async () => { await result.current.run(input); }); // 再送したらセッション切れ
+    await act(async () => { await result.current.run(input); }); // 再送したら混雑
+    expect(result.current.state.kind).toBe("limited");
+    await act(async () => { await result.current.run(input); }); // さらに再送したらセッション切れ
     expect(result.current.state.kind).toBe("unauthenticated");
     await act(async () => { await result.current.run(input); }); // 再ログイン後に同じ内容で再送
     const keys = fetchMock.mock.calls.map((c) => (c[1]!.headers as Record<string, string>)["idempotency-key"]);
-    expect(new Set(keys).size).toBe(1); // 3回とも同じ鍵 → サーバーが二重登録を防げる
+    expect(keys).toHaveLength(4);
+    expect(new Set(keys).size).toBe(1); // 4回とも同じ鍵 → サーバーが二重登録を防げる
+  });
+
+  it("the_key_survives_leaving_to_the_login_screen_and_coming_back", async () => {
+    // 実際の画面の流れ: 結果不明 → 再送で401 → ログイン画面へ（フォームは消える）→ 戻って同じ内容を入力して送る
+    const user = userEvent.setup();
+    const fetchMock = stubFetch(new TypeError("Failed to fetch"), fail(401, "UNAUTHENTICATED"), ok({ id: ID }, 201));
+    const router = renderShell("/app");
+    await fillAndSave(user);
+    await screen.findByText("結果を確認できませんでした");
+    await user.click(screen.getByRole("button", { name: "保存する" }));
+    await user.click(await screen.findByRole("button", { name: "保存せずに移動する" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
+    await act(async () => { await router.navigate("/app"); });
+    await fillAndSave(user);
+    await screen.findByText("保存しました");
+    const keys = fetchMock.mock.calls.map((c) => (c[1]!.headers as Record<string, string>)["idempotency-key"]);
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it("a_different_intent_keeps_its_own_key_and_does_not_overwrite_the_pending_one", async () => {
+    const fetchMock = stubFetch(new TypeError("Failed to fetch"), fail(429, "RATE_LIMITED"), ok({ id: ID }, 201));
+    const { result } = renderHook(() => useMutation("API-25"));
+    const a = { body: { title: "A", body: "b", audienceMemberIds: [ID] } };
+    const b = { body: { title: "B", body: "b", audienceMemberIds: [ID] } };
+    await act(async () => { await result.current.run(a); }); // Aは結果不明
+    await act(async () => { await result.current.run(b); }); // Bは混雑
+    await act(async () => { await result.current.run(a); }); // Aを送り直す
+    const keys = fetchMock.mock.calls.map((c) => (c[1]!.headers as Record<string, string>)["idempotency-key"]);
+    expect(keys[2]).toBe(keys[0]); // Aの鍵はBで上書きされていない
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it("the_saved_toast_shows_once_and_disappears_after_2_6_seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderShell("/app");
+      stubFetch(ok({ id: ID }, 201));
+      await fillAndSave(user);
+      expect(await screen.findByText("保存しました")).toBeTruthy();
+      await act(async () => { vi.advanceTimersByTime(2700); });
+      expect(screen.queryByText("保存しました")).toBeNull();
+      // 状態は saved のままでも、再描画や時間経過で出し直さない
+      await user.type(screen.getByLabelText("本文"), "x");
+      await act(async () => { vi.advanceTimersByTime(3000); });
+      expect(screen.queryByText("保存しました")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("422_is_shown_as_a_state_problem_not_as_field_errors", async () => {
+    const user = userEvent.setup();
+    renderShell("/app");
+    stubFetch(fail(422, "INVALID_TRANSITION"));
+    await fillAndSave(user);
+    const text = (await screen.findByText("この状態では実行できません")).closest("[role=alert]")!.textContent!;
+    expect(text).toContain("最新の内容を確認");
+    expect(screen.queryByText("入力内容を確認してください")).toBeNull();
   });
 
   it("server_validation_error_moves_focus_to_the_first_invalid_field", async () => {
