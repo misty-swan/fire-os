@@ -99,3 +99,24 @@ export async function seedInvitation(opts: {
 export { INVITATION_HEADER };
 export const uniqueEmail = (label = "u") => `${label}-${crypto.randomUUID().slice(0, 8)}@example.test`;
 export const GOOD_PASSWORD = "correct-horse-battery-1";
+
+/**
+ * 架空の団員(fixture)に「実セッション」を持たせる。招待→登録の本物の経路で認証identityを作り、その authId を
+ * 業務 users.auth_id に結びつけて、ログイン済みのブラウザ(Cookie付き)を返す。x-test-identity は使わない。
+ * mfa:true は認証側の two_factor_enabled を直接立てる近道（TOTPそのものは auth-adapter 試験で確認済み）。
+ */
+export async function loginAs(identity: { userId: string; unitId: string }, opts: { mfa?: boolean } = {}): Promise<Browser> {
+  const spare = await env.DB.prepare("SELECT id FROM members WHERE unit_id = ? AND user_id IS NULL LIMIT 1").bind(identity.unitId).first<{ id: string }>();
+  if (!spare) throw new Error("未リンクの団員がいません");
+  const email = uniqueEmail("login");
+  const token = await seedInvitation({ unitId: identity.unitId, memberId: spare.id, email, createdBy: null });
+  const b = await workerBrowser();
+  const up = await b.json<{ user: { id: string } }>("POST", "/api/auth/sign-up/email", { email, password: GOOD_PASSWORD, name: "団員" }, { [INVITATION_HEADER]: token });
+  if (up.status !== 200) throw new Error(`loginAs: sign-up失敗 ${up.status}`);
+  await env.DB.batch([
+    env.DB.prepare("UPDATE users SET auth_id = ? WHERE id = ?").bind(up.data.user.id, identity.userId),
+    env.DB.prepare("UPDATE invitations SET status = 'cancelled', cancelled_at = ? WHERE member_id = ? AND status = 'pending'").bind("2026-10-13T00:00:00.000Z", spare.id),
+    env.DB.prepare("UPDATE auth_users SET two_factor_enabled = ? WHERE id = ?").bind(opts.mfa ? 1 : 0, up.data.user.id),
+  ]);
+  return b;
+}

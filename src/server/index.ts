@@ -29,6 +29,8 @@ export function createApp(env: Pick<AppEnv, "APP_ENV">): Hono<AppBindings> {
       if (crossSite) return errorResponse(c, "FORBIDDEN", [{ field: "origin", reason: "cross_origin" }]);
     }
     await next();
+    // 個人情報・認可状態を含み得る応答を共有キャッシュ/ブラウザに残さない
+    c.header("cache-control", "no-store");
   });
 
   registerRoutes(app);

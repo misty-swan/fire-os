@@ -17,9 +17,14 @@ export const Scope = obj({
 
 export const Me = obj({
   profile: obj({ memberId: Id, displayName: ShortText, rank: ShortText.nullable() }),
+  /** 表示用の所属名（サイドバー/メニュー）。PH1でT008が追加（prototypeの分団カード） */
+  unitName: ShortText,
   roles: z.array(z.enum(roleCodes)),
   authzVersion: z.number().int().min(0),
   policyVersion: z.string(),
+  /** 二要素認証が有効か／この利用者に必須か（管理者）。必須で未設定なら管理系の操作は拒否される */
+  mfaEnabled: z.boolean(),
+  mfaRequired: z.boolean(),
 });
 
 /**
