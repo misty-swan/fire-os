@@ -1,7 +1,12 @@
-import type { Context } from "hono";
+import type { Context, Hono } from "hono";
 import { LIMITS, errorStatus, type ErrorCode } from "../shared/contracts/common";
 import { ContractError, apiDef, parseRequest, type ApiId, type ParsedRequest } from "../shared/contracts/registry";
 import type { AppBindings } from "./env";
+
+export type ApiApp = Hono<AppBindings>;
+export type ApiContext = Context<AppBindings>;
+/** 業務APIの共通接頭辞（API-36の認証だけは対象外） */
+export const API_BASE = "/api/v1";
 
 /** 業務エラー。codeからHTTP statusが決まる。messageは利用者に見せてよい文だけにする（内部本文を入れない）。 */
 export class HttpError extends Error {
@@ -95,4 +100,10 @@ export async function parseApiRequest<I extends ApiId>(c: Ctx, id: I): Promise<P
   if ("body" in shape) input.body = await readJsonBody(c);
   if ("headers" in shape) input.headers = Object.fromEntries(c.req.raw.headers.entries());
   return parseRequest(id, input);
+}
+
+/** 台帳(registry)の method/path でルートを登録する。パスをコードに二重に書かず、契約と食い違わないようにする。 */
+export function defineRoute<I extends ApiId>(app: ApiApp, id: I, handler: (c: ApiContext) => Response | Promise<Response>): void {
+  const def = apiDef(id);
+  app.on(def.method, `${API_BASE}${def.path}`, handler);
 }

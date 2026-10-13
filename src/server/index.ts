@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { assertEnvName, type AppBindings, type AppEnv } from "./env";
+import { assertEnvName, type AppBindings, type AppEnv, type JobMessage } from "./env";
+import { handleQueueBatch, handleScheduled } from "./jobs/dispatch";
 import { notFound, onError } from "./http";
 import { registerRoutes } from "./routes";
 
@@ -32,4 +33,12 @@ export default {
   fetch(request: Request, env: AppEnv, ctx: ExecutionContext): Response | Promise<Response> {
     return createApp(env).fetch(request, env, ctx);
   },
-} satisfies ExportedHandler<AppEnv>;
+  /** Cron（毎分）。永続ジョブの回収と実行 */
+  async scheduled(_controller: ScheduledController, env: AppEnv, _ctx?: ExecutionContext): Promise<void> {
+    await handleScheduled(env);
+  },
+  /** Queues。job IDの合図でジョブを実行する */
+  async queue(batch: MessageBatch<JobMessage>, env: AppEnv, _ctx?: ExecutionContext): Promise<void> {
+    await handleQueueBatch(batch, env);
+  },
+} satisfies ExportedHandler<AppEnv, JobMessage>;

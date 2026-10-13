@@ -14,6 +14,8 @@ export interface AppEnv {
   /** 静的ファイル(React)配信 */
   ASSETS: Fetcher;
   APP_ENV: AppEnvName;
+  /** '1' のとき、localかつ試験環境でだけ x-test-identity での認証注入を許す(src/server/auth/principal.ts)。本番系の設定には置かない */
+  TEST_AUTH?: string;
 }
 
 /** Queuesへ載せるのはjob IDだけ。内容はD1から読む(Secret/個人情報をQueueへ複製しない)。 */

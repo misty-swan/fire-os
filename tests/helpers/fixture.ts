@@ -108,8 +108,8 @@ async function seedUnit(label: string, unitName: string, now: string): Promise<U
 /**
  * 架空の「2分団×4役割＋停止ユーザー＋未登録団員＋担当内外」を作る。
  * 呼び出しごとに新しいIDを採番するので、同じDBで複数回呼んでも衝突しない。
- * client(identity) は T008 で「local/試験限定の認証注入」を受け側に実装するまで、
- * x-test-identity ヘッダーを付けるだけで、サーバーはまだ読まない（PH0では未接続）。
+ * client(identity) は x-test-identity ヘッダー({userId})を付ける。受け側は src/server/auth/principal.ts の
+ * 試験専用注入（APP_ENV=local かつ TEST_AUTH=1 のときだけ有効）。本物のセッション認証はT007/T008で実装する。
  */
 export async function createFixture(name: "two-units"): Promise<TestFixture> {
   if (name !== "two-units") throw new Error(`unknown fixture: ${name}`);
