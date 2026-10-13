@@ -8,6 +8,8 @@ declare namespace Cloudflare {
     JOBS_QUEUE: Queue<{ jobId: string }>;
     ASSETS: Fetcher;
     TEST_AUTH?: string;
+    BETTER_AUTH_SECRET: string;
+    AUTH_BASE_URL: string;
     APP_ENV: "local" | "demo" | "staging" | "production";
     TEST_MIGRATIONS: import("@cloudflare/vitest-plugin").D1Migration[];
   }

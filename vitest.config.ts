@@ -21,7 +21,12 @@ export default defineConfig(async () => {
               remoteBindings: false,
               miniflare: {
                 // TEST_AUTH=1 は試験でだけ x-test-identity による認証注入を許す（本番/staging/demoのwranglerには置かない）
-                bindings: { TEST_MIGRATIONS: migrations, TEST_AUTH: "1" },
+                bindings: {
+                  TEST_MIGRATIONS: migrations,
+                  TEST_AUTH: "1",
+                  BETTER_AUTH_SECRET: "dev-only-test-secret-0123456789abcdef0123456789",
+                  AUTH_BASE_URL: "http://example.com",
+                },
                 // 空DBから適用する試験用の2つ目のD1
                 d1Databases: { DB_FRESH: "fireos-fresh-test" },
               },

@@ -16,6 +16,10 @@ export interface AppEnv {
   APP_ENV: AppEnvName;
   /** '1' のとき、localかつ試験環境でだけ x-test-identity での認証注入を許す(src/server/auth/principal.ts)。本番系の設定には置かない */
   TEST_AUTH?: string;
+  /** 認証ライブラリ(Better Auth)の署名鍵。Secret（wrangler secret / .dev.vars）。32文字以上。ログ・応答・Gitに出さない */
+  BETTER_AUTH_SECRET: string;
+  /** 同一originのベースURL（例: https://fireos.example）。Cookie属性・trustedOrigins・Origin検査の唯一の基準 */
+  AUTH_BASE_URL: string;
 }
 
 /** Queuesへ載せるのはjob IDだけ。内容はD1から読む(Secret/個人情報をQueueへ複製しない)。 */

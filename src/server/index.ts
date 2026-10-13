@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { assertEnvName, type AppBindings, type AppEnv, type JobMessage } from "./env";
 import { handleQueueBatch, handleScheduled } from "./jobs/dispatch";
-import { notFound, onError } from "./http";
+import { errorResponse, notFound, onError } from "./http";
 import { registerRoutes } from "./routes";
 
 /**
@@ -17,6 +17,18 @@ export function createApp(env: Pick<AppEnv, "APP_ENV">): Hono<AppBindings> {
     c.set("requestId", crypto.randomUUID());
     await next();
     c.header("x-request-id", c.get("requestId"));
+  });
+
+  // 他originからの変更要求を拒否する（CSRF対策。Cookieは SameSite=Lax だが、Originも二重に見る）。
+  // ブラウザは変更要求にOriginを付ける。Originが無い場合は sec-fetch-site が cross-site でないことを要求する。
+  app.use("/api/*", async (c, next) => {
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(c.req.method)) {
+      const origin = c.req.header("origin");
+      const trusted = new URL(c.env.AUTH_BASE_URL).origin;
+      const crossSite = origin ? origin !== trusted : c.req.header("sec-fetch-site") === "cross-site";
+      if (crossSite) return errorResponse(c, "FORBIDDEN", [{ field: "origin", reason: "cross_origin" }]);
+    }
+    await next();
   });
 
   registerRoutes(app);

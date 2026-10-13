@@ -14,7 +14,8 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api", "/api/*"]
   },
-  "vars": { "APP_ENV": "local" },
+  // BETTER_AUTH_SECRET はSecret。localは .dev.vars（scripts/ensure-dev-vars.ts が生成、Git管理外）、他環境は `wrangler secret put`。
+  "vars": { "APP_ENV": "local", "AUTH_BASE_URL": "http://localhost:8787" },
   "d1_databases": [
     { "binding": "DB", "database_name": "fireos-local", "database_id": "00000000-0000-0000-0000-000000000001", "migrations_dir": "drizzle" }
   ],
@@ -28,7 +29,7 @@
   "env": {
     "demo": {
       "name": "fireos-demo",
-      "vars": { "APP_ENV": "demo" },
+      "vars": { "APP_ENV": "demo", "AUTH_BASE_URL": "https://fireos-demo.example.invalid" },
       "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api", "/api/*"] },
       "d1_databases": [{ "binding": "DB", "database_name": "fireos-demo", "database_id": "00000000-0000-0000-0000-000000000002", "migrations_dir": "drizzle" }],
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "fireos-demo-files" }],
@@ -41,7 +42,7 @@
     },
     "staging": {
       "name": "fireos-staging",
-      "vars": { "APP_ENV": "staging" },
+      "vars": { "APP_ENV": "staging", "AUTH_BASE_URL": "https://fireos-staging.example.invalid" },
       "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api", "/api/*"] },
       "d1_databases": [{ "binding": "DB", "database_name": "fireos-staging", "database_id": "00000000-0000-0000-0000-000000000003", "migrations_dir": "drizzle" }],
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "fireos-staging-files" }],
@@ -54,7 +55,7 @@
     },
     "production": {
       "name": "fireos-production",
-      "vars": { "APP_ENV": "production" },
+      "vars": { "APP_ENV": "production", "AUTH_BASE_URL": "https://fireos-production.example.invalid" },
       "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api", "/api/*"] },
       "d1_databases": [{ "binding": "DB", "database_name": "fireos-production", "database_id": "00000000-0000-0000-0000-000000000004", "migrations_dir": "drizzle" }],
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "fireos-production-files" }],

@@ -22,6 +22,32 @@ export const Me = obj({
   policyVersion: z.string(),
 });
 
+/**
+ * API-36 の固定版（V01）。認証ライブラリの公式スキーマに従い、業務envelope・Idempotency-Key対象外。
+ * ここに無い経路は Worker が JSON 404 で終わらせる（自由なsign-up・外部連携・プロフィール更新等は公開しない）。
+ * sign-up は招待tokenを持つ場合だけ通る（x-invitation-token）。
+ */
+export const authLibrary = {
+  name: "better-auth",
+  version: "1.7.7",
+  basePath: "/api/auth",
+  endpoints: [
+    { method: "POST", path: "/sign-up/email", purpose: "招待に束縛した登録（x-invitation-token必須。自由登録は403）" },
+    { method: "POST", path: "/sign-in/email", purpose: "メール＋パスワードのログイン（二要素が有効なら twoFactorRedirect）" },
+    { method: "POST", path: "/sign-out", purpose: "ログアウト（このセッションを失効）" },
+    { method: "GET", path: "/get-session", purpose: "認証identityの確認（業務の権限は /api/v1/me）" },
+    { method: "POST", path: "/request-password-reset", purpose: "再設定tokenの発行要求（登録の有無を応答に出さない）" },
+    { method: "POST", path: "/reset-password", purpose: "再設定tokenでパスワード変更（一回限り・成功後に全セッション失効）" },
+    { method: "POST", path: "/change-password", purpose: "ログイン中の本人がパスワード変更（現在のパスワード必須）" },
+    { method: "POST", path: "/two-factor/enable", purpose: "二要素の設定開始（パスワード再確認。TOTPと回復コードを返す）" },
+    { method: "POST", path: "/two-factor/verify-totp", purpose: "TOTP確認（設定の完了、またはログインの二要素）" },
+    { method: "POST", path: "/two-factor/verify-backup-code", purpose: "回復コードでログイン（各コード一回限り）" },
+    { method: "POST", path: "/two-factor/generate-backup-codes", purpose: "回復コードの再発行（パスワード再確認。旧コードは無効）" },
+    { method: "POST", path: "/two-factor/get-totp-uri", purpose: "TOTP登録URIの再表示（パスワード再確認）" },
+    { method: "POST", path: "/two-factor/disable", purpose: "二要素の解除（パスワード再確認）" },
+  ],
+} as const;
+
 // 名簿・招待・役割（PH1で詳細化）。応答DTOは04/10の確定待ちのため provisional。
 export const authApis = {
   "API-01": defineApi({

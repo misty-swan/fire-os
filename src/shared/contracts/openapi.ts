@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ErrorEnvelope, SuccessMeta, errorCodes } from "./common";
+import { authLibrary } from "./auth";
 import { apiDef, apiIds, type ApiId } from "./registry";
 
 type Json = Record<string, unknown>;
@@ -43,7 +44,14 @@ export function buildOpenApi(): Json {
     const common = { operationId: id, summary: `${id} ${def.method} ${def.path}`, "x-permission": def.permission, "x-kind": def.kind, "x-provisional-response": !!def.provisional };
 
     if (def.kind === "external") {
-      external[id] = { ...common, path: def.path, note: "認証ライブラリ(D04固定版)の公式スキーマに従う。業務envelope外" };
+      external[id] = {
+        ...common,
+        path: def.path,
+        note: "認証ライブラリ(D04固定版)の公式スキーマに従う。業務envelope外",
+        library: { name: authLibrary.name, version: authLibrary.version },
+        basePath: authLibrary.basePath,
+        endpoints: authLibrary.endpoints,
+      };
       continue;
     }
 

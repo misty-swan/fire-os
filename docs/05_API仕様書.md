@@ -86,7 +86,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-33 | POST /invitations | PER-07 | memberId,email,expiresInHours(1〜720);未リンク団員/対象認証 | Invitation（生token一回だけ返す） |
 | API-34 | POST /invitations/:id/cancel | PER-07 | version,reason;未消費のみ | Invitation |
 | API-35 | POST /invitations/accept | token＋認証所有確認 | token,verifiedAuthIdentity;一回/期限/名簿一致 | AccountLinkResult |
-| API-36 | ALL /api/auth/*（v1外） | 認証ライブラリ | login/logout/reset/MFA/recovery;D04固定版の公式スキーマ | ライブラリResponse（業務data envelope外） |
+| API-36 | ALL /api/auth/*（v1外） | 認証ライブラリ | better-auth 1.7.7固定。公開する経路は契約の一覧(`authLibrary.endpoints`、OpenAPI `x-external-apis`)だけ：sign-up(招待token必須)/sign-in/sign-out/get-session/request-password-reset/reset-password/change-password/two-factor(enable・verify-totp・verify-backup-code・generate-backup-codes・get-totp-uri・disable)。一覧外はJSON 404 | ライブラリResponse（業務data envelope外） |
 | API-37 | PUT /members/:id/roles | PER-07 | version,expectedAuthzVersion,roleCodes,scopes,reason;自己昇格/最終管理者禁止 | MemberRoles＋authzVersion |
 | API-38 | POST /users/:id/session-revocations | PER-07/本人 | expectedAuthzVersion,reason;全セッション失効 | RevocationResult |
 | API-39 | PATCH /activities/:id | PER-03 | version,ActivityInputの変更列,status?;公開済の変更理由/許可遷移 | Activity |
