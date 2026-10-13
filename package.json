@@ -1,0 +1,52 @@
+{
+  "name": "fire-os",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "FireOS - 消防団1分団向け総合管理Webアプリ（架空データで開発中）",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:e2e": "playwright test",
+    "test:live": "echo 'test:live は PH0 では対象外（実Secret・実サービスが必要）' && exit 1",
+    "test:load": "echo 'test:load は PH7 で実装' && exit 1",
+    "check:contracts": "tsx scripts/check-contracts.ts",
+    "check:coverage": "echo 'check:coverage は PH7 で実装' && exit 1",
+    "migrate": "tsx scripts/migrate.ts"
+  },
+  "dependencies": {
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "hono": "4.13.13",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "8.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.1",
+    "@cloudflare/workers-types": "5.20261013.1",
+    "@playwright/test": "1.64.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "drizzle-orm": "0.45.4",
+    "jsdom": "30.1.2",
+    "tailwindcss": "4.3.3",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vitest": "4.1.11",
+    "wrangler": "4.150.0"
+  }
+}

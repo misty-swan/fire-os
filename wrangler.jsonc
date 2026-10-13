@@ -1,0 +1,69 @@
+// FireOS Workers 設定（T001）。
+// - 4環境（local=既定 / demo / staging / production）はbindingを共有しない。wranglerのenvはbindingを継承しないので各環境に全て書く。
+// - database_id / bucket_name は架空の仮値。実環境の値はデプロイ時に設定する（Secretはここへ書かない）。
+// - compatibility_date は検証日。変更時は docs/02 §2 の記録と tests/runtime.test.ts を再確認する。
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fireos-local",
+  "main": "src/server/index.ts",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": { "APP_ENV": "local" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "fireos-local", "database_id": "00000000-0000-0000-0000-000000000001", "migrations_dir": "drizzle" }
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "fireos-local-files" }],
+  // localはWorkers AI(常にCloudflare本体へ接続)を持たない。AIを使うPH4以降はdemo/stagingで検証する。
+  "queues": {
+    "producers": [{ "binding": "JOBS_QUEUE", "queue": "fireos-local-jobs" }],
+    "consumers": [{ "queue": "fireos-local-jobs", "max_batch_size": 10, "max_retries": 2 }]
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "env": {
+    "demo": {
+      "name": "fireos-demo",
+      "vars": { "APP_ENV": "demo" },
+      "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
+      "d1_databases": [{ "binding": "DB", "database_name": "fireos-demo", "database_id": "00000000-0000-0000-0000-000000000002", "migrations_dir": "drizzle" }],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "fireos-demo-files" }],
+      "ai": { "binding": "AI" },
+      "queues": {
+        "producers": [{ "binding": "JOBS_QUEUE", "queue": "fireos-demo-jobs" }],
+        "consumers": [{ "queue": "fireos-demo-jobs", "max_batch_size": 10, "max_retries": 2 }]
+      },
+      "triggers": { "crons": ["* * * * *"] }
+    },
+    "staging": {
+      "name": "fireos-staging",
+      "vars": { "APP_ENV": "staging" },
+      "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
+      "d1_databases": [{ "binding": "DB", "database_name": "fireos-staging", "database_id": "00000000-0000-0000-0000-000000000003", "migrations_dir": "drizzle" }],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "fireos-staging-files" }],
+      "ai": { "binding": "AI" },
+      "queues": {
+        "producers": [{ "binding": "JOBS_QUEUE", "queue": "fireos-staging-jobs" }],
+        "consumers": [{ "queue": "fireos-staging-jobs", "max_batch_size": 10, "max_retries": 2 }]
+      },
+      "triggers": { "crons": ["* * * * *"] }
+    },
+    "production": {
+      "name": "fireos-production",
+      "vars": { "APP_ENV": "production" },
+      "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
+      "d1_databases": [{ "binding": "DB", "database_name": "fireos-production", "database_id": "00000000-0000-0000-0000-000000000004", "migrations_dir": "drizzle" }],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "fireos-production-files" }],
+      "ai": { "binding": "AI" },
+      "queues": {
+        "producers": [{ "binding": "JOBS_QUEUE", "queue": "fireos-production-jobs" }],
+        "consumers": [{ "queue": "fireos-production-jobs", "max_batch_size": 10, "max_retries": 2 }]
+      },
+      "triggers": { "crons": ["* * * * *"] }
+    }
+  }
+}

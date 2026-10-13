@@ -1,2 +1,12 @@
 # 個人用の設定（コミットしない）
 .claude/settings.local.json
+settings.local.json
+
+# 依存・生成物
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.env*
+playwright-report/
+test-results/
