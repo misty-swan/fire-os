@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { cloudflareTest } from "@cloudflare/vitest-plugin";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import react from "@vitejs/plugin-react";
 
 // 試験は2系統：
@@ -7,29 +7,43 @@ import react from "@vitejs/plugin-react";
 //  client  = jsdom上で動くReact試験
 const alias = { "@": new URL("./src", import.meta.url).pathname };
 
-export default defineConfig({
-  test: {
-    projects: [
-      {
-        resolve: { alias },
-        plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.jsonc" }, remoteBindings: false })],
-        test: {
-          name: "workers",
-          include: ["tests/**/*.test.ts"],
-          exclude: ["tests/e2e/**", "tests/live/**"],
-          globalSetup: ["./tests/helpers/build-client.ts"],
+export default defineConfig(async () => {
+  // drizzle/*.sql を読み、試験のD1へ適用できる形で binding(TEST_MIGRATIONS) に渡す
+  const migrations = await readD1Migrations("./drizzle");
+  return {
+    test: {
+      projects: [
+        {
+          resolve: { alias },
+          plugins: [
+            cloudflareTest({
+              wrangler: { configPath: "./wrangler.jsonc" },
+              remoteBindings: false,
+              miniflare: {
+                bindings: { TEST_MIGRATIONS: migrations },
+                // 空DBから適用する試験用の2つ目のD1
+                d1Databases: { DB_FRESH: "fireos-fresh-test" },
+              },
+            }),
+          ],
+          test: {
+            name: "workers",
+            include: ["tests/**/*.test.ts"],
+            exclude: ["tests/e2e/**", "tests/live/**"],
+            globalSetup: ["./tests/helpers/build-client.ts"],
+          },
         },
-      },
-      {
-        resolve: { alias },
-        plugins: [react()],
-        test: {
-          name: "client",
-          environment: "jsdom",
-          include: ["tests/**/*.test.tsx"],
-          setupFiles: ["./tests/helpers/client-setup.ts"],
+        {
+          resolve: { alias },
+          plugins: [react()],
+          test: {
+            name: "client",
+            environment: "jsdom",
+            include: ["tests/**/*.test.tsx"],
+            setupFiles: ["./tests/helpers/client-setup.ts"],
+          },
         },
-      },
-    ],
-  },
+      ],
+    },
+  };
 });

@@ -1,0 +1,11 @@
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
+import type { AppEnv } from "../env";
+import * as core from "./schema/core";
+
+export const schema = { ...core };
+export type FireDb = DrizzleD1Database<typeof schema>;
+
+/** 型付きクエリ用のDBハンドル。更新は mutations/execute.ts（原子batch）を通す。 */
+export function createDb(env: Pick<AppEnv, "DB">): FireDb {
+  return drizzle(env.DB, { schema });
+}
