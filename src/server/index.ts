@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { assertEnvName, type AppBindings, type AppEnv } from "./env";
+import { notFound, onError } from "./http";
 import { registerRoutes } from "./routes";
 
 /**
@@ -19,16 +20,9 @@ export function createApp(env: Pick<AppEnv, "APP_ENV">): Hono<AppBindings> {
 
   registerRoutes(app);
 
-  // 未定義のAPI。HTML(SPA)を返さない。T002でhttp.tsの共通エラー形式へ置き換える。
-  app.all("/api/*", (c) =>
-    c.json(
-      {
-        error: { code: "NOT_FOUND", message: "APIが見つかりません", details: [] },
-        meta: { requestId: c.get("requestId") },
-      },
-      404,
-    ),
-  );
+  // 未定義のAPI。HTML(SPA)を返さず、共通のJSONエラー形式で終わる。
+  app.all("/api/*", (c) => notFound(c));
+  app.onError(onError);
 
   app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
   return app;

@@ -14,14 +14,16 @@ IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-
 | 400 VALIDATION_ERROR | 型/範囲/未知列/形式違反 |
 | 401 UNAUTHENTICATED | セッションなし/失効 |
 | 403 FORBIDDEN、404 NOT_FOUND | 既知対象の操作不可/存在を明かさない対象不可 |
-| 409 VERSION_CONFLICT / IDEMPOTENCY_MISMATCH / DUPLICATE | 旧版、同キー別本文、競合リンク/番号 |
+| 409 VERSION_CONFLICT / IDEMPOTENCY_MISMATCH / DUPLICATE / SNAPSHOT_CHANGED / RESYNC_REQUIRED | 旧版、同キー別本文、競合リンク/番号、続き取得中のsnapshot更新(§5)、再開cursor失効(§8) |
 | 422 INVALID_TRANSITION / UNAPPROVED_POLICY / ATTACHMENT_NOT_READY | 業務前提/採用未決/未検査添付 |
 | 429 RATE_LIMITED | 認証/AI/検索/アップロード上限、Retry-After |
 | 500 INTERNAL_ERROR、503 DEPENDENCY_UNAVAILABLE | rollback済か結果不明かをoperation照会で確認。内部本文を漏らさない |
 
+**契約の実装（T002、`src/shared/contracts`）：** リクエストは`{params,query,body,headers}`の形で検証し、契約に無い項目は未知列として400。JSON 256 KiB超・壊れたJSONも400 `VALIDATION_ERROR`（理由は`details`）。API-IDは`API-01`〜`API-101`で、docsの表と台帳を`npm run check:contracts`が照合する。**応答DTOのうち04/10で列が確定していないものは`provisional`（id/versionのみ必須、他は通す）として登録**し、該当機能のタスクで厳密化する（OpenAPIにも`x-provisional-response`で出る）。固定パス（`/facilities/export`・`/facilities/imports`・`/notifications/me`・`/activities/:id/attendance/me`）は同階層の`:id`/`:memberId`より先に照合する（Honoは登録順）。出欠APIの`response`は`unanswered`も受け付ける（11「間の変更」）。
+
 ## 2. 冪等性・同時更新（全業務変更へ適用）
 
-API-36はライブラリ契約を別検証。その他POST/PUT/PATCH/DELETEのJSON変更には`Idempotency-Key`必須、GETには不要。キーはuser＋operation code＋keyで一意、正規化した本文（method/path、対象、baseVersion含む）のSHA256を保存。形式を変えても意味が同じJSONは同hash、別本文は409。保存7日案、通知/AI承認/同期effectは別UNIQUEを恒久保持し期限後も二重効果を防ぐ。下書きの自動再送は7日を上限とし、超過時は結果確認＋人が新操作を作る（D14）。
+API-36はライブラリ契約を別検証。API-83はバイナリで別規則。API-76（検索のPOST）は永続変更を伴わないため不要。その他POST/PUT/PATCH/DELETEのJSON変更には`Idempotency-Key`必須（API-77はAI提案を保存するため必須）、GETには不要。キーはuser＋operation code＋keyで一意、正規化した本文（method/path、対象、baseVersion含む）のSHA256を保存。形式を変えても意味が同じJSONは同hash、別本文は409。保存7日案、通知/AI承認/同期effectは別UNIQUEを恒久保持し期限後も二重効果を防ぐ。下書きの自動再送は7日を上限とし、超過時は結果確認＋人が新操作を作る（D14）。
 
 同じキー/本文の再送は元HTTP status/dataを返し、現在の認可は再検査する（失権後に旧レスポンスのPIIを返さない）。応答不明時は同キー照会/再送。既存rowはversion必須、未作成PUTは0を指定してINSERT UNIQUEをガード。version欠落400、旧版409。競合では履歴/監査成功行/通知を残さない。02のassertion方式で確認し、処理不成立ログは業務成功監査と分離する。
 
@@ -81,7 +83,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-30 | GET /ai/reviews | PER-10 | status/sourceType/limit/cursor | Page<AiEvaluation> |
 | API-31 | POST /ai/reviews/:id/decision | PER-10 | ReviewInput;元版/提案版/反映先権限 | ReviewDecision＋effectIds |
 | API-32 | POST /reports/drafts | PER-09 | activityId,resultVersion,templateVersion;読取/送信可 | Job(202) |
-| API-33 | POST /invitations | PER-07 | memberId,email,expiresInHours;未リンク団員/対象認証 | Invitation（生token一回だけ返す） |
+| API-33 | POST /invitations | PER-07 | memberId,email,expiresInHours(1〜720);未リンク団員/対象認証 | Invitation（生token一回だけ返す） |
 | API-34 | POST /invitations/:id/cancel | PER-07 | version,reason;未消費のみ | Invitation |
 | API-35 | POST /invitations/accept | token＋認証所有確認 | token,verifiedAuthIdentity;一回/期限/名簿一致 | AccountLinkResult |
 | API-36 | ALL /api/auth/*（v1外） | 認証ライブラリ | login/logout/reset/MFA/recovery;D04固定版の公式スキーマ | ライブラリResponse（業務data envelope外） |
@@ -112,7 +114,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-61 | GET /reports/:id/content | PER-11 | format=pdf/csv;承認版のみ/D20 | binary/CSV |
 | API-62 | POST /reports/manual | PER-04 | activityId,resultVersion,templateVersion,text;AI停止時 | Report(draft) |
 | API-63 | POST /notifications/drafts | PER-12 | source,body,audienceMemberIds,channels,expiresAt? | Notification(draft) |
-| API-64 | POST /notifications/:id/approval | PER-12 | version,bodyHash,audienceHash,decision;送信明示承認 | Notification＋Job(202) |
+| API-64 | POST /notifications/:id/approval | PER-12 | version,bodyHash,audienceHash,decision=approve/cancel;送信明示承認 | Notification＋Job(202) |
 | API-65 | GET /notifications/:id | PER-12/対象者 | なし;送信者と本人で項目投影 | Notification＋Deliveries |
 | API-66 | PUT /announcements/:id/read | 本人 | revisionNo;対象・公開版 | ReadReceipt |
 | API-67 | GET /notifications/me | PER-01 | status/limit/cursor;本人のみ | Page<Notification> |
@@ -127,14 +129,14 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-76 | POST /search/rag | PER-11/09 | query,maxSources?,documentIds?;ACL前置/引用必須 | RagAnswer(answer,citations,abstained) |
 | API-77 | POST /ai/assistant | PER-09 | query,contextRefs;許可読取/書込はproposalだけ | AssistantProposal＋references |
 | API-78 | POST /patrol-plans | PER-14 | facilityIds,date,objective;D01設計案で検証、正式対象は提案時確認 | PatrolPlan(draft) |
-| API-79 | POST /patrol-plans/:id/decision | PER-14 | version,orderedFacilityIds,decision,reason;人が確定 | PatrolPlan |
+| API-79 | POST /patrol-plans/:id/decision | PER-14 | version,orderedFacilityIds,decision=confirm/cancel,reason;人が確定 | PatrolPlan |
 | API-80 | GET /events | PER-13 | entityType/entityId/afterSequence;再接続認可 | 認可イベントstreamまたは同等poll DTO（D16） |
 | API-81 | POST /sync/commands | PER-13＋元操作 | SyncCommand;許可元API/同requestHash/baseVersion | SyncOperation(200/202/409) |
 | API-82 | GET /sync/operations/:id | PER-13本人 | なし;本人/端末operation | SyncOperation |
-| API-83 | PUT /attachments/:id/upload | PER-04本人申請 | uploadToken,bytes;実測容量、試行専用キー | UploadAttempt(id,sha256,size,version) |
+| API-83 | PUT /attachments/:id/upload | PER-04本人申請 | `x-upload-token`ヘッダー(URLに残さない),本文bytes;実測容量、試行専用キー | UploadAttempt(id,sha256,size,version) |
 | API-84 | POST /attachments/:id/completion | PER-04 | version,uploadAttemptId,sha256;実体HEAD/検査job | Attachment＋Job(202) |
 | API-85 | DELETE /attachments/:id | PER-04管理 | version,reason;有効リンクがある場合422 | 204（D1 tombstone後R2削除job） |
-| API-86 | GET /jobs/:id | 依頼者/担当 | なし;機微入力/内部error本文なし | Job(status,attempts,errorCode,resultRef) |
+| API-86 | GET /jobs/:id | 依頼者（PH0。担当者への拡張はPH4で通知/AI jobの利用時に判断） | なし;機微入力/内部error本文なし | Job(status,attempts,errorCode,resultRef) |
 | API-87 | PATCH /tasks/:id | PER-04/10 | version,status?,assigneeMemberId?,reason;業務対象権限 | Task |
 | API-88 | GET /ai/evaluation-runs | PER-08 | modelId/datasetVersion/limit/cursor | Page<EvaluationRun> |
 | API-89 | POST /ai/evaluation-runs | PER-08運用 | datasetVersion,questionVersion,modelId;架空/許諾済dataset | Job(202) |
@@ -145,11 +147,11 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-94 | GET /inspection-templates | PER-04 | targetType/status/limit/cursor;承認版一覧を担当範囲で取得 | Page<InspectionTemplate> |
 | API-95 | POST /inspection-templates | PER-03様式管理 | name,targetType,itemSchema;code一意/型/必須/結果列挙,D06 | InspectionTemplate(draft) |
 | API-96 | POST /inspection-templates/:id/versions | PER-03様式管理 | version,itemSchema,reason;新draft版/旧版不変 | InspectionTemplateVersion |
-| API-97 | POST /inspection-templates/:id/decision | PER-10様式承認 | version,templateVersionId,decision,reason;D06承認者/現版 | InspectionTemplateVersion |
+| API-97 | POST /inspection-templates/:id/decision | PER-10様式承認 | version,templateVersionId,decision=request_review/approve/changes_requested,reason;D06承認者/現版 | InspectionTemplateVersion |
 | API-98 | POST /attachment-drafts | PER-04＋対象作成権 | intendedEntityType,parentType?,parentId?;作成権/同unit、15分期限案 | AttachmentDraft(id,version,expiresAt) |
 | API-99 | PATCH /documents/:id/access-policy | PER-11管理 | version,classification,acl[{memberIdまたはroleId,permission,effect}];引下げ承認/同unit | Document＋policyVersion＋reindexJob |
 | API-100 | PUT /notifications/:id/read | 本人recipient | notificationVersion;本人/対象/可視版 | ReadReceipt（recipient.readAt） |
-| API-101 | DELETE /attachments/:id/links/:linkId | 元対象編集権 | version,reason;同unit/分類/保持方針D10、link tombstone | 204＋attachmentEvent |
+| API-101 | DELETE /attachments/:id/links/:linkId | 元対象編集権 | version,reason;同unit/分類/保持方針D10、link tombstone | 204（本文なし。attachmentEventは履歴へ追記し応答へ含めない） |
 
 ## 5. GIS・ページング・集計契約
 
@@ -165,7 +167,7 @@ DB planned_starts_at ↔ API plannedStartsAt ↔ UI予定開始、actual_starts_
 
 ## 7. 機械可読化と技術確認
 
-本書は詳細設計契約でありOpenAPI実装済みではない。該当API実装前にOpenAPI 3.1/Zodの同一スキーマへ転記し、全API-ID/DTO/拒否/再送をCI検査する（V03、13）。API-36の固定版認証スキーマ、SSE/poll/DO選択、生成/索引モデルの実呼出しは未検証。未検証を全機能正式リリースからの延期理由にしない。
+T002で`src/shared/contracts`（Zod）に全101件を実装し、`openapi/fireos.json`を生成した（`npm run generate:contracts`/`check:contracts`）。応答DTOの`provisional`分は各機能タスクで確定する。以下は設計時点の注意として残す：該当API実装前にOpenAPI 3.1/Zodの同一スキーマへ転記し、全API-ID/DTO/拒否/再送をCI検査する（V03、13）。API-36の固定版認証スキーマ、SSE/poll/DO選択、生成/索引モデルの実呼出しは未検証。未検証を全機能正式リリースからの延期理由にしない。
 
 ## 8. リアルタイムsnapshotと再開cursor
 
