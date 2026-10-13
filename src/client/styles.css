@@ -1,8 +1,96 @@
 @import "tailwindcss";
 
+/*
+ * FireOS デザイントークン。値は prototype/ の "Beacon" 配色（暗色のみ）に合わせる。
+ * 参照: prototype/FireOS Design System.dc.html の色・文字表、Prototype/Desktop.dc.html の寸法。
+ * プロトタイプに無いもの（フォーカスリング等）は a11y 要件(docs/03 §5)のため追加している。
+ */
+@theme {
+  --color-night: #08101c;
+  --color-surface: #101a2b;
+  --color-panel: #0d1626;
+  --color-sidebar: #060c16;
+  --color-ink: #edf1f7;
+  --color-ink-sub: #a9b3c4;
+  --color-ink-muted: #8792a5;
+  --color-ink-dim: #7d889b;
+  --color-ember: #ff5a2e;
+  --color-ember-hover: #ff6d45;
+  --color-ember-soft: #ff8a66;
+  --color-ok: #3ad08f;
+  --color-attention: #ffc35c;
+  --color-alert: #ff7a66;
+  --color-ai: #b9a9ff;
+  --color-dispatch: #ff3b2f;
+  --color-focus: #8ec5ff;
+
+  --font-sans: "Zen Kaku Gothic New", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --radius-card: 20px;
+  --radius-pill: 99px;
+  --radius-field: 16px;
+  --radius-nav: 12px;
+}
+
+html {
+  background: var(--color-night);
+  color-scheme: dark;
+}
 body {
   margin: 0;
-  background: #08101c;
-  color: #edf1f7;
-  font-family: "Zen Kaku Gothic New", system-ui, sans-serif;
+  min-height: 100dvh;
+  background: var(--color-night);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.7;
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* アイコン: Material Symbols Rounded（prototypeと同じ） */
+.ms {
+  /* アイコンフォント未読込/失敗時に、ligatureの文字がレイアウトを押し広げないよう枠を固定する */
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  overflow: hidden;
+  flex: none;
+  font-family: "Material Symbols Rounded";
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  direction: ltr;
+  font-feature-settings: "liga";
+  user-select: none;
+  font-variation-settings: "FILL" 0;
+}
+.ms-fill {
+  font-variation-settings: "FILL" 1;
+}
+
+/* キーボード操作で必ず見えるフォーカス（prototypeはoutline:noneだったため追加） */
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* prototype: 罫線は box-shadow の 1px inset で表現する */
+.hairline {
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+}
+
+@keyframes fo-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fo-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

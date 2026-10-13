@@ -1,4 +1,8 @@
-// T005でshell(ナビ/ルート)に置き換える。T001ではSPAが配信できることだけを示す最小画面。
+import { useMemo } from "react";
+import { RouterProvider } from "react-router/dom";
+import { createRouter } from "./routes";
+
 export function App() {
-  return <main>FireOS</main>;
+  const router = useMemo(() => createRouter(), []);
+  return <RouterProvider router={router} />;
 }
