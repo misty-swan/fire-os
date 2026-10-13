@@ -18,6 +18,8 @@ export function clearJobHandlers(): void {
  * 1件のjobを実行して結果(JobOutcome)にする。例外・タイムアウトは再試行扱い。
  * error_codeには短いコードだけを返し、例外の本文（内部情報を含み得る）は保存しない。
  * 処理を中断はできないので、タイムアウト後に遅れて終わった処理の結果はleaseで拒否される。
+ * ただし外部への効果（送信等）までは止められない。**外部効果の一回性は各handlerの責務**とし、
+ * 固定の効果キー（例: job id＋配送先）で相手側/台帳側の重複を防ぐこと（docs/02 §5）。
  */
 export async function handleJob(job: LeasedJob, env: AppEnv, opts: { timeoutMs?: number } = {}): Promise<JobOutcome> {
   const handler = handlers.get(job.kind);
@@ -56,7 +58,13 @@ export async function runDueJobs(
     if (!job) break;
     summary.leased++;
     const outcome = await handleJob(job, env, { timeoutMs: deps.timeoutMs });
-    const committed = await completeJob(env, job, outcome, clock.now().toISOString());
+    let committed = false;
+    try {
+      committed = await completeJob(env, job, outcome, clock.now().toISOString());
+    } catch (err) {
+      // 1件の確定失敗で残りのjobを止めない。このjobは作業権の期限切れ後に回収される
+      console.error(JSON.stringify({ event: "job_complete_failed", jobId: job.id, error: String(err) }));
+    }
     if (committed) summary.committed++;
     else summary.rejected++;
   }

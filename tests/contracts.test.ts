@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ErrorEnvelope, LIMITS, errorCodes, errorStatus } from "../src/shared/contracts/common";
 import { apiDef, apiIds, parseRequest, registry, safeParseRequest } from "../src/shared/contracts/registry";
 import { buildOpenApi } from "../src/shared/contracts/openapi";
+import { successStatusProblems } from "../src/shared/contracts/doc-check";
 import * as states from "../src/shared/states";
 import { Hono } from "hono";
 import type { AppBindings } from "../src/server/env";
@@ -115,6 +116,30 @@ describe("contracts (T002)", () => {
     expect(safeParseRequest("API-15", { query: { status: "deleted" } }).success).toBe(false);
   });
 
+  it("doc_check_detects_success_status_drift_between_docs_and_registry", () => {
+    expect(successStatusProblems("API-84", "Attachment＋Job(202)", [202])).toEqual([]);
+    expect(successStatusProblems("API-84", "Attachment＋Job(202)", [200])).toHaveLength(1);
+    expect(successStatusProblems("API-85", "204（D1 tombstone後R2削除job）", [204])).toEqual([]);
+    expect(successStatusProblems("API-85", "204（D1 tombstone後R2削除job）", [200])).toHaveLength(1);
+    expect(successStatusProblems("API-54", "ImportResult(202可)", [200, 202])).toEqual([]);
+    expect(successStatusProblems("API-54", "ImportResult(202可)", [202])).toHaveLength(1);
+    expect(successStatusProblems("API-12", "FacilityDetail", [202])).toHaveLength(1);
+  });
+
+  it("instants_are_normalized_before_comparison_and_ids_must_be_lowercase", () => {
+    const activity = {
+      title: "訓練", kind: "training", locationText: "詰所", ownerMemberId: ID, audienceMemberIds: [ID2],
+      plannedStartsAt: "2026-10-13T10:00:00.500Z", plannedEndsAt: "2026-10-13T10:00:00Z",
+    };
+    // 文字列比較だと end>=start に見えるが、実際は終了が0.5秒前
+    expect(safeParseRequest("API-06", { body: activity, headers: KEY }).success).toBe(false);
+    const ok = parseRequest("API-06", { body: { ...activity, plannedEndsAt: "2026-10-13T11:00:00Z" }, headers: KEY });
+    expect(ok.body.plannedEndsAt).toBe("2026-10-13T11:00:00.000Z"); // DBと同じミリ秒3桁へ正規化
+    const lettered = "abcdef12-3456-4789-8abc-def012345678";
+    expect(safeParseRequest("API-86", { params: { id: lettered } }).success).toBe(true);
+    expect(safeParseRequest("API-86", { params: { id: lettered.toUpperCase() } }).success).toBe(false);
+  });
+
   it("api36_and_binary_apis_have_their_own_contract", () => {
     expect(registry["API-36"].kind).toBe("external");
     expect(registry["API-27"].kind).toBe("binary");
@@ -198,15 +223,44 @@ describe("http layer (T002)", () => {
   });
 
   it("parseApiRequest_validates_params_body_and_headers", async () => {
-    const okRes = await app.request(`/attendance/${ID}`, {
-      method: "PUT", headers: { "idempotency-key": "k1" }, body: JSON.stringify({ version: 0, response: "attending" }),
-    });
+    const json = { "content-type": "application/json" };
+    const body = JSON.stringify({ version: 0, response: "attending" });
+    const okRes = await app.request(`/attendance/${ID}`, { method: "PUT", headers: { ...json, "idempotency-key": "k1" }, body });
     expect(okRes.status).toBe(200);
-    const noKey = await app.request(`/attendance/${ID}`, { method: "PUT", body: JSON.stringify({ version: 0, response: "attending" }) });
+    const noKey = await app.request(`/attendance/${ID}`, { method: "PUT", headers: json, body });
     expect(noKey.status).toBe(400);
-    const badId = await app.request(`/attendance/not-a-uuid`, {
-      method: "PUT", headers: { "idempotency-key": "k1" }, body: JSON.stringify({ version: 0, response: "attending" }),
-    });
+    const badId = await app.request(`/attendance/not-a-uuid`, { method: "PUT", headers: { ...json, "idempotency-key": "k1" }, body });
     expect(badId.status).toBe(400);
+    // 本文があるのにJSONでない（text/plain等のCSRF的な送信）
+    const noType = await app.request(`/attendance/${ID}`, { method: "PUT", headers: { "idempotency-key": "k1" }, body });
+    expect(noType.status).toBe(400);
+    // 契約に無いqueryは無視せず拒否
+    const extraQuery = await app.request(`/attendance/${ID}?admin=1`, { method: "PUT", headers: { ...json, "idempotency-key": "k1" }, body });
+    expect(extraQuery.status).toBe(400);
+  });
+
+  it("requests_without_body_contract_reject_query_and_body", async () => {
+    const getApp = new Hono<AppBindings>();
+    getApp.use("*", async (c, next) => { c.set("requestId", "r"); await next(); });
+    getApp.get("/jobs/:id", async (c) => c.json(await parseApiRequest(c, "API-86")));
+    getApp.onError(onError);
+    expect((await getApp.request(`/jobs/${ID}`)).status).toBe(200);
+    expect((await getApp.request(`/jobs/${ID}?foo=1`)).status).toBe(400);
+  });
+
+  it("chunked_body_without_content_length_is_cut_at_the_limit", async () => {
+    let sent = 0;
+    const chunk = new TextEncoder().encode("x".repeat(64 * 1024));
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        // 上限(256KiB)を大きく超える量を流す。途中で打ち切られれば全部は読まれない
+        if (sent >= 64) return controller.close();
+        sent++;
+        controller.enqueue(chunk);
+      },
+    });
+    const res = await app.request("/echo", { method: "POST", body: stream, duplex: "half" } as RequestInit);
+    expect(res.status).toBe(400);
+    expect(sent).toBeLessThan(64);
   });
 });

@@ -54,7 +54,10 @@ export function useMutation<I extends ApiId>(id: I) {
         if (e instanceof DOMException && e.name === "AbortError") return undefined;
         const err = e instanceof ApiError ? e : new ApiError(0, "RESPONSE_UNKNOWN");
         const next = stateFromError(err);
-        pendingKey.current = next.kind === "unknown" ? { signature, key } : null;
+        // 確定した拒否(400/403/404/409/422)のときだけ鍵を捨てる。結果不明の後の401(再ログイン)や429(待機)では、
+        // 前回が実は反映済みかもしれないので、同じ内容なら同じ鍵を使い続ける（二重登録を防ぐ）
+        const definitive = ["invalid", "forbidden", "conflict"].includes(next.kind);
+        pendingKey.current = definitive ? null : (pendingKey.current?.signature === signature ? pendingKey.current : { signature, key });
         setState(next);
         return undefined;
       } finally {

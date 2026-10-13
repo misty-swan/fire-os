@@ -109,8 +109,9 @@ export function enqueueJobStatement(env: Pick<AppEnv, "DB">, input: JobInput, no
 export async function enqueueJob(env: JobEnv, input: JobInput, now: Date = new Date()): Promise<JobRecord> {
   const { statement, dedupeKey } = enqueueJobStatement(env, input, now);
   const inserted = await statement.run();
-  const row = await env.DB.prepare("SELECT * FROM jobs WHERE dedupe_key = ?").bind(dedupeKey).first<JobRow>();
-  if (!row) throw new Error("enqueueJob: 登録したjobが見つかりません");
+  // 別unitの同じキーのjobを返さない（独自キーにunitが含まれていない場合の保険）
+  const row = await env.DB.prepare("SELECT * FROM jobs WHERE dedupe_key = ? AND unit_id = ?").bind(dedupeKey, input.unitId).first<JobRow>();
+  if (!row) throw new Error("enqueueJob: 登録したjobが見つかりません（同じdedupe_keyが別unitで使われています）");
   if ((inserted.meta.changes ?? 0) === 1) {
     try {
       await env.JOBS_QUEUE.send({ jobId: row.id });
@@ -159,12 +160,22 @@ export async function leaseJob(env: Pick<AppEnv, "DB">, nowIso: string): Promise
  * 結果を確定する。作業権が自分のもので期限内のときだけ成功(true)。
  * 期限切れ・別runnerに交代済み・既に確定済みの場合は何も変えずfalse。
  */
+/** error_code は短いコードだけ（内部の例外文・個人情報をAPI-86へ出さない）。形が不正なら置き換える */
+const ERROR_CODE = /^[a-z0-9_]{1,100}$/;
+const safeCode = (code: string | undefined, fallback: string) => (code && ERROR_CODE.test(code) ? code : fallback);
+
 export async function completeJob(
   env: Pick<AppEnv, "DB">,
   job: LeasedJob,
-  outcome: JobOutcome,
+  rawOutcome: JobOutcome,
   nowIso: string,
 ): Promise<boolean> {
+  let outcome = rawOutcome;
+  if (outcome.kind === "succeeded" && outcome.resultRef !== undefined && (outcome.resultRef.length < 1 || outcome.resultRef.length > 500)) {
+    outcome = { kind: "manual_review", errorCode: "invalid_result_ref" };
+  }
+  if (outcome.kind === "retryable" || outcome.kind === "manual_review") outcome = { ...outcome, errorCode: safeCode(outcome.errorCode, "invalid_error_code") };
+  if (outcome.kind === "stale") outcome = { ...outcome, errorCode: safeCode(outcome.errorCode, "source_changed") };
   const guard = "WHERE id = ?2 AND status = 'running' AND lease_token = ?3 AND lease_until > ?1";
   const clear = "lease_token = NULL, lease_until = NULL, updated_at = ?1";
   let sql: string;

@@ -38,7 +38,7 @@ function DemoTag({ className }: { className?: string }) {
 /** PC(1024px以上)の左サイドバー(248px)。prototype Desktop と同じ：ロゴ→分団カード→3グループ→出動管理→利用者。 */
 function Sidebar({ activePath }: { activePath: string | undefined }) {
   return (
-    <aside className="sticky top-0 hidden h-dvh w-[248px] flex-none flex-col gap-1 border-r border-white/[.06] bg-sidebar px-3.5 pb-4 pt-[18px] lg:flex">
+    <aside className="fo-scroll sticky top-0 hidden h-dvh w-[248px] flex-none flex-col gap-1 overflow-y-auto border-r border-white/[.06] bg-sidebar px-3.5 pb-4 pt-[18px] lg:flex">
       <div className="flex items-center gap-2.5 px-2 pb-4 pt-0.5">
         <BrandMark size={32} />
         <span className="text-[19px] font-black leading-none tracking-[-.01em]">FireOS</span>
@@ -58,8 +58,8 @@ function Sidebar({ activePath }: { activePath: string | undefined }) {
         <Icon name="unfold_more" className="text-[18px] text-ink-muted" />
       </button>
 
-      {/* 項目の一覧だけがスクロールし、最下部の出動管理/利用者は常に見える（prototypeと同じ） */}
-      <nav aria-label="主要メニュー" className="fo-scroll flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+      {/* prototype どおりサイドバー全体がスクロールし、出動管理/利用者は margin-top:auto で最下部へ寄せる */}
+      <nav aria-label="主要メニュー" className="flex flex-col gap-1">
         {desktopNavGroups.map((g) => (
           <div key={g.heading} className="flex flex-col gap-1">
             <p className="px-2.5 pb-1.5 pt-3.5 font-mono text-[10px] font-semibold tracking-[.16em] text-[#5f6a7d]">{g.heading}</p>
@@ -84,7 +84,7 @@ function Sidebar({ activePath }: { activePath: string | undefined }) {
         ))}
       </nav>
 
-      <div className="flex flex-none flex-col gap-2.5 pt-[18px]">
+      <div className="mt-auto flex flex-col gap-2.5 pt-[18px]">
         <Link
           to={dispatchNav.path}
           aria-current={activePath === dispatchNav.path ? "page" : undefined}
@@ -128,7 +128,7 @@ function DesktopHeader({ title, crumb, online }: { title: string; crumb: string;
         type="button"
         disabled
         title="検索は後続フェーズで有効になります"
-        className="hairline ml-auto flex h-10 min-w-[120px] flex-[0_1_320px] items-center gap-2 rounded-nav bg-white/5 px-3 text-ink-dim"
+        className="ml-auto flex h-10 min-w-[120px] flex-[0_1_320px] items-center gap-2 rounded-nav bg-white/5 px-3 text-ink-dim shadow-[inset_0_0_0_1px_rgba(255,255,255,.08)]"
       >
         <Icon name="search" className="text-[19px]" />
         <span className="flex-1 overflow-hidden whitespace-nowrap text-left text-[13px]">団員・施設・記録を検索</span>
@@ -162,7 +162,7 @@ function BottomNav({ activeTab }: { activeTab: string | undefined }) {
     <nav
       aria-label="主要メニュー"
       data-testid="bottom-nav"
-      className="fixed inset-x-0 bottom-0 z-30 grid h-[84px] grid-cols-5 border-t border-white/[.06] bg-gradient-to-b from-night/60 to-night/95 pt-[9px] backdrop-blur-xl lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-50 grid h-[84px] grid-cols-5 border-t border-white/[.06] bg-gradient-to-b from-night/60 to-night/[.96] pt-[9px] backdrop-blur-[16px] lg:hidden"
     >
       {bottomTabs.map((t) => {
         const active = t.tab === activeTab;
@@ -251,7 +251,8 @@ export function AppShell() {
             id="main"
             tabIndex={-1}
             className={clsx(
-              "relative mx-auto w-full max-w-[1440px] px-5 pt-4 outline-none lg:px-8 lg:pb-14 lg:pt-7",
+              // prototype: スマホ本文は上10px/左右20px、PCは 28px 32px 56px・最大1440px（左寄せ）
+              "relative mx-auto w-full max-w-[1440px] px-5 pt-2.5 outline-none lg:mx-0 lg:px-8 lg:pb-14 lg:pt-7",
               current?.hideNav ? "pb-32" : "pb-28",
             )}
           >

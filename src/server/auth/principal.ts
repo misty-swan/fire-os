@@ -23,7 +23,7 @@ export async function getPrincipal(c: Context<AppBindings>): Promise<Principal |
   if (typeof userId !== "string") return null;
   const row = await c.env.DB.prepare(
     "SELECT u.id AS user_id, u.authz_version, m.id AS member_id, m.unit_id FROM users u JOIN members m ON m.user_id = u.id " +
-      "WHERE u.id = ? AND u.status = 'active' AND m.status = 'active'",
+      "JOIN units n ON n.id = m.unit_id WHERE u.id = ? AND u.status = 'active' AND m.status = 'active' AND n.status = 'active'",
   )
     .bind(userId)
     .first<{ user_id: string; authz_version: number; member_id: string; unit_id: string }>();

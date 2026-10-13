@@ -17,8 +17,13 @@ export const LIMITS = {
 export const obj = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 
 // --- 基本型 ---
-export const Id = z.guid();
-export const Instant = z.iso.datetime({ message: "UTC瞬間(ISO8601)で指定してください" });
+/** サーバー生成のUUID（小文字）。大文字を受け付けると照会404や冪等hashの不一致を招くため拒否する */
+export const Id = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, "小文字のUUIDで指定してください");
+/**
+ * UTC瞬間。小数秒の桁数はいくつでも受け付け、検証後はDBと同じ「ミリ秒3桁のZ形式」へ正規化する
+ * （前後比較を文字列で行っても精度の違いで逆転しないように）。
+ */
+export const Instant = z.iso.datetime({ message: "UTC瞬間(ISO8601)で指定してください" }).transform((v) => new Date(v).toISOString());
 export const BusinessDate = z.iso.date();
 export const Version = z.number().int().min(1);
 /** 未作成のPUT(upsert)は version 0 を指定する */

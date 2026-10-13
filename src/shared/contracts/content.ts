@@ -5,7 +5,7 @@ import {
 } from "./common";
 import { announcementStates } from "../states";
 
-export const ReadReceipt = obj({ readAt: Instant, revisionNo: z.number().int().min(1).optional(), notificationVersion: z.number().int().min(1).optional() });
+export const ReadReceipt = obj({ readAt: z.iso.datetime(), revisionNo: z.number().int().min(1).optional(), notificationVersion: z.number().int().min(1).optional() });
 
 /** 版判定の共通3値。docs/05 API-60/75/97 */
 const ReviewVerb = z.enum(["request_review", "approve", "changes_requested"]);

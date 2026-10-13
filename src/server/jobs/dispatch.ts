@@ -1,8 +1,11 @@
 import type { AppEnv, JobMessage } from "../env";
+import { expireIdempotencyRecords } from "../mutations/execute";
 import { runDueJobs } from "./runner";
 
 /** Cron(毎分,UTC)：待機明け/期限切れ/Queueへ送れなかったjobを回収して実行する。Queueが止まっていても進む。 */
 export async function handleScheduled(env: AppEnv): Promise<void> {
+  // 期限切れの冪等レコードから応答本文を消す（鍵とhashは残る）
+  await expireIdempotencyRecords(env, new Date().toISOString());
   const summary = await runDueJobs(env);
   if (summary.leased > 0) console.log(JSON.stringify({ event: "jobs_run", via: "cron", ...summary }));
 }

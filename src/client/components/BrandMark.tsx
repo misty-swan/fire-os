@@ -33,8 +33,9 @@ export function BrandMark({ size = 32 }: { size?: number }) {
       <span style={ring(0.37, size >= 60 ? 0.5 : 0.55)} />
       <span
         style={{
-          width: size * 0.135,
-          height: size * 0.135,
+          // 32px→5px（prototype Desktop/Design System）、76px→10px（ログイン）
+          width: size >= 60 ? size * 0.132 : size * 0.156,
+          height: size >= 60 ? size * 0.132 : size * 0.156,
           borderRadius: "50%",
           background: "#ff5a2e",
           boxShadow: `0 0 ${size >= 60 ? 14 : 8}px rgba(255,90,46,.9)`,

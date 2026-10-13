@@ -24,7 +24,7 @@ export function FormErrors({ issues, labels = {} }: { issues: FieldIssue[]; labe
   useFocusFirstInvalid(issues);
   if (issues.length === 0) return null;
   return (
-    <Banner tone="error" icon="error" role="alert" title={`入力内容に${issues.length}件の誤りがあります`}>
+    <Banner tone="error" eyebrow="ERROR" role="alert" title={`入力内容に${issues.length}件の誤りがあります`}>
       <ul className="list-inside list-disc">
         {issues.map((i) => (
           <li key={`${i.field}:${i.reason}`}>

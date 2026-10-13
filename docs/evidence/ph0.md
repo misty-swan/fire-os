@@ -7,7 +7,7 @@
 |---|---|---|
 | 型検査 | `npm run typecheck` | 成功 |
 | 契約検査 | `npm run check:contracts` | 101 API / docs/05 101行 / OpenAPI一致 |
-| 単体・結合試験 | `npx vitest --run` | 6ファイル 68件成功（workers: runtime/contracts/schema/mutation/jobs、client: client-shell） |
+| 単体・結合試験 | `npx vitest --run` | 6ファイル 84件成功（PH0レビュー第1回の修正後）（workers: runtime/contracts/schema/mutation/jobs、client: client-shell） |
 | ブラウザ試験 | `npm run test:e2e` | 7件成功＋1件スキップ（スマホ専用試験をPC幅で除外） |
 | ビルド | `npm run build` | 成功（dist/client） |
 | 手動確認 | `npx wrangler dev` | `/app/unknown`=HTML、`/api/v1/x`・`/api/auth/x`=JSON 404 |
@@ -17,6 +17,9 @@ T001 `api_route_never_returns_spa` / T002 `contract_registry_is_complete_and_str
 
 ## 赤→緑の扱い（正直な記録）
 T001・T003・T004・T006は先にテストを書き「未実装/表なし」で失敗することを確認してから実装した。**T002・T005は実装を先に書き、試験を後から作った**。代わりに、契約や実装を意図的に壊して試験が失敗することを確認した（strict解除、API削除、202を「保存しました」表示、誤り欄へのフォーカス除去、二重送信防止除去など）。T004・T006でも防御を外す変異で検出を確認した。
+
+## レビュー・修正サイクル
+サブエージェント4体（正確さ・安全性／完了条件と試験／prototype準拠／docs整合）によるレビューと修正の記録は [ph0-review.md](ph0-review.md)。
 
 ## 未実施・未接続（実装済み/検証済みとして扱わない）
 - 実Cloudflare D1・R2・Queues・Cron、Workers AI、実環境への deploy/migration（`scripts/migrate.ts --remote`は実行していない）

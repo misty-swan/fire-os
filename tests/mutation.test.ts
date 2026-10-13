@@ -7,7 +7,7 @@ import { errorStatus } from "../src/shared/contracts/common";
 import { HttpError } from "../src/server/http";
 import { canonicalJson, canonicalRequestHash } from "../src/server/mutations/hash";
 import {
-  IDEMPOTENCY_TTL_MS, executeMutation, type MutationResult, type MutationSpec, type Principal,
+  IDEMPOTENCY_TTL_MS, executeMutation, expireIdempotencyRecords, type MutationResult, type MutationSpec, type Principal,
 } from "../src/server/mutations/execute";
 
 interface IssueDto { id: string; status: string; version: number }
@@ -33,9 +33,9 @@ const principalOf = (i: Identity, authzVersion = 1): Principal => ({
   userId: i.userId, memberId: i.memberId!, unitId: i.unitId, authzVersion,
 });
 
-async function newIssue(unitId: string): Promise<string> {
+async function newIssue(unitId: string, status = "reported"): Promise<string> {
   const id = uuid();
-  await env.DB.prepare("INSERT INTO t_issues (id, unit_id, status) VALUES (?, ?, 'reported')").bind(id, unitId).run();
+  await env.DB.prepare("INSERT INTO t_issues (id, unit_id, status) VALUES (?, ?, ?)").bind(id, unitId, status).run();
   return id;
 }
 
@@ -312,6 +312,103 @@ describe("executeMutation (T004)", () => {
     (nested.event as { payload: unknown }).payload = { body: { name: "架空 太郎" } };
     await expect(executeMutation(env, p, nested)).rejects.toThrow(/payload/);
     expect(await snapshot(p.unitId, issueId)).toEqual(before);
+  });
+});
+
+describe("executeMutation review fixes (PH0 review round 1)", () => {
+  it("failures_in_infrastructure_statements_also_roll_back_everything", async () => {
+    const p = principalOf(fx.units.a.people.admin);
+    // 基盤側の文での失敗: 監査(action長すぎ→CHECK)、event(版0→CHECK)、応答SQLがNULL(確定のCHECK)
+    const cases: [string, (s: MutationSpec<IssueDto>) => void][] = [
+      ["audit", (s) => { s.audit.action = "x".repeat(101); }],
+      ["event", (s) => { s.event.entityVersion = 0; }],
+      ["response", (s) => { s.response.sql = "SELECT NULL"; }],
+    ];
+    for (const [name, mutate] of cases) {
+      const issueId = await newIssue(p.unitId);
+      const before = await snapshot(p.unitId, issueId);
+      const spec = await transitionSpec(p, issueId);
+      mutate(spec);
+      const out = await attempt(() => executeMutation(env, p, spec));
+      expect(out.status, name).toBe(500);
+      expect(await snapshot(p.unitId, issueId), name).toEqual(before);
+    }
+  });
+
+  it("matching_version_but_wrong_state_is_invalid_transition_not_500", async () => {
+    const p = principalOf(fx.units.a.people.admin);
+    const issueId = await newIssue(p.unitId, "in_progress"); // version=1 のまま、許可された前の状態(reported)ではない
+    const before = await snapshot(p.unitId, issueId);
+    const out = await attempt(async () => executeMutation(env, p, await transitionSpec(p, issueId)));
+    expect(out).toMatchObject({ status: 422, code: "INVALID_TRANSITION" });
+    expect(await snapshot(p.unitId, issueId)).toEqual(before);
+  });
+
+  it("business_unique_violation_is_duplicate_not_500", async () => {
+    const p = principalOf(fx.units.a.people.admin);
+    const issueId = await newIssue(p.unitId);
+    const dupId = uuid();
+    await env.DB.prepare("INSERT INTO t_issue_events (id, issue_id, unit_id, mutation_id, from_status, to_status) VALUES (?, ?, ?, ?, 'reported', 'reported')")
+      .bind(dupId, issueId, p.unitId, uuid()).run();
+    const spec = await transitionSpec(p, issueId);
+    const base = spec.statements;
+    spec.statements = (ctx) => [
+      ...base(ctx),
+      env.DB.prepare("INSERT INTO t_issue_events (id, issue_id, unit_id, mutation_id, from_status, to_status) VALUES (?, ?, ?, ?, 'reported', 'under_review')")
+        .bind(dupId, issueId, p.unitId, ctx.mutationId),
+    ];
+    expect(await attempt(() => executeMutation(env, p, spec))).toMatchObject({ status: 409, code: "DUPLICATE" });
+  });
+
+  it("resending_an_old_base_version_with_a_new_key_after_a_real_update_conflicts", async () => {
+    const p = principalOf(fx.units.a.people.admin);
+    const issueId = await newIssue(p.unitId);
+    await executeMutation(env, p, await transitionSpec(p, issueId)); // v1→v2
+    const out = await attempt(async () => executeMutation(env, p, await transitionSpec(p, issueId, { expectedVersion: 1 })));
+    expect(out).toMatchObject({ status: 409, code: "VERSION_CONFLICT" });
+    expect(await count("SELECT count(*) AS n FROM t_issue_events WHERE issue_id = ?", issueId)).toBe(1);
+  });
+
+  it("replay_after_only_an_authz_version_bump_is_forbidden_before_revealing_mismatch", async () => {
+    const op = fx.units.b.people.operator;
+    const p = principalOf(op);
+    const issueId = await newIssue(p.unitId);
+    const key = uuid();
+    await executeMutation(env, p, await transitionSpec(p, issueId, { key }));
+    await env.DB.prepare("UPDATE users SET authz_version = authz_version + 1 WHERE id = ?").bind(p.userId).run();
+    // 同じ本文の再送も、別本文の再送も、まず403（鍵の存在や本文の違いを明かさない）
+    expect(await attempt(async () => executeMutation(env, p, await transitionSpec(p, issueId, { key })))).toMatchObject({ status: 403 });
+    expect(await attempt(async () => executeMutation(env, p, await transitionSpec(p, issueId, { key, to: "in_progress" })))).toMatchObject({ status: 403 });
+  });
+
+  it("conditions_are_preconditions_evaluated_before_the_writes", async () => {
+    const p = principalOf(fx.units.b.people.admin);
+    const issueId = await newIssue(p.unitId);
+    const spec = await transitionSpec(p, issueId);
+    // statementsが status を変える行を、書込前の状態で検査する（前提条件）。書込後の状態なら偽になるはず
+    spec.conditions = [{ existsSql: "SELECT 1 FROM t_issues WHERE id = ? AND status = 'reported'", binds: [issueId], failCode: "VERSION_CONFLICT" }];
+    expect((await executeMutation(env, p, spec)).status).toBe(200);
+  });
+
+  it("audit_metadata_rejects_free_text_such_as_names", async () => {
+    const p = principalOf(fx.units.a.people.admin);
+    const spec = await transitionSpec(p, await newIssue(p.unitId));
+    spec.audit.metadata = { name: "架空 太郎" };
+    await expect(executeMutation(env, p, spec)).rejects.toThrow(/ID・コード形式/);
+  });
+
+  it("expired_idempotency_records_lose_their_response_body_but_keep_rejecting_the_key", async () => {
+    const p = principalOf(fx.units.b.people.officer);
+    const issueId = await newIssue(p.unitId);
+    const key = uuid();
+    fx.clock.set("2026-10-13T00:00:00.000Z");
+    await executeMutation(env, p, await transitionSpec(p, issueId, { key }), { clock: fx.clock });
+    fx.clock.advance(IDEMPOTENCY_TTL_MS + 1000);
+    expect(await expireIdempotencyRecords(env, fx.clock.now().toISOString())).toBeGreaterThanOrEqual(1);
+    const rec = (await fx.rows("idempotency_records", { actor_user_id: p.userId, idempotency_key: key }))[0]!;
+    expect(rec).toMatchObject({ state: "expired", response_json: null, response_status: null });
+    const out = await attempt(async () => executeMutation(env, p, await transitionSpec(p, issueId, { key }), { clock: fx.clock }));
+    expect(out).toMatchObject({ status: 409, code: "IDEMPOTENCY_MISMATCH" });
   });
 });
 

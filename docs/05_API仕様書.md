@@ -1,6 +1,6 @@
 # 05 API仕様書
 
-版：v0.3 / 2026-10-13 / 設計契約ドラフト。API-01〜32を保全、欠落操作/統合機能を追加。未実装。権限は10、状態は11、データは04、未承認条件は14。
+版：v0.3 / 2026-10-13 / 設計契約ドラフト。API-01〜32を保全、欠落操作/統合機能を追加。全101件の契約(Zod/OpenAPI)とAPI-86はPH0で実装済み、他の業務処理は未実装。権限は10、状態は11、データは04、未承認条件は14。
 
 ## 1. 共通入出力・検証
 
@@ -14,12 +14,12 @@ IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-
 | 400 VALIDATION_ERROR | 型/範囲/未知列/形式違反 |
 | 401 UNAUTHENTICATED | セッションなし/失効 |
 | 403 FORBIDDEN、404 NOT_FOUND | 既知対象の操作不可/存在を明かさない対象不可 |
-| 409 VERSION_CONFLICT / IDEMPOTENCY_MISMATCH / DUPLICATE / SNAPSHOT_CHANGED / RESYNC_REQUIRED | 旧版、同キー別本文、競合リンク/番号、続き取得中のsnapshot更新(§5)、再開cursor失効(§8) |
+| 409 VERSION_CONFLICT / IDEMPOTENCY_MISMATCH / DUPLICATE / SNAPSHOT_CHANGED / RESYNC_REQUIRED | 旧版、同キー別本文または保持期限切れのキー（details.reason=key_expired）、競合リンク/番号、続き取得中のsnapshot更新(§5)、再開cursor失効(§8) |
 | 422 INVALID_TRANSITION / UNAPPROVED_POLICY / ATTACHMENT_NOT_READY | 業務前提/採用未決/未検査添付 |
 | 429 RATE_LIMITED | 認証/AI/検索/アップロード上限、Retry-After |
 | 500 INTERNAL_ERROR、503 DEPENDENCY_UNAVAILABLE | rollback済か結果不明かをoperation照会で確認。内部本文を漏らさない |
 
-**契約の実装（T002、`src/shared/contracts`）：** リクエストは`{params,query,body,headers}`の形で検証し、契約に無い項目は未知列として400。JSON 256 KiB超・壊れたJSONも400 `VALIDATION_ERROR`（理由は`details`）。API-IDは`API-01`〜`API-101`で、docsの表と台帳を`npm run check:contracts`が照合する。**応答DTOのうち04/10で列が確定していないものは`provisional`（id/versionのみ必須、他は通す）として登録**し、該当機能のタスクで厳密化する（OpenAPIにも`x-provisional-response`で出る）。固定パス（`/facilities/export`・`/facilities/imports`・`/notifications/me`・`/activities/:id/attendance/me`）は同階層の`:id`/`:memberId`より先に照合する（Honoは登録順）。出欠APIの`response`は`unanswered`も受け付ける（11「間の変更」）。
+**契約の実装（T002、`src/shared/contracts`）：** リクエストは`{params,query,body,headers}`の形で検証し、契約に無い項目は未知列として400。JSON 256 KiB超（content-lengthが無くても読みながら打ち切る）・壊れたJSON・本文があるのに`Content-Type: application/json`でない要求、契約に無いqueryや本文も400 `VALIDATION_ERROR`（理由は`details`）。UTC瞬間は小数秒の桁数を問わず受け付け、ミリ秒3桁のZ形式へ正規化してから比較・保存する。IDは小文字のUUIDのみ。API-IDは`API-01`〜`API-101`で、docsの表と台帳を`npm run check:contracts`が照合する。**応答DTOのうち04/10で列が確定していないものは`provisional`（id/versionのみ必須、他は通す）として登録**し、該当機能のタスクで厳密化する（OpenAPIにも`x-provisional-response`で出る）。固定パス（`/facilities/export`・`/facilities/imports`・`/notifications/me`・`/activities/:id/attendance/me`）は同階層の`:id`/`:memberId`より先に照合する（Honoは登録順）。出欠APIの`response`は`unanswered`も受け付ける（11「間の変更」）。
 
 ## 2. 冪等性・同時更新（全業務変更へ適用）
 

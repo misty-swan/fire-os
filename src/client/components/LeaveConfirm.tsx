@@ -38,23 +38,30 @@ export function LeaveConfirm({ dirty }: { dirty: boolean }) {
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(3,6,12,.6)] lg:items-center">
+    // スマホ: prototype の出欠シート（下から、取っ手、上端の光沢）。PC: リマインドモーダル（560px、26px角丸、ぼかし幕）
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[rgba(3,6,12,.6)] lg:items-center lg:bg-[rgba(3,6,12,.65)] lg:backdrop-blur-[4px]">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="leave-title"
         onKeyDown={(e) => e.key === "Escape" && blocker.reset()}
-        className="w-full max-w-[560px] rounded-t-[30px] bg-[#0f1828] p-6 lg:rounded-[26px]"
+        className={
+          "w-full rounded-t-[30px] bg-[#0f1828] px-5 pb-[34px] pt-3 shadow-[inset_0_1px_0_rgba(255,255,255,.1)] " +
+          "lg:flex lg:w-[560px] lg:max-w-[calc(100vw-40px)] lg:flex-col lg:gap-4 lg:rounded-[26px] lg:p-6 lg:shadow-[inset_0_0_0_1px_rgba(255,255,255,.1),0_40px_80px_rgba(0,0,0,.6)]"
+        }
       >
-        <h2 id="leave-title" className="text-[18px] font-bold">
-          保存されていない変更があります
-        </h2>
-        <p className="mt-2 text-[14px] text-ink-sub">このまま移動すると、入力した内容は失われます。</p>
-        <div className="mt-5 flex flex-col gap-3">
-          <Button ref={stayRef} onClick={() => blocker.reset()}>
+        <div aria-hidden="true" className="mx-auto mb-4 h-1 w-10 rounded-sm bg-white/[.18] lg:hidden" />
+        <div className="flex flex-col gap-1">
+          <h2 id="leave-title" className="text-[18px] font-bold lg:text-[19px]">
+            保存されていない変更があります
+          </h2>
+          <p className="text-[12px] font-medium text-ink-muted">このまま移動すると、入力した内容は失われます。</p>
+        </div>
+        <div className="mt-4 flex flex-col gap-2 lg:mt-0 lg:flex-row-reverse lg:justify-start lg:pt-1">
+          <Button ref={stayRef} onClick={() => blocker.reset()} className="lg:h-[46px] lg:w-auto lg:px-[22px] lg:text-[13px]">
             編集に戻る
           </Button>
-          <Button variant="secondary" onClick={() => blocker.proceed()}>
+          <Button variant="secondary" onClick={() => blocker.proceed()} className="lg:h-[46px] lg:w-auto lg:bg-white/[.07] lg:px-5 lg:text-[13px]">
             保存せずに移動する
           </Button>
         </div>

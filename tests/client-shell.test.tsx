@@ -107,6 +107,33 @@ describe("client shell (T005)", () => {
     expect(screen.queryByText("保存しました")).toBeNull();
     await user.click(await screen.findByRole("button", { name: "保存せずに移動する" }));
     await waitFor(() => expect(screen.queryByRole("heading", { level: 2, name: "ログイン" })).not.toBeNull());
+
+    // 503: 結果不明（保存済みでも失敗確定でもない）。400: 最初の誤り欄へフォーカス
+    cleanup();
+    renderShell("/app");
+    stubFetch(fail(503, "DEPENDENCY_UNAVAILABLE"));
+    await fillAndSave(user);
+    const unavailableText = (await screen.findByText("結果を確認できませんでした")).closest("[role=alert]")!.textContent!;
+    expect(unavailableText).toContain("二重には登録されません");
+    expect(screen.queryByText("保存しました")).toBeNull();
+    stubFetch(fail(400, "VALIDATION_ERROR", [{ field: "title", reason: "必須です" }]));
+    await user.click(screen.getByRole("button", { name: "保存する" }));
+    const firstInvalidField = screen.getByLabelText("件名");
+    await waitFor(() => expect(document.activeElement).toBe(firstInvalidField));
+    const focusedField = document.activeElement;
+    expect(focusedField).toBe(firstInvalidField);
+  });
+
+  it("the_key_survives_401_after_an_unknown_result_so_a_retry_cannot_double_register", async () => {
+    const fetchMock = stubFetch(new TypeError("Failed to fetch"), fail(401, "UNAUTHENTICATED"), ok({ id: ID }, 201));
+    const { result } = renderHook(() => useMutation("API-25"));
+    const input = { body: { title: "t", body: "b", audienceMemberIds: [ID] } };
+    await act(async () => { await result.current.run(input); }); // 応答消失（実は反映済みかもしれない）
+    await act(async () => { await result.current.run(input); }); // 再送したらセッション切れ
+    expect(result.current.state.kind).toBe("unauthenticated");
+    await act(async () => { await result.current.run(input); }); // 再ログイン後に同じ内容で再送
+    const keys = fetchMock.mock.calls.map((c) => (c[1]!.headers as Record<string, string>)["idempotency-key"]);
+    expect(new Set(keys).size).toBe(1); // 3回とも同じ鍵 → サーバーが二重登録を防げる
   });
 
   it("server_validation_error_moves_focus_to_the_first_invalid_field", async () => {
@@ -168,7 +195,8 @@ describe("client shell (T005)", () => {
     const button = screen.getByRole("button", { name: "保存する" });
     await user.click(button);
     const busy = await screen.findByRole("button", { name: "保存しています…" });
-    expect(busy.hasAttribute("disabled")).toBe(true);
+    // prototype Loading: 主色のまま操作だけ止める（aria-disabled）
+    expect(busy.getAttribute("aria-disabled")).toBe("true");
     await user.click(busy);
     await user.keyboard("{Enter}");
     release();

@@ -27,9 +27,10 @@ describe("core schema (T003)", () => {
     const adminOfA = a.people.admin.userId;
 
     // 別unit(B)として、A分団の団員へ役割を付ける → 複合FKで拒否
+    // （団員がまだ持っていない役割(operator)を使う。既存の役割だと重複UNIQUEで失敗し、FKを試せないため）
     const crossUnitInsert = run(
       "INSERT INTO member_roles (id, unit_id, member_id, role_id, granted_by, created_at, updated_at, created_by, actor_kind) VALUES (?,?,?,?,?,?,?,?,?)",
-      uuid(), b.id, memberOfA, "00000000-0000-4000-8000-000000000101", adminOfA, NOW, NOW, adminOfA, "human",
+      uuid(), b.id, memberOfA, "00000000-0000-4000-8000-000000000102", adminOfA, NOW, NOW, adminOfA, "human",
     );
     // 同じ団員×同じ役割の有効行を2件目として追加 → 部分UNIQUEで拒否（adminは既に admin role を持つ）
     const duplicateActiveRole = run(
@@ -39,9 +40,10 @@ describe("core schema (T003)", () => {
     // 比較更新が0行だったことを表す assertion(ok=0) → CHECKで拒否（0行更新を成功扱いにしない）
     const invalidAssertion = run("INSERT INTO mutation_assertions (attempt_token, seq, ok) VALUES (?,?,?)", uuid(), 1, 0);
 
-    await expect(crossUnitInsert).rejects.toThrow();
-    await expect(duplicateActiveRole).rejects.toThrow();
-    await expect(invalidAssertion).rejects.toThrow();
+    // 失敗の理由まで確かめる（列名の誤記やNOT NULL違反で「たまたま」失敗しているのではない）
+    await expect(crossUnitInsert).rejects.toThrow(/FOREIGN KEY/);
+    await expect(duplicateActiveRole).rejects.toThrow(/UNIQUE/);
+    await expect(invalidAssertion).rejects.toThrow(/CHECK constraint failed: ok = 1/);
     expect(await foreignKeyViolations()).toEqual([]);
   });
 
@@ -122,6 +124,36 @@ describe("core schema (T003)", () => {
       "INSERT INTO domain_events (id, unit_id, mutation_id, entity_type, entity_id, entity_version, event_type, payload_minimal, sequence, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
       uuid(), unit, uuid(), "member", uuid(), 1, "member.created", "{}", 1_000_001, NOW,
     )).rejects.toThrow();
+  });
+
+  it("append_only_tables_cannot_be_overwritten_with_insert_or_replace", async () => {
+    const adminA = fx.units.a.people.admin.userId;
+    const unit = fx.units.a.id;
+    const id = uuid();
+    const audit = (verb: string, action: string) => run(
+      `${verb} INTO audit_logs (id, unit_id, actor_kind, actor_user_id, action, entity_type, entity_id, mutation_id, occurred_at, metadata_json) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      id, unit, "human", adminA, action, "member", uuid(), uuid(), NOW, "{}",
+    );
+    await audit("INSERT", "original");
+    await expect(audit("INSERT OR REPLACE", "tampered")).rejects.toThrow(/append-only/);
+    expect((await fx.rows("audit_logs", { id }))[0]!.action).toBe("original");
+    const mutation = uuid();
+    const event = (verb: string, eventId: string, seq: number) => run(
+      `${verb} INTO domain_events (id, unit_id, mutation_id, entity_type, entity_id, entity_version, event_type, payload_minimal, sequence, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      eventId, unit, mutation, "member", uuid(), 1, "member.created", "{}", seq, NOW,
+    );
+    await event("INSERT", uuid(), 2_000_001);
+    // 別IDでも、同じ unit+sequence や unit+mutation_id で上書き(REPLACE)しようとすれば拒否
+    await expect(event("INSERT OR REPLACE", uuid(), 2_000_001)).rejects.toThrow(/append-only/);
+  });
+
+  it("indexes_required_by_docs_04_exist", async () => {
+    const names = async (table: string) => (await env.DB.prepare(`PRAGMA index_list(${table})`).all()).results.map((r) => String(r.name));
+    expect(await names("members")).toContain("idx_members_unit_status");
+    expect(await names("member_roles")).toContain("uq_member_roles_active");
+    expect(await names("scope_assignments")).toContain("uq_scope_assignments_active");
+    expect(await names("audit_logs")).toContain("idx_audit_unit_occurred");
+    expect(await names("jobs")).toContain("idx_jobs_due");
   });
 
   it("idempotency_records_reserve_then_complete_and_never_overwrite_key", async () => {

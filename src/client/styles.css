@@ -44,7 +44,8 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 15px;
-  line-height: 1.7;
+  /* prototype は各要素を font: 一括指定（行間 normal）で組む。本文段落だけ個別に1.6〜1.8を付ける */
+  line-height: normal;
   font-weight: 500;
   -webkit-font-smoothing: antialiased;
 }

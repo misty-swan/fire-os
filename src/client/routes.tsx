@@ -21,7 +21,7 @@ export function ScreenPlaceholder({ screen }: { screen: ScreenDef }) {
         <Chip tone="neutral" icon="construction">
           未実装
         </Chip>
-        <p className="text-[14px] text-ink-sub">{screen.summary}</p>
+        <p className="text-[14px] leading-[1.7] text-ink-sub">{screen.summary}</p>
         <p className="flex items-center gap-2 text-[13px] text-ink-muted">
           <Icon name="task_alt" className="text-[18px]" />
           この画面は{screen.phase}のタスク {screen.ownerTask} で実装します。

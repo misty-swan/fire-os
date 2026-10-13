@@ -12,7 +12,7 @@ export function PageTitle({ eyebrow, children, right, className }: { eyebrow?: s
     <div className={clsx("flex items-end justify-between gap-3", className)}>
       <div className="flex min-w-0 flex-col gap-0.5">
         {eyebrow && <span className="font-mono text-[12px] font-semibold text-ink-muted">{eyebrow}</span>}
-        <h2 className="text-[26px] font-bold leading-snug">{children}</h2>
+        <h2 className="text-[26px] font-bold leading-[1.3]">{children}</h2>
       </div>
       {right}
     </div>

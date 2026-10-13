@@ -60,6 +60,8 @@ describe("persistent jobs (T006)", () => {
     );
     expect([leaseA, leaseB].filter(Boolean)).toHaveLength(1);
     const holder = (leaseA ?? leaseB)!;
+    // 取れた側の作業権がDBに記録されたもの（後勝ちで別runnerの印に上書きされていない）
+    expect((await env.DB.prepare("SELECT lease_token FROM jobs WHERE id = ?").bind(first.id).first<{ lease_token: string }>())!.lease_token).toBe(holder.leaseToken);
 
     // --- 作業権が切れた後、古いrunnerの結果は確定できない ---
     fx.clock.advance((JOB_LIMITS.leaseSeconds + 1) * 1000);
@@ -190,6 +192,21 @@ describe("persistent jobs (T006)", () => {
     }
   });
 
+  it("handler_error_codes_are_sanitized_and_dedupe_does_not_cross_units", async () => {
+    registerJobHandler("test.leaky", async () => ({ kind: "retryable", errorCode: "SELECT * FROM users failed: secret" }));
+    registerJobHandler("test.bigref", async () => ({ kind: "succeeded", resultRef: "r".repeat(501) }));
+    const leaky = await enqueueJob(env, input({ kind: "test.leaky" }), fx.clock.now());
+    const big = await enqueueJob(env, input({ kind: "test.bigref" }), fx.clock.now());
+    const run = await runDueJobs(env, { clock: fx.clock });
+    expect(run.committed).toBe(2); // 不正な値でもループは止まらず確定できる
+    expect((await findJob(env, leaky.id))!.errorCode).toBe("invalid_error_code");
+    expect((await findJob(env, big.id))).toMatchObject({ status: "manual_review", errorCode: "invalid_result_ref" });
+    // 独自のdedupeKeyにunitが含まれていなくても、別unitのjobは返さない
+    await enqueueJob(env, input({ dedupeKey: "custom-key-1" }), fx.clock.now());
+    await expect(enqueueJob(env, input({ unitId: fx.units.b.id, requestedBy: fx.units.b.people.admin.userId, dedupeKey: "custom-key-1" }), fx.clock.now()))
+      .rejects.toThrow(/別unit/);
+  });
+
   it("a_late_runner_cannot_commit_even_before_the_reaper_runs", async () => {
     await enqueueJob(env, input(), fx.clock.now());
     const leased = (await leaseJob(env, iso()))!;
@@ -256,5 +273,9 @@ describe("GET /api/v1/jobs/:id (API-86)", () => {
     // 停止ユーザーは注入しても通らない
     const suspended = fx.units.a.people.suspended;
     expect((await get(suspended, job.id)).status).toBe(401);
+    // 分団(unit)が停止されていても通らない
+    await env.DB.prepare("UPDATE units SET status = 'disabled' WHERE id = ?").bind(fx.units.a.id).run();
+    expect((await get(fx.units.a.people.admin, job.id)).status).toBe(401);
+    await env.DB.prepare("UPDATE units SET status = 'active' WHERE id = ?").bind(fx.units.a.id).run();
   });
 });

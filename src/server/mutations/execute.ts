@@ -27,7 +27,10 @@ export interface RootGuard {
   expectedVersion: number;
 }
 
-/** root以外の追加検査（対象ユーザーの認可版など）。偽なら failCode で失敗させる。 */
+/**
+ * root以外の前提条件（対象ユーザーの認可版など）。**業務書込の前の状態**で評価する（batchの先頭側に置く）。
+ * 偽なら failCode で失敗させる。失敗後の判定(diagnose)も取消後=書込前の状態で同じSQLを評価するので結果が一致する。
+ */
 export interface ExtraCondition {
   existsSql: string;
   binds: unknown[];
@@ -75,11 +78,17 @@ export const IDEMPOTENCY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const MAX_AUDIT_BYTES = 1024;
 
+/** 監査/outboxに入れてよい文字列: ID・コード・状態名の形だけ（氏名・本文などの自由文を入れられないようにする） */
+const CODE_LIKE = /^[A-Za-z0-9_.:-]{0,100}$/;
+
 function assertSmallPrimitives(label: string, value: Record<string, unknown> | undefined) {
   if (!value) return;
   for (const [k, v] of Object.entries(value)) {
     const ok = v === null || ["string", "number", "boolean"].includes(typeof v);
     if (!ok) throw new Error(`${label} は値に入れ子や配列を持てません: ${k}`);
+    if (typeof v === "string" && !CODE_LIKE.test(v)) {
+      throw new Error(`${label}.${k} にはID・コード形式の値だけを入れてください（本文や氏名を複製しない）`);
+    }
   }
   if (new TextEncoder().encode(JSON.stringify(value)).byteLength > MAX_AUDIT_BYTES) {
     throw new Error(`${label} が${MAX_AUDIT_BYTES}バイトを超えています。本文を複製せずIDだけを入れてください`);
@@ -118,6 +127,8 @@ async function resolveExisting<T>(
   rec: IdempotencyRow,
   nowIso: string,
 ): Promise<MutationResult<T>> {
+  // 失権後に旧レスポンス（個人情報を含み得る）を返さず、鍵の存在や本文の違いも明かさない。認可を最初に確かめる
+  if (!(await principalIsCurrent(env, p, spec.expectedAuthzVersion))) throw new HttpError("FORBIDDEN");
   if (rec.canonical_request_hash !== spec.requestHash) throw new HttpError("IDEMPOTENCY_MISMATCH");
   // 期限後は暗黙に再実行しない。人が結果を確認して新しい操作を作る（docs/05 §2）
   if (rec.state === "expired" || rec.expires_at <= nowIso) {
@@ -126,8 +137,6 @@ async function resolveExisting<T>(
   if (rec.state !== "completed" || rec.response_status === null || rec.response_json === null) {
     throw new HttpError("INTERNAL_ERROR");
   }
-  // 失権後に旧レスポンス（個人情報を含み得る）を返さない
-  if (!(await principalIsCurrent(env, p, spec.expectedAuthzVersion))) throw new HttpError("FORBIDDEN");
   return {
     status: rec.response_status as 200 | 201,
     data: spec.response.decode(JSON.parse(rec.response_json)),
@@ -137,7 +146,7 @@ async function resolveExisting<T>(
 
 /**
  * 更新・冪等・監査・outboxを一つのD1 batchで確定する（docs/02 §4）。
- * batch内の順序: 認可版検査 → 冪等予約 → 業務書込(比較更新) → root検査 → 追加検査 → 監査 →
+ * batch内の順序: 認可版検査 → 冪等予約 → 前提条件(conditions) → 業務書込(比較更新) → root検査 → 監査 →
  * unit連番増分＋event → 連番検査 → 冪等確定(応答をSQLで組立) → 検査行の掃除 → 応答読出し。
  * どこかが失敗すればbatch全体が取り消される。失敗の理由は取消後の状態を読み直して判別する。
  */
@@ -180,23 +189,24 @@ export async function executeMutation<T>(
         "VALUES (?, ?, ?, ?, ?, ?, 'reserved', ?, ?)",
       recordId, principal.unitId, principal.userId, spec.operationCode, spec.key, spec.requestHash, nowIso, expiresAt,
     ),
-    // (c) 業務書込（rootの比較更新を含む）
+    // (c) 前提条件。書込前の状態で評価する
+    ...(spec.conditions ?? []).map((c) => assertion(c.existsSql, ...c.binds)),
+    // (d) 業務書込（rootの比較更新を含む）
     ...spec.statements(ctx),
   ];
-  // (d) 比較更新が本当に1行に効いたこと（0行更新を成功扱いにしない）
+  // (e) 比較更新が本当に1行に効いたこと（0行更新を成功扱いにしない）
   for (const r of spec.roots) {
     stmts.push(assertion(rootUpdatedExistsSql(r.table), r.id, principal.unitId, r.expectedVersion + 1, ctx.attempt));
   }
-  for (const c of spec.conditions ?? []) stmts.push(assertion(c.existsSql, ...c.binds));
   stmts.push(
-    // (e) 監査（成功時のみ。本文は複製せずIDと短い値だけ）
+    // (f) 監査（成功時のみ。本文は複製せずIDと短い値だけ）
     prep(
       "INSERT INTO audit_logs (id, unit_id, actor_kind, actor_user_id, action, entity_type, entity_id, mutation_id, occurred_at, metadata_json) " +
         "VALUES (?, ?, 'human', ?, ?, ?, ?, ?, ?, ?)",
       newId(), principalUnit(principal), principal.userId, spec.audit.action, spec.audit.entityType, spec.audit.entityId,
       ctx.mutationId, nowIso, JSON.stringify(spec.audit.metadata ?? {}),
     ),
-    // (f) unitの連番を1増やし、同じ値でoutbox(domain_events)へ。一mutation一event
+    // (g) unitの連番を1増やし、同じ値でoutbox(domain_events)へ。一mutation一event
     prep("UPDATE units SET event_sequence = event_sequence + 1 WHERE id = ?", principal.unitId),
     prep(
       "INSERT INTO domain_events (id, unit_id, mutation_id, entity_type, entity_id, entity_version, event_type, payload_minimal, sequence, created_at) " +
@@ -208,12 +218,12 @@ export async function executeMutation<T>(
       "SELECT 1 FROM domain_events e JOIN units u ON u.id = e.unit_id WHERE e.unit_id = ? AND e.mutation_id = ? AND e.sequence = u.event_sequence",
       principal.unitId, ctx.mutationId,
     ),
-    // (g) 冪等の確定。応答JSONはここでSQLが組み立てる（batch途中でJSへ値を戻せないため）
+    // (h) 冪等の確定。応答JSONはここでSQLが組み立てる（batch途中でJSへ値を戻せないため）
     prep(
       `UPDATE idempotency_records SET state = 'completed', response_status = ?, response_json = (${spec.response.sql}) WHERE id = ? AND state = 'reserved'`,
       spec.response.status, ...(spec.response.binds ?? []), recordId,
     ),
-    // (h) 検査行の掃除と、保存した応答の読出し
+    // (i) 検査行の掃除と、保存した応答の読出し
     prep("DELETE FROM mutation_assertions WHERE attempt_token = ?", ctx.attempt),
     prep("SELECT response_json FROM idempotency_records WHERE id = ?", recordId),
   );
@@ -233,7 +243,9 @@ const principalUnit = (p: Principal) => p.unitId;
 
 /**
  * batchが失敗した後（全て取り消し済み）の状態を読み直し、理由を判別する。
- * 競合/権限/対象なし/同じ鍵の勝者がいる、のどれでもなければ内部障害として扱い、409に偽装しない。
+ *  権限 → 403 / 同じ鍵の勝者 → その結果 / root無し・別unit → 404 / 版違い → 409 / 前提条件 → failCode /
+ *  版は合っているのに比較更新が0行（状態の条件が外れた）→ 422 INVALID_TRANSITION / 業務表のUNIQUE違反 → 409 DUPLICATE。
+ * どれでもなければ内部障害として扱い、409に偽装しない。
  */
 async function diagnose<T>(
   env: Pick<AppEnv, "DB">,
@@ -261,7 +273,24 @@ async function diagnose<T>(
     if (!ok) throw new HttpError(c.failCode ?? "VERSION_CONFLICT");
   }
 
+  const message = String(err);
+  // 版は一致しているのに検査(ok=1)が落ちた＝rootのUPDATEの追加条件（許可された前の状態など）が成り立たなかった
+  if (message.includes("CHECK constraint failed: ok = 1")) throw new HttpError("INVALID_TRANSITION");
+  // 業務表の一意制約（冪等表は上で勝者として処理済み）
+  if (message.includes("UNIQUE constraint failed") && !message.includes("idempotency_records")) throw new HttpError("DUPLICATE");
+
   // 理由が見つからない失敗は業務上の競合ではない。内部障害として扱う（詳細はログのみ）
   console.error(JSON.stringify({ operation: spec.operationCode, error: String(err) }));
   throw new HttpError("INTERNAL_ERROR");
+}
+
+/**
+ * 保持期間(7日)を過ぎた冪等レコードは、応答本文(個人情報を含み得る)を消して expired にする。
+ * 鍵とhashは残すので、期限後の同じ鍵の再送は再実行されず拒否される（docs/04・D21）。Cronから呼ぶ。
+ */
+export async function expireIdempotencyRecords(env: Pick<AppEnv, "DB">, nowIso: string): Promise<number> {
+  const res = await env.DB.prepare(
+    "UPDATE idempotency_records SET state = 'expired', response_status = NULL, response_json = NULL WHERE state = 'completed' AND expires_at <= ?",
+  ).bind(nowIso).run();
+  return res.meta.changes ?? 0;
 }

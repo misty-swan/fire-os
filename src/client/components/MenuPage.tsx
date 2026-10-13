@@ -34,7 +34,7 @@ export function MenuPage() {
         ))}
       </ul>
       {/* ログアウトはAPI-36(認証)が必要。PH1(T010)で接続するまで押せない */}
-      <Button variant="secondary" disabled title="ログインの実装(PH1)後に使えます" className="bg-white/5 text-ink-sub">
+      <Button variant="secondary" disabled title="ログインの実装(PH1)後に使えます" className="!bg-white/5 !text-[14px] !text-ink-sub">
         <Icon name="logout" className="text-[19px]" />
         ログアウト
       </Button>

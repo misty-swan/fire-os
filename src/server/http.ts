@@ -70,16 +70,42 @@ export function ok<T>(c: Ctx, data: T, meta: { nextCursor?: string; snapshotRevi
   return c.json({ data, meta: { requestId: c.get("requestId"), ...meta } }, status);
 }
 
+const tooLarge = () => new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "payload_too_large" }]);
+
+/**
+ * 本文を上限まで逐次読む。content-lengthが無い(chunked)送信でも、上限を超えた時点で読むのをやめる
+ * （全部をメモリに載せてから判定すると、巨大な本文でWorkerのメモリ上限に達しHTMLのエラーになるため）。
+ */
+async function readCapped(c: Ctx): Promise<string> {
+  const length = Number(c.req.header("content-length") ?? "0");
+  if (length > LIMITS.jsonBytesMax) throw tooLarge();
+  const body = c.req.raw.body;
+  if (!body) return "";
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > LIMITS.jsonBytesMax) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(total);
+  let offset = 0;
+  for (const ch of chunks) {
+    all.set(ch, offset);
+    offset += ch.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+
 /** JSON本文を読む。256KiB超・JSONでない・壊れたJSONは400 VALIDATION_ERROR。 */
 export async function readJsonBody(c: Ctx): Promise<unknown> {
-  const length = Number(c.req.header("content-length") ?? "0");
-  if (length > LIMITS.jsonBytesMax) {
-    throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "payload_too_large" }]);
-  }
-  const text = await c.req.text();
-  if (new TextEncoder().encode(text).byteLength > LIMITS.jsonBytesMax) {
-    throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "payload_too_large" }]);
-  }
+  const text = await readCapped(c);
   if (text === "") return undefined;
   try {
     return JSON.parse(text);
@@ -96,8 +122,21 @@ export async function parseApiRequest<I extends ApiId>(c: Ctx, id: I): Promise<P
   const shape = (apiDef(id).request as unknown as { shape?: Record<string, unknown> }).shape ?? {};
   const input: Record<string, unknown> = {};
   if ("params" in shape) input.params = c.req.param();
-  if ("query" in shape) input.query = c.req.query();
-  if ("body" in shape) input.body = await readJsonBody(c);
+  const query = c.req.query();
+  if ("query" in shape) input.query = query;
+  else if (Object.keys(query).length > 0) {
+    // 契約に無いqueryは無視せず拒否する（未知の入力は受け付けない）
+    throw new HttpError("VALIDATION_ERROR", undefined, Object.keys(query).map((k) => ({ field: `query.${k}`, reason: "unknown_field" })));
+  }
+  if ("body" in shape) {
+    const type = c.req.header("content-type") ?? "";
+    if (!type.toLowerCase().startsWith("application/json")) {
+      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(content-type)", reason: "application/json が必要です" }]);
+    }
+    input.body = await readJsonBody(c);
+  } else if ((await readCapped(c)) !== "") {
+    throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "unknown_field" }]);
+  }
   if ("headers" in shape) input.headers = Object.fromEntries(c.req.raw.headers.entries());
   return parseRequest(id, input);
 }
