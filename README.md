@@ -1,6 +1,6 @@
 # FireOS 設計ドキュメント v0.3
 
-2026-10-13 / 設計ドラフト・未承認。PH0（共通基盤）実装・検証済み、業務機能は未実装（docs/evidence/ph0.md）。消防団1分団（30名未満）の総合管理Webアプリ。Cloudflare中心、Google Maps、Jev/LLM/PWAを業務へ統合する。
+2026-10-13 / 設計ドラフト・未承認。PH0（共通基盤）・PH1（認証/名簿/権限/監査）実装済み（docs/evidence/ph0.md、ph1.md）。PH1の実Cloudflare検証（V01）は未実施。消防団1分団（30名未満）の総合管理Webアプリ。Cloudflare中心、Google Maps、Jev/LLM/PWAを業務へ統合する。
 
 
 **設計書の改訂は完了。消防団への実運用の提案・了承は、完成後に確認する。現段階の文書作成/架空データ検証を止める条件にはしない。アプリの実装・試験・正式運用承認とは区別する。**
@@ -48,7 +48,7 @@ v0.2の54要件ID/本文/受入を保全：機能41＋非機能10＝51件は初�
 
 ## 実装の着手先
 
-[ロードマップ](docs/09_ロードマップ・未決事項.md)と[実装タスク一覧](docs/16_実装タスク一覧.md)に作業を分解済み。**PH0（T001〜T006）は実装・検証済み**（Workers/React基盤、101 API契約、D1共通表と原子更新、スマホ用shell、永続ジョブ。証跡は[docs/evidence/ph0.md](docs/evidence/ph0.md)）。次はPH1のT007から。PH1以降は未着手で、完成後に消防団へ提案する順序を維持する。
+[ロードマップ](docs/09_ロードマップ・未決事項.md)と[実装タスク一覧](docs/16_実装タスク一覧.md)に作業を分解済み。**PH0（T001〜T006）は実装・検証済み**（Workers/React基盤、101 API契約、D1共通表と原子更新、スマホ用shell、永続ジョブ。証跡は[docs/evidence/ph0.md](docs/evidence/ph0.md)）。**PH1（T007〜T014）は局所で実装・検証済み**（認証・招待・MFA・名簿・権限・停止・監査。証跡は[docs/evidence/ph1.md](docs/evidence/ph1.md)、実Cloudflare上のV01は未実施＝[V01-auth.md](docs/evidence/V01-auth.md)）。次はPH2のT015から。PH2以降は未着手で、完成後に消防団へ提案する順序を維持する。
 
 開発コマンド: `npm ci` / `npm run typecheck` / `npm run check:contracts` / `npx vitest --run`（Workers試験とclient試験）/ `npm run test:e2e`（要`npx playwright install chromium`）/ `npm run build` / `npm run dev`。
 
