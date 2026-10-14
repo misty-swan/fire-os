@@ -5,6 +5,7 @@ import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../htt
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { enqueueJobStatement } from "../jobs/store";
+import "../jobs/handlers/attachment"; // 検査job handlerの登録（Cron/Queueと同じ登録点）
 import { requirePermission } from "../routes/invitations";
 import { resolvePrincipal } from "../auth/principal";
 import {
