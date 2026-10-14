@@ -156,7 +156,7 @@ export const gisApis = {
   "API-53": defineApi({
     method: "POST", path: "/facilities/imports", permission: "PER-03", kind: "job", success: [202],
     request: obj({ body: obj({ csvAttachmentId: Id, templateVersion: ShortText }), ...IDEM }),
-    response: provisionalDto(), provisional: true,
+    response: obj({ id: Id, jobId: Id }),
   }),
   "API-54": defineApi({
     method: "POST", path: "/facilities/imports/:id/commit", permission: "PER-03", kind: "job", success: [200, 202],

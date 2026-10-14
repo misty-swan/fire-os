@@ -11635,7 +11635,7 @@
         "summary": "API-53 POST /facilities/imports",
         "x-permission": "PER-03",
         "x-kind": "job",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "idempotency-key",
@@ -11668,17 +11668,16 @@
                           "type": "string",
                           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                         },
-                        "version": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "maximum": 9007199254740991
+                        "jobId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "jobId"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
