@@ -119,6 +119,22 @@ export async function planAttachmentLinks(
   const statements = (ctx: MutationContext): D1PreparedStatement[] => {
     const stmts: D1PreparedStatement[] = [];
     if (sensitiveTarget) {
+      // 移動セマンティクス: sensitiveの対象へリンクするときは、同じ添付の他の有効リンクを先に外す
+      // （写真の所在を1つの対象へ決定論化。jobの自動リンクで施設へ付いた写真を点検保存で移す等。docs/10 §3。
+      //   自動リンクの移動のための無条件DELETEで、手動のunlink（tombstone）の規則は適用しない。
+      //   条件（ready検査）が同じbatchの前提で通っているため、INSERTが0行のままリンクだけ消えることはない）
+      if (input.draftId) {
+        stmts.push(
+          env.DB.prepare(
+            "DELETE FROM attachment_links WHERE unit_id = ? AND unlinked_at IS NULL AND attachment_id IN (SELECT id FROM attachments WHERE draft_id = ? AND unit_id = ?)",
+          ).bind(unitId, input.draftId, unitId),
+        );
+      }
+      for (const id of ids) {
+        stmts.push(
+          env.DB.prepare("DELETE FROM attachment_links WHERE attachment_id = ? AND unit_id = ? AND unlinked_at IS NULL").bind(id, unitId),
+        );
+      }
       // basicの添付をsensitiveへ引き上げる（引下げはしない。docs/10 §4と矛盾しない）
       if (input.draftId) {
         stmts.push(

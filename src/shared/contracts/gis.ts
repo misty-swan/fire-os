@@ -130,8 +130,10 @@ export const gisApis = {
     request: obj({
       params: P_ID,
       // 座標/出典の変更は位置確認を失効させる（サーバー側）。null可は04で?の列だけ。
+      // attachmentIds/attachmentDraftIdは変更では受け付けない（編集画面のuploaderは検査の完了時に直リンク。
+      // 添付の変更はunlinkと再アップロードで行う。送った場合は未知列の400）
       body: obj({
-        ...obj(facilityShape).partial().shape,
+        ...obj(facilityShape).omit({ attachmentIds: true, attachmentDraftId: true }).partial().shape,
         managementNumber: Code100.nullable().optional(),
         identifyingName: Code100.nullable().optional(),
         version: Version,

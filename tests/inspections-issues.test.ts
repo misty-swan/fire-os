@@ -66,6 +66,34 @@ async function makeUploaded(who: Identity, intended: string): Promise<string> {
   return intent.id;
 }
 
+/** 既存の業務対象を直targetにしたintent（SCR-06のuploaderと同じ経路）。転送と完了まで進める */
+async function makeUploadedTo(who: Identity, target: { type: "facility"; id: string }): Promise<string> {
+  const iRes = await fx.client(who).request(
+    "POST", "/api/v1/attachments/upload-intents",
+    { target, contentType: "image/png", byteSize: 100 }, idem(),
+  );
+  const intent = (await json(iRes)).data! as { id: string; uploadToken: string };
+  const bytes = pngBytes();
+  const up = await fx.raw(who)(new Request(`http://example.com/api/v1/attachments/${intent.id}/upload`, {
+    method: "PUT", headers: { "content-type": "application/octet-stream", "x-upload-token": intent.uploadToken }, body: bytes as BufferSource,
+  }));
+  const attempt = (await json(up)).data! as { id: string; sha256: string };
+  await fx.client(who).request("POST", `/api/v1/attachments/${intent.id}/completion`, { version: 1, uploadAttemptId: attempt.id, sha256: attempt.sha256 }, idem());
+  return intent.id;
+}
+
+/** 検査jobをもう一度走らせる（checkingへ戻して専用のdedupe keyで再登録。docs/07 §3.4の再入経路） */
+async function rerunInspectJob(unitId: string, attachmentId: string) {
+  const version = (await fx.rows("attachments", { id: attachmentId }))[0]!.version as number;
+  await env.DB.prepare("UPDATE attachments SET status = 'checking' WHERE id = ?").bind(attachmentId).run();
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    "INSERT INTO jobs (id, unit_id, kind, source_type, source_id, source_version, config_version, dedupe_key, status, attempts, max_attempts, next_attempt_at, created_at, updated_at) " +
+      "VALUES (?, ?, 'attachment.inspect', 'attachment', ?, ?, 'v1', ?, 'queued', 0, 3, ?, ?, ?)",
+  ).bind(crypto.randomUUID(), unitId, attachmentId, version, `${unitId}|attachment.inspect|rerun-${attachmentId}`, now, now, now).run();
+  await runDueJobs(env);
+}
+
 interface TemplateRef {
   templateId: string;
   facilityVersionId: string;
@@ -501,6 +529,44 @@ describe("点検と異常 (T029〜T032)", () => {
     expect(((await json(notReady)).error?.code)).toBe("ATTACHMENT_NOT_READY");
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>())!.n).toBe(beforeIssues);
     expect(await fx.rows("attachment_links", { attachment_id: uninspectedId })).toHaveLength(0);
+  });
+
+  it("facility_autolinked_photo_moves_to_inspection_on_save", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+
+    // SCR-06のuploaderと同じ直target（既存施設）の写真は、検査jobの確定で施設へ自動リンクされる
+    const photoId = await makeUploadedTo(admin, { type: "facility", id: facilityId });
+    await runDueJobs(env);
+    expect((await fx.rows("attachments", { id: photoId }))[0]!.status).toBe("ready");
+    const autoLinks = await fx.rows("attachment_links", { attachment_id: photoId });
+    expect(autoLinks).toHaveLength(1);
+    expect(autoLinks[0]!.entity_type).toBe("facility");
+    expect(autoLinks[0]!.entity_id).toBe(facilityId);
+
+    // その写真をattachmentIds付きの点検保存に渡すと、施設リンクが外れて点検リンク1本へ移動する
+    // （sensitiveの写真が施設の一覧に出ない。jobと保存のどちらが先でも最終状態を点検1本に決定論化。docs/10 §3）
+    const res = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { attachmentIds: [photoId] }), idem(),
+    );
+    expect(res.status).toBe(201);
+    const inspection = (await json(res)).data! as { id: string };
+    const links = await fx.rows("attachment_links", { attachment_id: photoId });
+    expect(links).toHaveLength(1); // 有効リンクは点検の1本だけ（施設には残らない）
+    expect(links[0]!.entity_type).toBe("inspection");
+    expect(links[0]!.entity_id).toBe(inspection.id);
+    expect(links[0]!.unlinked_at).toBeNull();
+    expect((await fx.rows("attachments", { id: photoId }))[0]!.classification).toBe("sensitive");
+
+    // 逆順（保存が先）も決定論: 点検へリンク済みの添付を検査jobが再確定しても施設リンクは作らない
+    await rerunInspectJob(a.id, photoId);
+    expect((await fx.rows("attachments", { id: photoId }))[0]!.status).toBe("ready");
+    const afterRerun = await fx.rows("attachment_links", { attachment_id: photoId });
+    expect(afterRerun).toHaveLength(1);
+    expect(afterRerun[0]!.entity_type).toBe("inspection");
   });
 
   it("inspection_note_limits_follow_the_db_checks", async () => {

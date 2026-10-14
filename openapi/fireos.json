@@ -4122,18 +4122,6 @@
                     },
                     "additionalProperties": {}
                   },
-                  "attachmentIds": {
-                    "maxItems": 100,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                    }
-                  },
-                  "attachmentDraftId": {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                  },
                   "version": {
                     "type": "integer",
                     "minimum": 1,

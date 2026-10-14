@@ -7,7 +7,7 @@
 |---|---|---|
 | 型検査 | `npm run typecheck` | 成功 |
 | 契約検査 | `npm run check:contracts` | 101 API / docs/05 101行 / OpenAPI一致 |
-| 単体・結合試験 | `npx vitest --run` | 22ファイル146件成功（workers＝実workerd＋D1/R2/Queues、client＝jsdom。試験強化コミット 65b38f1 の後） |
+| 単体・結合試験 | `npx vitest --run` | 22ファイル146件成功（workers＝実workerd＋D1/R2/Queues、client＝jsdom。試験強化コミット 65b38f1 の後）→ **レビューサイクル後は166件**（docs/evidence/ph2-review.md。失敗テスト先行で追加） |
 | ブラウザ試験 | `npx playwright test` | 44件成功＋1件スキップ（スマホ専用試験をPC幅で除外）。setup（管理者招待→MFAで作成）＋shell/auth/member-admin/audit/attachments/map/facility-location/csv/assets/inspection-templates/inspection/issues を 360px と 1280px の両プロジェクトで実行 |
 | ビルド | `npm run build` | 成功 |
 | 実環境の試験 | `npm run test:live` | **未実施（環境未設定のため失敗＝未実施の記録）** |

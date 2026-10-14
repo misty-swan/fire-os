@@ -61,9 +61,15 @@ export function registerFacilityWriteRoutes(app: ApiApp): void {
     const { body, headers } = await parseApiRequest(c, "API-11");
     requirePermission(p, "PER-03", { unitId: p.unitId, type: "facility" });
     const id = crypto.randomUUID();
-    // 添付の予約があれば、施設の作成と同じbatchで消費してリンクする（T017）
-    const link = body.attachmentDraftId
-      ? await planAttachmentLinks(c.env, p.unitId, p.userId, { target: { type: "facility", id }, draftId: body.attachmentDraftId, targetCreatedInBatch: true })
+    // 添付の予約（draftId）とready添付の個別指定（attachmentIds。docs/05 API-11。draftIdと併用可）を、
+    // 施設の作成と同じbatchで消費/リンクする（T017）
+    const link = body.attachmentDraftId || (body.attachmentIds?.length ?? 0) > 0
+      ? await planAttachmentLinks(c.env, p.unitId, p.userId, {
+          target: { type: "facility", id },
+          draftId: body.attachmentDraftId,
+          attachmentIds: body.attachmentIds,
+          targetCreatedInBatch: true,
+        })
       : null;
     const result = await executeMutation(c.env, p, {
       operationCode: "facility.create",

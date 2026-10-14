@@ -63,7 +63,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-10 | GET /facilities | PER-01 | FacilityQuery;範囲/型/状態を別検証 | SnapshotPage<Facility> |
 | API-11 | POST /facilities | PER-03 | FacilityInput;番号か識別名必須/出典/座標 | Facility |
 | API-12 | GET /facilities/:id | PER-01 | なし;概要と履歴取得cursor/添付ID | FacilityDetail |
-| API-13 | PATCH /facilities/:id | PER-03 | version,変更列;座標/出典変更は確認失効 | Facility |
+| API-13 | PATCH /facilities/:id | PER-03 | version,変更列;座標/出典変更は確認失効。**添付の変更はこのAPIでは行わない（attachmentIds/attachmentDraftIdは受理しない。 unlink＋再アップロードで行う）** | Facility |
 | API-14 | POST /facilities/:id/inspections | PER-04 | InspectionInput;様式/明細/添付ready/実施者 | Inspection |
 | API-15 | GET /issues | PER-01 | targetType/targetId/status/assigneeMemberId/limit/cursor | Page<Issue> |
 | API-16 | POST /issues | PER-04 | Target,title,description,originInspectionId?,attachmentIds;起点一致 | Issue |

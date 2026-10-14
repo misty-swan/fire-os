@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+import "../src/server/jobs/handlers/attachment"; // 検査jobの登録（ready添付を作るため）
+import { runDueJobs } from "../src/server/jobs/runner";
 import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
 
 let fx: TestFixture;
@@ -29,6 +31,56 @@ const get = (who: Identity, id: string) => fx.client(who).request("GET", `/api/v
 const patch = (who: Identity, id: string, body: Record<string, unknown>) => fx.client(who).request("PATCH", `/api/v1/facilities/${id}`, body, idem());
 const review = (who: Identity, id: string, body: Record<string, unknown>) => fx.client(who).request("POST", `/api/v1/facilities/${id}/location-reviews`, body, idem());
 const ver = async (id: string) => (await fx.rows("facilities", { id }))[0]!.version as number;
+
+/** 検査を通る最小のPNG（eXIf等なし。内容の検査そのものはT016） */
+const pngBytes = () => {
+  const magic = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  let table: number[] = [];
+  const crc32 = (bytes: Uint8Array) => {
+    if (!table.length) {
+      for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; table[n] = c >>> 0; }
+    }
+    let c = 0xffffffff;
+    for (const b of bytes) c = table[(c ^ b) & 0xff]! ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Uint8Array) => {
+    const out = new Uint8Array(12 + data.length);
+    new DataView(out.buffer).setUint32(0, data.length);
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    out.set(data, 8);
+    new DataView(out.buffer).setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+    return out;
+  };
+  const ihdr = new Uint8Array(13);
+  new DataView(ihdr.buffer).setUint32(0, 1);
+  new DataView(ihdr.buffer).setUint32(4, 1);
+  ihdr.set([8, 6, 0, 0, 0], 8);
+  const parts = [magic, chunk("IHDR", ihdr), chunk("IDAT", new Uint8Array([0x78, 0x9c, 0x63, 0x60, 0x60, 0x60, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01])), chunk("IEND", new Uint8Array(0))];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+};
+
+/** 添付を予約→転送→完了まで進める。runDueJobs後にreadyになる（予約は消費しない個別リンクの試験に使う） */
+async function makeUploaded(who: Identity): Promise<string> {
+  const dRes = await fx.client(who).request("POST", "/api/v1/attachment-drafts", { intendedEntityType: "facility" }, idem());
+  const draft = (await json(dRes)).data! as { id: string };
+  const bytes = pngBytes();
+  const iRes = await fx.client(who).request(
+    "POST", "/api/v1/attachments/upload-intents",
+    { target: { type: "attachment_draft", id: draft.id }, contentType: "image/png", byteSize: bytes.byteLength }, idem(),
+  );
+  const intent = (await json(iRes)).data! as { id: string; uploadToken: string };
+  const up = await fx.raw(who)(new Request(`http://example.com/api/v1/attachments/${intent.id}/upload`, {
+    method: "PUT", headers: { "content-type": "application/octet-stream", "x-upload-token": intent.uploadToken }, body: bytes as BufferSource,
+  }));
+  const attempt = (await json(up)).data! as { id: string; sha256: string };
+  await fx.client(who).request("POST", `/api/v1/attachments/${intent.id}/completion`, { version: 1, uploadAttemptId: attempt.id, sha256: attempt.sha256 }, idem());
+  return intent.id;
+}
 
 describe("施設の台帳と位置確認 (T019)", () => {
   it("coordinate_edit_invalidates_only_location_confirmation", async () => {
@@ -149,5 +201,48 @@ describe("施設の台帳と位置確認 (T019)", () => {
     const audits = await fx.rows("audit_logs", { entity_id: f.id });
     expect(audits.length).toBeGreaterThanOrEqual(3);
     void NOW;
+  });
+
+  it("create_links_ready_attachmentIds_and_patch_rejects_attachment_fields", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+
+    // ready添付（予約経由で作り検査jobでreadyへ。attachmentIdsの個別リンクは予約を消費しない）
+    const readyId = await makeUploaded(admin);
+    await runDueJobs(env);
+    expect((await fx.rows("attachments", { id: readyId }))[0]!.status).toBe("ready");
+    expect(await fx.rows("attachment_links", { attachment_id: readyId })).toHaveLength(0);
+
+    // 施設の作成と同じ確定でready添付をリンクする（docs/05 API-11 attachmentIds。draftIdと併用も可）
+    const made = await create(admin, {
+      type: "hydrant", latitude: 35.001, longitude: 139.001,
+      locationSource: "架空市台帳", locationNote: "写真つきで登録",
+      managementNumber: "A-1001", attachmentIds: [readyId],
+    });
+    expect(made.status).toBe(201);
+    const facilityId = (made.body.data as { id: string }).id;
+    const links = await fx.rows("attachment_links", { attachment_id: readyId });
+    expect(links).toHaveLength(1);
+    expect(links[0]!.entity_type).toBe("facility");
+    expect(links[0]!.entity_id).toBe(facilityId);
+    expect(links[0]!.unlinked_at).toBeNull();
+
+    // 未検査（ready前）の添付は422で、施設も作られない（docs/07 §3.5「添付は業務と同時に確定」）
+    const uninspectedId = await makeUploaded(admin);
+    const failed = await create(admin, {
+      type: "hydrant", latitude: 35.002, longitude: 139.002,
+      locationSource: "x", locationNote: "x", managementNumber: "A-1002", attachmentIds: [uninspectedId],
+    });
+    expect(failed.status).toBe(422);
+    expect(failed.body.error?.code).toBe("ATTACHMENT_NOT_READY");
+    expect(await fx.rows("facilities", { management_number: "A-1002" })).toHaveLength(0);
+
+    // 変更（API-13）はattachment列を受け付けない（編集画面のuploaderは検査完了時に直リンク。未処理列は未知列の400）
+    const patchRes = await patch(admin, facilityId, { version: await ver(facilityId), locationNote: "表示位置を修正", attachmentIds: [readyId] });
+    expect(patchRes.status).toBe(400);
+    expect((await json(patchRes)).error?.code).toBe("VALIDATION_ERROR");
+    const patchDraft = await patch(admin, facilityId, { version: await ver(facilityId), locationNote: "表示位置を修正", attachmentDraftId: crypto.randomUUID() });
+    expect(patchDraft.status).toBe(400);
+    expect((await json(patchDraft)).error?.code).toBe("VALIDATION_ERROR");
   });
 });

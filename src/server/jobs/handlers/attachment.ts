@@ -92,15 +92,17 @@ export async function inspectUpload(job: LeasedJob, env: AppEnv): Promise<JobOut
   const linkStatement = linkTable
     ? env.DB.prepare(
         // insertLinkSql(false)と同じ形: sensitiveは基本の対象へリンクしない（docs/10。分類の引下げもしない）。
-        // NOT EXISTSで二重リンクを防ぎ（二重の検査jobでも1本）、対象が同unitに存在しなければ0行＝スキップする
+        // NOT EXISTSは「有効リンクが1本も無い」こと（同対象だけではない。点検保存が先に点検へリンクしていたら
+        // 施設へはリンクしない。job→保存/保存→jobのどちらでも最終状態を1本へ決定論化。docs/07 §3.5）。
+        // 対象が同unitに存在しなければ0行＝スキップする
         insertLinkSql(false) +
-          "a.id = ? AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id AND l.entity_type = ? AND l.entity_id = ? AND l.unlinked_at IS NULL) " +
+          "a.id = ? AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id AND l.unlinked_at IS NULL) " +
           `AND EXISTS (SELECT 1 FROM ${linkTable} t WHERE t.id = ? AND t.unit_id = ?)`,
       ).bind(
         crypto.randomUUID(), att.unit_id, att.intent_target_type, att.intent_target_id,
         // リンクしたのは添付の所有者（intentを作った人）
         att.owner_user_id, nowIso, nowIso, att.owner_user_id, att.unit_id,
-        att.id, att.intent_target_type, att.intent_target_id, att.intent_target_id, att.unit_id,
+        att.id, att.intent_target_id, att.unit_id,
       )
     : null;
   const finalize = await env.DB.batch([

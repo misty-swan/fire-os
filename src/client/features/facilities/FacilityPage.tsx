@@ -61,9 +61,9 @@ export function FacilityPage() {
       } catch {
         if (alive) setFacility("notfound");
       }
-      // この施設の未終了の異常（API-15。閉じているものは枠に出さない）
+      // この施設の未終了の異常（API-15。limit: 200で既定50の打ち切りを避ける。閉じているものは枠に出さない）
       try {
-        const issues = (await api("API-15", { query: { targetType: "facility", targetId: id } })) as unknown as {
+        const issues = (await api("API-15", { query: { targetType: "facility", targetId: id, limit: 200 } })) as unknown as {
           id: string; title: string; status: string;
         }[];
         if (alive) setOpenIssues(issues.filter((i) => i.status !== "closed"));

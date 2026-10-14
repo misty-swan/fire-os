@@ -75,10 +75,11 @@ export async function commitImport(job: LeasedJob, env: AppEnv): Promise<JobOutc
                 "version = version + 1, last_mutation_token = ?, updated_at = ? " +
                 "WHERE id = ? AND unit_id = ? AND version = ?",
             ).bind(n.latitude, n.longitude, n.locationSource, n.locationNote, `import:${batch.id}`, nowIso, existing.id, batch.unit_id, existing.version),
-            // 更新が本当に1行に効いたこと（0行更新を成功扱いにしない。docs/02 §4と同じ比較更新の検査）
+            // 更新が本当に1行に効いたこと（0行更新を成功扱いにしない。docs/02 §4と同じ比較更新の検査。
+            // 位置の変更の有無に依らず常に検査する。docs/11の位置履歴だけが位置変更の有無で分かれる）
+            assertion(rootUpdatedExistsSql("facilities"), existing.id, batch.unit_id, existing.version + 1, `import:${batch.id}`),
             ...(locationChanged
-              ? [assertion(rootUpdatedExistsSql("facilities"), existing.id, batch.unit_id, existing.version + 1, `import:${batch.id}`),
-                  insertLocationRevision(env, {
+              ? [insertLocationRevision(env, {
                     id: crypto.randomUUID(), unitId: batch.unit_id, facilityId: existing.id, locationVersion: newLocationVersion,
                     latitude: n.latitude, longitude: n.longitude, locationSource: n.locationSource,
                     verificationStatus: "unverified", verifiedByMemberId: null, verifiedAt: null,
