@@ -17,16 +17,27 @@ export const UploadIntent = obj({
 });
 export const UploadAttempt = obj({ id: Id, sha256: Sha256, size: z.number().int().min(1), version: z.number().int().min(1) });
 export const AttachmentDraft = obj({ id: Id, version: z.number().int().min(1), expiresAt: z.iso.datetime() });
+
+/** 車両（docs/04 §3.2）。状態は暫定の自由文字（docs/11 §2の暫定扱い。区分はD15の承認待ち） */
+export const Vehicle = obj({
+  id: Id, version: Version, assetCode: ShortText, name: ShortText, status: ShortText,
+  storageFacilityId: Id.nullable(), archivedAt: z.iso.datetime().nullable(),
+});
+/** 資機材（数量機材はD15の検証設定。保管先は施設/車両のどちらか一方、外部保管は備考） */
+export const Equipment = obj({
+  id: Id, version: Version, assetCode: ShortText, name: ShortText, quantity: z.number(),
+  quantityUnit: ShortText, status: ShortText,
+  storage: obj({ facilityId: Id.nullable(), vehicleId: Id.nullable(), note: z.string().nullable() }),
+  archivedAt: z.iso.datetime().nullable(),
+});
 /** 応答へ出す添付。R2鍵(staging/ready)・tokenのhashは内部値なので含めない */
 export const Attachment = obj({
   id: Id, version: Version, status: z.enum(attachmentStates), contentType: z.string(), byteSize: z.number().int().min(1),
   sha256: z.string().nullable(), classification: z.enum(["basic", "personal", "sensitive"]), expiresAt: z.iso.datetime(),
 });
 
-const storage = obj({ facilityId: Id.optional(), vehicleId: Id.optional(), note: OptionalBody.max(1000).optional() }).refine(
-  (v) => !(v.facilityId && v.vehicleId),
-  { message: "facilityId と vehicleId は同時に指定できません" },
-);
+// 保管先の排他（施設/車両の両方指定は不可）は業務規則のため、サーバーが422で返す（docs/16 T025）
+const storage = obj({ facilityId: Id.optional(), vehicleId: Id.optional(), note: OptionalBody.max(1000).optional() });
 
 const templateItem = obj({
   code: ShortText,
