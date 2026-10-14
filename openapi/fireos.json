@@ -3073,7 +3073,7 @@
         "summary": "API-11 POST /facilities",
         "x-permission": "PER-03",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "idempotency-key",
@@ -3110,13 +3110,95 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "hydrant",
+                            "cistern",
+                            "box"
+                          ]
+                        },
+                        "managementNumber": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "identifyingName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "latitude": {
+                          "type": "number",
+                          "minimum": -90,
+                          "maximum": 90
+                        },
+                        "longitude": {
+                          "type": "number",
+                          "minimum": -180,
+                          "maximum": 180
+                        },
+                        "locationSource": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "locationNote": {
+                          "type": "string"
+                        },
+                        "locationVersion": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "verificationStatus": {
+                          "type": "string",
+                          "enum": [
+                            "unverified",
+                            "pending",
+                            "verified",
+                            "rejected"
+                          ]
+                        },
+                        "lastVerifiedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "type",
+                        "managementNumber",
+                        "identifyingName",
+                        "latitude",
+                        "longitude",
+                        "locationSource",
+                        "locationNote",
+                        "locationVersion",
+                        "verificationStatus",
+                        "lastVerifiedAt",
+                        "metadata"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -3301,7 +3383,7 @@
         "summary": "API-12 GET /facilities/:id",
         "x-permission": "PER-01",
         "x-kind": "get",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -3310,6 +3392,27 @@
             "schema": {
               "type": "string",
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
             }
           }
         ],
@@ -3337,13 +3440,126 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "hydrant",
+                            "cistern",
+                            "box"
+                          ]
+                        },
+                        "managementNumber": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "identifyingName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "latitude": {
+                          "type": "number",
+                          "minimum": -90,
+                          "maximum": 90
+                        },
+                        "longitude": {
+                          "type": "number",
+                          "minimum": -180,
+                          "maximum": 180
+                        },
+                        "locationSource": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "locationNote": {
+                          "type": "string"
+                        },
+                        "locationVersion": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "verificationStatus": {
+                          "type": "string",
+                          "enum": [
+                            "unverified",
+                            "pending",
+                            "verified",
+                            "rejected"
+                          ]
+                        },
+                        "lastVerifiedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        },
+                        "attachments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending_upload",
+                                  "uploaded",
+                                  "checking",
+                                  "ready",
+                                  "rejected",
+                                  "expired",
+                                  "deleting",
+                                  "deleted"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "type",
+                        "managementNumber",
+                        "identifyingName",
+                        "latitude",
+                        "longitude",
+                        "locationSource",
+                        "locationNote",
+                        "locationVersion",
+                        "verificationStatus",
+                        "lastVerifiedAt",
+                        "metadata",
+                        "attachments"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -3430,7 +3646,7 @@
         "summary": "API-13 PATCH /facilities/:id",
         "x-permission": "PER-03",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -3476,13 +3692,95 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "hydrant",
+                            "cistern",
+                            "box"
+                          ]
+                        },
+                        "managementNumber": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "identifyingName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "latitude": {
+                          "type": "number",
+                          "minimum": -90,
+                          "maximum": 90
+                        },
+                        "longitude": {
+                          "type": "number",
+                          "minimum": -180,
+                          "maximum": 180
+                        },
+                        "locationSource": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "locationNote": {
+                          "type": "string"
+                        },
+                        "locationVersion": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "verificationStatus": {
+                          "type": "string",
+                          "enum": [
+                            "unverified",
+                            "pending",
+                            "verified",
+                            "rejected"
+                          ]
+                        },
+                        "lastVerifiedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "type",
+                        "managementNumber",
+                        "identifyingName",
+                        "latitude",
+                        "longitude",
+                        "locationSource",
+                        "locationNote",
+                        "locationVersion",
+                        "verificationStatus",
+                        "lastVerifiedAt",
+                        "metadata"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -9858,7 +10156,7 @@
         "summary": "API-45 POST /facilities/:id/location-reviews",
         "x-permission": "PER-03確認許可",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -9895,8 +10193,202 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "facility": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "hydrant",
+                                "cistern",
+                                "box"
+                              ]
+                            },
+                            "managementNumber": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "identifyingName": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "latitude": {
+                              "type": "number",
+                              "minimum": -90,
+                              "maximum": 90
+                            },
+                            "longitude": {
+                              "type": "number",
+                              "minimum": -180,
+                              "maximum": 180
+                            },
+                            "locationSource": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "locationNote": {
+                              "type": "string"
+                            },
+                            "locationVersion": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "verificationStatus": {
+                              "type": "string",
+                              "enum": [
+                                "unverified",
+                                "pending",
+                                "verified",
+                                "rejected"
+                              ]
+                            },
+                            "lastVerifiedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "metadata": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "type",
+                            "managementNumber",
+                            "identifyingName",
+                            "latitude",
+                            "longitude",
+                            "locationSource",
+                            "locationNote",
+                            "locationVersion",
+                            "verificationStatus",
+                            "lastVerifiedAt",
+                            "metadata"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "revision": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "locationVersion": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "eventNo": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "latitude": {
+                              "type": "number",
+                              "minimum": -90,
+                              "maximum": 90
+                            },
+                            "longitude": {
+                              "type": "number",
+                              "minimum": -180,
+                              "maximum": 180
+                            },
+                            "locationSource": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "verificationStatus": {
+                              "type": "string",
+                              "enum": [
+                                "unverified",
+                                "pending",
+                                "verified",
+                                "rejected"
+                              ]
+                            },
+                            "verifiedByMemberId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "verifiedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "locationVersion",
+                            "eventNo",
+                            "latitude",
+                            "longitude",
+                            "locationSource",
+                            "verificationStatus",
+                            "verifiedByMemberId",
+                            "verifiedAt",
+                            "reason",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "facility",
+                        "revision"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

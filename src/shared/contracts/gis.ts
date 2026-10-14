@@ -1,9 +1,9 @@
 import { z } from "zod";
 import {
-  Id, IdListMaybeEmpty, IDEM, Instant, Latitude, Longitude, P_ID, Page, Reason, ShortText, Version,
+  Cursor, Id, IdListMaybeEmpty, IDEM, Instant, Latitude, Limit, Longitude, P_ID, Page, Reason, ShortText, Version,
   defineApi, listQuery, noContent, obj, provisionalDto, OptionalBody, LIMITS,
 } from "./common";
-import { inspectionResults, locationVerificationStates } from "../states";
+import { attachmentStates, inspectionResults, locationVerificationStates } from "../states";
 
 export const facilityTypes = ["hydrant", "cistern", "box"] as const;
 
@@ -64,6 +64,45 @@ export const InspectionInput = obj({
 });
 export const inspectionShape = InspectionInput.shape;
 
+/** 施設の応答（docs/04 facilities）。R2鍵など内部値は含めない */
+export const Facility = obj({
+  id: Id,
+  version: Version,
+  type: z.enum(facilityTypes),
+  managementNumber: z.string().nullable(),
+  identifyingName: z.string().nullable(),
+  latitude: Latitude,
+  longitude: Longitude,
+  locationSource: ShortText,
+  locationNote: z.string(),
+  locationVersion: z.number().int().min(1),
+  verificationStatus: z.enum(locationVerificationStates),
+  lastVerifiedAt: z.iso.datetime().nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+});
+export type Facility = z.infer<typeof Facility>;
+
+export const FacilityDetail = obj({
+  ...Facility.shape,
+  /** リンク済みの添付（idと状態のみ。本文はAPI-27） */
+  attachments: z.array(obj({ id: Id, status: z.enum(attachmentStates) })),
+});
+export type FacilityDetail = z.infer<typeof FacilityDetail>;
+
+export const LocationRevision = obj({
+  id: Id,
+  locationVersion: z.number().int().min(1),
+  eventNo: z.number().int().min(1),
+  latitude: Latitude,
+  longitude: Longitude,
+  locationSource: ShortText,
+  verificationStatus: z.enum(locationVerificationStates),
+  verifiedByMemberId: Id.nullable(),
+  verifiedAt: z.iso.datetime().nullable(),
+  reason: z.string(),
+  createdAt: z.iso.datetime(),
+});
+
 export const gisApis = {
   "API-10": defineApi({
     method: "GET", path: "/facilities", permission: "PER-01", kind: "list", success: [200],
@@ -71,11 +110,12 @@ export const gisApis = {
   }),
   "API-11": defineApi({
     method: "POST", path: "/facilities", permission: "PER-03", kind: "mutation", success: [201],
-    request: obj({ body: FacilityInput, ...IDEM }), response: provisionalDto(), provisional: true,
+    request: obj({ body: FacilityInput, ...IDEM }), response: Facility,
   }),
   "API-12": defineApi({
     method: "GET", path: "/facilities/:id", permission: "PER-01", kind: "get", success: [200],
-    request: obj({ params: P_ID }), response: provisionalDto(), provisional: true,
+    request: obj({ params: obj({ ...P_ID.shape, limit: Limit, cursor: Cursor.optional() }) }),
+    response: FacilityDetail,
   }),
   "API-13": defineApi({
     method: "PATCH", path: "/facilities/:id", permission: "PER-03", kind: "mutation", success: [200],
@@ -90,7 +130,7 @@ export const gisApis = {
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Facility,
   }),
   "API-14": defineApi({
     method: "POST", path: "/facilities/:id/inspections", permission: "PER-04", kind: "mutation", success: [201],
@@ -111,7 +151,7 @@ export const gisApis = {
       body: obj({ version: Version, locationVersion: Version, decision: z.enum(["request", "verify", "reject"]), reason: Reason }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    response: obj({ facility: Facility, revision: LocationRevision }),
   }),
   "API-53": defineApi({
     method: "POST", path: "/facilities/imports", permission: "PER-03", kind: "job", success: [202],

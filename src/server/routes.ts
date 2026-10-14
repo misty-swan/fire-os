@@ -9,6 +9,8 @@ import { registerRevocationRoutes } from "./routes/session-revocations";
 import { registerMeRoutes } from "./routes/me";
 import { registerUploadRoutes } from "./attachments/upload";
 import { registerAttachmentRoutes } from "./routes/attachments";
+import { registerFacilityWriteRoutes } from "./routes/facility-writes";
+import { registerFacilityDetailRoutes } from "./routes/facility-detail";
 
 // APIルートの登録点。各ドメインのroute登録関数を後続タスクがここへ追加する。
 export function registerRoutes(app: ApiApp): void {
@@ -22,4 +24,6 @@ export function registerRoutes(app: ApiApp): void {
   registerAuditRoutes(app);
   registerUploadRoutes(app);
   registerAttachmentRoutes(app);
+  registerFacilityWriteRoutes(app);
+  registerFacilityDetailRoutes(app);
 }
