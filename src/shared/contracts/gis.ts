@@ -106,7 +106,7 @@ export const LocationRevision = obj({
 export const gisApis = {
   "API-10": defineApi({
     method: "GET", path: "/facilities", permission: "PER-01", kind: "list", success: [200],
-    request: obj({ query: FacilityQuery }), response: Page(provisionalDto()), provisional: true,
+    request: obj({ query: FacilityQuery }), response: Page(Facility),
   }),
   "API-11": defineApi({
     method: "POST", path: "/facilities", permission: "PER-03", kind: "mutation", success: [201],

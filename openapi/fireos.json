@@ -2843,7 +2843,7 @@
         "summary": "API-10 GET /facilities",
         "x-permission": "PER-01",
         "x-kind": "list",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "bbox",
@@ -2959,13 +2959,95 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 9007199254740991
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "hydrant",
+                              "cistern",
+                              "box"
+                            ]
+                          },
+                          "managementNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "identifyingName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "latitude": {
+                            "type": "number",
+                            "minimum": -90,
+                            "maximum": 90
+                          },
+                          "longitude": {
+                            "type": "number",
+                            "minimum": -180,
+                            "maximum": 180
+                          },
+                          "locationSource": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "locationNote": {
+                            "type": "string"
+                          },
+                          "locationVersion": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "verificationStatus": {
+                            "type": "string",
+                            "enum": [
+                              "unverified",
+                              "pending",
+                              "verified",
+                              "rejected"
+                            ]
+                          },
+                          "lastVerifiedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "metadata": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
                           }
                         },
                         "required": [
                           "id",
-                          "version"
+                          "version",
+                          "type",
+                          "managementNumber",
+                          "identifyingName",
+                          "latitude",
+                          "longitude",
+                          "locationSource",
+                          "locationNote",
+                          "locationVersion",
+                          "verificationStatus",
+                          "lastVerifiedAt",
+                          "metadata"
                         ],
-                        "additionalProperties": {}
+                        "additionalProperties": false
                       }
                     },
                     "meta": {
