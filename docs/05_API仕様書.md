@@ -1,6 +1,6 @@
 # 05 API仕様書
 
-版：v0.3 / 2026-10-13 / 設計契約ドラフト。API-01〜32を保全、欠落操作/統合機能を追加。全101件の契約(Zod/OpenAPI)とAPI-86はPH0で実装済み、他の業務処理は未実装。権限は10、状態は11、データは04、未承認条件は14。
+版：v0.3 / 2026-10-14 / 設計契約ドラフト。API-01〜32を保全、欠落操作/統合機能を追加。全101件の契約(Zod/OpenAPI)はPH0で実装済み。業務処理はPH1（認証・名簿・権限・監査: API-01/02〜04/33〜38）とPH2（添付・施設GIS・CSV・資産・点検様式・点検・異常: API-10〜14/15〜20/26/27/44〜51/53〜55/83〜86/94〜98/101）まで実装。残り（活動・出動・お知らせ・AI・帳票等）はPH3以降。権限は10、状態は11、データは04、未承認条件は14。
 
 ## 1. 共通入出力・検証
 
@@ -96,14 +96,14 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-43 | GET /activities/:id/actual-results | PER-01 | revision?;旧版も認可 | ActivityResult＋revisions |
 | API-44 | GET /facilities/:id/inspections | PER-01 | from/to/result/limit/cursor;最新有効版 | Page<Inspection> |
 | API-45 | POST /facilities/:id/location-reviews | PER-03確認許可 | version,locationVersion,decision=request/verify/reject,reason;座標版一致 | Facility＋LocationRevision |
-| API-46 | POST /inspections/:type/:id/corrections | PER-04 | seriesVersion,InspectionInput,supersedesId,reason;series版/同対象/分岐拒否 | Inspection |
+| API-46 | POST /inspections/:type/:id/corrections | PER-04 | seriesVersion,InspectionInput,supersedesId,reason;series版/同対象/分岐拒否。**訂正対象はseriesの現在版であること（過去版からの枝分かれは409 VERSION_CONFLICT）。並行の第2訂正もseries版ガードで409。supersedes_id非NULL UNIQUEの二重防御。再訂正は現在版への訂正として重ねる** | Inspection |
 | API-47 | POST /vehicles | PER-03 | assetCode,name,status,storageFacilityId?;番号一意 | Vehicle |
 | API-48 | PATCH /vehicles/:id | PER-03 | version,変更列;参照中物理削除なし | Vehicle |
-| API-49 | POST /equipment | PER-03 | assetCode,name,quantity,quantityUnit,storage;保管先排他 | Equipment |
+| API-49 | POST /equipment | PER-03 | assetCode,name,quantity,quantityUnit,storage;番号一意。**保管先の施設/車両の排他（両方指定）は契約でなくサーバーの422 INVALID_TRANSITION業務規則（docs/14 D22）。契約は形だけ検査する** | Equipment |
 | API-50 | PATCH /equipment/:id | PER-03 | version,変更列;数量非負/保管先 | Equipment |
 | API-51 | GET /assets/:type/:id | PER-01 | type vehicle/equipment;点検/異常/使用履歴cursor | AssetDetail |
 | API-52 | GET /analytics | PER-01 | from/to/fiscalYear/memberId/kind;distinct operation、D05年度 | Analytics＋sourceFilters |
-| API-53 | POST /facilities/imports | PER-03 | csvAttachmentId,templateVersion;UTF8/列/座標/重複プレビュー | ImportBatch(202) |
+| API-53 | POST /facilities/imports | PER-03 | csvAttachmentId,templateVersion;UTF8/列/座標/重複プレビュー。**解析job(import.parse)の応答はjobs.result_refに`ready:<previewHash>:<有効行数>/<全行数>`を載せ、照会(API-86/101系)がそれを受け取る。プレビューだけで台帳は不変** | ImportBatch(202) |
 | API-54 | POST /facilities/imports/:id/commit | PER-03 | version,previewHash,conflictResolution;元台帳版一致 | ImportResult(202可) |
 | API-55 | GET /facilities/export | PER-03閲覧＋出力 | FacilityQuery;同ACL/CSV式注入escape | CSV＋exportVersion |
 | API-56 | PUT /assets/:type/:id/inspection-schedule | PER-03 | version(未作成0),nextDueDate,intervalDays?,timezone;日付規則D06 | InspectionSchedule |
@@ -147,7 +147,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-94 | GET /inspection-templates | PER-04 | targetType/status/limit/cursor;承認版一覧を担当範囲で取得 | Page<InspectionTemplate> |
 | API-95 | POST /inspection-templates | PER-03様式管理 | name,targetType,itemSchema;code一意/型/必須/結果列挙,D06 | InspectionTemplate(draft) |
 | API-96 | POST /inspection-templates/:id/versions | PER-03様式管理 | version,itemSchema,reason;新draft版/旧版不変 | InspectionTemplateVersion |
-| API-97 | POST /inspection-templates/:id/decision | PER-10様式承認 | version,templateVersionId,decision=request_review/approve/changes_requested,reason;D06承認者/現版 | InspectionTemplateVersion |
+| API-97 | POST /inspection-templates/:id/decision | PER-10様式承認 | version,templateVersionId,decision=request_review/approve/changes_requested,reason;D06承認者/現版。**決定は様式root(inspection_templates)の版ガードで競合を409にし、一版一決定（同じ版への2回目の決定は409）。承認済み版はトリガーで不変** | InspectionTemplateVersion |
 | API-98 | POST /attachment-drafts | PER-04＋対象作成権 | intendedEntityType,parentType?,parentId?;作成権/同unit、15分期限案 | AttachmentDraft(id,version,expiresAt) |
 | API-99 | PATCH /documents/:id/access-policy | PER-11管理 | version,classification,acl[{memberIdまたはroleId,permission,effect}];引下げ承認/同unit | Document＋policyVersion＋reindexJob |
 | API-100 | PUT /notifications/:id/read | 本人recipient | notificationVersion;本人/対象/可視版 | ReadReceipt（recipient.readAt） |
