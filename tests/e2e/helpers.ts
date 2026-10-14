@@ -26,6 +26,11 @@ export async function withOwnIp(context: BrowserContext): Promise<void> {
 export function apiHeaders(extra: Record<string, string> = {}) {
   return { origin: BASE, "content-type": "application/json", "cf-connecting-ip": randomIp(), ...extra };
 }
+/** e2e用: data部の型をまとめて宣言できるadminApi */
+export async function adminApiData<T>(request: APIRequestContext, method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown): Promise<{ status: number; data: { data: T; error?: { code: string } } }> {
+  return adminApi<{ data: T; error?: { code: string } }>(request, method, path, body) as Promise<{ status: number; data: { data: T; error?: { code: string } } }>;
+}
+
 export async function adminApi<T = unknown>(request: APIRequestContext, method: "GET" | "POST" | "PATCH" | "PUT", path: string, body?: unknown) {
   const res = await request.fetch(`${BASE}${path}`, {
     method,
@@ -34,6 +39,12 @@ export async function adminApi<T = unknown>(request: APIRequestContext, method: 
   });
   const text = await res.text();
   return { status: res.status(), data: (text ? JSON.parse(text) : null) as T };
+}
+
+/** e2e用: 型を気にせずdata部を参照する簡易アクセサ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function dataOf<T>(res: { data: unknown }): T {
+  return (res.data ?? {}) as T;
 }
 
 /** 管理者が団員を登録して招待し、生tokenを返す（API-03→API-33） */

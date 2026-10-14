@@ -10,6 +10,7 @@ import { useMutation } from "../../useMutation";
 import { MfaPanel } from "../auth/MfaPanel";
 import { ROLE_LABEL, ROLE_OPTIONS, STATUS_LABEL, useMembers, type MemberRow } from "../members/useMembers";
 import { AuditPanel } from "./AuditPanel";
+import { InspectionTemplatesPanel } from "./InspectionTemplatesPanel";
 
 /** サーバーが返した理由コードを、利用者に分かる文にする（コードを見せない） */
 const REASON_TEXT: Record<string, string> = {
@@ -442,6 +443,7 @@ export function AccessPanel() {
         <MfaPanel />
       </Card>
       <AuditPanel enabled={mfaReady} members={rows} />
+          <InspectionTemplatesPanel />
     </div>
   );
 }

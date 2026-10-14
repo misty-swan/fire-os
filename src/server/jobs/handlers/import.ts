@@ -97,7 +97,8 @@ export async function parseImport(job: LeasedJob, env: AppEnv): Promise<JobOutco
     ).bind(inputHash, previewHash, results.length, validCount, results.length - validCount, unit!.dataset_revision, nowIso, batch.id, batch.unit_id, parsingVersion),
   ]);
   if ((done[0]?.meta.changes ?? 0) !== 1) return { kind: "stale", errorCode: "source_changed" };
-  return { kind: "succeeded", resultRef: `ready:${validCount}/${results.length}` };
+  // resultRefに確定(API-54)に必要なpreview_hashと件数を載せる（依頼者がAPI-86で参照する）
+  return { kind: "succeeded", resultRef: `ready:${previewHash}:${validCount}/${results.length}` };
 }
 
 // job登録（Cron/Queueと同じ登録点）

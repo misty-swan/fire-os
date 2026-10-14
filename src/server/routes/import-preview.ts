@@ -7,6 +7,7 @@ import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../htt
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { enqueueJobStatement } from "../jobs/store";
+import "../jobs/handlers/import"; // 解析・確定job handlerの登録（Cron/Queueと同じ登録点）
 import { requirePermission } from "./invitations";
 
 /**
@@ -67,9 +68,21 @@ export function registerImportPreviewRoutes(app: ApiApp): void {
       event: { entityType: "import_batch", entityId: id, entityVersion: 1, eventType: "import_batch.created" },
       response: {
         status: 202,
-        sql: "SELECT json_object('id', b.id, 'jobId', (SELECT j.id FROM jobs j WHERE j.source_type = 'import_batch' AND j.source_id = b.id AND j.kind = 'import.parse' ORDER BY j.created_at DESC LIMIT 1)) FROM import_batches b WHERE b.id = ?",
+        sql: "SELECT json_object('id', b.id, " +
+          "'jobId', (SELECT j.id FROM jobs j WHERE j.source_type = 'import_batch' AND j.source_id = b.id AND j.kind = 'import.parse' ORDER BY j.created_at DESC LIMIT 1), " +
+          "'status', b.status, 'version', b.version, 'totalRows', b.total_rows, 'validRows', b.valid_rows, 'errorRows', b.error_rows, 'previewHash', b.preview_hash) " +
+          "FROM import_batches b WHERE b.id = ?",
         binds: [id],
-        decode: (j) => ({ id: Id.parse((j as { id: string }).id), jobId: Id.parse((j as { jobId: string }).jobId) }),
+        decode: (j) => ({
+          id: Id.parse((j as { id: string }).id),
+          jobId: Id.parse((j as { jobId: string }).jobId),
+          status: (j as { status: string | null }).status ?? null,
+          version: (j as { version: number | null }).version ?? null,
+          totalRows: (j as { totalRows: number | null }).totalRows ?? null,
+          validRows: (j as { validRows: number | null }).validRows ?? null,
+          errorRows: (j as { errorRows: number | null }).errorRows ?? null,
+          previewHash: (j as { previewHash: string | null }).previewHash ?? null,
+        }),
       },
     });
     try {

@@ -124,12 +124,21 @@ export function registerInspectionTemplateRoutes(app: ApiApp): void {
       changes_requested: ["in_review"],
     } as const;
     const nextStatus = { request_review: "in_review", approve: "approved", changes_requested: "changes_requested" } as const;
+    // docs/05 API-97のversionは様式rootの版。rootを版ガードし、版行は状態遷移の条件で守る
+    // （承認済みの版rowはトリガーで不変。二重決定はrootの版ガードで409になる）
     const result = await executeMutation(c.env, p, {
       operationCode: "inspection_template.decision",
       key: headers["idempotency-key"],
       requestHash: await canonicalRequestHash({ method: "POST", path: `/inspection-templates/${params.id}/decision`, baseVersion: body.version, body }),
       expectedAuthzVersion: p.authzVersion,
-      roots: [{ table: "inspection_template_versions", id: version.id, expectedVersion: body.version, allowedStates: { column: "status", values: allowedStates[body.decision] } }],
+      roots: [{ table: "inspection_templates", id: template.id, expectedVersion: body.version, allowedStates: { column: "status", values: ["draft", "active"] } }],
+      conditions: [
+        {
+          existsSql: `SELECT 1 FROM inspection_template_versions WHERE id = ? AND unit_id = ? AND status IN (${allowedStates[body.decision].map(() => "?").join(", ")})`,
+          binds: [version.id, p.unitId, ...allowedStates[body.decision]],
+          failCode: "INVALID_TRANSITION",
+        },
+      ],
       statements: (ctx) => [
         c.env.DB.prepare(
           "UPDATE inspection_template_versions SET status = ?, " +
@@ -137,7 +146,7 @@ export function registerInspectionTemplateRoutes(app: ApiApp): void {
             "approved_at = CASE WHEN ? = 'approve' THEN ? ELSE approved_at END, " +
             "version = version + 1, last_mutation_token = ?, updated_at = ? " +
             "WHERE id = ? AND unit_id = ? AND version = ?",
-        ).bind(nextStatus[body.decision], body.decision, p.memberId, body.decision, ctx.now, ctx.attempt, ctx.now, version.id, p.unitId, body.version),
+        ).bind(nextStatus[body.decision], body.decision, p.memberId, body.decision, ctx.now, ctx.attempt, ctx.now, version.id, p.unitId, version.version),
         // 承認のときだけ、様式の現在承認版ポインタと状態を更新する
         c.env.DB.prepare(
           "UPDATE inspection_templates SET current_version_id = CASE WHEN ? = 'approve' THEN ? ELSE current_version_id END, " +

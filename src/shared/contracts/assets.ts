@@ -23,6 +23,7 @@ export const Vehicle = obj({
   id: Id, version: Version, assetCode: ShortText, name: ShortText, status: ShortText,
   storageFacilityId: Id.nullable(), archivedAt: z.iso.datetime().nullable(),
 });
+export type VehicleDto = z.infer<typeof Vehicle>;
 /** 資機材（数量機材はD15の検証設定。保管先は施設/車両のどちらか一方、外部保管は備考） */
 export const Equipment = obj({
   id: Id, version: Version, assetCode: ShortText, name: ShortText, quantity: z.number(),
@@ -30,6 +31,7 @@ export const Equipment = obj({
   storage: obj({ facilityId: Id.nullable(), vehicleId: Id.nullable(), note: z.string().nullable() }),
   archivedAt: z.iso.datetime().nullable(),
 });
+export type EquipmentDto = z.infer<typeof Equipment>;
 /** 応答へ出す添付。R2鍵(staging/ready)・tokenのhashは内部値なので含めない */
 export const Attachment = obj({
   id: Id, version: Version, status: z.enum(attachmentStates), contentType: z.string(), byteSize: z.number().int().min(1),

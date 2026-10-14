@@ -1,0 +1,227 @@
+import { useCallback, useEffect, useState } from "react";
+import { api } from "../../api";
+import { useMutation } from "../../useMutation";
+import { Banner, Button, Card, Chip, Icon, Notice, TextArea, TextField } from "../../components/ui";
+
+/**
+ * 点検様式の版・承認パネル（T028、SCR-17に追加。docs/16 T028）。
+ * 必須項目の追加→版比較→申請→承認（承認済み様式は変更不可。新しい下書き版を作る）。
+ * 様式は検証用の設定（D06未承認）で、実団体の正式点検票として承認済みと表示しない。
+ */
+
+interface TemplateVersionDto {
+  id: string;
+  revisionNo: number;
+  status: string;
+  itemSchema: ItemSchemaEntry[];
+}
+interface TemplateDto {
+  id: string;
+  version: number;
+  name: string;
+  targetType: "facility" | "vehicle" | "equipment";
+  status: string;
+  versions: TemplateVersionDto[];
+}
+
+type ItemSchemaEntry = { code: string; label: string; valueType: "boolean" | "number" | "text" | "select"; required: boolean; allowedResults?: string[] };
+const DEFAULT_SCHEMA: ItemSchemaEntry[] = [
+  { code: "exterior", label: "本体の外観", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] },
+];
+
+export function InspectionTemplatesPanel() {
+  const [templates, setTemplates] = useState<TemplateDto[] | "loading" | "error">("loading");
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [targetType, setTargetType] = useState<"facility" | "vehicle" | "equipment">("facility");
+  const [schemaText, setSchemaText] = useState(JSON.stringify(DEFAULT_SCHEMA, null, 2));
+  const [editing, setEditing] = useState<TemplateDto | null>(null);
+  const [editSchema, setEditSchema] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    try {
+      const data = (await api("API-94", { query: {} })) as unknown as TemplateDto[];
+      setTemplates(data);
+    } catch {
+      setTemplates("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload, reloadKey]);
+
+  const createTemplate = useMutation("API-95");
+  const createVersion = useMutation("API-96");
+  const decide = useMutation("API-97");
+
+  /** 様式rootの現在の版（決定APIに渡す。申請/承認でもrootの版が進むため、直前に読み直す） */
+  const currentVersionOf = useCallback(async (t: TemplateDto): Promise<number> => {
+    const fresh = (await api("API-94", { query: {} })) as unknown as TemplateDto[];
+    return fresh.find((x) => x.id === t.id)?.version ?? t.version;
+  }, []);
+
+  const submitCreate = async () => {
+    let schema: unknown;
+    try {
+      schema = JSON.parse(schemaText);
+    } catch {
+      setMessage("項目のJSONを読めません。形式を確認してください。");
+      return;
+    }
+    const res = await createTemplate.run({ body: { name: name.trim(), targetType, itemSchema: schema as ItemSchemaEntry[] } });
+    if (res) {
+      setCreating(false);
+      setName("");
+      setMessage("様式を作成しました（下書き）。申請→承認で使えるようになります。");
+      void reload();
+    }
+  };
+
+  const submitNewVersion = async (t: TemplateDto) => {
+    let schema: unknown;
+    try {
+      schema = JSON.parse(editSchema);
+    } catch {
+      setMessage("項目のJSONを読めません。形式を確認してください。");
+      return;
+    }
+    const templateVersion = await currentVersionOf(t);
+    const res = await createVersion.run({ params: { id: t.id }, body: { version: templateVersion, itemSchema: schema as ItemSchemaEntry[], reason: "項目の更新" } });
+    if (res) {
+      setEditing(null);
+      setMessage("新しい下書き版を作成しました。申請→承認で切り替わります。");
+      void reload();
+    }
+  };
+
+  const decideVersion = async (t: TemplateDto, versionId: string, decision: "request_review" | "approve" | "changes_requested") => {
+    const templateVersion = await currentVersionOf(t);
+    const res = await decide.run({
+      params: { id: t.id },
+      body: {
+        version: templateVersion, templateVersionId: versionId, decision,
+        reason: decision === "approve" ? "内容を確認した" : decision === "request_review" ? "確認をお願いします" : "修正が必要です",
+      },
+    });
+    if (res) {
+      setMessage(
+        decision === "approve" ? "承認しました。この版が現在の承認版です。"
+          : decision === "request_review" ? "申請しました。"
+            : "差し戻しました。",
+      );
+      void reload();
+    }
+  };
+
+  return (
+    <Card className="flex flex-col gap-3" aria-label="点検様式">
+      <div className="flex items-center justify-between">
+        <span className="text-[14px] font-bold">点検様式の版・承認</span>
+        <Button variant="secondary" className="max-lg:min-h-11 px-3" onClick={() => setCreating((v) => !v)}>
+          <Icon name={creating ? "close" : "add"} className="text-[18px]" />
+          様式を追加
+        </Button>
+      </div>
+      <Notice tone="ai" icon="info" role="status">
+        様式は検証用の設定です（実団体の正式点検票ではありません）。
+      </Notice>
+
+      {creating && (
+        <div className="flex flex-col gap-2 rounded-card bg-white/[.04] p-3">
+          <TextField name="tpl-name" label="様式名" value={name} onChange={(e) => setName(e.target.value)} />
+          <div className="flex gap-2">
+            {(["facility", "vehicle", "equipment"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={targetType === t}
+                onClick={() => setTargetType(t)}
+                className={`flex min-h-11 flex-1 items-center justify-center rounded-field text-[13px] font-bold ${targetType === t ? "bg-ember text-white" : "bg-white/[.06] text-ink-sub"}`}
+              >
+                {t === "facility" ? "施設" : t === "vehicle" ? "車両" : "資機材"}
+              </button>
+            ))}
+          </div>
+          <TextArea name="tpl-schema" label="項目（JSON）" value={schemaText} onChange={(e) => setSchemaText(e.target.value)} className="font-mono text-[12px]" />
+          <Button busy={createTemplate.saving} onClick={() => void submitCreate()}>作成する</Button>
+        </div>
+      )}
+
+      {message && <Notice tone="info" icon="check_circle" role="status">{message}</Notice>}
+      {templates === "error" && <Banner tone="error" eyebrow="ERROR" title="一覧を取得できませんでした" />}
+      {templates === "loading" && <div className="h-20 animate-pulse rounded-card bg-white/[.05]" />}
+
+      {Array.isArray(templates) && templates.length === 0 && (
+        <Banner tone="info" eyebrow="EMPTY" title="様式はまだありません">「様式を追加」から作成できます。</Banner>
+      )}
+
+      {Array.isArray(templates) && templates.map((t) => (
+        <div key={t.id} className="flex flex-col gap-2 rounded-card bg-white/[.03] p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-[14px] font-bold">{t.name}</span>
+              <span className="text-[11px] text-ink-muted">
+                {t.targetType === "facility" ? "施設用" : t.targetType === "vehicle" ? "車両用" : "資機材用"} · {t.versions.length}版
+              </span>
+            </div>
+            <Chip tone={t.status === "active" ? "ok" : "neutral"}>{t.status === "active" ? "運用中" : "下書き"}</Chip>
+          </div>
+          {t.versions.map((v) => (
+            <div key={v.id} className="flex items-center justify-between rounded-[12px] bg-white/[.04] px-3 py-2">
+              <span className="font-mono text-[12px] text-ink-muted">
+                rev{v.revisionNo} · {v.status === "approved" ? "承認済" : v.status === "in_review" ? "確認中" : v.status === "changes_requested" ? "差戻し" : "下書き"}
+              </span>
+              <div className="flex gap-1.5">
+                {v.status === "draft" && (
+                  <Button variant="secondary" className="max-lg:min-h-11 px-3" busy={decide.saving} onClick={() => void decideVersion(t, v.id, "request_review")}>
+                    申請
+                  </Button>
+                )}
+                {v.status === "in_review" && (
+                  <>
+                    <Button variant="secondary" className="max-lg:min-h-11 px-3" busy={decide.saving} onClick={() => void decideVersion(t, v.id, "changes_requested")}>
+                      差戻し
+                    </Button>
+                    <Button className="max-lg:min-h-11 px-3" busy={decide.saving} onClick={() => void decideVersion(t, v.id, "approve")}>
+                      承認
+                    </Button>
+                  </>
+                )}
+                {v.status === "approved" && (
+                  <span className="inline-flex items-center gap-1 text-[12px] text-ok">
+                    <Icon name="verified" className="text-[16px]" />
+                    現在の承認版
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+          {editing?.id === t.id ? (
+            <div className="flex flex-col gap-2">
+              <TextArea name="tpl-edit" label="項目（JSON）" value={editSchema} onChange={(e) => setEditSchema(e.target.value)} className="font-mono text-[12px]" />
+              <div className="flex gap-2">
+                <Button variant="secondary" className="max-lg:min-h-11 px-4" onClick={() => setEditing(null)}>キャンセル</Button>
+                <Button busy={createVersion.saving} onClick={() => void submitNewVersion(t)}>新しい下書き版を作成</Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="secondary"
+              className="max-lg:min-h-11 self-start px-4"
+              onClick={() => {
+                setEditing(t);
+                setEditSchema(JSON.stringify(t.versions[t.versions.length - 1]?.itemSchema ?? DEFAULT_SCHEMA, null, 2));
+              }}
+            >
+              <Icon name="edit" className="text-[18px]" />
+              編集（新しい版）
+            </Button>
+          )}
+        </div>
+      ))}
+    </Card>
+  );
+}

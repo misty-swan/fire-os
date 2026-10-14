@@ -7,6 +7,12 @@ import { MembersPage } from "./features/members/MembersPage";
 import { MapPage } from "./features/map/MapPage";
 import { FacilityPage } from "./features/facilities/FacilityPage";
 import { FacilityEditorPage } from "./features/facilities/FacilityEditorPage";
+import { InspectionFormPage } from "./features/inspections/InspectionForm";
+import { IssuesPage } from "./features/issues/IssuesPage";
+import { AssetsPage } from "./features/assets/AssetsPage";
+import { AssetPage } from "./features/assets/AssetPage";
+import { ImportPage } from "./features/facilities/ImportPage";
+import { InspectionTemplatesPanel } from "./features/admin/InspectionTemplatesPanel";
 import { MeGate, type MeData } from "./me";
 import { MenuPage } from "./components/MenuPage";
 import { MobileTopRow, PageTitle } from "./components/Page";
@@ -49,6 +55,11 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-03": <MapPage />,
   "SCR-04": <FacilityPage />,
   "SCR-05": <FacilityEditorPage />,
+  "SCR-06": <InspectionFormPage />,
+  "SCR-07": <IssuesPage />,
+  "SCR-13": <AssetsPage />,
+  "SCR-14": <AssetPage />,
+  "SCR-20": <ImportPage />,
 };
 
 function toRoutes(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject[] {
