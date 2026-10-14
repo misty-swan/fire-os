@@ -1,6 +1,7 @@
 import type { AppEnv, JobMessage } from "../env";
 import { reapOrphanIdentities } from "../auth/orphans";
 import { expireIdempotencyRecords } from "../mutations/execute";
+import { sweepAttachments } from "./handlers/attachment-cleanup";
 import { runDueJobs } from "./runner";
 
 /** Cron(毎分,UTC)：待機明け/期限切れ/Queueへ送れなかったjobを回収して実行する。Queueが止まっていても進む。 */
@@ -16,6 +17,12 @@ export async function handleScheduled(env: AppEnv): Promise<void> {
     await reapOrphanIdentities(env, new Date().toISOString());
   } catch (err) {
     console.error(JSON.stringify({ event: "orphan_reap_failed", error: String(err) }));
+  }
+  // 添付の期限切れ・未選択試行の回収（docs/07 §3.7）。失敗してもジョブの回収は止めない
+  try {
+    await sweepAttachments(env, new Date().toISOString());
+  } catch (err) {
+    console.error(JSON.stringify({ event: "attachment_sweep_failed", error: String(err) }));
   }
   const summary = await runDueJobs(env);
   if (summary.leased > 0) console.log(JSON.stringify({ event: "jobs_run", via: "cron", ...summary }));
