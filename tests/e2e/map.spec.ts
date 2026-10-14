@@ -51,7 +51,9 @@ test("old_map_response_cannot_replace_new_viewport", async ({ page }) => {
       await new Promise((r) => setTimeout(r, 2000)); // 旧世代を遅らせる
       const res = await route.fetch();
       const json = (await res.json()) as { data: { id: string; type: string; managementNumber: string }[] };
-      json.data = [...json.data, { id: crypto.randomUUID(), type: "hydrant", managementNumber: "OLDGEN-STALE" }];
+      // 種別は絞り込み後も見える「防火水槽」にする（消火栓はクライアント側の絞り込みで隠れるため、
+      // 世代の破棄が壊れても検出できない。docs/16の「旧応答で置き換わらない」を確かめる対象）
+      json.data = [...json.data, { id: crypto.randomUUID(), type: "cistern", managementNumber: "OLDGEN-STALE" }];
       // bodyを差し替えるので、元の応答のcontent-lengthを引きずらない（待ち続けて固まるため）
       await route.fulfill({ status: res.status(), headers: { "content-type": "application/json" }, body: JSON.stringify(json) });
       settleOldGeneration();
@@ -68,7 +70,7 @@ test("old_map_response_cannot_replace_new_viewport", async ({ page }) => {
   // 条件を変える（消火栓チップをOFF）→ 新しい世代の要求が走り、こちらが先に採用される
   await page.getByRole("button", { name: /^消火栓 [0-9]/ }).click();
 
-  // 絞り込み後は防火水槽だけ。遅延した旧応答（消火栓とOLDGEN-STALEを含む）で置き換わらない。
+  // 絞り込み後は防火水槽だけ。遅延した旧応答（OLDGEN-STALE=防火水槽を含む）で置き換わらない。
   // マーカー（スマホ）はaria-labelに種別+番号、PCの右パネルの行は名前テキストを持つ
   if (isPhone(page.viewportSize())) {
     await expect(page.getByRole("button", { name: `防火水槽 ${seed.cistern[0]}` })).toBeVisible({ timeout: 10_000 });
@@ -77,7 +79,8 @@ test("old_map_response_cannot_replace_new_viewport", async ({ page }) => {
     await expect(page.getByText(`防火水槽 ${seed.cistern[0]}`)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(`消火栓 ${seed.hydrant[0]}`)).toBeHidden();
   }
-  await expect(page.getByText("OLDGEN-STALE")).toBeHidden();
+  // 旧世代の応答に混ぜた施設（防火水槽。絞り込み後も見えるはずの種別）が表示されない＝旧応答は破棄されている
+  await expect(page.getByRole("button", { name: `防火水槽 OLDGEN-STALE` })).toHaveCount(0);
   const visibleIds = await page
     .locator("body")
     .textContent()

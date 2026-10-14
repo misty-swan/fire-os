@@ -55,9 +55,11 @@ describe("CSVの確定と書き出し (T024)", () => {
     await fx.client(admin).request("POST", "/api/v1/facilities", {
       type: "hydrant", latitude: 35.71, longitude: 139.71, locationSource: "現地", locationNote: "確定前に増えた台帳", managementNumber: "MASTER-1",
     }, idem());
+    // 現在のbatch版を送る（古い版だと版ガードの409になり、台帳版の検査を確かめられない）
+    const changedVersion = await env.DB.prepare("SELECT version AS v FROM import_batches WHERE id = ?").bind(first.batchId).first<{ v: number }>();
     const changedMasterCommit = await fx.client(admin).request(
       "POST", `/api/v1/facilities/imports/${first.batchId}/commit`,
-      { version: 1, previewHash: first.previewHash, conflictResolution: "skip" }, idem(),
+      { version: changedVersion!.v, previewHash: first.previewHash, conflictResolution: "skip" }, idem(),
     );
     expect(changedMasterCommit.status).toBe(409);
     const nothing = await env.DB.prepare("SELECT COUNT(*) AS n FROM facilities WHERE unit_id = ? AND management_number = 'C-0001'").bind(a.id).first<{ n: number }>();

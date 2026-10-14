@@ -22,7 +22,10 @@ interface TemplateRef {
 /** 施設と車両の承認済み様式を用意する（T027の経路） */
 async function seedTemplates(admin: Identity): Promise<TemplateRef> {
   // 許可された結果は点検結果の語彙（docs/05 InspectionInput。docs/11 点検結果）
-  const facilitySchema = [{ code: "exterior", label: "本体の外観", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] }];
+  const facilitySchema = [
+    { code: "exterior", label: "本体の外観", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] },
+    { code: "ground", label: "周辺の環境", valueType: "boolean", required: false },
+  ];
   const vehicleSchema = [{ code: "lights", label: "灯火類", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] }];
   const mk = async (name: string, targetType: "facility" | "vehicle", itemSchema: unknown) => {
     const res = await fx.client(admin).request("POST", "/api/v1/inspection-templates", { name, targetType, itemSchema }, idem());
@@ -114,7 +117,13 @@ describe("点検と異常 (T029〜T032)", () => {
       "POST", `/api/v1/facilities/${facilityId}/inspections`,
       facilityInput(t.facilityVersionId, admin.memberId!, { result: "needs_review", createIssue: true, checkItems: [] }), idem(),
     );
-    expect(missingRequired.status).toBe(400);
+    expect(missingRequired.status).toBe(400); // 空配列は契約(400)で拒否
+    // 項目が足りない明細（空配列でなく、必須の「exterior」が欠けた配列）も様式検査で拒否
+    const missingItem = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { result: "needs_review", createIssue: true, checkItems: [{ code: "ground", result: "ok" }] }), idem(),
+    );
+    expect(missingItem.status).toBe(400);
     const afterMissingRows = {
       inspections: (await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections").first<{ n: number }>())!.n,
       items: (await env.DB.prepare("SELECT COUNT(*) AS n FROM inspection_items").first<{ n: number }>())!.n,
@@ -209,9 +218,56 @@ describe("点検と異常 (T029〜T032)", () => {
     const currentRevisionCount = (await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections WHERE series_id = ?").bind(made.data.seriesId).first<{ n: number }>())!.n;
     expect(currentRevisionCount).toBe(2); // 原本+訂正（一本の履歴）
 
+    // 理由なしの訂正は契約で拒否（docs/11 §3「訂正理由を残す」）
+    const noReason = await fx.client(admin).request(
+      "POST", `/api/v1/inspections/facility/${correctedId}/corrections`,
+      { seriesVersion: winnerJson.data!.seriesVersion, supersedesId: correctedId, reason: "", ...facilityInput(t.facilityVersionId, admin.memberId!) }, idem(),
+    );
+    expect(noReason.status).toBe(400);
 
-    const resolvedIssueAutomaticallyReopened = false; // 訂正は異常の自動再開をしない（docs/11 §3）
-    expect(resolvedIssueAutomaticallyReopened).toBe(false);
+    // 訂正で起点異常を作り（createIssue）、解決済み（closed）まで進めてから再訂正しても、
+    // 異常は自動で再開・削除されない（docs/11 §3「既存異常の自動削除/再開を禁止」）
+    const issueCorrection = await fx.client(admin).request(
+      "POST", `/api/v1/inspections/facility/${correctedId}/corrections`,
+      { seriesVersion: winnerJson.data!.seriesVersion, supersedesId: correctedId, reason: "異常を含む訂正",
+        ...facilityInput(t.facilityVersionId, admin.memberId!, { result: "needs_review", checkItems: [{ code: "exterior", result: "needs_review" }], createIssue: true }) }, idem(),
+    );
+    expect(issueCorrection.status).toBe(201);
+    const issueCorrectionId = ((await issueCorrection.json()) as { data: { id: string } }).data.id;
+    const createdIssue = (await fx.rows("issues", { source_facility_inspection_id: issueCorrectionId }))[0]!;
+    expect(createdIssue!.status).toBe("reported");
+    const issueId = createdIssue!.id as string;
+    const underReview = await fx.client(admin).request("PATCH", `/api/v1/issues/${issueId}`, { version: 1, status: "under_review", reason: "確認を始めた" }, idem());
+    expect(underReview.status).toBe(200);
+    const closed = await fx.client(admin).request("PATCH", `/api/v1/issues/${issueId}`, { version: 2, status: "closed", reason: "対応済み" }, idem());
+    expect(closed.status).toBe(200);
+    const eventsBefore = (await env.DB.prepare("SELECT COUNT(*) AS n FROM issue_events WHERE issue_id = ?").bind(issueId).first<{ n: number }>())!.n;
+
+    // 現在版（訂正後の原本）をさらに訂正できる。系列は一本のまま進む
+    const secondCorrection = await fx.client(admin).request(
+      "POST", `/api/v1/inspections/facility/${issueCorrectionId}/corrections`,
+      { seriesVersion: winnerJson.data!.seriesVersion + 1, supersedesId: issueCorrectionId, reason: "数値の誤り訂正", ...facilityInput(t.facilityVersionId, admin.memberId!) }, idem(),
+    );
+    expect(secondCorrection.status).toBe(201);
+
+    // 解決済みの異常は訂正で再開も削除もされない
+    const issueAfter = (await fx.rows("issues", { id: issueId }))[0]!;
+    expect(issueAfter!.status).toBe("closed");
+    expect(issueAfter!.source_facility_inspection_id).toBe(issueCorrectionId);
+    const eventsAfter = (await env.DB.prepare("SELECT COUNT(*) AS n FROM issue_events WHERE issue_id = ?").bind(issueId).first<{ n: number }>())!.n;
+    expect(eventsAfter).toBe(eventsBefore);
+
+    // 過去版（もう訂正済みの旧原本）からさらに枝分かれしない。seriesの版は現在（版ガードを通る）なので、
+    // 現在版ポインタの検査が409にする（docs/16 T031「過去版枝分かれ」）
+    const staleFork = await fx.client(admin).request(
+      "POST", `/api/v1/inspections/facility/${originalId}/corrections`,
+      { seriesVersion: winnerJson.data!.seriesVersion + 2, supersedesId: originalId, reason: "過去版からの枝分かれ", ...facilityInput(t.facilityVersionId, admin.memberId!) }, idem(),
+    );
+    expect(staleFork.status).toBe(409);
+    // 過去版からの枝分かれは現在版競合（VERSION_CONFLICT）。同じ409でも「同じ原本への2回目の訂正」(DUPLICATE)とは区別する
+    expect(((await staleFork.json()) as { error?: { code?: string } }).error?.code).toBe("VERSION_CONFLICT");
+    const revisionCountFinal = (await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections WHERE series_id = ?").bind(made.data.seriesId).first<{ n: number }>())!.n;
+    expect(revisionCountFinal).toBe(4); // 原本+訂正+異常訂正+再訂正。過去版からの枝は増えていない
   });
 
   it("issue_close_and_reopen_require_current_version_and_reason", async () => {
