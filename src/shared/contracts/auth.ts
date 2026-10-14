@@ -53,6 +53,24 @@ export const authLibrary = {
   ],
 } as const;
 
+export const invitationStates = ["pending", "consumed", "cancelled"] as const;
+/** 招待。生tokenは作成した応答の一回だけ（再送・一覧では null）。token_hash/email_hashは返さない */
+export const Invitation = obj({
+  id: Id,
+  version: z.number().int().min(1),
+  memberId: Id,
+  status: z.enum(invitationStates),
+  expiresAt: z.string(),
+  token: z.string().nullable(),
+});
+/** 招待の受領結果。団員にリンクされ、役割が付いた状態 */
+export const AccountLinkResult = obj({
+  memberId: Id,
+  linked: z.literal(true),
+  roleCodes: z.array(z.enum(roleCodes)),
+  authzVersion: z.number().int().min(1),
+});
+
 // 名簿・招待・役割（PH1で詳細化）。応答DTOは04/10の確定待ちのため provisional。
 export const authApis = {
   "API-01": defineApi({
@@ -94,12 +112,12 @@ export const authApis = {
       ...IDEM,
     }),
     // 生tokenは作成時の一回だけ返す
-    response: provisionalDto(), provisional: true,
+    response: Invitation,
   }),
   "API-34": defineApi({
     method: "POST", path: "/invitations/:id/cancel", permission: "PER-07", kind: "mutation", success: [200],
     request: obj({ params: P_ID, body: obj({ version: Version, reason: Reason }), ...IDEM }),
-    response: provisionalDto(), provisional: true,
+    response: Invitation,
   }),
   "API-35": defineApi({
     method: "POST", path: "/invitations/accept", permission: "token＋認証所有確認", kind: "mutation", success: [200],
@@ -107,7 +125,7 @@ export const authApis = {
       body: obj({ token: z.string().min(16).max(512), verifiedAuthIdentity: ShortText }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    response: AccountLinkResult,
   }),
   // 認証ライブラリ(D04固定版)の公式スキーマに従う。業務envelope・Idempotency-Key対象外（T007で検証）。
   "API-36": defineApi({

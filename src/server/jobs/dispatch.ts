@@ -1,4 +1,5 @@
 import type { AppEnv, JobMessage } from "../env";
+import { reapOrphanIdentities } from "../auth/orphans";
 import { expireIdempotencyRecords } from "../mutations/execute";
 import { runDueJobs } from "./runner";
 
@@ -9,6 +10,12 @@ export async function handleScheduled(env: AppEnv): Promise<void> {
     await expireIdempotencyRecords(env, new Date().toISOString());
   } catch (err) {
     console.error(JSON.stringify({ event: "idempotency_expire_failed", error: String(err) }));
+  }
+  // 招待で登録したが受領しなかった認証identity（業務アクセス無し）を回収する。失敗してもジョブの回収は止めない
+  try {
+    await reapOrphanIdentities(env, new Date().toISOString());
+  } catch (err) {
+    console.error(JSON.stringify({ event: "orphan_reap_failed", error: String(err) }));
   }
   const summary = await runDueJobs(env);
   if (summary.leased > 0) console.log(JSON.stringify({ event: "jobs_run", via: "cron", ...summary }));

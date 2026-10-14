@@ -51,6 +51,12 @@ export interface MutationSpec<T> {
   /** 認可判定時の実行主体の認可版（通常は principal.authzVersion） */
   expectedAuthzVersion: number;
   roots: RootGuard[];
+  /**
+   * 実行主体そのものをこのbatchで作る操作（招待の受領：users行の作成と団員へのリンク）だけが使う。
+   * 認可版の検査(a)より前に書かれる。主体がまだ存在しないので、失敗後の分類では「主体が有効か」を見ず、
+   * roots/conditionsで原因を判別する。
+   */
+  prelude?: (ctx: MutationContext) => D1PreparedStatement[];
   conditions?: ExtraCondition[];
   /** 業務書込。root の UPDATE（version+1, last_mutation_token=ctx.attempt）を含める */
   statements: (ctx: MutationContext) => D1PreparedStatement[];
@@ -196,6 +202,7 @@ export async function executeMutation<T>(
   const assertion = (existsSql: string, ...binds: unknown[]) => prep(assertionSql(existsSql), ctx.attempt, ++seq, ...binds);
 
   const stmts: D1PreparedStatement[] = [
+    ...(spec.prelude?.(ctx) ?? []),
     // (a) 認可判断の根拠(認可版)が今も有効
     assertion(PRINCIPAL_EXISTS_SQL, principal.userId, spec.expectedAuthzVersion, principal.memberId, principal.unitId),
     // (b) 冪等予約。同じ鍵が同時に来た場合はUNIQUE違反で失敗し、勝者の結果を再読込する
@@ -271,7 +278,7 @@ async function diagnose<T>(
   err: unknown,
   nowIso: string,
 ): Promise<MutationResult<T>> {
-  if (!(await principalIsCurrent(env, p, spec.expectedAuthzVersion))) throw new HttpError("FORBIDDEN");
+  if (!spec.prelude && !(await principalIsCurrent(env, p, spec.expectedAuthzVersion))) throw new HttpError("FORBIDDEN");
 
   // 同じ鍵が同時に勝った（UNIQUE違反）なら、その結果を返す
   const winner = await findRecord(env, p, spec);

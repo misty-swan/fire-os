@@ -83,9 +83,9 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-30 | GET /ai/reviews | PER-10 | status/sourceType/limit/cursor | Page<AiEvaluation> |
 | API-31 | POST /ai/reviews/:id/decision | PER-10 | ReviewInput;元版/提案版/反映先権限 | ReviewDecision＋effectIds |
 | API-32 | POST /reports/drafts | PER-09 | activityId,resultVersion,templateVersion;読取/送信可 | Job(202) |
-| API-33 | POST /invitations | PER-07 | memberId,email,expiresInHours(1〜720);未リンク団員/対象認証 | Invitation（生token一回だけ返す） |
+| API-33 | POST /invitations | PER-07 | memberId,email,expiresInHours(1〜720);未リンク・active団員のみ(422)、別unit404、旧い有効な招待は同batchで取消して再発行 | Invitation（生tokenは作成した応答の一回だけ。同じ鍵の再送・保存応答にはtokenを含めず`token:null`） |
 | API-34 | POST /invitations/:id/cancel | PER-07 | version,reason;未消費のみ | Invitation |
-| API-35 | POST /invitations/accept | token＋認証所有確認 | token,verifiedAuthIdentity;一回/期限/名簿一致 | AccountLinkResult |
+| API-35 | POST /invitations/accept | token＋認証所有確認 | token,verifiedAuthIdentity(=セッションのidentity。不一致400);招待先メールと一致(403)、使用済み409、取消/期限切れ422(details.reason=cancelled/expired)、同時受領は片方のみ(409) | AccountLinkResult(memberId,linked,roleCodes,authzVersion)。usersの作成・団員リンク・招待消費・役割付与を一つのbatchで確定 |
 | API-36 | ALL /api/auth/*（v1外） | 認証ライブラリ | better-auth 1.7.7固定。公開する経路は契約の一覧(`authLibrary.endpoints`、OpenAPI `x-external-apis`)だけ：sign-up(招待token必須)/sign-in/sign-out/get-session/request-password-reset/reset-password/change-password/two-factor(enable・verify-totp・verify-backup-code・generate-backup-codes・get-totp-uri・disable)。一覧外はJSON 404 | ライブラリResponse（業務data envelope外） |
 | API-37 | PUT /members/:id/roles | PER-07 | version,expectedAuthzVersion,roleCodes,scopes,reason;自己昇格/最終管理者禁止 | MemberRoles＋authzVersion |
 | API-38 | POST /users/:id/session-revocations | PER-07/本人 | expectedAuthzVersion,reason;全セッション失効 | RevocationResult |
