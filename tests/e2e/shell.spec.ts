@@ -35,7 +35,7 @@ test("shell_layout_matches_the_viewport", async ({ page }, info) => {
     // prototype どおりサイドバー全体がスクロールし、最下部に出動管理と利用者がある
     await page.locator("aside").evaluate((el) => el.scrollTo(0, el.scrollHeight));
     await expect(page.getByRole("link", { name: "出動管理" })).toBeInViewport();
-    await expect(page.getByText("架空 団員")).toBeInViewport();
+    await expect(page.getByText("架空 管理者")).toBeInViewport(); // API-01 の値（管理者のセッション）
     await expect(page.getByRole("link", { name: "AIアシスタント" })).toBeVisible();
     // 画面全体はスクロールせず、中身だけがスクロールする（100vh固定）
     expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(0);
@@ -70,7 +70,7 @@ test("mobile_menu_tab_shows_profile_and_tiles", async ({ page }) => {
   await expect(page).toHaveURL(/\/app\/menu$/);
   await expect(page.getByRole("heading", { level: 2, name: "メニュー" })).toBeVisible();
   await expect(page.getByRole("link", { name: /団員名簿/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /ログアウト/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /ログアウト/ })).toBeEnabled(); // PH1で有効化
   // 2列グリッド
   const a = await page.getByRole("link", { name: /団員名簿/ }).boundingBox();
   const b = await page.getByRole("link", { name: /車両・資機材/ }).boundingBox();

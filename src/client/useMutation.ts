@@ -11,22 +11,22 @@ export type MutationState =
   | { kind: "saving" }
   | { kind: "processing" }
   | { kind: "saved" }
-  | { kind: "conflict"; code: string }
+  | { kind: "conflict"; code: string; details: { field: string; reason: string }[] }
   | { kind: "unauthenticated" }
-  | { kind: "forbidden" }
+  | { kind: "forbidden"; details: { field: string; reason: string }[] }
   | { kind: "invalid"; details: { field: string; reason: string }[] }
   /** 422: 入力は正しいが、対象の今の状態では実行できない（状態遷移・未承認設定・添付未検査） */
-  | { kind: "rejected"; code: string }
+  | { kind: "rejected"; code: string; details: { field: string; reason: string }[] }
   | { kind: "limited" }
   /** 結果不明: 反映されたか分からない。同じ内容なら同じ送信キーで再送でき、二重登録にならない */
   | { kind: "unknown" };
 
 export function stateFromError(e: ApiError): MutationState {
   if (e.status === 401) return { kind: "unauthenticated" };
-  if (e.status === 403 || e.status === 404) return { kind: "forbidden" };
-  if (e.status === 409) return { kind: "conflict", code: e.code };
+  if (e.status === 403 || e.status === 404) return { kind: "forbidden", details: e.details };
+  if (e.status === 409) return { kind: "conflict", code: e.code, details: e.details };
   if (e.status === 429) return { kind: "limited" };
-  if (e.status === 422) return { kind: "rejected", code: e.code };
+  if (e.status === 422) return { kind: "rejected", code: e.code, details: e.details };
   if (e.status === 400) return { kind: "invalid", details: e.details };
   return { kind: "unknown" }; // 0(通信断)/5xx/読めない応答
 }

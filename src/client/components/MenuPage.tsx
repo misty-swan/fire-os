@@ -1,24 +1,42 @@
-import { Link } from "react-router";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { clsx } from "clsx";
-import { demoProfile } from "../demo";
+import { AUTH_MESSAGES, AuthError, signOut } from "../authApi";
+import { initialOf, roleLabel, useMe } from "../me";
 import { menuTiles } from "../screens";
 import { PageTitle } from "./Page";
-import { Button, Icon } from "./ui";
+import { Banner, Button, Icon } from "./ui";
 
 /** スマホの「メニュー」タブ（prototype Menu）：プロフィールカード、2列の機能タイル、ログアウト。 */
 export function MenuPage() {
+  const { me } = useMe();
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const logout = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await signOut();
+      navigate("/login", { replace: true });
+    } catch (e) {
+      // 通信できずログアウトを確認できなかったときは、ログアウトできたと見せない
+      setError(AUTH_MESSAGES[e instanceof AuthError ? e.kind : "unknown"]);
+      setBusy(false);
+    }
+  };
   return (
     <div className="flex flex-col gap-4">
       <PageTitle>メニュー</PageTitle>
       <div className="hairline flex items-center gap-3.5 rounded-[22px] bg-white/5 p-4">
         <span aria-hidden="true" className="grid size-[52px] flex-none place-items-center rounded-full bg-[#1a2740] text-[18px] font-bold">
-          {demoProfile.initial}
+          {initialOf(me.profile.displayName)}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          <span className="truncate text-[16px] font-bold">{demoProfile.name}</span>
-          <span className="truncate text-[12px] text-ink-muted">{demoProfile.detail}</span>
+          <span className="truncate text-[16px] font-bold">{me.profile.displayName}</span>
+          <span className="truncate text-[12px] text-ink-muted">{me.unitName} · {me.profile.rank ?? "団員"}</span>
         </div>
-        <span className="flex-none rounded-pill bg-white/[.08] px-[9px] py-1 text-[11px] font-bold text-[#c3cad6]">{demoProfile.role}</span>
+        <span className="flex-none rounded-pill bg-white/[.08] px-[9px] py-1 text-[11px] font-bold text-[#c3cad6]">{roleLabel(me.roles)}</span>
       </div>
       <ul className="grid grid-cols-2 gap-2">
         {menuTiles.map((t) => (
@@ -33,10 +51,19 @@ export function MenuPage() {
           </li>
         ))}
       </ul>
-      {/* ログアウトはAPI-36(認証)が必要。PH1(T010)で接続するまで押せない */}
-      <Button variant="secondary" disabled title="ログインの実装(PH1)後に使えます" className="!bg-white/5 !text-[14px] !text-ink-sub">
+      {error && (
+        <Banner tone="error" eyebrow="ERROR" role="alert" title="ログアウトを確認できません">
+          {error}
+        </Banner>
+      )}
+      <Link to="/login#mfa" className="hairline flex min-h-12 items-center gap-3 rounded-card bg-white/[.04] px-4 text-[14px] font-bold hover:bg-white/[.07]">
+        <Icon name="shield" className="text-[22px] text-[#c3cad6]" />
+        二要素認証・回復コード
+        {me.mfaEnabled ? <span className="ml-auto text-[11px] font-bold text-ok">有効</span> : me.mfaRequired ? <span className="ml-auto text-[11px] font-bold text-attention">要設定</span> : <span className="ml-auto text-[11px] font-medium text-ink-muted">未設定</span>}
+      </Link>
+      <Button variant="secondary" busy={busy} onClick={() => void logout()} className="!bg-white/5 !text-[14px] !text-ink-sub">
         <Icon name="logout" className="text-[19px]" />
-        ログアウト
+        {busy ? "ログアウトしています…" : "ログアウト"}
       </Button>
     </div>
   );

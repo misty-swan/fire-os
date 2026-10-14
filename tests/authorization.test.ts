@@ -131,6 +131,9 @@ describe("認可 (T008)", () => {
     expect(authorize(admin, "PER-07", ref).allowed).toBe(true);
     expect(authorize({ ...admin, mfaEnabled: false }, "PER-07", ref)).toEqual({ allowed: false, reason: "mfa_required" });
     expect(authorize({ ...admin, mfaEnabled: false }, "PER-08", ref)).toEqual({ allowed: false, reason: "mfa_required" });
+    // 名簿の登録・変更（管理者の操作）も二要素が済むまで拒否。本人の許可列の編集は管理者操作ではないので対象外
+    expect(authorize({ ...admin, mfaEnabled: false }, "PER-06", { unitId: admin.unitId, type: "member", id: ref.id })).toEqual({ allowed: false, reason: "mfa_required" });
+    expect(authorize({ ...admin, mfaEnabled: false }, "PER-06", { unitId: admin.unitId, type: "member_private", id: admin.memberId, ownerMemberId: admin.memberId }).allowed).toBe(true);
     // 二要素が要らない操作は影響を受けない
     expect(authorize({ ...admin, mfaEnabled: false }, "PER-01", ref).allowed).toBe(true);
   });

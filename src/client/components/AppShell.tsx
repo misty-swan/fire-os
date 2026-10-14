@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { clsx } from "clsx";
 import { authEvents } from "../api";
-import { demoOrg, demoProfile } from "../demo";
+import { initialOf, roleLabel, splitUnit, useMe } from "../me";
 import { bottomTabs, desktopNavGroups, dispatchNav, matchDesktopNav, matchScreen } from "../screens";
 import { BrandMark } from "./BrandMark";
 import { Icon } from "./ui";
@@ -37,6 +37,8 @@ function DemoTag({ className }: { className?: string }) {
 
 /** PC(1024px以上)の左サイドバー(248px)。prototype Desktop と同じ：ロゴ→分団カード→3グループ→出動管理→利用者。 */
 function Sidebar({ activePath }: { activePath: string | undefined }) {
+  const { me } = useMe();
+  const unit = splitUnit(me.unitName);
   return (
     <aside className="fo-scroll sticky top-0 hidden h-dvh w-[248px] flex-none flex-col gap-1 overflow-y-auto border-r border-white/[.06] bg-sidebar px-3.5 pb-4 pt-[18px] lg:flex">
       <div className="flex items-center gap-2.5 px-2 pb-4 pt-0.5">
@@ -52,8 +54,8 @@ function Sidebar({ activePath }: { activePath: string | undefined }) {
         className="hairline mb-2.5 flex items-center gap-2.5 rounded-[14px] bg-white/[.04] px-3 py-2.5 text-left"
       >
         <span className="flex flex-1 flex-col gap-0.5">
-          <span className="text-[10px] text-ink-muted">{demoOrg.unit}</span>
-          <span className="text-[14px] font-bold">{demoOrg.branch}</span>
+          {unit.upper && <span className="text-[10px] text-ink-muted">{unit.upper}</span>}
+          <span className="text-[14px] font-bold">{unit.lower}</span>
         </span>
         <Icon name="unfold_more" className="text-[18px] text-ink-muted" />
       </button>
@@ -96,16 +98,17 @@ function Sidebar({ activePath }: { activePath: string | undefined }) {
           <Icon name={dispatchNav.icon} className="text-[20px]" />
           <span className="text-[13px] font-bold">{dispatchNav.label}</span>
         </Link>
-        <div className="flex items-center gap-2.5 border-t border-white/[.06] px-2 pt-2.5">
+        {/* 利用者ブロック（prototypeと同じ見た目）。押すとプロフィール/ログアウトのメニュー画面へ（PCにメニュータブが無いため） */}
+        <Link to="/app/menu" aria-label="プロフィールとログアウト" className="flex items-center gap-2.5 rounded-nav border-t border-white/[.06] px-2 pt-2.5 hover:bg-white/[.04]">
           <span aria-hidden="true" className="grid size-9 flex-none place-items-center rounded-full bg-[#1a2740] text-[14px] font-bold">
-            {demoProfile.initial}
+            {initialOf(me.profile.displayName)}
           </span>
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="truncate text-[13px] font-bold">{demoProfile.name}</span>
-            <span className="truncate text-[11px] text-ink-muted">第2班 団員</span>
+            <span className="truncate text-[13px] font-bold">{me.profile.displayName}</span>
+            <span className="truncate text-[11px] text-ink-muted">{me.profile.rank ?? "団員"}</span>
           </span>
-          <span className="rounded-pill bg-[rgba(255,106,61,.14)] px-[7px] py-[3px] text-[10px] font-bold text-ember-soft">{demoProfile.role}</span>
-        </div>
+          <span className="rounded-pill bg-[rgba(255,106,61,.14)] px-[7px] py-[3px] text-[10px] font-bold text-ember-soft">{roleLabel(me.roles)}</span>
+        </Link>
       </div>
     </aside>
   );
@@ -114,12 +117,13 @@ function Sidebar({ activePath }: { activePath: string | undefined }) {
 /** PCのヘッダー(64px)：パンくず＋画面名、検索欄、通信状態、通知、AIアシスタント。 */
 function DesktopHeader({ title, crumb, online }: { title: string; crumb: string; online: boolean }) {
   const location = useLocation();
+  const { me } = useMe();
   const aiActive = location.pathname.startsWith("/app/assistant");
   return (
     <header className="hidden h-16 flex-none items-center gap-3.5 border-b border-white/[.06] pl-8 pr-6 lg:flex">
       <div className="flex flex-none flex-col gap-0.5">
         <span className="whitespace-nowrap text-[11px] text-ink-dim">
-          {demoOrg.branch} / {crumb}
+          {splitUnit(me.unitName).lower} / {crumb}
         </span>
         <h1 className="whitespace-nowrap text-[17px] font-bold">{title}</h1>
       </div>

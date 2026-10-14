@@ -14,6 +14,16 @@ import { bottomTabs, matchScreen, screens } from "../src/client/screens";
 import { _resetPendingKeysForTest, useMutation } from "../src/client/useMutation";
 
 const ID = "11111111-1111-4111-8111-111111111111";
+/** API-01 の応答の代わり（認証済みの団員）。MeGate の取得を省いてシェルを描く */
+const TEST_ME = {
+  profile: { memberId: ID, displayName: "架空 団員", rank: "団員" },
+  unitName: "架空市 第一分団",
+  roles: ["member" as const],
+  authzVersion: 1,
+  policyVersion: "test",
+  mfaEnabled: false,
+  mfaRequired: false,
+};
 
 // --- fetch スタブ ---
 type Reply = { status: number; body?: unknown } | Error;
@@ -67,7 +77,7 @@ function SampleForm() {
 }
 
 function renderShell(path: string, overrides: Record<string, React.ReactNode> = { "SCR-02": <SampleForm /> }) {
-  const router = createMemoryRouter(buildRoutes(overrides), { initialEntries: [path] });
+  const router = createMemoryRouter(buildRoutes(overrides, { me: TEST_ME }), { initialEntries: [path] });
   render(<RouterProvider router={router} />);
   return router;
 }
@@ -107,7 +117,7 @@ describe("client shell (T005)", () => {
     expect(await screen.findByText("ログインが必要です")).toBeTruthy();
     expect(screen.queryByText("保存しました")).toBeNull();
     await user.click(await screen.findByRole("button", { name: "保存せずに移動する" }));
-    await waitFor(() => expect(screen.queryByRole("heading", { level: 2, name: "ログイン" })).not.toBeNull());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "ログイン" })).not.toBeNull()); // 実ログイン画面（SCR-01）
 
     // 503: 結果不明（保存済みでも失敗確定でもない）。400: 最初の誤り欄へフォーカス
     cleanup();
@@ -347,7 +357,7 @@ describe("client shell (T005)", () => {
     // docs/03の画面は全て到達できる（prototypeに入口が無かった分は追加タイルで）
     const hrefs = tiles.map((l) => l.getAttribute("href"));
     for (const path of ["/app/issues", "/app/patrol-plans", "/app/ai/reviews", "/app/sync", "/app/admin"]) expect(hrefs).toContain(path);
-    expect(screen.getByRole("button", { name: /ログアウト/ }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: /ログアウト/ }).hasAttribute("disabled")).toBe(false); // PH1で有効化（T010）
     expect(screen.getAllByText("一般団員").length).toBeGreaterThan(0); // メニューのカードとPCサイドバー
   });
 
@@ -436,7 +446,7 @@ describe("screen registry (T005)", () => {
   it("every_screen_renders_a_visible_not_implemented_placeholder", () => {
     const concrete = (p: string) => p.replace(/:type/g, "vehicle").replace(/:id/g, "abc");
     for (const sc of screens.filter((s) => s.id !== "SCR-01")) {
-      const router = createMemoryRouter(buildRoutes(), { initialEntries: [concrete(sc.path)] });
+      const router = createMemoryRouter(buildRoutes({}, { me: TEST_ME }), { initialEntries: [concrete(sc.path)] });
       const { unmount } = render(<RouterProvider router={router} />);
       expect(screen.getByRole("heading", { level: 2, name: sc.title }), sc.id).toBeTruthy();
       expect(screen.getByText("未実装"), sc.id).toBeTruthy();

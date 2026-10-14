@@ -10,3 +10,6 @@ dist/
 .env*
 playwright-report/
 test-results/
+
+# ブラウザ試験の一時状態（招待token・セッション。コミットしない）
+tests/e2e/.state/

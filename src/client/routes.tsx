@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Navigate, createBrowserRouter, createMemoryRouter, type RouteObject } from "react-router";
 import { AppShell, useOnline } from "./components/AppShell";
+import { LoginPage } from "./features/auth/LoginPage";
+import { MeGate, type MeData } from "./me";
 import { MenuPage } from "./components/MenuPage";
 import { MobileTopRow, PageTitle } from "./components/Page";
 import { Card, Chip, Icon } from "./components/ui";
@@ -35,7 +37,9 @@ export function ScreenPlaceholder({ screen }: { screen: ScreenDef }) {
  * 28画面の登録点。後続タスクは自分の画面を screenElements["SCR-xx"] へ登録する（未登録はプレースホルダー）。
  * 試験では buildRoutes の overrides で任意の要素に差し替える。
  */
-export const screenElements: Partial<Record<string, ReactNode>> = {};
+export const screenElements: Partial<Record<string, ReactNode>> = {
+  "SCR-01": <LoginPage />,
+};
 
 function toRoutes(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject[] {
   const element = overrides[sc.id] ?? screenElements[sc.id] ?? <ScreenPlaceholder screen={sc} />;
@@ -52,13 +56,18 @@ function NotFound() {
 }
 
 // ログイン(SCR-01)はshellの外（ナビを出さない）。/app 配下はAppShellの中。
-export function buildRoutes(overrides: Record<string, ReactNode> = {}): RouteObject[] {
+export function buildRoutes(overrides: Record<string, ReactNode> = {}, options: { me?: MeData } = {}): RouteObject[] {
   const loginScreen = screens.find((s) => s.id === "SCR-01")!;
   return [
     { path: "/", element: <Navigate to="/app" replace /> },
     ...toRoutes(loginScreen, overrides),
     {
-      element: <AppShell />,
+      // 業務の画面はログイン済み(API-01が取れる)ときだけ。取れなければ /login へ。options.me は試験用（取得を省く）
+      element: (
+        <MeGate me={options.me}>
+          <AppShell />
+        </MeGate>
+      ),
       children: [
         ...screens.filter((s) => s.id !== "SCR-01").flatMap((s) => toRoutes(s, overrides)),
         // シェルの画面（SCR番号なし）。メニューはスマホの「メニュー」タブ
@@ -71,5 +80,5 @@ export function buildRoutes(overrides: Record<string, ReactNode> = {}): RouteObj
 }
 
 export const createRouter = () => createBrowserRouter(buildRoutes());
-export const createTestRouter = (initialEntries: string[], overrides: Record<string, ReactNode> = {}) =>
-  createMemoryRouter(buildRoutes(overrides), { initialEntries });
+export const createTestRouter = (initialEntries: string[], overrides: Record<string, ReactNode> = {}, me?: MeData) =>
+  createMemoryRouter(buildRoutes(overrides, { me }), { initialEntries });

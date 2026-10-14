@@ -85,7 +85,10 @@ export function authorize(p: AuthzPrincipal, action: PermissionCode, target: Res
       return hasScope(p, action, { ...target, type: "member", id: target.id }) ? { allowed: true } : { allowed: false, reason: "scope_required" };
     }
     // 名簿の基本項目(氏名・役職・状態)の登録/変更は管理者
-    if (target.type === "member") return hasRole(p, ["admin"]) ? { allowed: true } : { allowed: false, reason: "role" };
+    if (target.type === "member") {
+      if (!hasRole(p, ["admin"])) return { allowed: false, reason: "role" };
+      return p.mfaEnabled ? { allowed: true } : { allowed: false, reason: "mfa_required" }; // 管理者の操作は二要素必須
+    }
     return { allowed: false, reason: "role" };
   }
 
