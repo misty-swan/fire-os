@@ -16,6 +16,10 @@ import { registerImportPreviewRoutes } from "./routes/import-preview";
 import { registerImportCommitRoutes, registerFacilityExportRoutes } from "./routes/import-commit";
 import { registerAssetRoutes } from "./routes/assets";
 import { registerInspectionTemplateRoutes } from "./routes/inspection-templates";
+import { registerFacilityInspectionRoutes } from "./routes/facility-inspections";
+import { registerAssetInspectionRoutes } from "./routes/asset-inspections";
+import { registerInspectionCorrectionRoutes } from "./routes/inspection-corrections";
+import { registerIssueRoutes } from "./routes/issues";
 
 // APIルートの登録点。各ドメインのroute登録関数を後続タスクがここへ追加する。
 export function registerRoutes(app: ApiApp): void {
@@ -38,4 +42,8 @@ export function registerRoutes(app: ApiApp): void {
   registerImportPreviewRoutes(app);
   registerAssetRoutes(app);
   registerInspectionTemplateRoutes(app);
+  registerFacilityInspectionRoutes(app);
+  registerAssetInspectionRoutes(app);
+  registerInspectionCorrectionRoutes(app);
+  registerIssueRoutes(app);
 }
