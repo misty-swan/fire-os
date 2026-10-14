@@ -19,6 +19,24 @@ const AclEntry = obj({
 }).refine((v) => !!v.memberId !== !!v.roleId, { message: "memberId か roleId のどちらか一方を指定してください" });
 const Acl = z.array(AclEntry).min(1).max(LIMITS.arrayMax);
 
+/**
+ * 監査ログ（追記専用）。本文・氏名・連絡先・token・Secretは入らない（metadataはIDとコードの平坦な値だけ、1KiB以下）。
+ * mutationId は同じ操作のoutbox（entityVersion/eventType）と結びつき、操作・旧新版を追跡できる。
+ */
+export const AuditLog = obj({
+  id: Id,
+  occurredAt: z.string(),
+  actorKind: z.enum(["human", "system"]),
+  actorId: Id.nullable(),
+  action: z.string(),
+  entityType: z.string(),
+  entityId: z.string(),
+  mutationId: z.string(),
+  entityVersion: z.number().int().nullable(),
+  eventType: z.string().nullable(),
+  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+});
+
 export const contentApis = {
   "API-24": defineApi({
     method: "GET", path: "/announcements", permission: "PER-01", kind: "list", success: [200],
@@ -180,6 +198,6 @@ export const contentApis = {
         actorId: Id.optional(),
       }),
     }),
-    response: Page(provisionalDto().partial({ version: true })), provisional: true,
+    response: Page(AuditLog),
   }),
 } as const;

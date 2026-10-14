@@ -1,5 +1,6 @@
 import type { ApiApp } from "./http";
 import { registerAuthRoutes } from "./routes/auth";
+import { registerAuditRoutes } from "./routes/audit";
 import { registerInvitationRoutes } from "./routes/invitations";
 import { registerJobRoutes } from "./routes/jobs";
 import { registerMemberRoutes } from "./routes/members";
@@ -16,4 +17,5 @@ export function registerRoutes(app: ApiApp): void {
   registerMemberRoutes(app);
   registerRoleRoutes(app);
   registerRevocationRoutes(app);
+  registerAuditRoutes(app);
 }

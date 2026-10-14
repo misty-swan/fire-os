@@ -434,7 +434,7 @@ export function AccessPanel() {
         </h3>
         <MfaPanel />
       </Card>
-      <AuditPanel enabled={mfaReady} />
+      <AuditPanel enabled={mfaReady} members={rows} />
     </div>
   );
 }

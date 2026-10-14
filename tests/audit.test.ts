@@ -1,0 +1,123 @@
+import { env } from "cloudflare:workers";
+import { applyD1Migrations } from "cloudflare:test";
+import { beforeAll, describe, expect, it } from "vitest";
+import { loginAs } from "./helpers/auth";
+import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
+
+beforeAll(async () => {
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+});
+
+interface AuditDto {
+  id: string; occurredAt: string; actorKind: string; actorId: string | null; action: string; entityType: string; entityId: string;
+  mutationId: string; entityVersion: number | null; eventType: string | null; metadata: Record<string, unknown>;
+}
+const idem = () => ({ "idempotency-key": crypto.randomUUID() });
+const SECRETS = ["架空 監査確認", "090-0000-1111", "audit-secret@example.test", "監査試験の理由", "誤発行テスト"];
+
+async function listAudit(fx: TestFixture, who: Identity, query = "") {
+  const r = await fx.client(who).request("GET", `/api/v1/audit-logs${query}`);
+  const j = (await r.json()) as { data?: AuditDto[]; meta?: { nextCursor?: string } };
+  return { status: r.status, rows: j.data ?? [], next: j.meta?.nextCursor };
+}
+
+describe("監査 (T014)", () => {
+  it("audit_is_append_only_and_scope_filtered", async () => {
+    const fx = await createFixture("two-units");
+    const { admin, member, operator, officer } = fx.units.a.people;
+    const c = fx.client(admin);
+    // 台帳(名簿)・権限・停止の操作を行う
+    const made = await c.request("POST", "/api/v1/members", { displayName: "架空 監査確認", status: "active", privateFields: { phone: "090-0000-1111" } }, idem());
+    const newMember = ((await made.json()) as { data: { id: string } }).data.id;
+    const inv = await c.request("POST", "/api/v1/invitations", { memberId: newMember, email: "audit-secret@example.test", expiresInHours: 24 }, idem());
+    const invitation = ((await inv.json()) as { data: { id: string; version: number } }).data;
+    await c.request("POST", `/api/v1/invitations/${invitation.id}/cancel`, { version: invitation.version, reason: "誤発行テスト" }, idem());
+    const roles = await c.request("PUT", `/api/v1/members/${operator.memberId}/roles`, { version: 1, expectedAuthzVersion: 1, roleCodes: ["officer"], scopes: [], reason: "監査試験の理由" }, idem());
+    expect(roles.status).toBe(200);
+    const memberDenied = (await listAudit(fx, member)).status; // 停止する前の一般団員
+    // 失敗した操作（旧い版・権限なし）は監査に残らない
+    const before = (await listAudit(fx, admin)).rows.length;
+    expect((await c.request("PATCH", `/api/v1/members/${newMember}`, { version: 99, rank: "x" }, idem())).status).toBe(409);
+    expect((await fx.client(member).request("PATCH", `/api/v1/members/${newMember}`, { version: 1, rank: "x" }, idem())).status).toBe(403);
+    const stop = await c.request("PATCH", `/api/v1/members/${member.memberId}`, { version: 1, status: "paused", reason: "監査試験の理由" }, idem());
+    expect(stop.status).toBe(200);
+
+    // 担当者（actor）別の検索：成功した操作が、操作の順に一回ずつ追跡できる
+    const mine = await listAudit(fx, admin, `?actorId=${admin.userId}&limit=100`);
+    expect(mine.status).toBe(200);
+    const successfulActions = [...mine.rows].reverse().map((r) => r.action);
+    const expectedActions = ["member.create", "invitation.create", "invitation.cancel", "member.roles.replace", "member.disable"];
+    const duplicateOperationIds = mine.rows.map((r) => r.mutationId).filter((m, i, a) => a.indexOf(m) !== i);
+    const sensitiveBodiesInLog = SECRETS.filter((s) => JSON.stringify(mine.rows).includes(s));
+    // 新しい順。version追跡：outboxの版と結びつく
+    expect(mine.rows[0]!.action).toBe("member.disable");
+    expect(mine.rows.find((r) => r.action === "member.roles.replace")).toMatchObject({ entityType: "member", entityId: operator.memberId, entityVersion: 2, eventType: "member.roles.replaced", actorId: admin.userId });
+    expect(mine.rows.every((r) => before >= 0 && r.actorKind === "human")).toBe(true);
+
+    // 一般役割・別unitは参照できない。監査の更新/削除の経路は存在しない
+    const denied = [] as number[];
+    denied.push(memberDenied);
+    for (const who of [operator, officer]) denied.push((await listAudit(fx, who)).status);
+    const otherUnit = await listAudit(fx, fx.units.b.people.admin);
+    const updateAuditRoute = await c.request("PATCH", `/api/v1/audit-logs/${mine.rows[0]!.id}`, { action: "x" }, idem());
+    const deleteAuditRoute = await c.request("DELETE", `/api/v1/audit-logs/${mine.rows[0]!.id}`, undefined, idem());
+    const postAuditRoute = await c.request("POST", "/api/v1/audit-logs", { action: "x" }, idem());
+
+    expect(successfulActions).toEqual(expectedActions);
+    expect(duplicateOperationIds).toEqual([]);
+    expect(sensitiveBodiesInLog).toEqual([]);
+    expect(updateAuditRoute.status).toBe(404);
+    expect(deleteAuditRoute.status).toBe(404);
+    expect(postAuditRoute.status).toBe(404);
+    expect(denied).toEqual([403, 403, 403]);
+    expect(otherUnit.status).toBe(200);
+    expect(otherUnit.rows.some((r) => mine.rows.some((m) => m.id === r.id))).toBe(false); // 別unitの管理者に、この分団の監査は見えない
+    // DB自体も追記専用（トリガー）：直接のUPDATE/DELETEは失敗する
+    await expect(env.DB.prepare("UPDATE audit_logs SET action = 'x' WHERE id = ?").bind(mine.rows[0]!.id).run()).rejects.toThrow(/append-only/);
+    await expect(env.DB.prepare("DELETE FROM audit_logs WHERE id = ?").bind(mine.rows[0]!.id).run()).rejects.toThrow(/append-only/);
+  });
+
+  it("audit_search_filters_and_keyset_paging_are_stable", async () => {
+    const fx = await createFixture("two-units");
+    const { admin } = fx.units.a.people;
+    const c = fx.client(admin);
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = await c.request("POST", "/api/v1/members", { displayName: `架空 履歴${i}`, status: "active" }, idem());
+      ids.push(((await r.json()) as { data: { id: string } }).data.id);
+    }
+    // ページング中に新しい監査が増えても、取りこぼし・重複が出ない（新しい順のkeyset）
+    const p1 = await listAudit(fx, admin, "?limit=2");
+    await c.request("POST", "/api/v1/members", { displayName: "架空 履歴後から", status: "active" }, idem());
+    const p2 = await listAudit(fx, admin, `?limit=2&cursor=${encodeURIComponent(p1.next!)}`);
+    const p3 = await listAudit(fx, admin, `?limit=2&cursor=${encodeURIComponent(p2.next!)}`);
+    const seen = [...p1.rows, ...p2.rows, ...p3.rows].map((r) => r.id);
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(p1.rows.map((r) => r.entityId)).toEqual([ids[4], ids[3]]);
+    expect(p2.rows.map((r) => r.entityId)).toEqual([ids[2], ids[1]]);
+    // 絞り込み：対象・対象種別・期間・行為者
+    const byEntity = await listAudit(fx, admin, `?entityId=${ids[2]}`);
+    expect(byEntity.rows.map((r) => r.action)).toEqual(["member.create"]);
+    expect((await listAudit(fx, admin, "?entityType=invitation")).rows).toEqual([]);
+    const all = await listAudit(fx, admin, "?limit=200&entityType=member");
+    const times = all.rows.map((r) => r.occurredAt);
+    expect([...times].sort().reverse()).toEqual(times);
+    const mid = times[2]!;
+    expect((await listAudit(fx, admin, `?limit=200&from=${encodeURIComponent(mid)}`)).rows.every((r) => r.occurredAt >= mid)).toBe(true);
+    expect((await listAudit(fx, admin, `?limit=200&to=${encodeURIComponent(mid)}`)).rows.every((r) => r.occurredAt <= mid)).toBe(true);
+    expect((await listAudit(fx, admin, `?actorId=${crypto.randomUUID()}`)).rows).toEqual([]);
+    // 契約に無い絞り込み・壊れたcursorは400
+    expect((await c.request("GET", "/api/v1/audit-logs?unitId=x")).status).toBe(400);
+    expect((await c.request("GET", "/api/v1/audit-logs?cursor=broken")).status).toBe(400);
+  });
+
+  it("audit_requires_mfa_for_a_real_admin_session", async () => {
+    const fx = await createFixture("two-units");
+    const { admin } = fx.units.a.people;
+    const noMfa = await loginAs(admin);
+    expect((await noMfa.json("GET", "/api/v1/audit-logs")).status).toBe(403);
+    const withMfa = await loginAs(admin, { mfa: true });
+    const r = await withMfa.json<{ data: unknown[] }>("GET", "/api/v1/audit-logs");
+    expect(r.status).toBe(200);
+  });
+});

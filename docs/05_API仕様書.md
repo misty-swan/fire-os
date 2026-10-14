@@ -143,7 +143,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-90 | GET /documents | PER-11 | q/status/limit/cursor;文書ACL前置 | Page<Document> |
 | API-91 | GET /documents/:id | PER-11 | revision?;原文添付参照/引用元版 | DocumentDetail |
 | API-92 | POST /documents/:id/withdrawal | PER-11管理 | version,reason;即時検索除外/旧引用失効 | Document＋deindexJob |
-| API-93 | GET /audit-logs | PER-08 | entityType/entityId/from/to/actorId/limit/cursor | Page<AuditLog> |
+| API-93 | GET /audit-logs | PER-08 | entityType/entityId/from/to/actorId/limit/cursor（新しい順の安定keyset=occurred_at,id）;管理者のみ・二要素必須・自分の分団だけ。監査の更新/削除/追加のAPIは無い(PATCH/DELETE/POSTは404) | Page<AuditLog>（id,occurredAt,actorKind,actorId,action,entityType,entityId,mutationId,entityVersion,eventType,metadata。本文・氏名・連絡先・token・Secretは含まない） |
 | API-94 | GET /inspection-templates | PER-04 | targetType/status/limit/cursor;承認版一覧を担当範囲で取得 | Page<InspectionTemplate> |
 | API-95 | POST /inspection-templates | PER-03様式管理 | name,targetType,itemSchema;code一意/型/必須/結果列挙,D06 | InspectionTemplate(draft) |
 | API-96 | POST /inspection-templates/:id/versions | PER-03様式管理 | version,itemSchema,reason;新draft版/旧版不変 | InspectionTemplateVersion |
