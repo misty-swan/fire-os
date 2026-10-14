@@ -52,12 +52,17 @@ describe("監査 (T014)", () => {
     // 新しい順。version追跡：outboxの版と結びつく
     expect(mine.rows[0]!.action).toBe("member.disable");
     expect(mine.rows.find((r) => r.action === "member.roles.replace")).toMatchObject({ entityType: "member", entityId: operator.memberId, entityVersion: 2, eventType: "member.roles.replaced", actorId: admin.userId });
-    expect(mine.rows.every((r) => before >= 0 && r.actorKind === "human")).toBe(true);
+    expect(mine.rows.every((r) => r.actorKind === "human")).toBe(true);
+    // 失敗した操作（旧い版409・権限なし403）は、その対象の監査に何も残していない
+    expect(mine.rows.filter((r) => r.entityId === newMember).map((r) => r.action)).toEqual(["invitation.create", "invitation.cancel", "member.create"].filter((a) => a === "member.create"));
+    expect(before).toBeGreaterThan(0);
 
     // 一般役割・別unitは参照できない。監査の更新/削除の経路は存在しない
     const denied = [] as number[];
     denied.push(memberDenied);
     for (const who of [operator, officer]) denied.push((await listAudit(fx, who)).status);
+    const reasonBody = (await (await fx.client(officer).request("GET", "/api/v1/audit-logs")).json()) as { error: { code: string; details: { reason: string }[] } };
+    expect(reasonBody.error).toMatchObject({ code: "FORBIDDEN", details: [{ reason: "role" }] }); // 権限不足（二要素欠如の403とは別の理由）
     const otherUnit = await listAudit(fx, fx.units.b.people.admin);
     const updateAuditRoute = await c.request("PATCH", `/api/v1/audit-logs/${mine.rows[0]!.id}`, { action: "x" }, idem());
     const deleteAuditRoute = await c.request("DELETE", `/api/v1/audit-logs/${mine.rows[0]!.id}`, undefined, idem());

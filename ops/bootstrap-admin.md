@@ -5,7 +5,7 @@
 ## 前提
 - 環境（local / demo / staging / production）ごとに別のD1。**環境名を必ず明示**する（`--env` なしは実行不可）。
 - migration（`wrangler d1 migrations apply`）が済み、`units` が空であること。
-- Secret `BETTER_AUTH_SECRET` と `AUTH_BASE_URL` が設定済み。
+- （CLI自体はD1にだけ触れる。招待を受け取る本人がログインできるよう、Workerには Secret `BETTER_AUTH_SECRET` と `AUTH_BASE_URL` を設定しておく。）
 
 ## 実行
 ```

@@ -7,7 +7,6 @@ test("audit_panel_shows_who_changed_what_without_bodies", async ({ page, request
   await inviteNewMember(request, name, email);
 
   await page.goto("/app/admin");
-  const panel = page.locator("section, div").filter({ has: page.getByRole("heading", { name: "監査ログ" }) }).last();
   await expect(page.getByRole("heading", { name: "監査ログ" })).toBeVisible();
   await page.getByLabel("対象").selectOption("invitation");
   await page.getByRole("button", { name: "絞り込む" }).click();
@@ -19,7 +18,6 @@ test("audit_panel_shows_who_changed_what_without_bodies", async ({ page, request
   await log.getByText("招待を発行").first().click();
   await expect(log.getByText("操作ID").first()).toBeVisible();
   await expect(log.getByText("invitation.created").first()).toBeVisible();
-  expect(panel).toBeTruthy();
   // 横にはみ出さない
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 });

@@ -68,11 +68,13 @@ describe("名簿 (T011)", () => {
 
     // 未知の列の更新は400、旧い版の変更は409
     const unknownColumn = await patch(admin, made.body.data!.id, { version: 1, role: "admin" });
+    expect(((await unknownColumn.clone().json()) as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
     const unknownPrivate = await patch(member, member.memberId!, { version: 1, privateFields: { ssn: "x" } });
     expect(unknownPrivate.status).toBe(400);
     const ok = await patch(admin, made.body.data!.id, { version: 1, rank: "班長" });
     expect(ok.status).toBe(200);
     const staleEdit = await patch(admin, made.body.data!.id, { version: 1, rank: "部長" });
+    expect(((await staleEdit.clone().json()) as { error: { code: string } }).error.code).toBe("VERSION_CONFLICT"); // 重複(DUPLICATE)や内部障害ではない
 
     // 退団は論理状態。履歴の参照（招待・監査）は残り、DBは物理削除を拒否する
     const retire = await patch(admin, made.body.data!.id, { version: 2, status: "retired", reason: "転居" });
@@ -109,6 +111,19 @@ describe("名簿 (T011)", () => {
     await f.client(a.people.member).request("GET", "/api/v1/members");
     const after = await env.DB.prepare("SELECT count(*) AS n FROM audit_logs WHERE action = 'member.private.view' AND entity_id = ?").bind(a.people.member.memberId).first<{ n: number }>();
     expect(after!.n).toBe(1);
+  });
+
+  it("expired_scopes_are_not_listed_and_expiry_is_preserved_when_roles_are_edited", async () => {
+    const f = await createFixture("two-units");
+    const a = f.units.a;
+    const ins = (member: string, target: string, expires: string | null) =>
+      env.DB.prepare("INSERT INTO scope_assignments (id, unit_id, member_id, entity_type, entity_id, permissions, expires_at, created_at, updated_at, created_by, actor_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(), a.id, member, "member", target, '["PER-06"]', expires, NOW, NOW, a.people.admin.userId, "human").run();
+    await ins(a.people.operator.memberId!, a.people.member.memberId!, "2020-01-01T00:00:00.000Z"); // 期限切れ
+    await ins(a.people.officer.memberId!, a.people.member.memberId!, "2099-01-01T00:00:00.000Z"); // 有効（期限つき）
+    const rows = ((await (await f.client(a.people.admin).request("GET", "/api/v1/members")).json()) as { data: (MemberDto & { scopes: { expiresAt: string | null }[] })[] }).data;
+    expect(rows.find((r) => r.id === a.people.operator.memberId)!.scopes.filter((s) => (s as { entityType?: string }).entityType === "member")).toEqual([]);
+    expect(rows.find((r) => r.id === a.people.officer.memberId)!.scopes.map((s) => s.expiresAt)).toEqual(["2099-01-01T00:00:00.000Z"]);
   });
 
   it("who_may_change_what_is_enforced_by_the_server", async () => {

@@ -18,7 +18,7 @@ const MEMBER_ROLES_JSON =
   "SELECT json_object('memberId', m.id, 'version', m.version, 'authzVersion', u.authz_version, " +
   "'roleCodes', (SELECT json_group_array(r.code) FROM member_roles mr JOIN roles r ON r.id = mr.role_id WHERE mr.member_id = m.id AND mr.revoked_at IS NULL), " +
   "'scopes', (SELECT json_group_array(json_object('entityType', s.entity_type, 'entityId', s.entity_id, 'permissions', json(s.permissions), 'expiresAt', s.expires_at)) " +
-  "FROM scope_assignments s WHERE s.member_id = m.id AND s.revoked_at IS NULL)) FROM members m JOIN users u ON u.id = m.user_id WHERE m.id = ?";
+  "FROM scope_assignments s WHERE s.member_id = m.id AND s.revoked_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))) FROM members m JOIN users u ON u.id = m.user_id WHERE m.id = ?";
 
 /** API-37: 役割と担当の全置換（版管理）。最後の管理者の降格・自己昇格は拒否し、成功したら対象の認可版を増やす */
 export function registerRoleRoutes(app: ApiApp): void {

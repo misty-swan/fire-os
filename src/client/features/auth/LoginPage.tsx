@@ -11,7 +11,7 @@ import { MfaPanel } from "./MfaPanel";
 const errText = (e: unknown) => AUTH_MESSAGES[e instanceof AuthError ? e.kind : "unknown"];
 
 /** URLの # 以降（招待・再設定のtoken）を読み、読んだらアドレスから消す。tokenを履歴・共有・Refererに残さない */
-function useFragmentSecret(key: "invite" | "reset"): string | null {
+function useFragmentSecret(key: "invite" | "reset"): [string | null, () => void] {
   const read = () => (typeof window === "undefined" ? null : new URLSearchParams(window.location.hash.slice(1)).get(key));
   const [value, setValue] = useState<string | null>(read);
   // 同じ画面のまま別の招待リンクを開いた（# だけが変わる）場合も、新しいtokenを読む
@@ -27,7 +27,7 @@ function useFragmentSecret(key: "invite" | "reset"): string | null {
   useEffect(() => {
     if (value) window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, [value]);
-  return value;
+  return [value, () => setValue(null)];
 }
 
 /** パスワードの再設定（本人確認済みのtokenでのみ）。tokenの配送手段はD04未決のため、tokenは管理者または配送経路から受け取る */
@@ -109,7 +109,7 @@ function RecoveryPanel({ token, onBack }: { token: string | null; onBack: () => 
           <Button type="submit" busy={busy} disabled={!email}>
             {busy ? "送信しています…" : "再設定を申請する"}
           </Button>
-          <button type="button" className="text-[13px] font-bold text-ember-soft underline" onClick={() => setHaveToken(true)}>
+          <button type="button" className="min-h-11 text-[13px] font-bold text-ember-soft underline" onClick={() => setHaveToken(true)}>
             再設定コードをお持ちの方
           </button>
         </form>
@@ -130,8 +130,8 @@ export function LoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const next = safeNext(new URLSearchParams(location.search).get("next"));
-  const inviteToken = useFragmentSecret("invite");
-  const resetToken = useFragmentSecret("reset");
+  const [inviteToken] = useFragmentSecret("invite");
+  const [resetToken, clearReset] = useFragmentSecret("reset");
   const [recover, setRecover] = useState(() => typeof window !== "undefined" && window.location.hash === "#recover");
   // ログイン済みの利用者が二要素認証を設定/回復コードを作り直すための入口（#mfa）
   const [mfaOnly] = useState(() => typeof window !== "undefined" && window.location.hash === "#mfa");
@@ -209,7 +209,7 @@ export function LoginPage() {
   if (resetToken || recover) {
     return (
       <AuthLayout>
-        <RecoveryPanel token={resetToken} onBack={() => setRecover(false)} />
+        <RecoveryPanel token={resetToken} onBack={() => { setRecover(false); clearReset(); }} />
       </AuthLayout>
     );
   }
@@ -265,7 +265,7 @@ export function LoginPage() {
           <Button variant="secondary" onClick={() => { setStep(backup ? "second" : "backup"); setCode(""); setError(""); }}>
             {backup ? "認証コードに戻る" : "回復コードを使う"}
           </Button>
-          <button type="button" className="text-[13px] font-bold text-ink-sub underline" onClick={() => { setStep("password"); setCode(""); setError(""); }}>
+          <button type="button" className="min-h-11 text-[13px] font-bold text-ink-sub underline" onClick={() => { setStep("password"); setCode(""); setError(""); }}>
             最初からやり直す
           </button>
         </form>
@@ -295,7 +295,7 @@ export function LoginPage() {
           <Icon name="fingerprint" className="text-[20px]" />
           生体認証でログイン
         </Button>
-        <button type="button" className="mx-auto text-[12px] font-bold text-ember-soft underline" onClick={() => setRecover(true)}>
+        <button type="button" className="mx-auto min-h-11 text-[12px] font-bold text-ember-soft underline" onClick={() => setRecover(true)}>
           パスワードの再設定
         </button>
       </form>

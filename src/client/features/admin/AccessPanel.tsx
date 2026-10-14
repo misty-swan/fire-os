@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { ConfirmDialog } from "../../components/Overlay";
 import { MutationStatus } from "../../components/MutationStatus";
@@ -188,7 +188,13 @@ function RolesSection({ member, members, enabled, isSelf, onChanged }: { member:
         roleCodes: ROLE_OPTIONS.filter((x) => roles.has(x)),
         scopes: [
           ...keptOther.map((s) => ({ entityType: s.entityType, entityId: s.entityId, permissions: s.permissions, ...(s.expiresAt ? { expiresAt: s.expiresAt } : {}) })),
-          ...[...scopeIds].map((id) => ({ entityType: "member", entityId: id, permissions: ["PER-06"] })),
+          // 既にある担当は期限ごと保持し、新しく選んだ分だけを無期限で追加する（期限を黙って外さない）
+          ...[...scopeIds].map((id) => {
+            const existing = (member.scopes ?? []).find((s) => s.entityType === "member" && s.entityId === id);
+            return existing
+              ? { entityType: "member", entityId: id, permissions: existing.permissions, ...(existing.expiresAt ? { expiresAt: existing.expiresAt } : {}) }
+              : { entityType: "member", entityId: id, permissions: ["PER-06"] };
+          }),
         ],
         reason,
       },
@@ -313,7 +319,7 @@ function StopSection({ member, enabled, isSelf, onChanged }: { member: MemberRow
         <TextArea name="stop-reason" label="停止理由" value={reason} onChange={(e) => setReason(e.target.value)} hint="変更された団員の記録に残ります（監査ログには本文を複製しません）" />
         <MutationStatus state={stop.state} toastBottom={100} />
         <ReasonLine state={stop.state} />
-        <Button disabled={!enabled || reason.trim() === ""} onClick={() => setConfirm("stop")} className="!h-[46px] !text-[13px] !bg-[#e8432a] hover:!bg-[#f0543c]">
+        <Button disabled={!enabled || reason.trim() === ""} onClick={() => setConfirm("stop")} className="!h-[46px] !text-[13px] !bg-danger hover:!bg-danger-hover">
           停止の内容を確認する
         </Button>
       </div>
@@ -351,6 +357,7 @@ export function AccessPanel() {
   const { me, refresh } = useMe();
   const { state, reload } = useMembers();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
   const isAdmin = me.roles.includes("admin");
   const mfaReady = me.mfaEnabled || !me.mfaRequired;
   const rows = state.kind === "ready" ? state.rows : [];
@@ -399,7 +406,7 @@ export function AccessPanel() {
                   <button
                     type="button"
                     aria-pressed={r.id === selectedId}
-                    onClick={() => setSelectedId(r.id)}
+                    onClick={() => { setSelectedId(r.id); if (window.innerWidth < 1024) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
                     className={clsx("flex min-h-[52px] w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-white/[.05]", r.id === selectedId && "bg-white/[.08]")}
                   >
                     <span aria-hidden="true" className="grid size-9 flex-none place-items-center rounded-full bg-[#1a2740] text-[13px] font-bold">{initialOf(r.displayName)}</span>
@@ -413,10 +420,10 @@ export function AccessPanel() {
               ))}
             </ul>
           </Card>
-          <div className="flex flex-col gap-4" aria-live="polite">
+          <div ref={detailRef} className="flex flex-col gap-4 scroll-mt-4">
             {selected ? (
               <>
-                <h3 className="text-[19px] font-bold">{selected.displayName} <span className="text-[13px] font-medium text-ink-muted">の管理</span></h3>
+                <h3 tabIndex={-1} className="text-[19px] font-bold outline-none">{selected.displayName} <span className="text-[13px] font-medium text-ink-muted">の管理</span></h3>
                 <InvitationSection key={`i-${selected.id}`} member={selected} enabled={mfaReady} onChanged={changed} />
                 <RolesSection member={selected} members={rows} enabled={mfaReady} isSelf={selected.id === me.profile.memberId} onChanged={changed} />
                 <StopSection key={`s-${selected.id}`} member={selected} enabled={mfaReady} isSelf={selected.id === me.profile.memberId} onChanged={changed} />

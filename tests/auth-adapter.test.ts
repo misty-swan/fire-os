@@ -208,6 +208,50 @@ describe("認証ライブラリ (T007 / V01)", () => {
     expect((await b4.json("POST", "/api/auth/two-factor/verify-backup-code", { code: codes[1] })).status).toBe(200);
   });
 
+  it("mfa_cannot_be_turned_off_or_bypassed_and_enabling_it_revokes_older_sessions", async () => {
+    const { service } = directAuth();
+    const worker = await workerBrowser();
+    const { email } = await invitedAccount(worker);
+    const sessionOf = (b: Browser) => service.session(new Request(`${BASE}/x`, { headers: { cookie: b.cookieHeader() } }));
+    // MFA設定前に別端末(パスワードだけ)でログインしていたセッション
+    const old = await directBrowser(service);
+    await old.json("POST", "/api/auth/sign-in/email", { email, password: GOOD_PASSWORD });
+    const b1 = await directBrowser(service);
+    await b1.json("POST", "/api/auth/sign-in/email", { email, password: GOOD_PASSWORD });
+    const enable = await b1.json<{ totpURI: string; backupCodes: string[] }>("POST", "/api/auth/two-factor/enable", { password: GOOD_PASSWORD });
+    const secret = secretFromUri(enable.data.totpURI);
+    // 信頼端末(30日間コード不要)の要求は受け付けない
+    const trust = await b1.json("POST", "/api/auth/two-factor/verify-totp", { code: await totpCode(secret), trustDevice: true });
+    expect(trust.status).toBe(400);
+    expect((await b1.json("POST", "/api/auth/two-factor/verify-totp", { code: await totpCode(secret) })).status).toBe(200);
+    // 有効化を確定したら、それ以前に作られた他のセッションは失効する（パスワードだけで作られたセッションを残さない）
+    expect(await sessionOf(old)).toBeNull();
+    expect(await sessionOf(b1)).not.toBeNull();
+  });
+
+  it("mfa_management_endpoints_require_the_password_and_there_is_no_disable_path", async () => {
+    const worker = await workerBrowser();
+    const p = fx.units.a.people.unlinked;
+    const email = uniqueEmail("mfa-ep");
+    const token = await seedInvitation({ unitId: p.unitId, memberId: p.memberId!, email, createdBy: null });
+    expect((await signUp(worker, email, token)).status).toBe(200);
+    // 二要素の解除は公開しない（契約外 → 404）。回復コードの再発行・URI再表示はパスワードの再確認が要る
+    expect((await worker.json("POST", "/api/auth/two-factor/disable", { password: GOOD_PASSWORD })).status).toBe(404);
+    expect((await worker.json("POST", "/api/auth/two-factor/generate-backup-codes", {})).status).toBe(400);
+    expect((await worker.json("POST", "/api/auth/two-factor/get-totp-uri", {})).status).toBe(400);
+    const enable = await worker.json<{ totpURI: string; backupCodes: string[] }>("POST", "/api/auth/two-factor/enable", { password: GOOD_PASSWORD });
+    expect((await worker.json("POST", "/api/auth/two-factor/verify-totp", { code: await totpCode(secretFromUri(enable.data.totpURI)) })).status).toBe(200);
+    expect((await worker.json("POST", "/api/auth/two-factor/generate-backup-codes", { password: "wrong-password-123" })).status).not.toBe(200);
+    // 再発行すると旧い回復コードは使えない
+    const regen = await worker.json<{ backupCodes: string[] }>("POST", "/api/auth/two-factor/generate-backup-codes", { password: GOOD_PASSWORD });
+    expect(regen.status).toBe(200);
+    const { service } = directAuth();
+    const other = await directBrowser(service);
+    await other.json("POST", "/api/auth/sign-in/email", { email, password: GOOD_PASSWORD });
+    expect((await other.json("POST", "/api/auth/two-factor/verify-backup-code", { code: enable.data.backupCodes[0] })).status).not.toBe(200);
+    expect((await other.json("POST", "/api/auth/two-factor/verify-backup-code", { code: regen.data.backupCodes[0] })).status).toBe(200);
+  });
+
   it("revoke_all_deletes_every_session_of_the_identity", async () => {
     const { service } = directAuth();
     const { email } = await invitedAccount(await workerBrowser());
@@ -252,6 +296,29 @@ describe("認証ライブラリ (T007 / V01)", () => {
     // 実CPU時間は実Workersでしか測れない（ローカルworkerdの壁時計は目安）。値は docs/evidence/V01-auth.md に記録する
     console.log(JSON.stringify({ v01: "ローカルworkerdの壁時計(ms)", signUpMs: Math.round(signUpMs), loginMs: Math.round(loginMs) }));
     expect(loginMs).toBeLessThan(5000);
+  });
+
+  it("https_environments_issue_secure_httponly_samesite_cookies", async () => {
+    // staging/production相当の設定（https）。局所のhttp試験では確認できないSecure属性を、設定の段階で確認する
+    const origin = "https://fireos-staging.example.invalid";
+    const service = createAuthService({ DB: env.DB, APP_ENV: "staging", BETTER_AUTH_SECRET: "s".repeat(40), AUTH_BASE_URL: origin });
+    const p = fx.units.a.people.unlinked;
+    const email = uniqueEmail("secure");
+    const token = await seedInvitation({ unitId: p.unitId, memberId: p.memberId!, email, createdBy: null });
+    const res = await service.handle(new Request(`${origin}/api/auth/sign-up/email`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/json", [INVITATION_HEADER]: token, "cf-connecting-ip": "203.0.113.77" },
+      body: JSON.stringify({ email, password: GOOD_PASSWORD, name: "団員" }),
+    }));
+    expect(res.status).toBe(200);
+    const cookie = res.headers.getSetCookie().join("\n");
+    expect(cookie).toMatch(/Secure/i);
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/SameSite=Lax/i);
+    expect(cookie).toMatch(/__Secure-fireos/); // https では __Secure- 接頭辞つき
+    // http の origin からの要求（別のorigin扱い）は拒否される
+    const bad = await service.handle(new Request(`${origin}/api/auth/sign-out`, { method: "POST", headers: { origin: "http://fireos-staging.example.invalid", cookie: res.headers.getSetCookie().map((c) => c.split(";")[0]).join("; "), "content-type": "application/json" }, body: "{}" }));
+    expect(bad.status).toBe(403);
   });
 
   it("auth_env_misconfiguration_is_rejected_at_startup", () => {

@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { clsx } from "clsx";
 import { Link } from "react-router";
-import { Drawer, Modal } from "../../components/Overlay";
+import { ConfirmDialog, Drawer, Modal } from "../../components/Overlay";
 import { MutationStatus } from "../../components/MutationStatus";
 import { PageTitle } from "../../components/Page";
 import { Banner, Button, Chip, Icon, Notice, TextField } from "../../components/ui";
@@ -59,7 +59,7 @@ function OwnPrivateForm({ member, onSaved }: { member: MemberRow; onSaved: () =>
 }
 
 /** 団員ドロワー（prototype：幅440px、アバター64px、緊急連絡先は伏せて「表示」で開く） */
-function MemberDrawer({ member, canManage, isSelf, onClose, onChanged }: { member: MemberRow; canManage: boolean; isSelf: boolean; onClose: () => void; onChanged: () => void }) {
+function MemberDrawer({ member, canManage, isSelf, onClose, onChanged, onDirtyChange }: { member: MemberRow; canManage: boolean; isSelf: boolean; onClose: () => void; onChanged: () => void; onDirtyChange: (d: boolean) => void }) {
   const [reveal, setReveal] = useState(false);
   const [editing, setEditing] = useState<"basic" | "private" | null>(null);
   const priv = member.privateFields;
@@ -96,21 +96,21 @@ function MemberDrawer({ member, canManage, isSelf, onClose, onChanged }: { membe
           <span className="text-[10px] text-ink-muted">緊急連絡先</span>
           {priv && (priv.phone || priv.emergencyContact) ? (
             <>
-              {priv.phone && <span className="font-mono text-[13px] font-semibold">{reveal ? priv.phone : mask(priv.phone)}</span>}
-              {priv.emergencyContact && <span className="text-[13px] font-semibold">{reveal ? priv.emergencyContact : "••••••"}</span>}
+              {priv.phone && <span className="text-[13px] font-semibold"><span className="mr-1.5 text-[10px] font-medium text-ink-muted">電話</span><span className="font-mono">{reveal ? priv.phone : mask(priv.phone)}</span></span>}
+              {priv.emergencyContact && <span className="text-[13px] font-semibold"><span className="mr-1.5 text-[10px] font-medium text-ink-muted">連絡先</span>{reveal ? priv.emergencyContact : "••••••"}</span>}
             </>
           ) : (
             <span className="text-[12px] text-ink-dim">{isSelf ? "未登録です" : "本人と、担当する者だけが表示できます"}</span>
           )}
         </span>
         {priv && (priv.phone || priv.emergencyContact) && (
-          <button type="button" onClick={() => setReveal((v) => !v)} aria-pressed={reveal} className="flex h-8 items-center gap-1 rounded-pill bg-white/[.08] px-3 text-[11px] font-bold">
+          <button type="button" onClick={() => setReveal((v) => !v)} aria-pressed={reveal} className="flex h-8 items-center gap-1 rounded-pill bg-white/[.08] px-3 text-[11px] font-bold max-lg:min-h-11">
             <Icon name={reveal ? "visibility_off" : "visibility"} className="text-[15px]" />
             {reveal ? "隠す" : "表示"}
           </button>
         )}
       </div>
-      <span className="mx-6 mt-1.5 block text-[10px] text-ink-dim">個人情報の表示は監査ログに記録されます</span>
+      <span className="mx-6 mt-1.5 block text-[10px] text-ink-dim">他の団員の連絡先を読み込んだ記録は、監査ログに残ります</span>
 
       <div className="px-6 pb-2 pt-[22px] text-[13px] font-bold">資格・講習</div>
       <div className="hairline mx-6 rounded-2xl bg-white/[.03]">
@@ -142,7 +142,7 @@ function MemberDrawer({ member, canManage, isSelf, onClose, onChanged }: { membe
           <>
             <div className="pt-2 text-[13px] font-bold">管理</div>
             {editing === "basic" ? (
-              <MemberForm member={member} onSaved={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} />
+              <MemberForm member={member} onSaved={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} onDirtyChange={onDirtyChange} />
             ) : (
               <Button variant="secondary" onClick={() => setEditing("basic")} className="!h-[46px] !text-[13px]">
                 基本情報を編集する
@@ -169,6 +169,10 @@ export function MembersPage() {
   const [squad, setSquad] = useState("all");
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // 入力途中の編集フォームがあるとき、ドロワー/モーダルを閉じる前に確認する（Esc・幕・×のどれでも）
+  const [formDirty, setFormDirty] = useState(false);
+  const [discard, setDiscard] = useState<(() => void) | null>(null);
+  const guard = (close: () => void) => (formDirty ? setDiscard(() => close) : close());
   const canManage = me.roles.includes("admin");
 
   const rows = state.kind === "ready" ? state.rows : [];
@@ -185,7 +189,7 @@ export function MembersPage() {
       <PageTitle eyebrow="MEMBERS" className="lg:hidden">団員名簿</PageTitle>
 
       <div className="flex flex-wrap items-center gap-2.5">
-        <label className="hairline flex h-[42px] w-full items-center gap-2 rounded-xl bg-white/5 px-3 lg:w-80">
+        <label className="hairline flex h-[42px] w-full items-center gap-2 rounded-xl bg-white/5 px-3 max-lg:min-h-11 lg:w-80">
           <Icon name="search" className="text-[18px] text-ink-muted" />
           <span className="sr-only">氏名・班・資格で絞り込み</span>
           <input
@@ -202,7 +206,7 @@ export function MembersPage() {
               type="button"
               aria-pressed={squad === s}
               onClick={() => setSquad(s)}
-              className={clsx("h-[34px] flex-none whitespace-nowrap rounded-[10px] px-3 text-[12px] font-bold", squad === s ? "bg-white/10 text-ink" : "text-ink-muted")}
+              className={clsx("h-[34px] flex-none whitespace-nowrap rounded-[10px] px-3 text-[12px] font-bold max-lg:min-h-11", squad === s ? "bg-white/10 text-ink" : "text-ink-muted")}
             >
               {s === "all" ? "すべて" : s}
             </button>
@@ -214,7 +218,7 @@ export function MembersPage() {
           disabled={!canManage}
           onClick={() => setAdding(true)}
           title={canManage ? undefined : "団員の追加は管理者だけができます"}
-          className="flex h-[42px] items-center gap-1.5 rounded-pill bg-white/[.07] px-4 text-[13px] font-bold text-ink-sub enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:text-ink-dim lg:ml-auto"
+          className="flex h-[42px] items-center gap-1.5 rounded-pill bg-white/[.07] px-4 max-lg:min-h-11 text-[13px] font-bold text-ink-sub enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:text-ink-dim lg:ml-auto"
         >
           <Icon name={canManage ? "person_add" : "lock"} className="text-[17px]" />
           団員を追加
@@ -271,11 +275,16 @@ export function MembersPage() {
 
       {!canManage && <Notice tone="info" icon="lock">連絡先などの個人情報は、本人と、その団員を担当する者だけが表示できます。</Notice>}
 
-      {open && <MemberDrawer member={open} canManage={canManage} isSelf={open.id === me.profile.memberId} onClose={() => setOpenId(null)} onChanged={() => void reload()} />}
+      {open && <MemberDrawer member={open} canManage={canManage} isSelf={open.id === me.profile.memberId} onClose={() => guard(() => setOpenId(null))} onChanged={() => void reload()} onDirtyChange={setFormDirty} />}
       {adding && (
-        <Modal title="団員を追加" sub="登録後、「管理」から招待を送ります" onClose={() => setAdding(false)}>
-          <MemberForm onSaved={() => { setAdding(false); void reload(); }} onCancel={() => setAdding(false)} />
+        <Modal title="団員を追加" sub="登録後、「管理」から招待を送ります" onClose={() => guard(() => setAdding(false))}>
+          <MemberForm onSaved={() => { setAdding(false); void reload(); }} onCancel={() => guard(() => setAdding(false))} onDirtyChange={setFormDirty} />
         </Modal>
+      )}
+      {discard && (
+        <ConfirmDialog title="入力を破棄しますか" confirmLabel="破棄して閉じる" danger onCancel={() => setDiscard(null)} onConfirm={() => { const close = discard; setDiscard(null); setFormDirty(false); close(); }}>
+          <p>保存されていない入力があります。閉じると失われます。</p>
+        </ConfirmDialog>
       )}
     </div>
   );

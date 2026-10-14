@@ -520,4 +520,28 @@ describe("api client (T005)", () => {
     controller.abort();
     await expect(api("API-01", {}, { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
   });
+
+  it("password_reset_screens_return_to_the_login_form_after_success_and_after_failure", async () => {
+    const user = userEvent.setup();
+    // 再設定リンク（#reset=）から入る
+    window.location.hash = "#reset=reset-token-1";
+    stubFetch({ status: 200, body: { status: true } });
+    const router = createMemoryRouter(buildRoutes({}, { me: TEST_ME }), { initialEntries: ["/login"] });
+    render(<RouterProvider router={router} />);
+    await user.type(await screen.findByLabelText("新しいパスワード（12文字以上）"), "a-long-password-1");
+    await user.click(screen.getByRole("button", { name: "再設定する" }));
+    await user.click(await screen.findByRole("button", { name: "ログインへ" }));
+    expect(await screen.findByRole("button", { name: /^ログイン$/ })).toBeTruthy(); // 再設定画面に居続けない
+    cleanup();
+    // 失敗（期限切れ）でも「ログインへ戻る」で戻れる
+    window.location.hash = "#reset=reset-token-2";
+    stubFetch({ status: 400, body: { code: "INVALID_TOKEN", message: "x" } });
+    render(<RouterProvider router={createMemoryRouter(buildRoutes({}, { me: TEST_ME }), { initialEntries: ["/login"] })} />);
+    await user.type(await screen.findByLabelText("新しいパスワード（12文字以上）"), "a-long-password-1");
+    await user.click(screen.getByRole("button", { name: "再設定する" }));
+    expect(await screen.findByText(/再設定の期限が切れているか/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "ログインへ戻る" }));
+    expect(await screen.findByRole("button", { name: /^ログイン$/ })).toBeTruthy();
+    window.location.hash = "";
+  });
 });

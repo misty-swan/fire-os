@@ -10,7 +10,8 @@ describe("runtime (T001)", () => {
     await runtime.dispose();
   });
 
-  it("api_route_never_returns_spa", async () => {
+  // 全試験を並列に起動した直後は、最初の要求（Workerの冷間起動）が5秒を超えることがある
+  it("api_route_never_returns_spa", { timeout: 30_000 }, async () => {
     const appResponse = await runtime.fetch(new Request("http://example.com/app/unknown"));
     const apiResponse = await runtime.fetch(new Request("http://example.com/api/v1/unknown"));
     const authResponse = await runtime.fetch(new Request("http://example.com/api/auth/unknown"));

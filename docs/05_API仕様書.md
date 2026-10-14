@@ -51,7 +51,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 
 | API-ID | method / path | 権限 | 入力と固有検証 | 成功data |
 |---|---|---|---|---|
-| API-01 | GET /me | PER-01 | なし | Me(profile,roles,authzVersion,policyVersion) |
+| API-01 | GET /me | PER-01 | なし | Me(profile,unitName,roles,authzVersion,policyVersion,mfaEnabled,mfaRequired)。未受領/停止/失効済みは401（details.reason=account_not_linked/account_disabled/session_revoked） |
 | API-02 | GET /members | PER-01(一覧)/PER-06(許可列) | q/status/squad/limit/cursor（名前→IDのkeyset。絞り込み・ページングはSQL）;基本項目は全員、roleCodes/invitationはPER-07、privateFieldsは本人または担当(scope)の分だけ（他人分を返したら`member.private.view`を監査） | Page<Member>（privateFieldsは許可された行にだけ現れる） |
 | API-03 | POST /members | PER-06 | displayName,status,rank?,squad?,qualifications?,joinedOn?,privateFields?(phone/emergencyContactのみ。未知列400);管理者のみ。登録時の許可列入力は可（読み返しは別権限） | Member（応答・冪等保存にprivateFieldsを含めない） |
 | API-04 | PATCH /members/:id | PER-06/07 | version,変更列（基本項目=管理者、privateFields=本人または担当、status=管理者）,reason（status変更時は必須）;旧版409、未知列400、アカウントのある団員の休団・退団は利用停止（団員の状態＋利用者の停止＋認可版の増分＋失効job＋監査を一つのcommit、他の列との同時変更は400、再開は未提供422、最後の管理者は422 last_admin） | Member |
@@ -85,7 +85,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-32 | POST /reports/drafts | PER-09 | activityId,resultVersion,templateVersion;読取/送信可 | Job(202) |
 | API-33 | POST /invitations | PER-07 | memberId,email,expiresInHours(1〜720);未リンク・active団員のみ(422)、別unit404、旧い有効な招待は同batchで取消して再発行 | Invitation（生tokenは作成した応答の一回だけ。同じ鍵の再送・保存応答にはtokenを含めず`token:null`） |
 | API-34 | POST /invitations/:id/cancel | PER-07 | version,reason;未消費のみ | Invitation |
-| API-35 | POST /invitations/accept | token＋認証所有確認 | token,verifiedAuthIdentity(=セッションのidentity。不一致400);招待先メールと一致(403)、使用済み409、取消/期限切れ422(details.reason=cancelled/expired)、同時受領は片方のみ(409) | AccountLinkResult(memberId,linked,roleCodes,authzVersion)。usersの作成・団員リンク・招待消費・役割付与を一つのbatchで確定 |
+| API-35 | POST /invitations/accept | token＋認証所有確認 | token,verifiedAuthIdentity(=セッションのidentity。不一致400、セッション無し401、未知token404);招待先メールと一致(403)、使用済み409、取消/期限切れ422(details.reason=cancelled/expired)、同時受領は片方のみ(409) | AccountLinkResult(memberId,linked,roleCodes,authzVersion)。usersの作成・団員リンク・招待消費・役割付与を一つのbatchで確定 |
 | API-36 | ALL /api/auth/*（v1外） | 認証ライブラリ | better-auth 1.7.7固定。公開する経路は契約の一覧(`authLibrary.endpoints`、OpenAPI `x-external-apis`)だけ：sign-up(招待token必須)/sign-in/sign-out/get-session/request-password-reset/reset-password/change-password/two-factor(enable・verify-totp・verify-backup-code・generate-backup-codes・get-totp-uri・disable)。一覧外はJSON 404 | ライブラリResponse（業務data envelope外） |
 | API-37 | PUT /members/:id/roles | PER-07 | version,expectedAuthzVersion,roleCodes,scopes,reason;管理者のみ（二要素必須）。対象は有効なアカウント付きの同unit団員。自己昇格(今持つ最上位より上の役割・新しい担当)403、最後の管理者の降格422(details.reason=last_admin)、旧版/旧認可版409、担当の対象種別は存在を確認できる種別だけ(PH1は`member`のPER-06のみ、他は422)。外れた役割・担当は取消して履歴に残し、認可版を増やす | MemberRoles(memberId,version,authzVersion,roleCodes,scopes) |
 | API-38 | POST /users/:id/session-revocations | PER-07/本人 | expectedAuthzVersion,reason;管理者または本人。認可版を増やし、基準時刻(users.session_revoked_before)より前のセッションを業務側で拒否したうえで認証側の全セッションを削除。失敗は再試行job(`auth.revoke_sessions`)が残り`pending` | RevocationResult(userId,authzVersion,sessionRevocation=completed/pending) |

@@ -9,12 +9,15 @@ import { Button, Icon } from "./ui";
 function useOverlay(onClose: () => void, initialFocus?: string) {
   const ref = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
+  // Escで呼ぶ onClose は常に最新のもの（入力途中かどうかの確認を含む）にする。初回の関数を握り続けない
+  const latestClose = useRef(onClose);
+  latestClose.current = onClose;
   useEffect(() => {
     opener.current = document.activeElement;
     const target = initialFocus ? ref.current?.querySelector<HTMLElement>(initialFocus) : null;
     (target ?? ref.current?.querySelector<HTMLElement>("button, [href], input, textarea, select") ?? ref.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") latestClose.current();
       // フォーカスを面の外へ出さない（Tabの循環）
       if (e.key === "Tab" && ref.current) {
         const items = [...ref.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')];
@@ -118,7 +121,7 @@ export function ConfirmDialog({
         <Button
           busy={busy}
           onClick={onConfirm}
-          className={clsx("!h-[46px] !w-auto px-[22px] !text-[13px]", danger && "!bg-[#e8432a] hover:!bg-[#f0543c]")}
+          className={clsx("!h-[46px] !w-auto px-[22px] !text-[13px]", danger && "!bg-danger hover:!bg-danger-hover")}
         >
           {busy ? "実行しています…" : confirmLabel}
         </Button>

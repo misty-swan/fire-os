@@ -1,5 +1,5 @@
 import { expect, request as pwRequest, test } from "@playwright/test";
-import { BASE, PASSWORD, acceptInvitationViaUi, adminApi, apiHeaders, inviteNewMember, isPhone, loginViaUi, logoutViaUi, newUserContext, randomIp, readAdmin, totpCode, uniqueEmail } from "./helpers";
+import { BASE, PASSWORD, acceptInvitationViaUi, adminApi, apiHeaders, inviteNewMember, loginViaUi, logoutViaUi, newUserContext, totpCode, uniqueEmail } from "./helpers";
 
 // 実際のCookie・実際のログイン画面で、招待受領→二要素認証→別端末のログイン→回復コード→ログアウトを通す。
 // 管理者のセッションは auth.setup.ts が作った storageState（招待tokenからの本物の経路）。fixtureのCookie注入は使わない。
@@ -12,7 +12,6 @@ test("mfa_recovery_code_cannot_be_reused", async ({ browser, request }, info) =>
   // 1) 招待の受領 → 二要素認証の設定（回復コードは一度だけ表示）
   const ctxA = await newUserContext(browser, viewport);
   const pageA = await ctxA.newPage();
-  await expect(pageA.getByRole("button", { name: "自由登録" })).toHaveCount(0);
   const { totpSecret, backupCodes } = await acceptInvitationViaUi(pageA, email, token);
   await expect(pageA).toHaveURL(/\/app$/);
 
@@ -59,7 +58,6 @@ test("login_screen_matches_the_prototype_and_offers_no_public_signup", async ({ 
   const ctx = await newUserContext(browser, info.project.use.viewport!);
   const page = await ctx.newPage();
   await page.goto("/login");
-  const phone = isPhone(page.viewportSize());
   // prototype LOGIN：FireOS 40px太字、ロゴ76px、入力54px、主ボタン56px・副ボタン52px
   const logo = page.locator("main span[aria-hidden='true']").first();
   const box = (await logo.boundingBox())!;
@@ -87,7 +85,6 @@ test("login_screen_matches_the_prototype_and_offers_no_public_signup", async ({ 
   await page.getByRole("button", { name: "ログイン", exact: true }).click();
   await expect(page.getByText("メールアドレスまたはパスワードが正しくありません")).toBeVisible();
   if (process.env.SAVE_EVIDENCE === "1") await page.screenshot({ path: `docs/evidence/ph1/login-${info.project.name}.png` });
-  expect(phone || true).toBe(true);
   await ctx.close();
 });
 
@@ -142,6 +139,4 @@ test("invitation_that_cannot_be_used_explains_why_without_leaking_state", async 
   await page.getByRole("button", { name: "アカウントを作成して受け取る" }).click();
   await expect(page.getByText("パスワードは12文字以上で入力してください")).toBeVisible();
   await ctx.close();
-  expect(randomIp()).toBeTruthy();
-  expect(readAdmin().email).toBeTruthy();
 });

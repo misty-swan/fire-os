@@ -74,8 +74,8 @@ export function registerMemberRoutes(app: ApiApp): void {
         .bind(p.unitId, JSON.stringify(readable)),
       c.env.DB.prepare("SELECT m.id AS member_id, u.id AS user_id, u.authz_version FROM members m JOIN users u ON u.id = m.user_id WHERE m.unit_id = ? AND m.id IN (SELECT value FROM json_each(?)) AND ?")
         .bind(p.unitId, ids, canManage ? 1 : 0),
-      c.env.DB.prepare("SELECT member_id, entity_type, entity_id, permissions, expires_at FROM scope_assignments WHERE unit_id = ? AND revoked_at IS NULL AND member_id IN (SELECT value FROM json_each(?)) AND ?")
-        .bind(p.unitId, ids, canManage ? 1 : 0),
+      c.env.DB.prepare("SELECT member_id, entity_type, entity_id, permissions, expires_at FROM scope_assignments WHERE unit_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?) AND member_id IN (SELECT value FROM json_each(?)) AND ?")
+        .bind(p.unitId, new Date().toISOString(), ids, canManage ? 1 : 0),
     ]);
     const roleMap = new Map<string, string[]>();
     for (const r of roles!.results as { member_id: string; code: string }[]) roleMap.set(r.member_id, [...(roleMap.get(r.member_id) ?? []), r.code]);

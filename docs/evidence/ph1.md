@@ -7,8 +7,8 @@
 |---|---|---|
 | 型検査 | `npm run typecheck` | 成功 |
 | 契約検査 | `npm run check:contracts` | 101 API / docs/05 101行 / OpenAPI一致 |
-| 単体・結合試験 | `npx vitest --run` | 12ファイル126件成功（workers 101件＝認証/認可/招待/名簿/失効/監査を含む、client 25件） |
-| ブラウザ試験 | `npm run test:e2e` | 24件成功＋1件スキップ（スマホ専用試験をPC幅で除外）。setup（管理者を招待→MFAで作成）＋shell/auth/member-admin/audit を 360px と 1280px で実行 |
+| 単体・結合試験 | `npx vitest --run` | 12ファイル131件成功（workers 104件＝認証/認可/招待/名簿/失効/監査を含む、client 26件。レビュー第1回の修正後） |
+| ブラウザ試験 | `npm run test:e2e` | 26件成功＋1件スキップ（スマホ専用試験をPC幅で除外。レビュー第1回の修正後）。setup（管理者を招待→MFAで作成）＋shell/auth/member-admin/audit を 360px と 1280px で実行 |
 | ビルド | `npm run build` | 成功 |
 | 実環境の試験 | `npm run test:live` | **未実施（環境未設定のため失敗＝未実施の記録）**。docs/evidence/V01-auth.md の手順が必要 |
 

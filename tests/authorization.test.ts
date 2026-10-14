@@ -114,8 +114,13 @@ describe("認可 (T008)", () => {
     const afterDisable = await session.json("GET", "/api/v1/me");
 
     // 6) 要求の自己申告（query/ヘッダー）の unitId は受け付けない
+    // /me は入力を取らないので、契約外のunitIdは400（理由 unknown_field）。変更系の本文に unitId を足しても同じく拒否され、何も作られない
     const claim = await fx.client(fx.units.a.people.admin).request("GET", `/api/v1/me?unitId=${fx.units.b.id}`);
-    const clientSuppliedUnitAccepted = claim.status === 200;
+    expect(((await claim.json()) as { error: { code: string; details: { reason: string }[] } }).error).toMatchObject({ code: "VALIDATION_ERROR", details: [{ reason: "unknown_field" }] });
+    const bodyClaim = await fx.client(fx.units.a.people.admin).request("POST", "/api/v1/members", { displayName: "x", status: "active", unitId: fx.units.b.id }, { "idempotency-key": crypto.randomUUID() });
+    expect(bodyClaim.status).toBe(400);
+    expect((await env.DB.prepare("SELECT count(*) AS n FROM members WHERE unit_id = ? AND display_name = 'x'").bind(fx.units.b.id).first<{ n: number }>())!.n).toBe(0);
+    const clientSuppliedUnitAccepted = claim.status === 200 || bodyClaim.status === 201;
     const header = await fx.client(fx.units.a.people.admin).request("GET", "/api/v1/me", undefined, { "x-unit-id": fx.units.b.id, "x-role": "admin" });
     expect(((await header.json()) as { data: { unitName: string } }).data.unitName).toBe("架空市 第一分団");
 

@@ -166,7 +166,7 @@ test("members_screen_matches_the_prototype_structure", async ({ page }, info) =>
     const drawer = page.getByRole("dialog", { name: /のプロフィール/ });
     expect(Math.round((await drawer.boundingBox())!.width)).toBe(440);
     await expect(drawer.getByText("MEMBER PROFILE")).toBeVisible();
-    await expect(drawer.getByText("個人情報の表示は監査ログに記録されます")).toBeVisible();
+    await expect(drawer.getByText("他の団員の連絡先を読み込んだ記録は、監査ログに残ります")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(drawer).toBeHidden();
   } else {
@@ -196,4 +196,65 @@ test("keyboard_only_can_filter_open_and_close_the_member_drawer", async ({ page 
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
   await expect(row).toBeFocused(); // 開いた操作へフォーカスが戻る
+});
+
+test("unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown", async ({ page, browser, request }, info) => {
+  const viewport = info.project.use.viewport!;
+  // 1) 入力途中でEscを押しても、確認なしには閉じない（確認は最前面で、既定は「戻る」）
+  await page.goto("/app/members");
+  await page.getByRole("button", { name: "団員を追加" }).click();
+  const add = page.getByRole("dialog", { name: "団員を追加" });
+  await add.getByLabel("氏名").fill("架空 入力途中");
+  await page.keyboard.press("Escape");
+  const confirm = page.getByRole("dialog", { name: "入力を破棄しますか" });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByRole("button", { name: "戻る" })).toBeFocused();
+  await confirm.getByRole("button", { name: "戻る" }).click();
+  await expect(add).toBeVisible();
+  await expect(add.getByLabel("氏名")).toHaveValue("架空 入力途中");
+  await page.keyboard.press("Escape");
+  await page.getByRole("dialog", { name: "入力を破棄しますか" }).getByRole("button", { name: "破棄して閉じる" }).click();
+  await expect(add).toBeHidden();
+
+  // 2) 本人（アカウントあり）を用意する
+  const name = `架空 競合確認 ${crypto.randomUUID().slice(0, 4)}`;
+  const email = uniqueEmail("e2e-conflict");
+  const made = await inviteNewMember(request, name, email);
+  const ctx = await newUserContext(browser, viewport);
+  const ip = await ctx.newPage();
+  await acceptInvitationViaUi(ip, email, made.token, { mfa: false });
+
+  // 3) 画面を開いたあとに、他の操作で更新されると、競合として表示され保存されない
+  await selectMember(page, name);
+  const cur = await adminApi<{ data: { id: string; version: number }[] }>(request, "GET", `/api/v1/members?q=${encodeURIComponent(name)}`);
+  const bumped = await adminApi(request, "PATCH", `/api/v1/members/${made.memberId}`, { version: cur.data.data[0]!.version, rank: "班長" }); // 画面を開いた後の別操作
+  expect(bumped.status).toBe(200);
+  await page.getByRole("checkbox", { name: "担当者" }).check();
+  await page.getByLabel("変更の理由").fill("競合の確認");
+  await page.getByRole("button", { name: "変更内容を確認する" }).click();
+  await page.getByRole("dialog", { name: "役割と担当の変更を確認" }).getByRole("button", { name: "この内容で変更する" }).click();
+  await expect(page.getByText("他の操作で更新されています").first()).toBeVisible();
+  await page.getByRole("dialog", { name: "役割と担当の変更を確認" }).getByRole("button", { name: "戻る" }).click();
+
+  // 4) 担当（連絡先を読める団員）を選んで保存 → 取消もできる。反映は管理画面の一覧に出る
+  await selectMember(page, name);
+  await page.getByRole("checkbox", { name: "担当者" }).check();
+  await page.getByRole("group", { name: "連絡先を読める団員（担当）" }).getByRole("checkbox", { name: "架空 管理者" }).check();
+  await page.getByLabel("変更の理由").fill("連絡網の担当");
+  await page.getByRole("button", { name: "変更内容を確認する" }).click();
+  const dlg = page.getByRole("dialog", { name: "役割と担当の変更を確認" });
+  await expect(dlg.getByText("担当を追加：架空 管理者 の連絡先")).toBeVisible();
+  await dlg.getByRole("button", { name: "この内容で変更する" }).click();
+  await expect(page.getByRole("list", { name: "管理する団員" }).getByRole("button", { name: new RegExp(`${name}.*担当者`) })).toBeVisible();
+
+  // 5) 全セッション失効：本人のログイン中の画面は、次の操作から使えなくなる
+  await selectMember(page, name);
+  await page.getByRole("button", { name: "全セッションを失効させる" }).click();
+  const rv = page.getByRole("dialog", { name: "全セッションの失効" });
+  await rv.getByLabel("理由").fill("端末紛失の申告");
+  await rv.getByRole("button", { name: "失効させる" }).click();
+  await expect(page.getByText("全端末のログインを解除しました")).toBeVisible();
+  await ip.goto("/app/members");
+  await expect(ip).toHaveURL(/\/login/);
+  await ctx.close();
 });

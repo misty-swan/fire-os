@@ -155,7 +155,21 @@ export function createAuth(env: AuthEnv, deps: AuthDeps = {}) {
       }),
     ],
     hooks: {
+      // 有効化を確定したら、それ以前に（パスワードだけで）作られた他のセッションを失効させる。
+      // 二要素を通っていないセッションが、管理者の操作に残らないようにする。ログイン時の二要素確認（既存セッション無し）では何もしない
+      after: createAuthMiddleware(async (ctx) => {
+        const before = ctx.context.session?.session;
+        // 確認後に新しいセッションへ切り替わる場合は、そちらを残す
+        const keep = ctx.context.newSession?.session ?? before;
+        if (ctx.path === "/two-factor/verify-totp" && before && keep) {
+          await env.DB.prepare("DELETE FROM auth_sessions WHERE user_id = ? AND token <> ?").bind(keep.userId, keep.token).run();
+        }
+      }),
       before: createAuthMiddleware(async (ctx) => {
+        // 「この端末を30日間信頼する」は受け付けない（停止・失効で消せない端末Cookieを作らない）
+        if (ctx.path.startsWith("/two-factor/") && (ctx.body as { trustDevice?: unknown } | undefined)?.trustDevice) {
+          throw APIError.from("BAD_REQUEST", { code: "TRUST_DEVICE_DISABLED", message: "この端末を信頼する設定は使えません" });
+        }
         // 自由なsign-upを許さない。招待tokenを持ち、そのtokenの招待先メールと同じ場合だけ登録できる
         if (ctx.path.startsWith("/sign-up")) {
           await assertInvitedSignUp(env.DB, ctx.headers?.get(INVITATION_HEADER) ?? null, (ctx.body as { email?: unknown } | undefined)?.email);

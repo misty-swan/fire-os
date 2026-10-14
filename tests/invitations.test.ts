@@ -76,8 +76,11 @@ describe("招待 (T009)", () => {
     const other = await register(otherEmail, otherInv.token!);
     const wrongIdentity = await accept(other, inv.token!, await authIdOf(other));
     expect(wrongIdentity.status).toBe(403);
+    expect(wrongIdentity.data.error!.details[0]!.reason).toBe("identity_mismatch");
     // 自分のidentityを偽って申告してもセッションと一致しなければ拒否
-    expect((await accept(other, otherInv.token!, authId)).status).toBe(400);
+    const spoof = await accept(other, otherInv.token!, authId);
+    expect(spoof.status).toBe(400);
+    expect(spoof.data.error!.details[0]!.reason).toBe("session_mismatch");
     expect((await (await workerBrowser()).json("POST", "/api/v1/invitations/accept", { token: inv.token, verifiedAuthIdentity: authId }, idem())).status).toBe(401);
 
     // 2つ同時の受領は片方だけ成立
@@ -88,6 +91,7 @@ describe("招待 (T009)", () => {
     const linkedMemberCount = (await env.DB.prepare("SELECT count(*) AS n FROM members WHERE id = ? AND user_id IS NOT NULL").bind(memberId).first<{ n: number }>())!.n;
 
     expect(acceptStatuses).toEqual([200, 409]);
+    expect([r1, r2].find((r) => r.status === 409)!.data.error!.code).toBe("VERSION_CONFLICT"); // 敗者は「版の競合」（権限や内部障害ではない）
     expect(linkedMemberCount).toBe(1);
     expect(wrongIdentity.status).not.toBe(200);
     expect(storedRawTokens).toEqual([]);

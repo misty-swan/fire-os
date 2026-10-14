@@ -7,7 +7,7 @@ import type { AuthzPrincipal } from "../src/server/auth/principal";
 import type { ApiContext } from "../src/server/http";
 import { runDueJobs } from "../src/server/jobs/runner";
 import { commitRoleReplacement } from "../src/server/routes/member-roles";
-import { loginAs, signInAnotherDevice } from "./helpers/auth";
+import { GOOD_PASSWORD, loginAs, signInAnotherDevice, workerBrowser } from "./helpers/auth";
 import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
 
 beforeAll(async () => {
@@ -55,9 +55,12 @@ describe("権限変更・利用停止・失効 (T012)", () => {
       (await pc.json("GET", "/api/v1/members")).status,
       (await pc.json("GET", `/api/v1/jobs/${crypto.randomUUID()}`)).status,
     ];
-    const allBusinessRequestsDenied = statuses.every((s) => s === 401 || s === 403);
-    const relogin = await signInAnotherDevice(phone).catch((e: Error) => e);
-    expect(relogin).toBeInstanceOf(Error); // 停止後の新しいセッションは作れない
+    const allBusinessRequestsDenied = statuses.every((s) => s === 401);
+    // 停止後の新しいセッションは作れない（理由は ACCOUNT_DISABLED。回数制限などの別の失敗ではない）
+    const relogin = await (await workerBrowser()).json<{ code: string }>("POST", "/api/auth/sign-in/email", { email: phone.email, password: GOOD_PASSWORD });
+    expect(relogin.status).toBe(403);
+    expect(relogin.data.code).toBe("ACCOUNT_DISABLED");
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM auth_sessions WHERE user_id = ? AND created_at > ?").bind(phone.authId, "2026-10-14").first<{ n: number }>()).toBeDefined();
 
     // 失効の再試行は永続jobに残り、実行すれば全セッションが消える
     const jobs = await env.DB.prepare("SELECT id, status FROM jobs WHERE kind = 'auth.revoke_sessions' AND source_id = ?").bind(member.userId).all<{ id: string; status: string }>();

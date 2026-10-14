@@ -195,7 +195,7 @@
       "get": {
         "operationId": "API-02",
         "summary": "API-02 GET /members",
-        "x-permission": "PER-06",
+        "x-permission": "PER-01/06",
         "x-kind": "list",
         "x-provisional-response": false,
         "parameters": [
@@ -20229,11 +20229,6 @@
           "method": "POST",
           "path": "/two-factor/get-totp-uri",
           "purpose": "TOTP登録URIの再表示（パスワード再確認）"
-        },
-        {
-          "method": "POST",
-          "path": "/two-factor/disable",
-          "purpose": "二要素の解除（パスワード再確認）"
         }
       ]
     }

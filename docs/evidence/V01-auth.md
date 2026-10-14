@@ -37,9 +37,11 @@
 2. stagingの資源を作る: `npx wrangler d1 create fireos-staging`、`npx wrangler r2 bucket create fireos-staging-files`、`npx wrangler queues create fireos-staging-jobs`。出力された `database_id` を `wrangler.jsonc` の `env.staging` に設定。
 3. Secret: `npx wrangler secret put BETTER_AUTH_SECRET --env staging`（32文字以上の乱数。`dev-only-` で始めない）。`AUTH_BASE_URL` を実際のhttps URLにする。
 4. `npx wrangler d1 migrations apply DB --remote --env staging` → `npx wrangler deploy --env staging`（**`--env` なしの deploy は禁止**）。
-5. `npm run bootstrap:admin -- --env staging --remote --unit-name 架空市消防団第一分団 --admin-name 架空管理者 --email <検証用メール>` で初期管理者の招待tokenを得る（ops/bootstrap-admin.md）。
+5. `npm run bootstrap:admin -- --env staging --remote --confirm staging --unit-name 架空市消防団第一分団 --admin-name 架空管理者 --email <検証用メール>` で初期管理者の招待tokenを得る（ops/bootstrap-admin.md）。
 6. `LIVE_BASE_URL=https://<staging> LIVE_BOOTSTRAP_EMAIL=<上と同じ> LIVE_BOOTSTRAP_TOKEN=<token> npm run test:live` を実行。壁時計を転記する。
 7. CPU時間: Cloudflare ダッシュボードの Workers → Metrics（CPU time p50/p99）または `npx wrangler tail --env staging --format json` の `cpuTime`（sign-up/loginを数回）を記録し、Freeの10ms/Paidの上限に対する余裕を判定。
 8. この文書の「未実施」を、実測値と判定に書き換える。
+
+※Cookieの**Secure属性**は、局所のhttp試験では確認できない。https相当の設定（`createAuthService` にstagingの値を渡す）でSecure/HttpOnly/SameSite=Lax/`__Secure-`接頭辞を確認済み（`https_environments_issue_secure_httponly_samesite_cookies`）。実https配置での確認は上の手順6。
 
 この手順を実行するまで、V01は **局所のみ検証済み・実環境は未検証**。RG-03/04/10 は引き続き阻止される。

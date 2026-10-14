@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { FormErrors, errorFor } from "../../components/FormErrors";
 import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { MutationStatus } from "../../components/MutationStatus";
@@ -9,7 +9,7 @@ import type { MemberRow } from "./useMembers";
 const split = (text: string) => text.split(/[,、\n]/).map((t) => t.trim()).filter(Boolean);
 
 /** 氏名・役職・班・資格・入団日の入力（登録=API-03、基本項目の変更=API-04）。許可列は登録のときだけ入力できる。 */
-export function MemberForm({ member, onSaved, onCancel }: { member?: MemberRow; onSaved: () => void; onCancel: () => void }) {
+export function MemberForm({ member, onSaved, onCancel, onDirtyChange }: { member?: MemberRow; onSaved: () => void; onCancel: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const create = useMutation("API-03");
   const update = useMutation("API-04");
   const mut = member ? update : create;
@@ -21,6 +21,11 @@ export function MemberForm({ member, onSaved, onCancel }: { member?: MemberRow; 
   const [phone, setPhone] = useState("");
   const [emergency, setEmergency] = useState("");
   const dirty = displayName !== (member?.displayName ?? "") || rank !== (member?.rank ?? "") || squad !== (member?.squad ?? "") || quals !== (member?.qualifications ?? []).join("、") || joinedOn !== (member?.joinedOn ?? "") || phone !== "" || emergency !== "";
+  useEffect(() => {
+    onDirtyChange?.(dirty && mut.state.kind !== "saved");
+    return () => onDirtyChange?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, mut.state.kind]);
   const issues = mut.state.kind === "invalid" ? mut.state.details : [];
 
   async function submit(e: FormEvent) {

@@ -41,7 +41,7 @@ export function LeaveConfirm({ dirty }: { dirty: boolean }) {
     // スマホ: prototype の出欠シート（下から、取っ手、上端の光沢）。PC: リマインドモーダル（560px、26px角丸、ぼかし幕）
     <div
       onClick={() => blocker.reset()} // 幕を押したら既定（編集に戻る）
-      className="fixed inset-0 z-[60] flex animate-[fo-in_.2s_ease_both] items-end lg:animate-[fo-fade_.2s_ease_both] justify-center bg-[rgba(3,6,12,.6)] lg:items-center lg:bg-[rgba(3,6,12,.65)] lg:backdrop-blur-[4px]"
+      className="fixed inset-0 z-[100] flex animate-[fo-in_.2s_ease_both] items-end lg:animate-[fo-fade_.2s_ease_both] justify-center bg-[rgba(3,6,12,.6)] lg:items-center lg:bg-[rgba(3,6,12,.65)] lg:backdrop-blur-[4px]"
     >
       <div
         onClick={(e) => e.stopPropagation()}

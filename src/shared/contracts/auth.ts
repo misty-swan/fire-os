@@ -70,7 +70,6 @@ export const authLibrary = {
     { method: "POST", path: "/two-factor/verify-backup-code", purpose: "回復コードでログイン（各コード一回限り）" },
     { method: "POST", path: "/two-factor/generate-backup-codes", purpose: "回復コードの再発行（パスワード再確認。旧コードは無効）" },
     { method: "POST", path: "/two-factor/get-totp-uri", purpose: "TOTP登録URIの再表示（パスワード再確認）" },
-    { method: "POST", path: "/two-factor/disable", purpose: "二要素の解除（パスワード再確認）" },
   ],
 } as const;
 
@@ -124,7 +123,7 @@ export const authApis = {
     request: obj({}), response: Me,
   }),
   "API-02": defineApi({
-    method: "GET", path: "/members", permission: "PER-06", kind: "list", success: [200],
+    method: "GET", path: "/members", permission: "PER-01/06", kind: "list", success: [200],
     request: obj({ query: listQuery({ q: ShortText.optional(), status: z.enum(memberStates).optional(), squad: ShortText.optional() }) }),
     response: Page(Member),
   }),
