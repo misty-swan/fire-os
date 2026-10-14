@@ -86,6 +86,36 @@ async function makeUploaded(who: Identity): Promise<{ id: string; draftId: strin
   return { id: intent.id, draftId: draft.id };
 }
 
+/** 既存の業務対象を直targetにしたintent（編集画面のuploaderと同じ経路）。転送と完了まで進める */
+async function makeUploadedTo(who: Identity, target: { type: "facility"; id: string }): Promise<string> {
+  const iRes = await fx.client(who).request(
+    "POST", "/api/v1/attachments/upload-intents",
+    { target, contentType: "image/png", byteSize: 100 }, idem(),
+  );
+  const intent = (await json(iRes)).data! as { id: string; uploadToken: string };
+  const bytes = pngBytes();
+  const up = await fx.raw(who)(new Request(`http://example.com/api/v1/attachments/${intent.id}/upload`, {
+    method: "PUT",
+    headers: { "content-type": "application/octet-stream", "x-upload-token": intent.uploadToken },
+    body: bytes as BufferSource,
+  }));
+  const attempt = (await json(up)).data! as { id: string; sha256: string };
+  await fx.client(who).request("POST", `/api/v1/attachments/${intent.id}/completion`, { version: 1, uploadAttemptId: attempt.id, sha256: attempt.sha256 }, idem());
+  return intent.id;
+}
+
+/** 検査jobをもう一度走らせる（checkingへ戻して専用のdedupe keyで再登録。docs/07 §3.4の再入経路） */
+async function rerunInspectJob(unitId: string, attachmentId: string) {
+  const version = (await fx.rows("attachments", { id: attachmentId }))[0]!.version as number;
+  await env.DB.prepare("UPDATE attachments SET status = 'checking' WHERE id = ?").bind(attachmentId).run();
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    "INSERT INTO jobs (id, unit_id, kind, source_type, source_id, source_version, config_version, dedupe_key, status, attempts, max_attempts, next_attempt_at, created_at, updated_at) " +
+      "VALUES (?, ?, 'attachment.inspect', 'attachment', ?, ?, 'v1', ?, 'queued', 0, 3, ?, ?, ?)",
+  ).bind(crypto.randomUUID(), unitId, attachmentId, version, `${unitId}|attachment.inspect|rerun-${attachmentId}`, now, now, now).run();
+  await runDueJobs(env);
+}
+
 describe("添付のリンク・取得・削除 (T017)", () => {
   it("unlink_and_permission_revocation_block_new_downloads", async () => {
     const a = fx.units.a;
@@ -207,5 +237,68 @@ describe("添付のリンク・取得・削除 (T017)", () => {
     await env.DB.prepare("UPDATE attachments SET classification = 'sensitive' WHERE id = ?").bind(second.id).run();
     const planS = await planAttachmentLinks(env, a.id, admin.userId, { target: { type: "facility", id: facilityId }, attachmentIds: [second.id] });
     await expect(runLink(planS, "test.link.sensitive")).rejects.toMatchObject({ code: "ATTACHMENT_NOT_READY" });
+  });
+
+  it("ready_upload_to_an_existing_facility_autolinks_once", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const facilityId = await seedFacility(a.id, "T017-2", admin.userId);
+
+    // (a) 既存施設を直targetにしたintent（編集画面のuploaderと同じ経路）は、検査jobのready確定と同じbatchで初回リンクが作られる
+    const attId = await makeUploadedTo(admin, { type: "facility", id: facilityId });
+    expect(await fx.rows("attachment_links", { attachment_id: attId })).toHaveLength(0); // ready前はリンク無し
+    await runDueJobs(env);
+    expect((await fx.rows("attachments", { id: attId }))[0]!.status).toBe("ready");
+    const links = await fx.rows("attachment_links", { attachment_id: attId });
+    expect(links).toHaveLength(1);
+    expect(links[0]!.entity_type).toBe("facility");
+    expect(links[0]!.entity_id).toBe(facilityId);
+    expect(links[0]!.linked_by).toBe(admin.userId); // リンクしたのは添付の所有者
+    expect(links[0]!.unlinked_at).toBeNull();
+
+    // (b) 二重の検査jobでもリンクは1本（checkingへ戻して再確定させる）
+    await rerunInspectJob(a.id, attId);
+    expect((await fx.rows("attachments", { id: attId }))[0]!.status).toBe("ready");
+    expect(await fx.rows("attachment_links", { attachment_id: attId })).toHaveLength(1);
+
+    // (c) sensitiveに分類された添付は基本の対象（施設）へは自動リンクしない（docs/10。引下げもしない）
+    const sensitiveId = await makeUploadedTo(admin, { type: "facility", id: facilityId });
+    await env.DB.prepare("UPDATE attachments SET classification = 'sensitive' WHERE id = ?").bind(sensitiveId).run();
+    await runDueJobs(env);
+    expect((await fx.rows("attachments", { id: sensitiveId }))[0]!.status).toBe("ready");
+    expect(await fx.rows("attachment_links", { attachment_id: sensitiveId })).toHaveLength(0);
+  });
+
+  it("inspection_targeted_intent_is_not_autolinked_by_the_job", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const facilityId = await seedFacility(a.id, "T017-3", admin.userId);
+    // 点検の行を直接作る（リンク先の親。点検へのリンクは業務mutationだけが条件と監査を付けて行う）
+    const inspectionId = crypto.randomUUID();
+    const seriesId = crypto.randomUUID();
+    const templateId = crypto.randomUUID();
+    const templateVersionId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO inspection_templates (id, unit_id, name, target_type, status, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, 'facility', 'draft', ?, ?, ?, 'human')",
+    ).bind(templateId, a.id, "自動試験の様式", now, now, admin.userId).run();
+    await env.DB.prepare(
+      "INSERT INTO inspection_template_versions (id, unit_id, template_id, revision_no, item_schema, status, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, 1, '[]', 'draft', ?, ?, ?, 'human')",
+    ).bind(templateVersionId, a.id, templateId, now, now, admin.userId).run();
+    await env.DB.prepare(
+      "INSERT INTO inspection_series (id, unit_id, facility_id, current_facility_inspection_id, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, ?, ?, ?, ?, 'human')",
+    ).bind(seriesId, a.id, facilityId, inspectionId, now, now, admin.userId).run();
+    await env.DB.prepare(
+      "INSERT INTO facility_inspections (id, unit_id, series_id, facility_id, template_version_id, inspector_member_id, inspected_at, result, note, location_version, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', '自動試験の点検', 1, ?, ?, ?, 'human')",
+    ).bind(inspectionId, a.id, seriesId, facilityId, templateVersionId, admin.memberId!, "2026-10-14T02:00:00.000Z", now, now, admin.userId).run();
+
+    // 点検を直targetにしたintent＋basic分類の添付は、検査jobでも自動リンクしない（リンクは業務mutationの経路だけ）
+    const attId = (await makeUploaded(admin)).id; // draft経由で作った後、直intentの状態を模擬する
+    await env.DB.prepare("UPDATE attachments SET intent_target_type = 'inspection', intent_target_id = ?, classification = 'basic' WHERE id = ?")
+      .bind(inspectionId, attId).run();
+    await runDueJobs(env);
+    expect((await fx.rows("attachments", { id: attId }))[0]!.status).toBe("ready");
+    expect(await fx.rows("attachment_links", { attachment_id: attId })).toHaveLength(0);
   });
 });

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
-  Code100, Cursor, Id, IdListMaybeEmpty, IDEM, Instant, Latitude, Limit, Longitude, P_ID, Page, Reason, Reason2000, ShortText, Version,
-  defineApi, listQuery, noContent, obj, provisionalDto, OptionalBody, LIMITS,
+  Code100, Cursor, Id, IdListMaybeEmpty, IDEM, Instant, Latitude, Limit, Longitude, Note1000, Note2000, P_ID, Page, Reason, Reason2000, ShortText, Version,
+  Body, defineApi, listQuery, noContent, obj, provisionalDto, LIMITS,
 } from "./common";
 import { attachmentStates, inspectionResults, locationVerificationStates } from "../states";
 
@@ -30,7 +30,8 @@ const facilityShape = {
   longitude: Longitude,
   // DBのCHECK（facilities.location_source/management_number/identifying_name ≤100）に揃える
   locationSource: Code100,
-  locationNote: OptionalBody.max(1000),
+  // DBのCHECK（facilities.location_note 1..1000。NOT NULL）に揃える（空文字は400。500にしない）
+  locationNote: Note1000,
   managementNumber: Code100.optional(),
   identifyingName: Code100.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -55,12 +56,14 @@ export const InspectionInput = obj({
         code: Code100,
         result: z.enum(inspectionResults),
         value: z.union([z.string().max(LIMITS.titleMax), z.number(), z.boolean()]).optional(),
-        note: OptionalBody.optional(),
+        // DBのCHECK（inspection_items.note 1..2000。未指定はNULL）に揃える（空文字は400）
+        note: Note2000.optional(),
       }),
     )
     .min(1)
     .max(LIMITS.arrayMax),
-  note: OptionalBody,
+  // DBのCHECK（facility_inspections/asset_inspections.note 1..20000）に揃える（空文字は400）
+  note: Body,
   createIssue: z.boolean(),
   attachmentIds: IdListMaybeEmpty,
 });

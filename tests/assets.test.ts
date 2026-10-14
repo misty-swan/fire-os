@@ -78,6 +78,17 @@ describe("車両・資機材の台帳 (T025)", () => {
       { version: 1, storage: {} }, idem(),
     );
     expect(noStorage.status).toBe(400);
+    // 外部保管の備考はDBのCHECK（equipment.storage_note 1..1000）に揃える。空文字は契約で400（通ってから500にならない）
+    const emptyNote = await fx.client(admin).request(
+      "POST", "/api/v1/equipment",
+      { assetCode: "NOTE-0", name: "備考が空文字の機材", quantity: 1, quantityUnit: "本", storage: { facilityId, note: "" } }, idem(),
+    );
+    expect(emptyNote.status).toBe(400);
+    const emptyNotePatch = await fx.client(admin).request(
+      "PATCH", `/api/v1/equipment/${e.id}`,
+      { version: 1, storage: { facilityId, note: "" } }, idem(),
+    );
+    expect(emptyNotePatch.status).toBe(400);
 
     // 同じ番号は409。別unitなら同じ番号でも可
     const dup = await fx.client(admin).request(

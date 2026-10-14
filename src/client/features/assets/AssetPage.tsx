@@ -121,10 +121,17 @@ function AssetEditForm({ type, asset, onSaved }: { type: "vehicle" | "equipment"
   const [status, setStatus] = useState(asset.status);
   const [quantity, setQuantity] = useState(isEquipment ? String((asset as EquipmentDto).quantity) : "");
   const [quantityUnit, setQuantityUnit] = useState(isEquipment ? (asset as EquipmentDto).quantityUnit : "");
-  // 車両は施設1択、資機材は施設/車両/外部保管（備考）のどれか
+  // 車両は施設1択、資機材は施設/車両/外部保管（備考）のどれか。
+  // 保管先が未指定の資機材は「指定しない」（変更しない）で開く。未指定のまま黙って備考を書かない
   const [storageMode, setStorageMode] = useState<"none" | "facilityId" | "vehicleId" | "note">(
     isEquipment
-      ? (asset as EquipmentDto).storage.facilityId ? "facilityId" : (asset as EquipmentDto).storage.vehicleId ? "vehicleId" : "note"
+      ? (asset as EquipmentDto).storage.facilityId
+        ? "facilityId"
+        : (asset as EquipmentDto).storage.vehicleId
+          ? "vehicleId"
+          : (asset as EquipmentDto).storage.note
+            ? "note"
+            : "none"
       : (asset as VehicleDto).storageFacilityId ? "facilityId" : "none",
   );
   const [facilityId, setFacilityId] = useState(
@@ -169,16 +176,20 @@ function AssetEditForm({ type, asset, onSaved }: { type: "vehicle" | "equipment"
       return;
     }
     const current = asset as EquipmentDto;
-    // どれか一つだけ送る（契約はnullを拒否するので、選んでいない列は省略する。サーバーが他をnullにして排他を作る）
+    // どれか一つだけ送る（契約はnullを拒否するので、選んでいない列は省略する。サーバーが他をnullにして排他を作る）。
+    // 「指定しない」は変更しない（storage自体を送らない。黙って備考を書かない）
     const nextStorage:
       | { facilityId: string; vehicleId?: undefined; note?: undefined }
       | { facilityId?: undefined; vehicleId: string; note?: undefined }
-      | { facilityId?: undefined; vehicleId?: undefined; note: string } =
-      storageMode === "facilityId" ? { facilityId: facilityId.trim() }
-        : storageMode === "vehicleId" ? { vehicleId: vehicleId.trim() }
-          : { note: note.trim() || "詰所" };
+      | { facilityId?: undefined; vehicleId?: undefined; note: string }
+      | null =
+      storageMode === "none" ? null
+        : storageMode === "facilityId" ? { facilityId: facilityId.trim() }
+          : storageMode === "vehicleId" ? { vehicleId: vehicleId.trim() }
+            : { note: note.trim() || "詰所" };
     const storageChanged =
-      (nextStorage.facilityId ?? null) !== current.storage.facilityId || (nextStorage.vehicleId ?? null) !== current.storage.vehicleId || (nextStorage.note ?? null) !== current.storage.note;
+      nextStorage !== null &&
+      ((nextStorage.facilityId ?? null) !== current.storage.facilityId || (nextStorage.vehicleId ?? null) !== current.storage.vehicleId || (nextStorage.note ?? null) !== current.storage.note);
     const res = await patch.run({
       params: { id: asset.id },
       body: {
@@ -187,7 +198,7 @@ function AssetEditForm({ type, asset, onSaved }: { type: "vehicle" | "equipment"
         ...(status.trim() !== current.status ? { status: status.trim() } : {}),
         ...(Number(quantity) !== current.quantity ? { quantity: quantity === "" ? 0 : Number(quantity) } : {}),
         ...(quantityUnit.trim() !== current.quantityUnit ? { quantityUnit: quantityUnit.trim() || "本" } : {}),
-        ...(storageChanged ? { storage: nextStorage } : {}),
+        ...(nextStorage && storageChanged ? { storage: nextStorage } : {}),
       },
     });
     if (res) onSaved();
@@ -279,7 +290,7 @@ function AssetEditForm({ type, asset, onSaved }: { type: "vehicle" | "equipment"
           onConfirm={() => void retire()}
           onCancel={() => setConfirmRetire(false)}
         >
-          <p>「{asset.name}」の状態を「廃止」にします。記録は残り、削除はされません。取り消す場合は状態を戻してください。</p>
+          <p>「{asset.name}」の状態を「廃止」にします。記録は残り、削除はされません。廃止すると一覧の既定表示から外れます。取り消し（復活）はこの画面からはできません（後続の復帰機能まで）。</p>
         </ConfirmDialog>
       )}
     </Card>

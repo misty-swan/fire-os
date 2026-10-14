@@ -5,6 +5,7 @@ import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../htt
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { Target } from "../../shared/contracts/common";
+import { planAttachmentLinks } from "../attachments/link";
 import { requirePermission } from "./invitations";
 
 /**
@@ -57,13 +58,26 @@ export function registerIssueRoutes(app: ApiApp): void {
     }
 
     const id = crypto.randomUUID();
+    // ready添付のリンク（docs/05 API-16 attachmentIds）。リンク先の異常行はこのbatchで作るため
+    // 存在条件を付けず、リンク文は異常のINSERTと同じbatchに入れる（docs/07 §3.5「添付は業務と同時に確定」。
+    // 点検と同じplanAttachmentLinksの呼び方。未検査は422 ATTACHMENT_NOT_READY、別unitは404）
+    const link = (body.attachmentIds?.length ?? 0) > 0
+      ? await planAttachmentLinks(c.env, p.unitId, p.userId, {
+          target: { type: "issue", id },
+          attachmentIds: body.attachmentIds!,
+          targetCreatedInBatch: true,
+        })
+      : null;
+
     const result = await executeMutation(c.env, p, {
       operationCode: "issue.create",
       key: headers["idempotency-key"],
       requestHash: await canonicalRequestHash({ method: "POST", path: "/issues", body }),
       expectedAuthzVersion: p.authzVersion,
-      roots: [],
+      roots: link?.root ? [link.root] : [],
       created: [{ table: "issues", id }],
+      conditions: link?.conditions ?? [],
+      duplicateOn: link ? [...link.duplicateOn] : [],
       statements: (ctx) => [
         c.env.DB.prepare(
           `INSERT INTO issues (id, unit_id, ${body.target.type}_id, source_facility_inspection_id, source_asset_inspection_id, title, description, reported_by, status, last_mutation_token, created_at, updated_at, created_by, actor_kind) ` +
@@ -72,12 +86,15 @@ export function registerIssueRoutes(app: ApiApp): void {
         c.env.DB.prepare(
           "INSERT INTO issue_events (id, unit_id, issue_id, action, before_json, after_json, actor_user_id, actor_kind, created_at) VALUES (?, ?, ?, 'reported', '{}', ?, ?, 'human', ?)",
         ).bind(crypto.randomUUID(), p.unitId, id, JSON.stringify({ status: "reported", source: "manual" }), p.userId, ctx.now),
+        // リンク文は親のINSERTより後に置く（docs/07 §3.5）
+        ...(link ? link.statements(ctx) : []),
       ],
       audit: {
         action: "issue.create", entityType: "issue", entityId: id,
         metadata: {
           target: body.target.type, source: "manual",
           originKind: originFacilityInspectionId ? "facility_inspection" : originAssetInspectionId ? "asset_inspection" : "none",
+          attachments: body.attachmentIds?.length ?? 0,
         },
       },
       event: {

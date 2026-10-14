@@ -128,7 +128,7 @@ export function FacilityEditorPage() {
         ...(longitude.trim() !== "" && num(longitude) !== original.longitude ? { longitude: num(longitude) } : {}),
         ...(locationSource.trim() !== original.locationSource ? { locationSource: locationSource.trim() } : {}),
         ...(changedNote ? { locationNote: locationNote.trim() || "未記入" } : {}),
-        ...(readyIds.length > 0 ? { attachmentIds: readyIds } : {}),
+        // attachmentIdsは編集では送らない（API-13は未処理。編集画面のuploaderは検査の完了時に直接リンクする）
       };
       const result = await update.run({ params: { id: editId! }, body: body as never });
       if (result) {

@@ -75,7 +75,7 @@ export function useFacilities(query: FacilitiesQuery): {
   return { items, state, reload };
 }
 
-/** 種別の日本語ラベル・形・色（prototype の TYPES と docs/03 のトークン） */
+/** 種別の日本語ラベル・形・色。マーカーの字形（prototype の TYPES。9px/7px・格納箱は45°）。チップはTypeChip側の専用形を使う */
 export const FACILITY_TYPES = {
   hydrant: { label: "消火栓", color: "#e8432a", icon: "fire_hydrant", radius: "50%", tf: "none" },
   cistern: { label: "防火水槽", color: "#2f7fe0", icon: "water_drop", radius: "9px", tf: "none" },

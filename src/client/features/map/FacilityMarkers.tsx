@@ -7,6 +7,13 @@ import { FACILITY_TYPES, facilityName, locationStatusLabel, type FacilityItem, t
  * 地図面は prototype と同じプレースホルダー（実地図の接続はV05。docs/14）。
  */
 
+/** 種別チップの字形（prototype の chips の上書きどおり。マーカー(TYPES)より小さい専用の形: 防火水槽=4px・格納箱=3pxで45°） */
+const TYPE_CHIP_SHAPES: Record<FacilityType, { radius: string; tf: string }> = {
+  hydrant: { radius: "50%", tf: "none" },
+  cistern: { radius: "4px", tf: "none" },
+  box: { radius: "3px", tf: "rotate(45deg) scale(.8)" },
+};
+
 export interface MarkerBox {
   /** 施設の緯度経度を表示範囲に収めた 0〜100 の位置 */
   x: number;
@@ -71,6 +78,7 @@ export function TypeChip({
   onToggle: () => void;
 }) {
   const t = FACILITY_TYPES[type];
+  const shape = TYPE_CHIP_SHAPES[type];
   return (
     <button
       type="button"
@@ -83,7 +91,7 @@ export function TypeChip({
       )}
     >
       <span aria-hidden="true" className="relative flex size-[18px] items-center justify-center">
-        <span style={{ background: t.color, borderRadius: t.radius, transform: t.tf, opacity: on ? 1 : 0.3 }} className="absolute inset-[2px]" />
+        <span style={{ background: t.color, borderRadius: shape.radius, transform: shape.tf, opacity: on ? 1 : 0.3 }} className="absolute inset-[2px]" />
       </span>
       {t.label}
       <span className="font-mono text-[11px] font-medium text-ink-muted">{count}</span>

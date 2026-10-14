@@ -109,7 +109,9 @@ test("map_selection_sheet_matches_prototype_and_opens_detail", async ({ page }) 
   const target = page.getByRole("button", { name: `消火栓 ${seed.hydrant[0]}` });
   await expect(target.first()).toBeVisible({ timeout: 10_000 });
   // フル試験では同座標に他の試験の施設が重なり、最前面が別のマーカーになることがある。
-  // ここで確かめたいのはシートの構成（prototype準拠）なので、スマホはヒットテストを強制する
+  // ここで確かめたいのはシートの構成（prototype準拠）なので、スマホはヒットテストを強制する。
+  // また読込中の再描画で選択が外れるため、全cursor完走（「取得中」の消滅）を待ってから選ぶ
+  await expect(page.getByText("施設一覧を取得中…")).toBeHidden({ timeout: 20_000 });
   await (isPhone(page.viewportSize()) ? target.first().click({ force: true }) : target.last().click());
 
   if (isPhone(page.viewportSize())) {

@@ -3413,6 +3413,7 @@
                   },
                   "locationNote": {
                     "type": "string",
+                    "minLength": 1,
                     "maxLength": 1000
                   },
                   "managementNumber": {
@@ -4087,6 +4088,7 @@
                   },
                   "locationNote": {
                     "type": "string",
+                    "minLength": 1,
                     "maxLength": 1000
                   },
                   "managementNumber": {
@@ -4371,7 +4373,8 @@
                         },
                         "note": {
                           "type": "string",
-                          "maxLength": 20000
+                          "minLength": 1,
+                          "maxLength": 2000
                         }
                       },
                       "required": [
@@ -4383,6 +4386,7 @@
                   },
                   "note": {
                     "type": "string",
+                    "minLength": 1,
                     "maxLength": 20000
                   },
                   "createIssue": {
@@ -5916,6 +5920,7 @@
                       },
                       "note": {
                         "type": "string",
+                        "minLength": 1,
                         "maxLength": 1000
                       }
                     },
@@ -6171,7 +6176,8 @@
                         },
                         "note": {
                           "type": "string",
-                          "maxLength": 20000
+                          "minLength": 1,
+                          "maxLength": 2000
                         }
                       },
                       "required": [
@@ -6183,6 +6189,7 @@
                   },
                   "note": {
                     "type": "string",
+                    "minLength": 1,
                     "maxLength": 20000
                   },
                   "createIssue": {
@@ -10957,7 +10964,8 @@
                         },
                         "note": {
                           "type": "string",
-                          "maxLength": 20000
+                          "minLength": 1,
+                          "maxLength": 2000
                         }
                       },
                       "required": [
@@ -10969,6 +10977,7 @@
                   },
                   "note": {
                     "type": "string",
+                    "minLength": 1,
                     "maxLength": 20000
                   },
                   "createIssue": {
@@ -11419,6 +11428,7 @@
                       },
                       "note": {
                         "type": "string",
+                        "minLength": 1,
                         "maxLength": 1000
                       }
                     },

@@ -41,6 +41,10 @@ export const Code100 = z.string().min(1).max(100);
 export const Code50 = z.string().min(1).max(50);
 /** 確認・訂正・対応の理由（DBのCHECK 1〜2000。共通上限Reason(20,000)より狭い列） */
 export const Reason2000 = z.string().min(1).max(2000);
+/** 点検明細の備考など（DBのCHECK 1〜2000。未指定はNULL。空文字は不可） */
+export const Note2000 = z.string().min(1).max(2000);
+/** 施設の位置メモなど（DBのCHECK 1〜1000。NOT NULL。空文字は不可） */
+export const Note1000 = z.string().min(1).max(1000);
 export const Latitude = z.number().min(-90).max(90);
 export const Longitude = z.number().min(-180).max(180);
 export const NonNegative = z.number().min(0);

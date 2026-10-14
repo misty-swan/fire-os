@@ -1,4 +1,4 @@
-import { index, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { rootColumns } from "./core";
 
 // 点検・異常（docs/04 §3.3、drizzle/0013_inspections_issues.sql）。制約の正本はSQL。
@@ -27,7 +27,7 @@ export const facilityInspections = sqliteTable(
     inspectedAt: text("inspected_at").notNull(),
     result: text("result", { enum: ["ok", "needs_review", "unknown"] }).notNull(),
     note: text("note").notNull(),
-    locationVersion: real("location_version").notNull(),
+    locationVersion: integer("location_version").notNull(),
     supersedesId: text("supersedes_id"),
     correctionReason: text("correction_reason"),
     ...rootColumns,

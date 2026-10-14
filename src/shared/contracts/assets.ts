@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  AssetTarget, Code100, Code50, Id, IdListMaybeEmpty, IDEM, LIMITS, NonNegative, OptionalBody, P_ID, Page, Reason, Reason2000, Sha256, ShortText, Target,
+  AssetTarget, Code100, Code50, Id, IdListMaybeEmpty, IDEM, LIMITS, NonNegative, Note1000, P_ID, Page, Reason, Reason2000, Sha256, ShortText, Target,
   Title, Version, VersionOrZero, BusinessDate, Body, Job, defineApi, listQuery, noContent, obj, provisionalDto,
 } from "./common";
 import { inspectionShape } from "./gis";
@@ -38,8 +38,9 @@ export const Attachment = obj({
   sha256: z.string().nullable(), classification: z.enum(["basic", "personal", "sensitive"]), expiresAt: z.iso.datetime(),
 });
 
-// 保管先の排他（施設/車両の両方指定は不可）は業務規則のため、サーバーが422で返す（docs/16 T025）
-const storage = obj({ facilityId: Id.optional(), vehicleId: Id.optional(), note: OptionalBody.max(1000).optional() });
+// 保管先の排他（施設/車両の両方指定は不可）は業務規則のため、サーバーが422で返す（docs/16 T025）。
+// 備考はDBのCHECK（equipment.storage_note 1..1000。未指定はNULL）に揃える（空文字は400。500にしない）
+const storage = obj({ facilityId: Id.optional(), vehicleId: Id.optional(), note: Note1000.optional() });
 
 const templateItem = obj({
   // 項目コードは点検明細のitem_code（DBのCHECK ≤100）として保存されるため、様式の時点で100に揃える

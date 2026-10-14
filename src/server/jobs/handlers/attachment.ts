@@ -2,6 +2,7 @@ import type { AppEnv } from "../../env";
 import { enqueueJobStatement } from "../store";
 import type { JobOutcome, LeasedJob } from "../store";
 import { registerJobHandler } from "../runner";
+import { insertLinkSql, LINK_ENTITY_TABLES } from "../../attachments/link";
 import { FileScanner } from "../../attachments/scanner";
 import { readyKeyFor } from "../../attachments/sizes";
 
@@ -14,10 +15,11 @@ import { readyKeyFor } from "../../attachments/sizes";
  */
 export async function inspectUpload(job: LeasedJob, env: AppEnv): Promise<JobOutcome> {
   const att = await env.DB.prepare(
-    "SELECT id, unit_id, status, version, staging_key, sha256, content_type, byte_size FROM attachments WHERE id = ?",
+    "SELECT id, unit_id, status, version, staging_key, sha256, content_type, byte_size, intent_target_type, intent_target_id, owner_user_id FROM attachments WHERE id = ?",
   ).bind(job.sourceId).first<{
     id: string; unit_id: string; status: string; version: number;
     staging_key: string | null; sha256: string | null; content_type: string; byte_size: number;
+    intent_target_type: string; intent_target_id: string; owner_user_id: string;
   }>();
   if (!att || att.unit_id !== job.unitId) return { kind: "stale", errorCode: "attachment_missing" };
   // 元版の確認: uploadedの初回だけ版の完全一致を要求する。checkingは検査の途中なので、
@@ -82,6 +84,25 @@ export async function inspectUpload(job: LeasedJob, env: AppEnv): Promise<JobOut
     return { kind: "retryable", errorCode: "ready_object_unavailable" };
   }
   // 確定の直前にもう一度元版を確認する（checkingの間に変更が入っていないか）
+  // ready確定と同じbatchで、既存の業務対象へ直アップロードされた添付（編集画面のuploader経路。docs/07 §3.5）の
+  // 初回リンクを作る。draft経由（attachment_draft対象）は業務mutationが予約を消費してリンクするため、ここでは作らない。
+  // 対象表はLINK_ENTITY_TABLES（facility/vehicle/equipment）だけ。点検・異常など業務mutationが条件と監査を
+  // 付けてリンクする種別は、ここでは自動リンクしない（未対応表はリンクを作らずスキップ＝既存挙動のまま）。
+  const linkTable = LINK_ENTITY_TABLES[att.intent_target_type];
+  const linkStatement = linkTable
+    ? env.DB.prepare(
+        // insertLinkSql(false)と同じ形: sensitiveは基本の対象へリンクしない（docs/10。分類の引下げもしない）。
+        // NOT EXISTSで二重リンクを防ぎ（二重の検査jobでも1本）、対象が同unitに存在しなければ0行＝スキップする
+        insertLinkSql(false) +
+          "a.id = ? AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id AND l.entity_type = ? AND l.entity_id = ? AND l.unlinked_at IS NULL) " +
+          `AND EXISTS (SELECT 1 FROM ${linkTable} t WHERE t.id = ? AND t.unit_id = ?)`,
+      ).bind(
+        crypto.randomUUID(), att.unit_id, att.intent_target_type, att.intent_target_id,
+        // リンクしたのは添付の所有者（intentを作った人）
+        att.owner_user_id, nowIso, nowIso, att.owner_user_id, att.unit_id,
+        att.id, att.intent_target_type, att.intent_target_id, att.intent_target_id, att.unit_id,
+      )
+    : null;
   const finalize = await env.DB.batch([
     env.DB.prepare(
       "UPDATE attachments SET status = 'ready', ready_key = ?, sha256 = ?, byte_size = ?, version = version + 1, updated_at = ? " +
@@ -90,6 +111,8 @@ export async function inspectUpload(job: LeasedJob, env: AppEnv): Promise<JobOut
     env.DB.prepare(
       "INSERT INTO attachment_events (id, unit_id, attachment_id, action, details, actor_kind, created_at) VALUES (?, ?, ?, 'inspect.passed', ?, 'system', ?)",
     ).bind(crypto.randomUUID(), att.unit_id, att.id, JSON.stringify({ key: readyKey, size: scan.bytes.byteLength }), nowIso),
+    // リンク文は親（attachments）のready確定より後に置く。UPDATEが0行（他が変えた）なら a.status='ready' にならず0行で揃う
+    ...(linkStatement ? [linkStatement] : []),
   ]);
   if ((finalize[0]?.meta.changes ?? 0) !== 1) {
     // 遅れて確定しようとした案件。ready候補のオブジェクトは孤児として回収対象（D10の遅延削除）

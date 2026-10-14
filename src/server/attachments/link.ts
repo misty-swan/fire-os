@@ -43,7 +43,8 @@ export interface LinkPlan {
   statements: (ctx: MutationContext) => D1PreparedStatement[];
 }
 
-const insertLinkSql = (allowSensitive: boolean) =>
+/** リンクINSERTの共通文。SELECT〜WHEREで二重INSERTを防ぐ。allowSensitive=falseはsensitiveを除外する（docs/10 §3） */
+export const insertLinkSql = (allowSensitive: boolean) =>
   "INSERT INTO attachment_links (id, unit_id, attachment_id, entity_type, entity_id, linked_by, created_at, updated_at, created_by, actor_kind) " +
   "SELECT ?, ?, a.id, ?, ?, ?, ?, ?, ?, 'human' FROM attachments a WHERE a.unit_id = ? AND a.status = 'ready' " +
   (allowSensitive ? "" : "AND a.classification <> 'sensitive' ") + "AND ";

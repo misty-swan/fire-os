@@ -113,12 +113,12 @@ export function IssuesPage() {
           const open = openId === i.id;
           return (
             <Card key={i.id} className="flex flex-col gap-2">
-              {/* 行押下で展開し、状態の操作と担当の変更を出す */}
+              {/* 行押下で展開し、状態の操作と担当の変更を出す（スマホは押下領域44pxを確保する） */}
               <button
                 type="button"
                 aria-expanded={open}
                 onClick={() => setOpenId(open ? null : i.id)}
-                className="flex items-start justify-between gap-2 text-left"
+                className="flex max-lg:min-h-11 items-start justify-between gap-2 py-1.5 text-left"
               >
                 <span className="min-w-0 text-[14px] font-bold">
                   {i.title}

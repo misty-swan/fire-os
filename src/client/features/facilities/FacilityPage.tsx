@@ -25,6 +25,20 @@ const ISSUE_STATUS_LABELS: Record<string, string> = {
   closed: "確認終了",
 };
 
+/** 点検結果の日本語ラベル（点検登録画面と同じ語彙。docs/11 点検結果） */
+const INSPECTION_RESULT_LABELS: Record<string, { label: string; tone: "ok" | "alert" | "neutral" }> = {
+  ok: { label: "良好", tone: "ok" },
+  needs_review: { label: "異常あり", tone: "alert" },
+  unknown: { label: "未確認", tone: "neutral" },
+};
+
+/** 現在版の点検結果（API-44の先頭1件。loading=取得中、none=記録0件、error=取得失敗） */
+type LastInspection =
+  | { state: "loading" }
+  | { state: "none" }
+  | { state: "error" }
+  | { state: "found"; result: string; inspectedAt: string };
+
 /**
  * 施設の詳細（T022/T034、SCR-04）。台帳・写真・位置（出典/確認対象版）・点検と異常の状態を
  * 混同しない表示（docs/03 SCR-04）。位置の確認/点検結果/異常対応を別の行で示す。
@@ -34,6 +48,7 @@ export function FacilityPage() {
   const id = params.id!;
   const [facility, setFacility] = useState<FacilityDetail | "loading" | "notfound">("loading");
   const [openIssues, setOpenIssues] = useState<{ id: string; title: string; status: string }[] | null>(null);
+  const [lastInspection, setLastInspection] = useState<LastInspection>({ state: "loading" });
   // 位置確認の結果。409(競合)・403(権限)・404(所在)・結果不明(通信断/5xx)を同じ「失敗」にしない（docs/03 §1.1）
   const [reviewState, setReviewState] = useState<"idle" | "busy" | "conflict" | "forbidden" | "missing" | "unknown">("idle");
 
@@ -54,6 +69,21 @@ export function FacilityPage() {
         if (alive) setOpenIssues(issues.filter((i) => i.status !== "closed"));
       } catch {
         if (alive) setOpenIssues([]); // 一覧の取得に失敗しても詳細自体は見せる
+      }
+      // 現在版の点検結果（API-44の先頭1件。記録が0件のときだけ「まだありません」を空表示にしない）
+      try {
+        const inspections = (await api("API-44", { params: { id }, query: { limit: 1 } })) as unknown as {
+          result: string; inspectedAt: string;
+        }[];
+        if (alive) {
+          setLastInspection(
+            inspections.length > 0
+              ? { state: "found", result: inspections[0]!.result, inspectedAt: inspections[0]!.inspectedAt }
+              : { state: "none" },
+          );
+        }
+      } catch {
+        if (alive) setLastInspection({ state: "error" }); // 通信断・5xxは記録0件と区別する（docs/03 §1.1）
       }
     })();
     return () => {
@@ -83,7 +113,8 @@ export function FacilityPage() {
 
   const status = locationStatusLabel[facility.verificationStatus];
   const statusTone = status.tone === "ok" ? "ok" : status.tone === "attention" ? "attention" : status.tone === "alert" ? "alert" : "neutral";
-  const latestIssue = openIssues && openIssues.length > 0 ? openIssues[0]! : null;
+  // API-15は昇順のため、未終了の異常の「最新1件」は配列の末尾（docs/03 §1）
+  const latestIssue = openIssues && openIssues.length > 0 ? openIssues[openIssues.length - 1]! : null;
 
   const review = async (decision: "request" | "verify") => {
     setReviewState("busy");
@@ -173,8 +204,21 @@ export function FacilityPage() {
         </div>
         <div className="flex items-center justify-between gap-3 text-[13px]">
           <span className="text-ink-sub">点検結果</span>
-          {/* FacilityDetail DTOには点検の記録が含まれないため、記録が無いことを空表示で示す（docs/03 SCR-04） */}
-          <span className="text-[12px] text-ink-muted">点検の記録はまだありません</span>
+          {lastInspection.state === "loading" && <span className="text-[12px] text-ink-muted">読み込み中…</span>}
+          {lastInspection.state === "error" && (
+            <span className="text-[12px] text-attention">結果を確認できません（通信を確認してください）</span>
+          )}
+          {lastInspection.state === "none" && (
+            <span className="text-[12px] text-ink-muted">点検の記録はまだありません</span>
+          )}
+          {lastInspection.state === "found" && (
+            <span className="flex flex-wrap items-center justify-end gap-2 text-[12px] text-ink-sub">
+              <span className="font-mono">{lastInspection.inspectedAt.slice(0, 10)}</span>
+              <Chip tone={INSPECTION_RESULT_LABELS[lastInspection.result]?.tone ?? "neutral"}>
+                {INSPECTION_RESULT_LABELS[lastInspection.result]?.label ?? "結果を確認中"}
+              </Chip>
+            </span>
+          )}
         </div>
         <div className="flex items-center justify-between text-[13px]">
           <span className="text-ink-sub">異常対応</span>

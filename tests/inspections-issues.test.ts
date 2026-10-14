@@ -452,6 +452,88 @@ describe("点検と異常 (T029〜T032)", () => {
     expect(await fx.rows("attachment_links", { attachment_id: uninspectedId })).toHaveLength(0);
   });
 
+  it("manual_issue_links_ready_attachments_and_rejects_uninspected_ones", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+
+    // (a) 起点なしの手動起票: ready添付を異常の作成と同じ確定で紐付ける（docs/05 API-16 attachmentIds）
+    const readyId = await makeUploaded(admin, "issue");
+    await runDueJobs(env);
+    expect((await fx.rows("attachments", { id: readyId }))[0]!.status).toBe("ready"); // 前提: 検査を通っている
+    const created = await fx.client(admin).request(
+      "POST", "/api/v1/issues",
+      { target: { type: "facility", id: facilityId }, title: "写真つきの手動報告", description: "検査の済んだ写真を添えて起票", attachmentIds: [readyId] }, idem(),
+    );
+    expect(created.status).toBe(201);
+    const issueId = ((await json(created)).data! as { id: string }).id;
+    const links = await fx.rows("attachment_links", { attachment_id: readyId });
+    expect(links).toHaveLength(1);
+    expect(links[0]!.entity_type).toBe("issue");
+    expect(links[0]!.entity_id).toBe(issueId);
+    expect(links[0]!.unlinked_at).toBeNull();
+    // 異常への添付はsensitiveを基本とする（docs/10 §3。basicからの引上げ。引下げはしない）
+    expect((await fx.rows("attachments", { id: readyId }))[0]!.classification).toBe("sensitive");
+
+    // (b) 起点つきの起票でも同じ（起点の対象一致は既存の規則のまま）
+    const facilityInspection = await (await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!), idem(),
+    )).json() as { data: { id: string } };
+    const ready2 = await makeUploaded(admin, "issue");
+    await runDueJobs(env);
+    const withOrigin = await fx.client(admin).request(
+      "POST", "/api/v1/issues",
+      { target: { type: "facility", id: facilityId }, title: "起点つきの写真つき報告", description: "点検の後に手動で起票", originInspectionId: facilityInspection.data.id, attachmentIds: [ready2] }, idem(),
+    );
+    expect(withOrigin.status).toBe(201);
+    expect(await fx.rows("attachment_links", { attachment_id: ready2 })).toHaveLength(1);
+
+    // (c) 未検査（ready前）の添付は422で、異常もリンクも増えない
+    const uninspectedId = await makeUploaded(admin, "issue"); // 完了済みだが検査jobは未実行
+    const beforeIssues = (await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>())!.n;
+    const notReady = await fx.client(admin).request(
+      "POST", "/api/v1/issues",
+      { target: { type: "facility", id: facilityId }, title: "未検査の添付", description: "ready前の写真は紐付かない", attachmentIds: [uninspectedId] }, idem(),
+    );
+    expect(notReady.status).toBe(422);
+    expect(((await json(notReady)).error?.code)).toBe("ATTACHMENT_NOT_READY");
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>())!.n).toBe(beforeIssues);
+    expect(await fx.rows("attachment_links", { attachment_id: uninspectedId })).toHaveLength(0);
+  });
+
+  it("inspection_note_limits_follow_the_db_checks", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+
+    // 明細の備考はDBのCHECK（inspection_items.note 1..2000。未指定はNULL）に揃える。超過も空文字も400（500にならない）
+    const tooLongItemNote = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { checkItems: [{ code: "exterior", result: "ok", note: "長".repeat(2001) }] }), idem(),
+    );
+    expect(tooLongItemNote.status).toBe(400);
+    const emptyItemNote = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { checkItems: [{ code: "exterior", result: "ok", note: "" }] }), idem(),
+    );
+    expect(emptyItemNote.status).toBe(400);
+    // 2000字ちょうどは通る（上限の固定値。docs/05 §1）
+    const okItemNote = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { checkItems: [{ code: "exterior", result: "ok", note: "長".repeat(2000) }] }), idem(),
+    );
+    expect(okItemNote.status).toBe(201);
+    // 点検の本文（facility_inspections.note 1..20000）も空文字は400
+    const emptyNote = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { note: "" }), idem(),
+    );
+    expect(emptyNote.status).toBe(400);
+  });
+
   it("manual_issue_records_only_matching_origin_inspection", async () => {
     const a = fx.units.a;
     const admin = a.people.admin;

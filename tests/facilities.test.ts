@@ -99,6 +99,9 @@ describe("施設の台帳と位置確認 (T019)", () => {
       type: "hydrant", latitude: 35, longitude: 139, locationSource: "超".repeat(101), locationNote: "x", managementNumber: "A-9997",
     });
     expect(longSource.status).toBe(400);
+    // DBのCHECK（facilities.location_note 1..1000）に合わせ、空文字も契約で400（通ってから500にならない）
+    const emptyNote = await create(admin, { type: "hydrant", latitude: 35, longitude: 139, locationSource: "x", locationNote: "", managementNumber: "A-9996" });
+    expect(emptyNote.status).toBe(400);
     const noName = await create(admin, { type: "hydrant", latitude: 1, longitude: 1, locationSource: "x", locationNote: "x" });
     expect(noName.status).toBe(400);
     // 同じ番号の重複（作成と変更の両方で409 DUPLICATE。API-13にもduplicateOn宣言が必要）
