@@ -52,6 +52,12 @@ export interface MutationSpec<T> {
   expectedAuthzVersion: number;
   roots: RootGuard[];
   /**
+   * 新規作成した行（INSERT）。書込の後に「その行が今回の試行の印(last_mutation_token)付きで存在する」ことを検査する。
+   * 作成だけの操作は更新対象のrootが無いので、rootsの代わりに使える（rootsとcreatedの少なくとも一方が必要）。
+   * INSERTは last_mutation_token = ctx.attempt を設定すること。
+   */
+  created?: { table: string; id: string }[];
+  /**
    * 実行主体そのものをこのbatchで作る操作（招待の受領：users行の作成と団員へのリンク）だけが使う。
    * 認可版の検査(a)より前に書かれる。主体がまだ存在しないので、失敗後の分類では「主体が有効か」を見ず、
    * roots/conditionsで原因を判別する。
@@ -184,7 +190,8 @@ export async function executeMutation<T>(
     assertIdent(r.table, "root.table");
     if (r.allowedStates) assertIdent(r.allowedStates.column, "root.allowedStates.column");
   }
-  if (spec.roots.length === 0) throw new Error("roots が空です。更新対象のrootを1つ以上指定してください");
+  for (const r of spec.created ?? []) assertIdent(r.table, "created.table");
+  if (spec.roots.length === 0 && !(spec.created?.length)) throw new Error("roots が空です。更新対象のroot（または新規作成の created）を指定してください");
   if (spec.key.length < 1 || spec.key.length > 128) throw new Error("Idempotency-Key は1〜128文字です");
   assertSmallPrimitives("audit.metadata", spec.audit.metadata);
   assertSmallPrimitives("event.payload", spec.event.payload);
@@ -219,6 +226,9 @@ export async function executeMutation<T>(
   // (e) 比較更新が本当に1行に効いたこと（0行更新を成功扱いにしない）
   for (const r of spec.roots) {
     stmts.push(assertion(rootUpdatedExistsSql(r.table), r.id, principal.unitId, r.expectedVersion + 1, ctx.attempt));
+  }
+  for (const cr of spec.created ?? []) {
+    stmts.push(assertion(`SELECT 1 FROM ${cr.table} WHERE id = ? AND unit_id = ? AND last_mutation_token = ?`, cr.id, principal.unitId, ctx.attempt));
   }
   stmts.push(
     // (f) 監査（成功時のみ。本文は複製せずIDと短い値だけ）

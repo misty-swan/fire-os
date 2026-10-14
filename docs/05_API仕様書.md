@@ -52,9 +52,9 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-ID | method / path | 権限 | 入力と固有検証 | 成功data |
 |---|---|---|---|---|
 | API-01 | GET /me | PER-01 | なし | Me(profile,roles,authzVersion,policyVersion) |
-| API-02 | GET /members | PER-06 | q/status/limit/cursor;項目許可で投影 | Page<Member> |
-| API-03 | POST /members | PER-06 | displayName,status,rank?,privateFields?;承認列のみ | Member |
-| API-04 | PATCH /members/:id | PER-06/07 | version,変更列;停止はusers状態/失効と連動 | Member |
+| API-02 | GET /members | PER-01(一覧)/PER-06(許可列) | q/status/squad/limit/cursor（名前→IDのkeyset。絞り込み・ページングはSQL）;基本項目は全員、roleCodes/invitationはPER-07、privateFieldsは本人または担当(scope)の分だけ（他人分を返したら`member.private.view`を監査） | Page<Member>（privateFieldsは許可された行にだけ現れる） |
+| API-03 | POST /members | PER-06 | displayName,status,rank?,squad?,qualifications?,joinedOn?,privateFields?(phone/emergencyContactのみ。未知列400);管理者のみ。登録時の許可列入力は可（読み返しは別権限） | Member（応答・冪等保存にprivateFieldsを含めない） |
+| API-04 | PATCH /members/:id | PER-06/07 | version,変更列（基本項目=管理者、privateFields=本人または担当、status=管理者）;旧版409、未知列400、アカウントのある団員のstatus変更は422（利用停止の手順で行う） | Member |
 | API-05 | GET /activities | PER-01 | from/to/kind/memberId/status/limit/cursor;実参加検索はactual=true | Page<Activity> |
 | API-06 | POST /activities | PER-03 | ActivityInput＋audienceMemberIds;同unit/日時順序 | Activity |
 | API-07 | GET /activities/:id | PER-01 | なし;可視出欠と現在実績を含む | ActivityDetail |

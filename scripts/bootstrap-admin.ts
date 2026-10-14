@@ -46,8 +46,8 @@ const execute = (args: string[]) => spawnSync("npx", ["wrangler", "d1", "execute
 const flags = [...(a.remote ? ["--remote"] : ["--local", ...(a["persist-to"] ? ["--persist-to", a["persist-to"]] : [])]), ...(envName === "local" ? [] : ["--env", envName!])];
 
 // 再発行は既存の分団/団員を引く（remote/localどちらでも同じ手順）
-let unitId = crypto.randomUUID();
-let memberId = crypto.randomUUID();
+let unitId: string = crypto.randomUUID();
+let memberId: string = crypto.randomUUID();
 if (input.reissue) {
   const r = execute([...flags, "--json", "--command", "SELECT unit_id, member_id FROM invitations WHERE kind = 'bootstrap' AND status = 'pending'"]);
   if (r.status !== 0) fail(`既存の初期招待を読めません: ${r.stderr || r.stdout}`);

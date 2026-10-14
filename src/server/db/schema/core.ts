@@ -46,6 +46,9 @@ export const members = sqliteTable(
     displayName: text("display_name").notNull(),
     rank: text("rank"),
     joinedAt: text("joined_at"),
+    squad: text("squad"),
+    /** JSON配列（資格・講習。最大10件） */
+    qualifications: text("qualifications").notNull().default("[]"),
     status: text("status", { enum: ["active", "paused", "retired"] }).notNull(),
     ...rootColumns,
   },
@@ -72,5 +75,14 @@ export const scopeAssignments = sqliteTable("scope_assignments", {
   permissions: text("permissions").notNull(),
   expiresAt: text("expires_at"),
   revokedAt: text("revoked_at"),
+  ...rootColumns,
+});
+
+/** 名簿の個人情報（D02許可列だけ。トリガーがキーを制限）。allowedFields は {"phone":…,"emergencyContact":…} */
+export const memberPrivateProfiles = sqliteTable("member_private_profiles", {
+  id: text("id").primaryKey(),
+  unitId: text("unit_id").notNull(),
+  memberId: text("member_id").notNull().unique(),
+  allowedFields: text("allowed_fields").notNull(),
   ...rootColumns,
 });

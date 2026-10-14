@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  Id, IDEM, P_ID, Reason, ShortText, Version, defineApi, listQuery, noContent, obj, provisionalDto, Page,
+  BusinessDate, Id, IDEM, P_ID, Reason, ShortText, Version, defineApi, listQuery, noContent, obj, provisionalDto, Page,
 } from "./common";
 import { memberStates } from "../states";
 
@@ -53,6 +53,28 @@ export const authLibrary = {
   ],
 } as const;
 
+/** D02の検証設定：保存できる個人情報（許可リスト）。増やすときは drizzle/0006 のトリガーも変更する */
+export const privateFieldNames = ["phone", "emergencyContact"] as const;
+const PrivateText = z.string().min(1).max(200);
+/** 許可列だけ。null はその項目の削除。未知の列は400 */
+export const PrivateFields = obj({ phone: PrivateText.nullable().optional(), emergencyContact: PrivateText.nullable().optional() });
+export const Qualifications = z.array(z.string().min(1).max(40)).max(10);
+/** 名簿の団員。privateFields は本人またはその団員を対象にした担当(scope)を持つ者の応答にだけ現れる。roleCodes/invitation は招待・権限の管理権(PER-07)を持つ者だけ */
+export const Member = obj({
+  id: Id,
+  version: z.number().int().min(1),
+  displayName: ShortText,
+  rank: ShortText.nullable(),
+  squad: ShortText.nullable(),
+  qualifications: Qualifications,
+  joinedOn: BusinessDate.nullable(),
+  status: z.enum(memberStates),
+  hasAccount: z.boolean(),
+  roleCodes: z.array(z.enum(roleCodes)).optional(),
+  invitation: obj({ id: Id, version: z.number().int().min(1), expiresAt: z.string() }).nullable().optional(),
+  privateFields: obj({ phone: PrivateText.optional(), emergencyContact: PrivateText.optional() }).optional(),
+});
+
 export const invitationStates = ["pending", "consumed", "cancelled"] as const;
 /** 招待。生tokenは作成した応答の一回だけ（再送・一覧では null）。token_hash/email_hashは返さない */
 export const Invitation = obj({
@@ -79,19 +101,20 @@ export const authApis = {
   }),
   "API-02": defineApi({
     method: "GET", path: "/members", permission: "PER-06", kind: "list", success: [200],
-    request: obj({ query: listQuery({ q: ShortText.optional(), status: z.enum(memberStates).optional() }) }),
-    response: Page(provisionalDto()), provisional: true,
+    request: obj({ query: listQuery({ q: ShortText.optional(), status: z.enum(memberStates).optional(), squad: ShortText.optional() }) }),
+    response: Page(Member),
   }),
   "API-03": defineApi({
     method: "POST", path: "/members", permission: "PER-06", kind: "mutation", success: [201],
     request: obj({
       body: obj({
         displayName: ShortText, status: z.enum(memberStates), rank: ShortText.optional(),
-        privateFields: z.record(z.string(), z.unknown()).optional(),
+        squad: ShortText.optional(), qualifications: Qualifications.optional(), joinedOn: BusinessDate.optional(),
+        privateFields: PrivateFields.optional(),
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Member,
   }),
   "API-04": defineApi({
     method: "PATCH", path: "/members/:id", permission: "PER-06/07", kind: "mutation", success: [200],
@@ -99,11 +122,13 @@ export const authApis = {
       params: P_ID,
       body: obj({
         version: Version, displayName: ShortText.optional(), status: z.enum(memberStates).optional(),
-        rank: ShortText.nullable().optional(), privateFields: z.record(z.string(), z.unknown()).optional(),
+        rank: ShortText.nullable().optional(), squad: ShortText.nullable().optional(),
+        qualifications: Qualifications.optional(), joinedOn: BusinessDate.nullable().optional(),
+        privateFields: PrivateFields.optional(),
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Member,
   }),
   "API-33": defineApi({
     method: "POST", path: "/invitations", permission: "PER-07", kind: "mutation", success: [201],

@@ -3,6 +3,7 @@ import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import * as core from "../src/server/db/schema/core";
+import * as invitationSchema from "../src/server/db/schema/invitations";
 import { createFixture, type TestFixture } from "./helpers/fixture";
 
 const NOW = "2026-10-13T00:00:00.000Z";
@@ -185,7 +186,7 @@ describe("core schema (T003)", () => {
   });
 
   it("ts_schema_columns_match_migrated_tables", async () => {
-    for (const table of Object.values(core).filter((t) => typeof t === "object" && "id" in (t as object))) {
+    for (const table of [...Object.values(core), ...Object.values(invitationSchema)].filter((t) => typeof t === "object" && "id" in (t as object))) {
       const name = getTableName(table as never);
       const expected = Object.values(getTableColumns(table as never)).map((c) => (c as { name: string }).name).sort();
       const info = await env.DB.prepare(`PRAGMA table_info(${name})`).all();
