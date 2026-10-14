@@ -113,7 +113,7 @@ describe("名簿 (T011)", () => {
     expect(after!.n).toBe(1);
   });
 
-  it("expired_scopes_are_not_listed_and_expiry_is_preserved_when_roles_are_edited", async () => {
+  it("expired_scopes_are_not_listed_and_api37_keeps_the_expiry_it_is_given", async () => {
     const f = await createFixture("two-units");
     const a = f.units.a;
     const ins = (member: string, target: string, expires: string | null) =>
@@ -124,6 +124,14 @@ describe("名簿 (T011)", () => {
     const rows = ((await (await f.client(a.people.admin).request("GET", "/api/v1/members")).json()) as { data: (MemberDto & { scopes: { expiresAt: string | null }[] })[] }).data;
     expect(rows.find((r) => r.id === a.people.operator.memberId)!.scopes.filter((s) => (s as { entityType?: string }).entityType === "member")).toEqual([]);
     expect(rows.find((r) => r.id === a.people.officer.memberId)!.scopes.map((s) => s.expiresAt)).toEqual(["2099-01-01T00:00:00.000Z"]);
+    // 期限つきの担当をそのまま再送すると、期限が保たれる（API-37は期限をそのまま保存して返す）。期限切れの担当は応答に出ない
+    const off = a.people.officer;
+    const put = await f.client(a.people.admin).request("PUT", `/api/v1/members/${off.memberId}/roles`, {
+      version: rows.find((r) => r.id === off.memberId)!.version, expectedAuthzVersion: 1, roleCodes: ["officer"], reason: "期限の保持",
+      scopes: [{ entityType: "member", entityId: a.people.member.memberId, permissions: ["PER-06"], expiresAt: "2099-01-01T00:00:00.000Z" }],
+    }, idem());
+    expect(put.status).toBe(200);
+    expect(((await put.json()) as { data: { scopes: { expiresAt: string | null }[] } }).data.scopes.map((s) => s.expiresAt)).toEqual(["2099-01-01T00:00:00.000Z"]);
   });
 
   it("who_may_change_what_is_enforced_by_the_server", async () => {

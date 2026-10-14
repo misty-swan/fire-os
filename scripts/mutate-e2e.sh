@@ -1,7 +1,8 @@
 #!/bin/bash
-# 変異（防御を外す）で試験が失敗することの再現用。例: scripts/mutate.sh src/server/auth/authorize.ts "旧文字列" "新文字列" --project workers tests/authorization.test.ts （ファイルは終了時に必ず元へ戻す）
+# 変異（防御を外す）で実ブラウザ試験が失敗することの再現用。例: scripts/mutate-e2e.sh src/client/components/MenuPage.tsx "      await signOut();" "" tests/e2e/auth.spec.ts --project=desktop-1280 --grep mfa_recovery （終了時に必ずファイルを戻す。サーバーを自動起動するので他のwrangler devは止めておく）
 f="$1"; old="$2"; new="$3"; shift 3
 cp "$f" "$f.mutbak"
+trap '[ -f "$f.mutbak" ] && mv "$f.mutbak" "$f"' INT TERM EXIT
 python3 - "$f" "$old" "$new" <<'PY'
 import sys
 f,old,new=sys.argv[1:4]

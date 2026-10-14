@@ -59,7 +59,7 @@ function OwnPrivateForm({ member, onSaved }: { member: MemberRow; onSaved: () =>
 }
 
 /** 団員ドロワー（prototype：幅440px、アバター64px、緊急連絡先は伏せて「表示」で開く） */
-function MemberDrawer({ member, canManage, isSelf, onClose, onChanged, onDirtyChange }: { member: MemberRow; canManage: boolean; isSelf: boolean; onClose: () => void; onChanged: () => void; onDirtyChange: (d: boolean) => void }) {
+function MemberDrawer({ member, canManage, isSelf, onClose, onChanged, onDirtyChange, onRequestDiscard }: { member: MemberRow; canManage: boolean; isSelf: boolean; onClose: () => void; onChanged: () => void; onDirtyChange: (d: boolean) => void; onRequestDiscard?: (close: () => void) => void }) {
   const [reveal, setReveal] = useState(false);
   const [editing, setEditing] = useState<"basic" | "private" | null>(null);
   const priv = member.privateFields;
@@ -142,7 +142,7 @@ function MemberDrawer({ member, canManage, isSelf, onClose, onChanged, onDirtyCh
           <>
             <div className="pt-2 text-[13px] font-bold">管理</div>
             {editing === "basic" ? (
-              <MemberForm member={member} onSaved={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} onDirtyChange={onDirtyChange} />
+              <MemberForm member={member} onSaved={() => { setEditing(null); onChanged(); }} onCancel={() => (onRequestDiscard ? onRequestDiscard(() => setEditing(null)) : setEditing(null))} onDirtyChange={onDirtyChange} />
             ) : (
               <Button variant="secondary" onClick={() => setEditing("basic")} className="!h-[46px] !text-[13px]">
                 基本情報を編集する
@@ -275,7 +275,7 @@ export function MembersPage() {
 
       {!canManage && <Notice tone="info" icon="lock">連絡先などの個人情報は、本人と、その団員を担当する者だけが表示できます。</Notice>}
 
-      {open && <MemberDrawer member={open} canManage={canManage} isSelf={open.id === me.profile.memberId} onClose={() => guard(() => setOpenId(null))} onChanged={() => void reload()} onDirtyChange={setFormDirty} />}
+      {open && <MemberDrawer member={open} canManage={canManage} isSelf={open.id === me.profile.memberId} onClose={() => guard(() => setOpenId(null))} onChanged={() => void reload()} onDirtyChange={setFormDirty} onRequestDiscard={guard} />}
       {adding && (
         <Modal title="団員を追加" sub="登録後、「管理」から招待を送ります" onClose={() => guard(() => setAdding(false))}>
           <MemberForm onSaved={() => { setAdding(false); void reload(); }} onCancel={() => guard(() => setAdding(false))} onDirtyChange={setFormDirty} />

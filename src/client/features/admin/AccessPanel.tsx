@@ -406,7 +406,7 @@ export function AccessPanel() {
                   <button
                     type="button"
                     aria-pressed={r.id === selectedId}
-                    onClick={() => { setSelectedId(r.id); if (window.innerWidth < 1024) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}
+                    onClick={() => { setSelectedId(r.id); if (window.innerWidth < 1024) setTimeout(() => { detailRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); detailRef.current?.querySelector<HTMLElement>("h3")?.focus({ preventScroll: true }); }, 50); }}
                     className={clsx("flex min-h-[52px] w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-white/[.05]", r.id === selectedId && "bg-white/[.08]")}
                   >
                     <span aria-hidden="true" className="grid size-9 flex-none place-items-center rounded-full bg-[#1a2740] text-[13px] font-bold">{initialOf(r.displayName)}</span>

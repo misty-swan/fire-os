@@ -229,6 +229,32 @@ describe("認証ライブラリ (T007 / V01)", () => {
     expect(await sessionOf(b1)).not.toBeNull();
   });
 
+  it("verify_totp_only_revokes_other_sessions_when_it_actually_enables_mfa", async () => {
+    const { service } = directAuth();
+    const worker = await workerBrowser();
+    const { email } = await invitedAccount(worker);
+    const sessionOf = (b: Browser) => service.session(new Request(`${BASE}/x`, { headers: { cookie: b.cookieHeader() } }));
+    const a = await directBrowser(service);
+    await a.json("POST", "/api/auth/sign-in/email", { email, password: GOOD_PASSWORD });
+    const enable = await a.json<{ totpURI: string }>("POST", "/api/auth/two-factor/enable", { password: GOOD_PASSWORD });
+    const secret = secretFromUri(enable.data.totpURI);
+    // 有効化の確定前に、誤ったコードを送っても、他のセッションは消えない
+    const other = await directBrowser(service);
+    await other.json("POST", "/api/auth/sign-in/email", { email, password: GOOD_PASSWORD });
+    expect((await a.json("POST", "/api/auth/two-factor/verify-totp", { code: "000000" })).status).toBe(401);
+    expect(await sessionOf(other)).not.toBeNull();
+    expect((await a.json("POST", "/api/auth/two-factor/verify-totp", { code: await totpCode(secret) })).status).toBe(200);
+    expect(await sessionOf(other)).toBeNull(); // 有効化の確定では、旧セッションが消える
+    // 有効化済みの利用者が、ログイン中に誤ったコード/正しいコードで呼んでも、他端末を巻き込まない（強制ログアウトの経路にしない）
+    const second = await directBrowser(service);
+    await second.json("POST", "/api/auth/sign-in/email", { email, password: GOOD_PASSWORD });
+    await second.json("POST", "/api/auth/two-factor/verify-totp", { code: await totpCode(secret, Date.now(), -1) }); // 二要素のログイン確認
+    expect(await sessionOf(second)).not.toBeNull();
+    expect((await a.json("POST", "/api/auth/two-factor/verify-totp", { code: "000000" })).status).toBe(401);
+    expect(await sessionOf(second)).not.toBeNull();
+    expect(await sessionOf(a)).not.toBeNull();
+  });
+
   it("mfa_management_endpoints_require_the_password_and_there_is_no_disable_path", async () => {
     const worker = await workerBrowser();
     const p = fx.units.a.people.unlinked;
@@ -237,11 +263,14 @@ describe("認証ライブラリ (T007 / V01)", () => {
     expect((await signUp(worker, email, token)).status).toBe(200);
     // 二要素の解除は公開しない（契約外 → 404）。回復コードの再発行・URI再表示はパスワードの再確認が要る
     expect((await worker.json("POST", "/api/auth/two-factor/disable", { password: GOOD_PASSWORD })).status).toBe(404);
-    expect((await worker.json("POST", "/api/auth/two-factor/generate-backup-codes", {})).status).toBe(400);
     expect((await worker.json("POST", "/api/auth/two-factor/get-totp-uri", {})).status).toBe(400);
     const enable = await worker.json<{ totpURI: string; backupCodes: string[] }>("POST", "/api/auth/two-factor/enable", { password: GOOD_PASSWORD });
     expect((await worker.json("POST", "/api/auth/two-factor/verify-totp", { code: await totpCode(secretFromUri(enable.data.totpURI)) })).status).toBe(200);
-    expect((await worker.json("POST", "/api/auth/two-factor/generate-backup-codes", { password: "wrong-password-123" })).status).not.toBe(200);
+    expect((await worker.json("POST", "/api/auth/two-factor/generate-backup-codes", {})).status).toBe(400); // 有効化後でも、パスワード無しは拒否
+    expect((await worker.json("POST", "/api/auth/two-factor/get-totp-uri", {})).status).toBe(400);
+    const wrongPw = await worker.json<{ code?: string }>("POST", "/api/auth/two-factor/generate-backup-codes", { password: "wrong-password-123" });
+    expect(wrongPw.status).toBe(400);
+    expect(wrongPw.data.code).toBe("INVALID_PASSWORD");
     // 再発行すると旧い回復コードは使えない
     const regen = await worker.json<{ backupCodes: string[] }>("POST", "/api/auth/two-factor/generate-backup-codes", { password: GOOD_PASSWORD });
     expect(regen.status).toBe(200);

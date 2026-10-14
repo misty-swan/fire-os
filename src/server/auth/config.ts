@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins";
 import type { AppEnv } from "../env";
 import { sha256Hex } from "../mutations/hash";
@@ -17,6 +17,9 @@ export const INVITATION_HEADER = "x-invitation-token";
 export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 /** 局所実行の鍵(試験・wrangler dev)を本番系で使わないための目印 */
 export const DEV_SECRET_PREFIX = "dev-only-";
+
+/** セッションtoken → 呼び出し時点で二要素が未有効だったか（verify-totpの前後で受け渡す。1要求の間だけ保持） */
+const enablingSessions = new Map<string, boolean>();
 
 export type AuthEnv = Pick<AppEnv, "DB" | "APP_ENV" | "BETTER_AUTH_SECRET" | "AUTH_BASE_URL">;
 
@@ -155,17 +158,27 @@ export function createAuth(env: AuthEnv, deps: AuthDeps = {}) {
       }),
     ],
     hooks: {
-      // 有効化を確定したら、それ以前に（パスワードだけで）作られた他のセッションを失効させる。
-      // 二要素を通っていないセッションが、管理者の操作に残らないようにする。ログイン時の二要素確認（既存セッション無し）では何もしない
+      // 二要素の「有効化」を確定した成功のときだけ、それ以前に（パスワードだけで）作られた他のセッションを失効させる。
+      // 誤ったコードや、有効化済みの利用者の呼び出し、ログイン時の二要素確認では何も消さない（他端末の強制ログアウトにしない）。
       after: createAuthMiddleware(async (ctx) => {
-        const before = ctx.context.session?.session;
+        if (ctx.path !== "/two-factor/verify-totp") return;
+        const token = ctx.context.session?.session.token;
+        const enabling = token ? enablingSessions.get(token) : undefined;
+        if (!token || enabling === undefined) return;
+        enablingSessions.delete(token);
+        const failed = ctx.context.returned instanceof Error || (ctx.context.returned as { status?: unknown } | undefined)?.status === "UNAUTHORIZED";
+        if (!enabling || failed) return;
         // 確認後に新しいセッションへ切り替わる場合は、そちらを残す
-        const keep = ctx.context.newSession?.session ?? before;
-        if (ctx.path === "/two-factor/verify-totp" && before && keep) {
-          await env.DB.prepare("DELETE FROM auth_sessions WHERE user_id = ? AND token <> ?").bind(keep.userId, keep.token).run();
-        }
+        const keep = ctx.context.newSession?.session.token ?? token;
+        const userId = ctx.context.session!.session.userId;
+        await env.DB.prepare("DELETE FROM auth_sessions WHERE user_id = ? AND token <> ?").bind(userId, keep).run();
       }),
       before: createAuthMiddleware(async (ctx) => {
+        // 有効化の確認かどうか（呼び出し時点で二要素が未有効）を、確認の前に控える
+        if (ctx.path === "/two-factor/verify-totp") {
+          const session = await getSessionFromCtx(ctx).catch(() => null);
+          if (session) enablingSessions.set(session.session.token, !(session.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled);
+        }
         // 「この端末を30日間信頼する」は受け付けない（停止・失効で消せない端末Cookieを作らない）
         if (ctx.path.startsWith("/two-factor/") && (ctx.body as { trustDevice?: unknown } | undefined)?.trustDevice) {
           throw APIError.from("BAD_REQUEST", { code: "TRUST_DEVICE_DISABLED", message: "この端末を信頼する設定は使えません" });

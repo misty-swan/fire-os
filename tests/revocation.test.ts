@@ -60,7 +60,8 @@ describe("権限変更・利用停止・失効 (T012)", () => {
     const relogin = await (await workerBrowser()).json<{ code: string }>("POST", "/api/auth/sign-in/email", { email: phone.email, password: GOOD_PASSWORD });
     expect(relogin.status).toBe(403);
     expect(relogin.data.code).toBe("ACCOUNT_DISABLED");
-    expect(await env.DB.prepare("SELECT count(*) AS n FROM auth_sessions WHERE user_id = ? AND created_at > ?").bind(phone.authId, "2026-10-14").first<{ n: number }>()).toBeDefined();
+    const afterRelogin = await env.DB.prepare("SELECT count(*) AS n FROM auth_sessions WHERE user_id = ?").bind(phone.authId).first<{ n: number }>();
+    expect(afterRelogin!.n).toBe(remaining!.n); // 拒否された再ログインでセッションは増えていない
 
     // 失効の再試行は永続jobに残り、実行すれば全セッションが消える
     const jobs = await env.DB.prepare("SELECT id, status FROM jobs WHERE kind = 'auth.revoke_sessions' AND source_id = ?").bind(member.userId).all<{ id: string; status: string }>();

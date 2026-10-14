@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useLayoutEffect, useState, type FormEvent } from "react";
 import { FormErrors, errorFor } from "../../components/FormErrors";
 import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { MutationStatus } from "../../components/MutationStatus";
@@ -21,7 +21,8 @@ export function MemberForm({ member, onSaved, onCancel, onDirtyChange }: { membe
   const [phone, setPhone] = useState("");
   const [emergency, setEmergency] = useState("");
   const dirty = displayName !== (member?.displayName ?? "") || rank !== (member?.rank ?? "") || squad !== (member?.squad ?? "") || quals !== (member?.qualifications ?? []).join("、") || joinedOn !== (member?.joinedOn ?? "") || phone !== "" || emergency !== "";
-  useEffect(() => {
+  // 入力の直後（同じイベント内）に親へ伝える。直後のEscが古い「未入力」を見て確認なしで閉じないように
+  useLayoutEffect(() => {
     onDirtyChange?.(dirty && mut.state.kind !== "saved");
     return () => onDirtyChange?.(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps

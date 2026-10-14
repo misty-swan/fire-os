@@ -213,8 +213,18 @@ test("unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_ar
   await expect(add).toBeVisible();
   await expect(add.getByLabel("氏名")).toHaveValue("架空 入力途中");
   await page.keyboard.press("Escape");
+  // 確認は最前面：実際にクリックできる位置にある（他の要素に覆われていない）。確認の上のEscは確認だけを閉じ、背面の入力は残る
+  const box = (await page.getByRole("dialog", { name: "入力を破棄しますか" }).getByRole("button", { name: "戻る" }).boundingBox())!;
+  const topmost = await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.closest("[role=dialog]")?.getAttribute("aria-label"), [box.x + box.width / 2, box.y + box.height / 2]);
+  expect(topmost).toBe("入力を破棄しますか");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "入力を破棄しますか" })).toBeHidden();
+  await expect(add.getByLabel("氏名")).toHaveValue("架空 入力途中");
+  await page.keyboard.press("Escape");
   await page.getByRole("dialog", { name: "入力を破棄しますか" }).getByRole("button", { name: "破棄して閉じる" }).click();
   await expect(add).toBeHidden();
+  // 破棄したあと、操作の位置（「団員を追加」）へフォーカスが戻る
+  await expect(page.getByRole("button", { name: "団員を追加" })).toBeFocused();
 
   // 2) 本人（アカウントあり）を用意する
   const name = `架空 競合確認 ${crypto.randomUUID().slice(0, 4)}`;

@@ -109,7 +109,7 @@ function RecoveryPanel({ token, onBack }: { token: string | null; onBack: () => 
           <Button type="submit" busy={busy} disabled={!email}>
             {busy ? "送信しています…" : "再設定を申請する"}
           </Button>
-          <button type="button" className="min-h-11 text-[13px] font-bold text-ember-soft underline" onClick={() => setHaveToken(true)}>
+          <button type="button" className="max-lg:min-h-11 text-[13px] font-bold text-ember-soft underline" onClick={() => setHaveToken(true)}>
             再設定コードをお持ちの方
           </button>
         </form>
@@ -209,7 +209,7 @@ export function LoginPage() {
   if (resetToken || recover) {
     return (
       <AuthLayout>
-        <RecoveryPanel token={resetToken} onBack={() => { setRecover(false); clearReset(); }} />
+        <RecoveryPanel key={resetToken ?? "recover"} token={resetToken} onBack={() => { setRecover(false); clearReset(); }} />
       </AuthLayout>
     );
   }
@@ -265,7 +265,7 @@ export function LoginPage() {
           <Button variant="secondary" onClick={() => { setStep(backup ? "second" : "backup"); setCode(""); setError(""); }}>
             {backup ? "認証コードに戻る" : "回復コードを使う"}
           </Button>
-          <button type="button" className="min-h-11 text-[13px] font-bold text-ink-sub underline" onClick={() => { setStep("password"); setCode(""); setError(""); }}>
+          <button type="button" className="max-lg:min-h-11 text-[13px] font-bold text-ink-sub underline" onClick={() => { setStep("password"); setCode(""); setError(""); }}>
             最初からやり直す
           </button>
         </form>
@@ -295,7 +295,7 @@ export function LoginPage() {
           <Icon name="fingerprint" className="text-[20px]" />
           生体認証でログイン
         </Button>
-        <button type="button" className="mx-auto min-h-11 text-[12px] font-bold text-ember-soft underline" onClick={() => setRecover(true)}>
+        <button type="button" className="mx-auto max-lg:min-h-11 text-[12px] font-bold text-ember-soft underline" onClick={() => setRecover(true)}>
           パスワードの再設定
         </button>
       </form>

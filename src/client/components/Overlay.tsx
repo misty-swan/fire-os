@@ -6,6 +6,9 @@ import { Button, Icon } from "./ui";
  * 重ねて出す面（ドロワー/モーダル）の共通の挙動：Escapeで閉じる、開いたら中へフォーカス、閉じたら開いた操作へ戻す、
  * 背面はクリックで閉じる（prototype：背景 rgba(3,6,12,.55)、ドロワー440px、モーダル560px）。
  */
+/** 重なっている面の並び。Esc・Tabは最前面（最後に開いたもの）だけが処理する */
+const overlayStack: object[] = [];
+
 function useOverlay(onClose: () => void, initialFocus?: string) {
   const ref = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
@@ -14,9 +17,12 @@ function useOverlay(onClose: () => void, initialFocus?: string) {
   latestClose.current = onClose;
   useEffect(() => {
     opener.current = document.activeElement;
+    const me = {};
+    overlayStack.push(me);
     const target = initialFocus ? ref.current?.querySelector<HTMLElement>(initialFocus) : null;
     (target ?? ref.current?.querySelector<HTMLElement>("button, [href], input, textarea, select") ?? ref.current)?.focus();
     const onKey = (e: KeyboardEvent) => {
+      if (overlayStack[overlayStack.length - 1] !== me) return; // 背面の面は反応しない
       if (e.key === "Escape") latestClose.current();
       // フォーカスを面の外へ出さない（Tabの循環）
       if (e.key === "Tab" && ref.current) {
@@ -31,6 +37,7 @@ function useOverlay(onClose: () => void, initialFocus?: string) {
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
+      overlayStack.splice(overlayStack.indexOf(me), 1);
       (opener.current as HTMLElement | null)?.focus?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

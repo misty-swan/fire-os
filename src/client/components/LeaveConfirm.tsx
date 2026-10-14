@@ -48,7 +48,7 @@ export function LeaveConfirm({ dirty }: { dirty: boolean }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="leave-title"
-        onKeyDown={(e) => e.key === "Escape" && blocker.reset()}
+        onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); blocker.reset(); } }}
         className={
           "w-full animate-[fo-in_.3s_ease_both] rounded-t-[30px] lg:animate-[fo-in-desktop_.3s_cubic-bezier(.2,.8,.2,1)_both] bg-[#0f1828] px-5 pb-[34px] pt-3 shadow-[inset_0_1px_0_rgba(255,255,255,.1)] " +
           "lg:flex lg:w-[560px] lg:max-w-[calc(100vw-40px)] lg:flex-col lg:gap-4 lg:rounded-[26px] lg:p-6 lg:shadow-[inset_0_0_0_1px_rgba(255,255,255,.1),0_40px_80px_rgba(0,0,0,.6)]"

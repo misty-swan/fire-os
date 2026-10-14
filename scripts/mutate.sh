@@ -1,9 +1,9 @@
 #!/bin/bash
 # 変異（防御を外す）で試験が失敗することの再現用。例: scripts/mutate.sh src/server/auth/authorize.ts "旧文字列" "新文字列" --project workers tests/authorization.test.ts （ファイルは終了時に必ず元へ戻す）
-# usage: mutate.sh <file> <python-old> <python-new> <vitest args...>
 # 指定の文字列を置換して試験を実行し、必ず元に戻す。試験が失敗(=変異を検出)したら "DETECTED"。
 f="$1"; old="$2"; new="$3"; shift 3
 cp "$f" "$f.mutbak"
+trap '[ -f "$f.mutbak" ] && mv "$f.mutbak" "$f"' INT TERM EXIT
 python3 - "$f" "$old" "$new" <<'PY'
 import sys
 f,old,new=sys.argv[1:4]
