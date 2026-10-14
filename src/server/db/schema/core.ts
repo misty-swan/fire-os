@@ -3,7 +3,8 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // 型付きクエリ用の表定義。制約(CHECK/FK/部分索引/トリガー)の正本は drizzle/*.sql で、
 // ここは列の名前と型だけを持つ。tests/schema.test.ts が実DBの列と一致することを検査する。
 
-const rootColumns = {
+/** 全root可変表の共通列（docs/04 §1）。 制約の正本は各drizzle/*.sql */
+export const rootColumns = {
   version: integer("version").notNull().default(1),
   lastMutationToken: text("last_mutation_token"),
   createdAt: text("created_at").notNull(),

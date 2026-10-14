@@ -6841,7 +6841,10 @@
                           "type": "string"
                         },
                         "uploadToken": {
-                          "type": "string"
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "expiresAt": {
                           "type": "string",
@@ -16946,7 +16949,7 @@
         "summary": "API-84 POST /attachments/:id/completion",
         "x-permission": "PER-04",
         "x-kind": "job",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -16983,8 +16986,124 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "attachment": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pending_upload",
+                                "uploaded",
+                                "checking",
+                                "ready",
+                                "rejected",
+                                "expired",
+                                "deleting",
+                                "deleted"
+                              ]
+                            },
+                            "contentType": {
+                              "type": "string"
+                            },
+                            "byteSize": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "sha256": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "classification": {
+                              "type": "string",
+                              "enum": [
+                                "basic",
+                                "personal",
+                                "sensitive"
+                              ]
+                            },
+                            "expiresAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "status",
+                            "contentType",
+                            "byteSize",
+                            "sha256",
+                            "classification",
+                            "expiresAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "job": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "retry_wait",
+                                "manual_review",
+                                "cancelled",
+                                "stale"
+                              ]
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "errorCode": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "resultRef": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "status",
+                            "attempts",
+                            "errorCode",
+                            "resultRef"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "attachment",
+                        "job"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

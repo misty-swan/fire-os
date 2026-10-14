@@ -34,6 +34,8 @@ export interface TestClient {
 export interface TestFixture {
   units: { a: UnitFixture; b: UnitFixture };
   client(identity: Identity): TestClient;
+  /** 生のRequestをWorkerへ渡す（バイナリアップロードなど専用ヘッダー/本文の試験用） */
+  raw(identity: Identity): (request: Request) => Promise<Response>;
   rows(table: string, where?: Record<string, string | number | null>): Promise<Record<string, unknown>[]>;
   clock: FixedClock;
   dispose(): Promise<void>;
@@ -42,6 +44,14 @@ export interface TestFixture {
 const TABLES = new Set([
   "units", "users", "roles", "members", "member_roles", "scope_assignments",
   "idempotency_records", "mutation_assertions", "audit_logs", "domain_events",
+  // PH2: 添付・GIS・資産・点検・異常
+  "attachment_drafts", "upload_attempts", "attachments", "attachment_links", "attachment_events",
+  "facilities", "facility_location_revisions",
+  "vehicles", "equipment",
+  "import_batches", "import_rows",
+  "inspection_templates", "inspection_template_versions",
+  "inspection_series", "facility_inspections", "asset_inspections", "inspection_items",
+  "issues", "issue_events",
 ]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 
@@ -132,6 +142,11 @@ export async function createFixture(name: "two-units"): Promise<TestFixture> {
           }),
         ),
     }),
+    raw: (identity) => (request) => {
+      const headers = new Headers(request.headers);
+      headers.set("x-test-identity", JSON.stringify(identity));
+      return runtime.fetch(new Request(request.url, { method: request.method, headers, body: request.body, duplex: "half" } as RequestInit));
+    },
     async rows(table, where = {}) {
       if (!TABLES.has(table)) throw new Error(`rows(): 未知の表 ${table}`);
       const cols = Object.keys(where);

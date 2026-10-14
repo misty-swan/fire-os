@@ -81,12 +81,12 @@ export interface MutationSpec<T> {
    * 「全体で一意（例: members.user_id）」が混在し、後者を重複と答えると他unitの存在を推測させるため。宣言外は500。
    */
   duplicateOn?: readonly string[];
-  /** 応答はbatch内のSQLが組み立てる。sqlは1行1列(JSON文字列)を返すSELECT */
-  response: { status: 200 | 201; sql: string; binds?: unknown[]; decode: (json: unknown) => T };
+  /** 応答はbatch内のSQLが組み立てる。sqlは1行1列(JSON文字列)を返すSELECT。202=永続jobの受付（docs/05 §1） */
+  response: { status: 200 | 201 | 202; sql: string; binds?: unknown[]; decode: (json: unknown) => T };
 }
 
 export interface MutationResult<T> {
-  status: 200 | 201;
+  status: 200 | 201 | 202;
   data: T;
   /** 同じ鍵の再送で、保存済みの結果を返した */
   replayed: boolean;
@@ -162,7 +162,7 @@ async function resolveExisting<T>(
     throw new HttpError("INTERNAL_ERROR");
   }
   return {
-    status: rec.response_status as 200 | 201,
+    status: rec.response_status as 200 | 201 | 202,
     data: spec.response.decode(JSON.parse(rec.response_json)),
     replayed: true,
   };

@@ -1,10 +1,10 @@
 import { z } from "zod";
 import {
   AssetTarget, Id, IdListMaybeEmpty, IDEM, LIMITS, NonNegative, OptionalBody, P_ID, Page, Reason, Sha256, ShortText, Target,
-  Title, Version, VersionOrZero, BusinessDate, Body, defineApi, listQuery, noContent, obj, provisionalDto,
+  Title, Version, VersionOrZero, BusinessDate, Body, Job, defineApi, listQuery, noContent, obj, provisionalDto,
 } from "./common";
 import { inspectionShape } from "./gis";
-import { issueStates } from "../states";
+import { attachmentStates, issueStates } from "../states";
 
 export const attachmentTargetTypes = [
   "facility", "activity", "vehicle", "equipment", "inspection", "issue", "announcement", "report_version", "document",
@@ -13,10 +13,15 @@ export const attachmentTargetTypes = [
 export const AttachmentTarget = obj({ type: z.enum(attachmentTargetTypes), id: Id });
 
 export const UploadIntent = obj({
-  id: Id, uploadPath: z.string(), uploadToken: z.string(), expiresAt: z.iso.datetime(), version: z.number().int().min(1),
+  id: Id, uploadPath: z.string(), uploadToken: z.string().nullable(), expiresAt: z.iso.datetime(), version: z.number().int().min(1),
 });
 export const UploadAttempt = obj({ id: Id, sha256: Sha256, size: z.number().int().min(1), version: z.number().int().min(1) });
 export const AttachmentDraft = obj({ id: Id, version: z.number().int().min(1), expiresAt: z.iso.datetime() });
+/** 応答へ出す添付。R2鍵(staging/ready)・tokenのhashは内部値なので含めない */
+export const Attachment = obj({
+  id: Id, version: Version, status: z.enum(attachmentStates), contentType: z.string(), byteSize: z.number().int().min(1),
+  sha256: z.string().nullable(), classification: z.enum(["basic", "personal", "sensitive"]), expiresAt: z.iso.datetime(),
+});
 
 const storage = obj({ facilityId: Id.optional(), vehicleId: Id.optional(), note: OptionalBody.max(1000).optional() }).refine(
   (v) => !(v.facilityId && v.vehicleId),
@@ -203,7 +208,7 @@ export const assetsApis = {
   "API-84": defineApi({
     method: "POST", path: "/attachments/:id/completion", permission: "PER-04", kind: "job", success: [202],
     request: obj({ params: P_ID, body: obj({ version: Version, uploadAttemptId: Id, sha256: Sha256 }), ...IDEM }),
-    response: z.looseObject({}), provisional: true,
+    response: obj({ attachment: Attachment, job: Job }),
   }),
   "API-85": defineApi({
     method: "DELETE", path: "/attachments/:id", permission: "PER-04管理", kind: "noContent", success: [204],
