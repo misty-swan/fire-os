@@ -47,6 +47,8 @@ export async function inspectUpload(job: LeasedJob, env: AppEnv): Promise<JobOut
       env.DB.prepare(
         "UPDATE upload_attempts SET status = 'rejected', version = version + 1, updated_at = ? WHERE id = (SELECT selected_upload_attempt_id FROM attachments WHERE id = ?) AND status = 'selected'",
       ).bind(nowIso, att.id),
+      // 検査で拒否された添付は親の予約から外す（拒否された写真のせいで、残りの準備完了した写真も親に渡せなくなるため）
+      env.DB.prepare("UPDATE attachments SET draft_id = NULL WHERE id = ? AND draft_id IS NOT NULL").bind(att.id),
       env.DB.prepare(
         "INSERT INTO attachment_events (id, unit_id, attachment_id, action, details, actor_kind, created_at) VALUES (?, ?, ?, 'inspect.rejected', ?, 'system', ?)",
       ).bind(crypto.randomUUID(), att.unit_id, att.id, JSON.stringify({ reason: scan.reason }), nowIso),

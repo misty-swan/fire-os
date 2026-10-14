@@ -82,13 +82,6 @@ export const Facility = obj({
 });
 export type Facility = z.infer<typeof Facility>;
 
-export const FacilityDetail = obj({
-  ...Facility.shape,
-  /** リンク済みの添付（idと状態のみ。本文はAPI-27） */
-  attachments: z.array(obj({ id: Id, status: z.enum(attachmentStates) })),
-});
-export type FacilityDetail = z.infer<typeof FacilityDetail>;
-
 export const LocationRevision = obj({
   id: Id,
   locationVersion: z.number().int().min(1),
@@ -103,6 +96,16 @@ export const LocationRevision = obj({
   createdAt: z.iso.datetime(),
 });
 
+export const FacilityDetail = obj({
+  ...Facility.shape,
+  /** リンク済みの添付（idと状態のみ。本文はAPI-27） */
+  attachments: z.array(obj({ id: Id, status: z.enum(attachmentStates) })),
+  /** 位置の履歴（古い順の1ページ。続きはmeta.nextCursor） */
+  locationHistory: z.array(LocationRevision),
+});
+export type FacilityDetail = z.infer<typeof FacilityDetail>;
+
+
 export const gisApis = {
   "API-10": defineApi({
     method: "GET", path: "/facilities", permission: "PER-01", kind: "list", success: [200],
@@ -114,7 +117,7 @@ export const gisApis = {
   }),
   "API-12": defineApi({
     method: "GET", path: "/facilities/:id", permission: "PER-01", kind: "get", success: [200],
-    request: obj({ params: obj({ ...P_ID.shape, limit: Limit, cursor: Cursor.optional() }) }),
+    request: obj({ params: P_ID, query: listQuery({}) }),
     response: FacilityDetail,
   }),
   "API-13": defineApi({

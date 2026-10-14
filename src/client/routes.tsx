@@ -4,6 +4,9 @@ import { AppShell, useOnline } from "./components/AppShell";
 import { AccessPanel } from "./features/admin/AccessPanel";
 import { LoginPage } from "./features/auth/LoginPage";
 import { MembersPage } from "./features/members/MembersPage";
+import { MapPage } from "./features/map/MapPage";
+import { FacilityPage } from "./features/facilities/FacilityPage";
+import { FacilityEditorPage } from "./features/facilities/FacilityEditorPage";
 import { MeGate, type MeData } from "./me";
 import { MenuPage } from "./components/MenuPage";
 import { MobileTopRow, PageTitle } from "./components/Page";
@@ -43,6 +46,9 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-01": <LoginPage />,
   "SCR-15": <MembersPage />,
   "SCR-17": <AccessPanel />,
+  "SCR-03": <MapPage />,
+  "SCR-04": <FacilityPage />,
+  "SCR-05": <FacilityEditorPage />,
 };
 
 function toRoutes(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject[] {

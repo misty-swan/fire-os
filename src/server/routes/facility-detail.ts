@@ -1,4 +1,4 @@
-import { FacilityDetail } from "../../shared/contracts/gis";
+import { FacilityDetail, LocationRevision } from "../../shared/contracts/gis";
 import { resolvePrincipal } from "../auth/principal";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../http";
 import { loadFacility } from "./facility-writes";
@@ -30,7 +30,7 @@ function decodeCursor(cursor: string): [number, number] {
 export function registerFacilityDetailRoutes(app: ApiApp): void {
   defineRoute(app, "API-12", async (c) => {
     const p = await resolvePrincipal(c);
-    const { params } = await parseApiRequest(c, "API-12");
+    const { params, query } = await parseApiRequest(c, "API-12");
     requirePermission(p, "PER-01", { unitId: p.unitId, type: "facility", id: params.id });
     const facility = await loadFacility(c.env, params.id, p.unitId);
     if (!facility) throw new HttpError("NOT_FOUND"); // 別unitも同じ応答
@@ -38,18 +38,18 @@ export function registerFacilityDetailRoutes(app: ApiApp): void {
     // 位置履歴（古い順のkeyset: (location_version, event_no)）
     const where = ["facility_id = ?", "unit_id = ?"];
     const binds: unknown[] = [params.id, p.unitId];
-    if (params.cursor) {
-      const [version, eventNo] = decodeCursor(params.cursor);
+    if (query.cursor) {
+      const [version, eventNo] = decodeCursor(query.cursor);
       where.push("(location_version > ? OR (location_version = ? AND event_no > ?))");
       binds.push(version, version, eventNo);
     }
     const revisions = (
       await c.env.DB.prepare(
         `SELECT * FROM facility_location_revisions WHERE ${where.join(" AND ")} ORDER BY location_version, event_no LIMIT ?`,
-      ).bind(...binds, params.limit + 1).all<RevisionRow>()
+      ).bind(...binds, query.limit + 1).all<RevisionRow>()
     ).results;
-    const page = revisions.slice(0, params.limit);
-    const nextCursor = revisions.length > params.limit
+    const page = revisions.slice(0, query.limit);
+    const nextCursor = revisions.length > query.limit
       ? encodeCursor(page[page.length - 1]!.location_version, page[page.length - 1]!.event_no)
       : undefined;
 
@@ -59,6 +59,11 @@ export function registerFacilityDetailRoutes(app: ApiApp): void {
         "WHERE l.entity_type = 'facility' AND l.entity_id = ? AND l.unlinked_at IS NULL ORDER BY a.id",
     ).bind(params.id).all<{ id: string; status: string }>();
 
+    const locationHistory = page.map((r) => LocationRevision.parse({
+      id: r.id, locationVersion: r.location_version, eventNo: r.event_no, latitude: r.latitude, longitude: r.longitude,
+      locationSource: r.location_source, verificationStatus: r.verification_status,
+      verifiedByMemberId: r.verified_by_member_id, verifiedAt: r.verified_at, reason: r.reason, createdAt: r.created_at,
+    }));
     const data = {
       id: facility.id,
       version: facility.version,
@@ -74,6 +79,7 @@ export function registerFacilityDetailRoutes(app: ApiApp): void {
       lastVerifiedAt: facility.last_verified_at,
       metadata: JSON.parse(facility.metadata) as Record<string, unknown>,
       attachments: attachments.results.map((a) => ({ id: a.id, status: a.status as "ready" })),
+      locationHistory,
     };
     return ok(c, FacilityDetail.parse(data), { nextCursor });
   });

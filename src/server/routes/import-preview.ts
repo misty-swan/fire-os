@@ -39,7 +39,7 @@ export function registerImportPreviewRoutes(app: ApiApp): void {
       }
     }
     const id = crypto.randomUUID();
-    const job = enqueueJobStatement(c.env, {
+    const parseJob = enqueueJobStatement(c.env, {
       unitId: p.unitId,
       kind: "import.parse",
       sourceType: "import_batch",
@@ -48,7 +48,7 @@ export function registerImportPreviewRoutes(app: ApiApp): void {
       configVersion: CSV_TEMPLATE_VERSION,
       requestedBy: p.userId,
       dedupeKey: `${p.unitId}|import.parse|import_batch|${id}|1|${CSV_TEMPLATE_VERSION}`,
-    }, new Date());
+    });
     const result = await executeMutation(c.env, p, {
       operationCode: "facility.import.preview",
       key: headers["idempotency-key"],
@@ -61,7 +61,7 @@ export function registerImportPreviewRoutes(app: ApiApp): void {
           "INSERT INTO import_batches (id, unit_id, attachment_id, template_version, status, last_mutation_token, created_at, updated_at, created_by, actor_kind) " +
             "VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, 'human')",
         ).bind(id, p.unitId, body.csvAttachmentId, body.templateVersion, ctx.attempt, ctx.now, ctx.now, p.userId),
-        job.statement,
+        parseJob.statement,
       ],
       audit: { action: "facility.import.preview", entityType: "import_batch", entityId: id, metadata: { attachmentId: body.csvAttachmentId } },
       event: { entityType: "import_batch", entityId: id, entityVersion: 1, eventType: "import_batch.created" },
@@ -72,6 +72,11 @@ export function registerImportPreviewRoutes(app: ApiApp): void {
         decode: (j) => ({ id: Id.parse((j as { id: string }).id), jobId: Id.parse((j as { jobId: string }).jobId) }),
       },
     });
+    try {
+      await c.env.JOBS_QUEUE.send({ jobId: parseJob.id });
+    } catch (err) {
+      console.error(JSON.stringify({ event: "job_queue_send_failed", jobId: parseJob.id, error: String(err) }));
+    }
     return ok(c, result.data, {}, 202);
   });
 }

@@ -249,6 +249,16 @@ export function registerUploadRoutes(app: ApiApp): void {
       throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "uploadAttemptId", reason: "attempt_object_missing" }]);
     }
 
+    // 検査job（T016のhandlerが実行する）。業務の確定と同じbatchで登録し、確定後にQueueへ起動の合図を送る
+    const job = enqueueJobStatement(c.env, {
+      unitId: att.unit_id,
+      kind: "attachment.inspect",
+      sourceType: "attachment",
+      sourceId: att.id,
+      sourceVersion: body.version + 1,
+      configVersion: "v1",
+      requestedBy: p.userId,
+    });
     const result = await executeMutation(c.env, p, {
       operationCode: "attachment.upload.complete",
       key: headers["idempotency-key"],
@@ -273,16 +283,7 @@ export function registerUploadRoutes(app: ApiApp): void {
         c.env.DB.prepare(
           "INSERT INTO attachment_events (id, unit_id, attachment_id, action, details, actor_user_id, actor_kind, created_at) VALUES (?, ?, ?, 'upload.selected', ?, ?, 'human', ?)",
         ).bind(crypto.randomUUID(), att.unit_id, att.id, JSON.stringify({ attemptId: attempt.id }), p.userId, ctx.now),
-        // 検査job（T016のhandlerが実行する）。業務の確定と同じbatchで登録する
-        enqueueJobStatement(c.env, {
-          unitId: att.unit_id,
-          kind: "attachment.inspect",
-          sourceType: "attachment",
-          sourceId: att.id,
-          sourceVersion: body.version + 1,
-          configVersion: "v1",
-          requestedBy: p.userId,
-        }, new Date(ctx.now)).statement,
+        job.statement,
       ],
       audit: { action: "attachment.upload.complete", entityType: "attachment", entityId: att.id, metadata: { attemptId: attempt.id } },
       event: { entityType: "attachment", entityId: att.id, entityVersion: body.version + 1, eventType: "attachment.upload_completed", payload: { attemptId: attempt.id } },
@@ -300,6 +301,12 @@ export function registerUploadRoutes(app: ApiApp): void {
         },
       },
     });
+    // 起動の合図（正本はD1。Cronも回収するので送信失敗は握りつぶす）
+    try {
+      await c.env.JOBS_QUEUE.send({ jobId: job.id });
+    } catch (err) {
+      console.error(JSON.stringify({ event: "job_queue_send_failed", jobId: job.id, error: String(err) }));
+    }
     return ok(c, result.data, {}, 202);
   });
 }

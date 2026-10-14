@@ -61,6 +61,10 @@ export function registerAttachmentRoutes(app: ApiApp): void {
     const att = await loadAttachment(c.env, params.id, p.unitId);
     if (!att) throw new HttpError("NOT_FOUND");
     requirePermission(p, "PER-04", { unitId: att.unit_id, type: "attachment", id: att.id, ownerMemberId: att.owner_member_id });
+    const cleanupJob = enqueueJobStatement(c.env, {
+      unitId: att.unit_id, kind: "attachment.cleanup", sourceType: "attachment", sourceId: att.id,
+      sourceVersion: body.version + 1, configVersion: "v1", requestedBy: p.userId,
+    });
     await executeMutation(c.env, p, {
       operationCode: "attachment.delete",
       key: headers["idempotency-key"],
@@ -87,10 +91,7 @@ export function registerAttachmentRoutes(app: ApiApp): void {
           "INSERT INTO attachment_events (id, unit_id, attachment_id, action, details, actor_user_id, actor_kind, created_at) VALUES (?, ?, ?, 'delete.requested', ?, ?, 'human', ?)",
         ).bind(crypto.randomUUID(), att.unit_id, att.id, JSON.stringify({}), p.userId, ctx.now),
         // R2削除は遅延job（D1 tombstone の後に実体を消す。jobが失敗してもtombstoneのまま再試行される）
-        enqueueJobStatement(c.env, {
-          unitId: att.unit_id, kind: "attachment.cleanup", sourceType: "attachment", sourceId: att.id,
-          sourceVersion: body.version + 1, configVersion: "v1", requestedBy: p.userId,
-        }, new Date(ctx.now)).statement,
+        cleanupJob.statement,
       ],
       audit: { action: "attachment.delete", entityType: "attachment", entityId: att.id },
       event: { entityType: "attachment", entityId: att.id, entityVersion: body.version + 1, eventType: "attachment.delete_requested" },
@@ -101,6 +102,12 @@ export function registerAttachmentRoutes(app: ApiApp): void {
         decode: (j) => j as { id: string; status: string; version: number },
       },
     });
+    // 起動の合図（失敗してもCronが回収する）
+    try {
+      await c.env.JOBS_QUEUE.send({ jobId: cleanupJob.id });
+    } catch (err) {
+      console.error(JSON.stringify({ event: "job_queue_send_failed", jobId: cleanupJob.id, error: String(err) }));
+    }
     // 204はJSON envelopeの外（docs/05 §1）。冪等の記録には上の応答が保存され、再送も204になる
     return c.body(null, 204);
   });
