@@ -102,7 +102,8 @@ describe("contracts (T002)", () => {
     expect(safeParseRequest("API-11", { body: noName, headers: KEY }).success).toBe(false);
     // 保管先: facility と vehicle の同時指定
     const equipment = { assetCode: "E1", name: "ホース", quantity: 1, quantityUnit: "本" };
-    expect(safeParseRequest("API-49", { body: { ...equipment, storage: { facilityId: ID, vehicleId: ID2 } }, headers: KEY }).success).toBe(false);
+    // 保管先の排他（両方指定は不可）はサーバーが422で返す業務規則（docs/16 T025）。契約は形だけ検査する
+    expect(safeParseRequest("API-49", { body: { ...equipment, storage: { facilityId: ID, vehicleId: ID2 } }, headers: KEY }).success).toBe(true);
     // 点検様式: code重複
     const dup = [
       { code: "a", label: "A", valueType: "boolean", required: true },
