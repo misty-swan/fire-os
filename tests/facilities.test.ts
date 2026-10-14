@@ -94,13 +94,29 @@ describe("施設の台帳と位置確認 (T019)", () => {
     expect(lat91.status).toBe(400);
     const nanLat = await create(admin, { type: "hydrant", latitude: "NaN", longitude: 139, locationSource: "x", locationNote: "x", managementNumber: "A-9998" });
     expect(nanLat.status).toBe(400);
+    // DBのCHECK（facilities.location_source ≤100）を超える長さは契約で400（通ってから500にならない）
+    const longSource = await create(admin, {
+      type: "hydrant", latitude: 35, longitude: 139, locationSource: "超".repeat(101), locationNote: "x", managementNumber: "A-9997",
+    });
+    expect(longSource.status).toBe(400);
     const noName = await create(admin, { type: "hydrant", latitude: 1, longitude: 1, locationSource: "x", locationNote: "x" });
     expect(noName.status).toBe(400);
+    // 同じ番号の重複（作成と変更の両方で409 DUPLICATE。API-13にもduplicateOn宣言が必要）
     const dup = await create(admin, {
       type: "hydrant", latitude: 35.0002, longitude: 139.0002, locationSource: "x", locationNote: "x", managementNumber: "A-0001",
     });
     expect(dup.status).toBe(409);
     expect(dup.body.error?.code).toBe("DUPLICATE");
+    // 既存と同じ番号への変更も409（UNIQUE違反を500にしない）
+    const rename = await patch(admin, f.id, { version: (await ver(f.id)), managementNumber: "A-0002" });
+    expect(rename.status).toBe(200);
+    const other = await create(admin, {
+      type: "hydrant", latitude: 35.0005, longitude: 139.0005, locationSource: "x", locationNote: "x", managementNumber: "A-0003",
+    });
+    expect(other.status).toBe(201);
+    const dupPatch = await patch(admin, (other.body.data as FacilityDto).id, { version: 1, managementNumber: "A-0002" });
+    expect(dupPatch.status).toBe(409);
+    expect((await json(dupPatch)).error?.code).toBe("DUPLICATE");
     // 種別が違えば同じ番号でも可（D19案: unit×type×番号の一意）
     const dupOtherType = await create(admin, {
       type: "cistern", latitude: 35.0003, longitude: 139.0003, locationSource: "x", locationNote: "x", managementNumber: "A-0001",

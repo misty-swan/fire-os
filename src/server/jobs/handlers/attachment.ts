@@ -20,18 +20,32 @@ export async function inspectUpload(job: LeasedJob, env: AppEnv): Promise<JobOut
     staging_key: string | null; sha256: string | null; content_type: string; byte_size: number;
   }>();
   if (!att || att.unit_id !== job.unitId) return { kind: "stale", errorCode: "attachment_missing" };
-  if (att.version !== job.sourceVersion) return { kind: "stale", errorCode: "source_changed" };
-  if (att.status === "ready") return { kind: "stale", errorCode: "already_ready" };
-  if (att.status !== "uploaded") return { kind: "stale", errorCode: "unexpected_status" };
+  // 元版の確認: uploadedの初回だけ版の完全一致を要求する。checkingは検査の途中なので、
+  // 自分が対象の検査jobの再試行（unavailable等。docs/07 §3.4）は再入を許す（checkingへの切替は済んでいる）。
+  // readyはもう確定済み、その他の状態はこのjobの結果を使えないためstale。
+  if (att.status === "uploaded") {
+    if (att.version !== job.sourceVersion) return { kind: "stale", errorCode: "source_changed" };
+  } else if (att.status === "checking") {
+    // 再入OK（下のcheckingへの切替はスキップする）
+  } else if (att.status === "ready") {
+    return { kind: "stale", errorCode: "already_ready" };
+  } else {
+    return { kind: "stale", errorCode: "unexpected_status" };
+  }
   if (!att.staging_key || !att.sha256) return { kind: "manual_review", errorCode: "missing_selected_object" };
 
-  // checking へ動かす。0行（他が変えた）ならこのjobの結果は使えない
+  // checking へ動かす。0行（他が変えた）ならこのjobの結果は使えない。checking再入では切替済みなので続行する
   const nowIso = new Date().toISOString();
-  const checking = await env.DB.prepare(
-    "UPDATE attachments SET status = 'checking', version = version + 1, updated_at = ? WHERE id = ? AND unit_id = ? AND version = ? AND status = 'uploaded'",
-  ).bind(nowIso, att.id, att.unit_id, att.version).run();
-  if ((checking.meta.changes ?? 0) !== 1) return { kind: "stale", errorCode: "source_changed" };
-  const checkingVersion = att.version + 1;
+  let checkingVersion: number;
+  if (att.status === "uploaded") {
+    const checking = await env.DB.prepare(
+      "UPDATE attachments SET status = 'checking', version = version + 1, updated_at = ? WHERE id = ? AND unit_id = ? AND version = ? AND status = 'uploaded'",
+    ).bind(nowIso, att.id, att.unit_id, att.version).run();
+    if ((checking.meta.changes ?? 0) !== 1) return { kind: "stale", errorCode: "source_changed" };
+    checkingVersion = att.version + 1;
+  } else {
+    checkingVersion = att.version;
+  }
 
   const scan = await FileScanner.scan({ key: att.staging_key, contentType: att.content_type, sha256: att.sha256 }, env.FILES);
 

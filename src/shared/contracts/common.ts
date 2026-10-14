@@ -34,6 +34,13 @@ export const OptionalBody = z.string().max(LIMITS.bodyMax);
 export const Reason = z.string().min(1).max(LIMITS.bodyMax);
 export const Question = z.string().min(1).max(LIMITS.queryMax);
 export const ShortText = z.string().min(1).max(200);
+// --- DBのCHECKに揃えた上限（docs/04の各表DDLと一致。共通上限のまま通すとDBで500になる系列を入力で400にする） ---
+/** 管理番号・出典・資産コードなど（DBのCHECK 1〜100） */
+export const Code100 = z.string().min(1).max(100);
+/** 資機材の数量単位など（DBのCHECK 1〜50） */
+export const Code50 = z.string().min(1).max(50);
+/** 確認・訂正・対応の理由（DBのCHECK 1〜2000。共通上限Reason(20,000)より狭い列） */
+export const Reason2000 = z.string().min(1).max(2000);
 export const Latitude = z.number().min(-90).max(90);
 export const Longitude = z.number().min(-180).max(180);
 export const NonNegative = z.number().min(0);

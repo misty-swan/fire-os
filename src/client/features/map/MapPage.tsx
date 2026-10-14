@@ -87,9 +87,9 @@ export function MapPage() {
             Google Maps JS API · ダークスタイル
           </span>
 
-          {/* 検索と切替（スマホの上端。prototype の位置） */}
-          <div className="absolute inset-x-0 top-0 z-30 flex flex-col gap-2.5 px-4 pb-3.5 pt-2 max-lg:bg-[linear-gradient(180deg,rgba(8,16,28,.95)_60%,rgba(8,16,28,0))] lg:left-5 lg:right-5 lg:top-4 lg:bg-transparent lg:px-0 lg:pt-0">
-            <div className="flex gap-2">
+          {/* 検索と切替（スマホの上端。prototype の位置）。空き領域はマップの下にタップを通す */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col gap-2.5 px-4 pb-3.5 pt-2 max-lg:bg-[linear-gradient(180deg,rgba(8,16,28,.95)_60%,rgba(8,16,28,0))] lg:left-5 lg:right-5 lg:top-4 lg:bg-transparent lg:px-0 lg:pt-0">
+            <div className="pointer-events-auto flex gap-2">
               <div className="flex h-[50px] min-w-0 flex-1 items-center gap-2 rounded-pill bg-[rgba(20,30,50,.9)] px-4 shadow-[inset_0_0_0_1px_rgba(255,255,255,.1)]">
                 <Icon name="search" className="text-[20px] text-ink-dim" />
                 <input
@@ -110,7 +110,7 @@ export function MapPage() {
               </button>
             </div>
             {searchResults.length > 0 && (
-              <div className="overflow-hidden rounded-[18px] bg-[#101a2b] shadow-[inset_0_0_0_1px_rgba(255,255,255,.1)]">
+              <div className="pointer-events-auto overflow-hidden rounded-[18px] bg-[#101a2b] shadow-[inset_0_0_0_1px_rgba(255,255,255,.1)]">
                 {searchResults.map((r) => (
                   <button key={r.facility.id} type="button" onClick={r.onOpen} className="flex w-full justify-between border-b border-white/[.06] px-4 py-3 text-left last:border-b-0">
                     <span className="text-[13px] font-bold">{facilityName(r.facility)}</span>
@@ -119,7 +119,7 @@ export function MapPage() {
                 ))}
               </div>
             )}
-            <div className="fo-scroll flex gap-1.5 overflow-x-auto">
+            <div className="fo-scroll pointer-events-auto flex gap-1.5 overflow-x-auto">
               {(Object.keys(FACILITY_TYPE_KEYS) as FacilityType[]).map((k) => (
                 <TypeChip key={k} type={k} count={counts[k]!} on={types[k]!} onToggle={() => { setTypes((prev) => ({ ...prev, [k]: !prev[k] })); reload(); }} />
               ))}
@@ -174,10 +174,13 @@ export function MapPage() {
                   <span className="text-[12px] text-ink-muted">管理番号（例：K-112）でも検索できます</span>
                 </div>
               )}
-              <div className="mt-4 flex justify-center px-4">
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4">
                 <Link to="/app/facilities/new" className="flex min-h-11 items-center gap-1.5 rounded-pill bg-white/[.08] px-4 text-[13px] font-bold">
                   <Icon name="add_location_alt" className="text-[18px]" />
                   施設を登録
+                </Link>
+                <Link to="/app/facilities/import" className="flex min-h-11 items-center text-[12px] font-bold text-ink-muted underline">
+                  施設CSV取込
                 </Link>
               </div>
             </div>
@@ -198,7 +201,7 @@ export function MapPage() {
         {/* PC: 右420pxの一覧/詳細（prototype Desktop Map） */}
         <div className="fo-scroll hidden border-l border-white/[.06] bg-[#0a1220] lg:block lg:overflow-y-auto">
           {selectedFacility ? (
-            <FacilityPanelDetail facility={selectedFacility} onBack={() => setSelected(null)} onInspect={() => openDetail(selectedFacility)} />
+            <FacilityPanelDetail facility={selectedFacility} onBack={() => setSelected(null)} onInspect={() => navigate(`/app/facilities/${selectedFacility.id}/inspections/new`)} />
           ) : (
             <>
               <div className="sticky top-0 z-[2] flex flex-col gap-3 bg-[#0a1220] px-5 pb-2.5 pt-[18px]">
@@ -224,10 +227,13 @@ export function MapPage() {
                   <span className="text-[14px] font-bold">該当する施設がありません</span>
                 </div>
               )}
-              <div className="flex justify-center py-5">
+              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-5">
                 <Link to="/app/facilities/new" className="flex items-center gap-1.5 rounded-pill bg-white/[.08] px-4 py-2.5 text-[13px] font-bold">
                   <Icon name="add_location_alt" className="text-[18px]" />
                   施設を登録
+                </Link>
+                <Link to="/app/facilities/import" className="flex min-h-11 items-center text-[12px] font-bold text-ink-muted underline">
+                  施設CSV取込
                 </Link>
               </div>
             </>
@@ -308,8 +314,8 @@ function FacilityPanelDetail({ facility, onBack, onInspect }: { facility: Facili
       </div>
       <div className="flex gap-2 px-[22px] pb-[18px] pt-5">
         <button type="button" onClick={onInspect} className="flex h-[46px] flex-1 items-center justify-center gap-1.5 rounded-pill bg-ember text-[13px] font-bold text-white">
-          <Icon name="fact_check" className="text-[18px]" />
-          この施設を点検する
+          <Icon name="send" className="text-[18px]" />
+          点検を依頼
         </button>
       </div>
     </div>

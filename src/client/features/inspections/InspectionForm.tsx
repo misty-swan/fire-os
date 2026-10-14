@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { AttachmentUploader } from "../attachments/AttachmentUploader";
 import { FormErrors } from "../../components/FormErrors";
 import { LeaveConfirm } from "../../components/LeaveConfirm";
+import { MutationStatus } from "../../components/MutationStatus";
 import { SubHeader } from "../../components/Page";
 import { Banner, Button, Card, Chip, Icon, Notice, TextArea } from "../../components/ui";
 import { useMutation } from "../../useMutation";
@@ -86,8 +87,8 @@ export function InspectionFormPage() {
     } as never);
     if (res) {
       setCompleted(true);
-      // 離脱確認の番が降りてから遷移する
-      await new Promise((r) => setTimeout(r, 30));
+      // 「保存しました」のトーストが見える時間を確保してから遷移する（離脱確認の番もこの間に降りる）
+      await new Promise((r) => setTimeout(r, 1000));
       navigate(`/app/facilities/${facilityId}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -168,6 +169,11 @@ export function InspectionFormPage() {
                 {(item.allowedResults ?? ["ok", "needs_review"]).map((r) => {
                   const on = results[item.code] === r;
                   const meta = RESULT_LABELS[r] ?? { label: r, tone: "neutral" as const };
+                  // 選択中はprototype（941行付近）と同じベタ塗り＋濃色文字。色だけでなく文字・アイコンでも判別できる
+                  const onStyles =
+                    meta.tone === "ok" ? "bg-[#3ad08f] text-[#06231a]"
+                      : meta.tone === "alert" ? "bg-[#ff7a66] text-[#2a0b06]"
+                        : "bg-white text-[#08101c]";
                   return (
                     <button
                       key={r}
@@ -175,11 +181,7 @@ export function InspectionFormPage() {
                       aria-pressed={on}
                       onClick={() => { setResults((prev) => ({ ...prev, [item.code]: r })); setTouched(true); }}
                       className={`flex h-12 items-center justify-center gap-1.5 rounded-[14px] text-[14px] font-bold transition max-lg:min-h-11 ${
-                        on
-                          ? meta.tone === "ok" ? "bg-ok/20 text-ok shadow-[inset_0_0_0_1px_var(--color-ok)]"
-                            : meta.tone === "alert" ? "bg-[rgba(255,90,70,.16)] text-alert shadow-[inset_0_0_0_1px_var(--color-alert)]"
-                              : "bg-white/[.12] text-ink"
-                          : "bg-white/[.05] text-ink-sub"
+                        on ? onStyles : "bg-white/[.05] text-ink-sub"
                       }`}
                     >
                       <Icon name={r === "ok" ? "check_circle" : r === "needs_review" ? "warning" : "help"} className="text-[19px]" />
@@ -190,10 +192,6 @@ export function InspectionFormPage() {
               </div>
             </Card>
           ))}
-          {/* AI分類の候補枠（紫。最終判断は人。依頼の接続はPH4） */}
-          <Notice tone="ai" icon="auto_awesome" role="status">
-            AI分類の候補はこの画面に表示されます（未実装。確定は人の操作です）。
-          </Notice>
           <Button onClick={() => setStep(2)} disabled={missingRequired.length > 0}>
             {missingRequired.length > 0 ? `未回答の必須項目が${missingRequired.length}件` : "写真・メモへ進む"}
           </Button>
@@ -209,6 +207,22 @@ export function InspectionFormPage() {
               onReady={(ids, draft) => { setReadyIds(ids); if (draft) setDraftId(draft); }}
               onChange={setBusyAttachments}
             />
+          </div>
+          {/* AI分類の候補枠（紫。異常ありの項目があるときだけ・ステップ2に出す。prototypeの配置） */}
+          {Object.values(results).some((r) => r === "needs_review") && (
+            <Notice tone="ai" icon="auto_awesome" role="status">
+              AI分類の候補はこの画面に表示されます（未実装。確定は人の操作です）。
+            </Notice>
+          )}
+          {/* 班長への確認タスク（prototype ステップ2のトグル。タスク機能の接続は後のフェーズなので押せない状態で置く） */}
+          <div className="flex items-center gap-3 rounded-[18px] bg-white/[.04] p-3.5" aria-disabled="true">
+            <span aria-hidden="true" className="relative h-[22px] w-[38px] flex-none rounded-pill bg-white/[.15]">
+              <span className="absolute left-[3px] top-[3px] size-4 rounded-full bg-white/60" />
+            </span>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-[13px] font-bold text-ink-sub">班長への確認タスクを作成</span>
+              <span className="text-[11px] text-ink-muted">タスク機能は後のフェーズで接続されます</span>
+            </span>
           </div>
           <TextArea name="inspection-note" label="メモ・特記事項" value={note} onChange={(e) => setNote(e.target.value)} placeholder="例: 蓋の開閉が重い。表示板に汚れ" />
           <div className="flex gap-2">
@@ -249,6 +263,8 @@ export function InspectionFormPage() {
           {save.state.kind === "unknown" && (
             <Banner tone="warning" eyebrow="UNKNOWN" title="結果を確認できません">同じ内容で再送しても二重登録にはなりません。</Banner>
           )}
+          {/* 保存の成功はトースト（docs/03 §1.1。savedのときだけ出す） */}
+          <MutationStatus state={save.state.kind === "saved" ? save.state : { kind: "idle" }} toastBottom={110} />
           <FormErrors issues={save.state.kind === "invalid" ? save.state.details : []} />
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setStep(2)} className="max-lg:min-h-11 flex-none px-5">戻る</Button>

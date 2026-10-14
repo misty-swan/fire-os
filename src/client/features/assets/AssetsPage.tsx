@@ -28,13 +28,17 @@ export function AssetsPage() {
   const [equipment, setEquipment] = useState<EquipmentRow[] | "loading" | "error">("loading");
   const [creating, setCreating] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [q, setQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
 
   useEffect(() => {
     let alive = true;
     void (async () => {
       try {
-        const v = (await api("API-18", { query: {} })) as unknown as VehicleRow[];
-        const e = (await api("API-19", { query: {} })) as unknown as EquipmentRow[];
+        // 検索はAPI-18/19のq（サーバー側で絞り込む。docs/03 SCR-13「検索」）
+        const query = appliedQ.trim() ? { q: appliedQ.trim() } : {};
+        const v = (await api("API-18", { query })) as unknown as VehicleRow[];
+        const e = (await api("API-19", { query })) as unknown as EquipmentRow[];
         if (alive) { setVehicles(v); setEquipment(e); }
       } catch {
         if (alive) { setVehicles("error"); setEquipment("error"); }
@@ -43,13 +47,41 @@ export function AssetsPage() {
     return () => {
       alive = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, appliedQ]);
 
   const rows = tab === "vehicle" ? vehicles : equipment;
 
   return (
     <div className="flex max-w-[720px] flex-col gap-4">
       <PageTitle eyebrow="ASSETS" className="lg:hidden">車両・資機材</PageTitle>
+
+      {/* 検索（API-18/19のq。Enterで絞り込む。docs/03 SCR-13） */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setAppliedQ(q);
+        }}
+        className="flex gap-2"
+      >
+        <label className="hairline flex h-[42px] min-w-0 flex-1 items-center gap-2 rounded-xl bg-white/[.06] px-3 max-lg:min-h-11">
+          <Icon name="search" className="text-[18px] text-ink-muted" />
+          <span className="sr-only">名称・管理番号で検索</span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="名称・管理番号で検索"
+            className="min-w-0 flex-1 border-none bg-transparent text-[13px] font-medium text-ink outline-none placeholder:text-ink-dim"
+          />
+        </label>
+        <Button variant="secondary" type="submit" className="!h-[42px] max-lg:min-h-11 !w-auto flex-none px-4 !text-[13px]">
+          検索
+        </Button>
+        {appliedQ && (
+          <button type="button" onClick={() => { setQ(""); setAppliedQ(""); }} className="flex min-h-11 flex-none items-center text-[12px] font-bold text-ink-muted underline">
+            解除
+          </button>
+        )}
+      </form>
 
       <div className="flex gap-1.5">
         {(["vehicle", "equipment"] as const).map((t) => (
@@ -199,7 +231,9 @@ function AssetCreateForm({ type, onCreated }: { type: "vehicle" | "equipment"; o
         </>
       )}
       {type === "vehicle" && <TextField name="v-storage-facility" label="保管施設のID（省略可）" value={facilityId} onChange={(e) => setFacilityId(e.target.value)} />}
-      <TextField name="asset-status" label="状態" value={status} onChange={(e) => setStatus(e.target.value)} />
+      {/* 状態欄は車両だけ。資機材はAPI-49にstatusが無く、サーバーが「在庫」で作る（変更は詳細のAPI-50） */}
+      {type === "vehicle" && <TextField name="asset-status" label="状態" value={status} onChange={(e) => setStatus(e.target.value)} />}
+      {type === "equipment" && <p className="text-[12px] text-ink-muted">資機材は「在庫」で登録されます。状態の変更は詳細画面からできます。</p>}
       {create.state.kind === "conflict" && <Banner tone="warning" eyebrow="CONFLICT" title="同じ管理番号が既に登録されています" />}
       {create.state.kind === "invalid" && <Banner tone="warning" eyebrow="INVALID" title="入力を確認してください">保管先のIDや数量を確認してください。</Banner>}
       <Button busy={create.saving} onClick={() => void submit()}>登録する</Button>

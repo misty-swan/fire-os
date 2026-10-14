@@ -46,6 +46,99 @@ async function previewBatch(who: Identity, rows: string[]): Promise<{ batchId: s
 }
 
 describe("CSVの確定と書き出し (T024)", () => {
+  it("commit_job_detects_external_master_change_and_never_completes", async () => {
+    const admin = fx.units.a.people.admin;
+
+    // 確定を受け付けた後、jobが走る前に台帳が変わったら、チャンクの版検査で失敗して確定されない
+    const first = await previewBatch(admin, ["hydrant,GC-0001,,35.7,139.7,架空市台帳,確定中に台帳が変わる行"]);
+    const version = await env.DB.prepare("SELECT version AS v FROM import_batches WHERE id = ?").bind(first.batchId).first<{ v: number }>();
+    const commitRes = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/imports/${first.batchId}/commit`,
+      { version: version!.v, previewHash: first.previewHash, conflictResolution: "skip" }, idem(),
+    );
+    expect([200, 202]).toContain(commitRes.status);
+    // 確定jobの実行前に別の施設を作る（dataset_revisionが進む=外部の変更）
+    await fx.client(admin).request("POST", "/api/v1/facilities", {
+      type: "hydrant", latitude: 35.72, longitude: 139.72, locationSource: "現地", locationNote: "確定jobの実行中に増えた台帳", managementNumber: "GC-EXTERNAL",
+    }, idem());
+    await runDueJobs(env);
+    // batchはcommittedに進まず、行も確定されない
+    const batch1 = await env.DB.prepare("SELECT status, committed_rows FROM import_batches WHERE id = ?").bind(first.batchId)
+      .first<{ status: string; committed_rows: number | null }>();
+    expect(batch1!.status).not.toBe("committed");
+    expect(batch1!.status).toBe("committing");
+    const committedRows = (await fx.rows("import_rows", { batch_id: first.batchId })).filter((r) => r.committed_facility_id !== null).length;
+    expect(committedRows).toBe(0);
+    const created = await env.DB.prepare("SELECT COUNT(*) AS n FROM facilities WHERE unit_id = (SELECT unit_id FROM import_batches WHERE id = ?) AND management_number = 'GC-0001'").bind(first.batchId).first<{ n: number }>();
+    expect(created!.n).toBe(0);
+
+    // 上限まで再試行されても台帳は変わったままなので、最後は手動確認になり、勝手に確定されない
+    for (let i = 0; i < 2; i++) {
+      await env.DB.prepare("UPDATE jobs SET next_attempt_at = ? WHERE kind = 'import.commit' AND status = 'retry_wait'").bind(new Date().toISOString()).run();
+      await runDueJobs(env);
+    }
+    const job = await env.DB.prepare("SELECT status, error_code FROM jobs WHERE kind = 'import.commit' ORDER BY created_at DESC, id DESC LIMIT 1")
+      .first<{ status: string; error_code: string | null }>();
+    expect(job!.status).toBe("manual_review");
+    expect(job!.error_code).toBe("chunk_conflict");
+    const batch2 = await env.DB.prepare("SELECT status FROM import_batches WHERE id = ?").bind(first.batchId).first<{ status: string }>();
+    expect(batch2!.status).toBe("committing"); // 手動確認後もcommittedのまま放置されない
+    const stillNothing = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM import_rows WHERE batch_id = ? AND committed_facility_id IS NOT NULL",
+    ).bind(first.batchId).first<{ n: number }>();
+    expect(stillNothing!.n).toBe(0);
+  });
+
+  it("overwrite_commit_resets_location_confirmation_with_new_location_version", async () => {
+    const admin = fx.units.a.people.admin;
+
+    // 既存施設を作り、位置確認をverifiedまで進める（上書きで失効することを確かめるため）
+    const made = await (await fx.client(admin).request("POST", "/api/v1/facilities", {
+      type: "hydrant", latitude: 35.1, longitude: 139.1, locationSource: "架空市台帳", locationNote: "上書きされる施設", managementNumber: "OV-0001",
+    }, idem())).json() as { data: { id: string; version: number; locationVersion: number } };
+    const facilityId = made.data.id;
+    await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/location-reviews`, { version: 1, locationVersion: 1, decision: "request", reason: "現地確認のお願い" }, idem());
+    const verified = await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/location-reviews`, { version: 2, locationVersion: 1, decision: "verify", reason: "現地で確認した" }, idem());
+    expect(verified.status).toBe(200);
+    const before = (await fx.rows("facilities", { id: facilityId }))[0]!;
+    expect(before.verification_status).toBe("verified");
+
+    // 同じ番号の行はpreviewで重複エラーになるため、試験内で行を有効化してoverwriteの確定対象にする
+    // （import_rowsはerrorとnormalized_jsonを同時に反転するCHECKを持つため、正規化済みの値も入れる）
+    const batch = await previewBatch(admin, ["hydrant,OV-0001,,35.15,139.15,現地測量,上書きで座標を修正"]);
+    await env.DB.prepare(
+      "UPDATE import_rows SET error = NULL, normalized_json = ? WHERE batch_id = ? AND row_no = 1",
+    ).bind(
+      JSON.stringify({ type: "hydrant", managementNumber: "OV-0001", identifyingName: null, latitude: 35.15, longitude: 139.15, locationSource: "現地測量", locationNote: "上書きで座標を修正" }),
+      batch.batchId,
+    ).run();
+    const version = await env.DB.prepare("SELECT version AS v FROM import_batches WHERE id = ?").bind(batch.batchId).first<{ v: number }>();
+    const commitRes = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/imports/${batch.batchId}/commit`,
+      { version: version!.v, previewHash: batch.previewHash, conflictResolution: "overwrite" }, idem(),
+    );
+    expect([200, 202]).toContain(commitRes.status);
+    await runDueJobs(env);
+
+    // 座標が変わったので位置確認はunverifiedに戻り、location_versionが増える（docs/11「座標変更は必ず新locationVersion、旧確認を失効」）
+    const after = (await fx.rows("facilities", { id: facilityId }))[0]!;
+    expect(after.latitude).toBeCloseTo(35.15);
+    expect(after.location_version).toBe((before.location_version as number) + 1);
+    expect(after.verification_status).toBe("unverified");
+    expect(after.last_verified_at).toBeNull();
+    expect(after.verified_by_member_id).toBeNull();
+    // 位置履歴には新しいlocationVersionのevent_no 1が増える（版1に決め打ちしない）
+    const revisions = await fx.rows("facility_location_revisions", { facility_id: facilityId });
+    const v2Rows = revisions.filter((r) => r.location_version === after.location_version);
+    expect(v2Rows).toHaveLength(1);
+    expect(v2Rows[0]!.event_no).toBe(1);
+    expect(v2Rows[0]!.verification_status).toBe("unverified");
+    const batchDone = await env.DB.prepare("SELECT status, committed_rows FROM import_batches WHERE id = ?").bind(batch.batchId)
+      .first<{ status: string; committed_rows: number }>();
+    expect(batchDone!.status).toBe("committed");
+    expect(batchDone!.committed_rows).toBe(1);
+  });
+
   it("import_commit_detects_master_change_and_escapes_formula", async () => {
     const a = fx.units.a;
     const admin = a.people.admin;
@@ -98,18 +191,39 @@ describe("CSVの確定と書き出し (T024)", () => {
     const rowsAfter = await env.DB.prepare("SELECT COUNT(*) AS n FROM facilities WHERE unit_id = ?").bind(a.id).first<{ n: number }>();
     expect(rowsAfter!.n).toBe(rowsBefore!.n); // 施設は増えない
 
-    // 途中失敗: jobの確定が中断しても、batchはcommittedにならない（再開で残りを処理できる）
-    // （ここでは結合試験として、正常系の完了と「失敗時にcompleteにならない」の両方を確認する）
+    // 途中失敗: 後続のチャンクで番号が重複しても、そこまでのチャンクは確定のままで、batchはcommittedにならない
+    // （再開で残りの行を処理できる。docs/16 T024「中断状態でcompleteにならない」）
+    await env.DB.prepare(
+      "INSERT INTO facilities (id, unit_id, type, management_number, latitude, longitude, location_note, location_source, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, 'hydrant', 'P-085', 35.9, 139.9, '確定と競合する既存施設', '架空台帳', ?, ?, ?, 'human')",
+    ).bind(crypto.randomUUID(), a.id, new Date().toISOString(), new Date().toISOString(), admin.userId).run();
     const partial = await previewBatch(admin, Array.from({ length: 90 }, (_, i) => `hydrant,P-${String(i).padStart(3, "0")},,35.9,139.9,架空市台帳,大量行${i}`));
+    // P-085の行はpreviewで重複エラーになるため、試験内で有効化して確定時に競合させる（errorとnormalized_jsonは同時に反転するCHECK）
+    await env.DB.prepare(
+      "UPDATE import_rows SET error = NULL, normalized_json = ? WHERE batch_id = ? AND row_no = 86",
+    ).bind(
+      JSON.stringify({ type: "hydrant", managementNumber: "P-085", identifyingName: null, latitude: 35.9, longitude: 139.9, locationSource: "架空市台帳", locationNote: "大量行85" }),
+      partial.batchId,
+    ).run();
     const partialVersion = await env.DB.prepare("SELECT version AS v FROM import_batches WHERE id = ?").bind(partial.batchId).first<{ v: number }>();
     const bigCommit = await fx.client(admin).request(
       "POST", `/api/v1/facilities/imports/${partial.batchId}/commit`,
       { version: partialVersion!.v, previewHash: partial.previewHash, conflictResolution: "skip" }, idem(),
     );
     expect([200, 202]).toContain(bigCommit.status);
-    await runDueJobs(env, { maxJobs: 3 }); // 一部のチャンクだけ実行した体で確認
-    const bigRows = await env.DB.prepare("SELECT COUNT(*) AS n FROM facilities WHERE unit_id = ? AND management_number LIKE 'P-%'").bind(a.id).first<{ n: number }>();
-    void bigRows;
+    await runDueJobs(env); // チャンク1〜4までは成功し、P-085の行（5チャンク目）で重複して中断する
+    const midBatch = await env.DB.prepare("SELECT status, committed_rows FROM import_batches WHERE id = ?").bind(partial.batchId)
+      .first<{ status: string; committed_rows: number | null }>();
+    // 中断状態でcomplete（committed）になっていないこと。確定済みの行だけが台帳に残る
+    expect(midBatch!.status).toBe("committing");
+    const midCommitted = (await fx.rows("import_rows", { batch_id: partial.batchId })).filter((r) => r.committed_facility_id !== null).length;
+    expect(midCommitted).toBe(80); // 5チャンク目の20行は未確定
+    const midFacilities = await env.DB.prepare("SELECT COUNT(*) AS n FROM facilities WHERE unit_id = ? AND management_number LIKE 'P-%'").bind(a.id).first<{ n: number }>();
+    expect(midFacilities!.n).toBe(81); // 確定済み80行＋競合確認用に直入れしたP-085の1件
+
+    // 競合を取り除けば、同じjobの再開で残りの行を確定できる（行の確定先で固定するので重複しない）
+    await env.DB.prepare("DELETE FROM facilities WHERE unit_id = ? AND management_number = 'P-085'").bind(a.id).run();
+    await env.DB.prepare("UPDATE jobs SET next_attempt_at = ? WHERE kind = 'import.commit' AND status = 'retry_wait'").bind(new Date().toISOString()).run();
     await runDueJobs(env);
     const finalBatch = await env.DB.prepare("SELECT status, committed_rows FROM import_batches WHERE id = ?").bind(partial.batchId)
       .first<{ status: string; committed_rows: number }>();
@@ -117,8 +231,6 @@ describe("CSVの確定と書き出し (T024)", () => {
     expect(finalBatch!.committed_rows).toBe(90);
     const totalP = await env.DB.prepare("SELECT COUNT(*) AS n FROM facilities WHERE unit_id = ? AND management_number LIKE 'P-%'").bind(a.id).first<{ n: number }>();
     expect(totalP!.n).toBe(90); // 行欠落・再送重複なし
-    const partialBatchMarkedComplete = false; // 中断状態でcompleteになっていないことを上の再開で確認
-    expect(partialBatchMarkedComplete).toBe(false);
 
     // 書き出し: 式注入の escape（=で始まるセルは ' を前置）と台帳の一致
     const now = new Date().toISOString();

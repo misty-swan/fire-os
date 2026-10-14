@@ -6,7 +6,7 @@
 
 業務ベース`/api/v1`、同一originのHTTPS/JSON。API-36のみ認証base path。クライアントのunit/actor/roleを信用しない。成功`{data:DTO,meta:{requestId,nextCursor?,snapshotRevision?}}`、失敗`{error:{code,message,details:[{field,reason}]},meta:{requestId}}`。binary/CSV/stream/204はJSON envelope外。Inspection DTOは原本＋seriesId/seriesVersion＋明細/添付ID、Template DTOは項目schemaと承認版。その他DTOは04の同名モデルのcamelCase＋version＋10の許可列、Secret/内部token/R2キーを返さない。ResourceUsageListのPUTはoperation版をガードし全有効集合を更新、抜けた既存行はcancelled＋イベントで保持。全件編集権がなければ拒否する。Detailは親＋認可された子PageとnextCursorを返し、子一覧の件数を黙って切り捨てない。
 
-IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-MM-DD業務日を区別。未知JSON列・列挙外を拒否。文字上限案：件名200、note/body20,000、AI/RAG質問4,000文字、JSON要求256 KiB（binary別）、limit既定50/最大200、配列最大100。大きいCSV/多数対象はimport/job分割、D1 bound parameter上限100を越えない。値は負荷検証で固定するB案で機能上限の無断削減を意味しない。
+IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-MM-DD業務日を区別。未知JSON列・列挙外を拒否。文字上限案：件名200、note/body20,000、AI/RAG質問4,000文字、JSON要求256 KiB（binary別）、limit既定50/最大200、配列最大100。大きいCSV/多数対象はimport/job分割、D1 bound parameter上限100を越えない。値は負荷検証で固定するB案で機能上限の無断削減を意味しない。**列ごとにDBのCHECKより広い共通上限を使う場合、その列の入力だけDBに揃えて引き締める（PH2〜: 管理番号・識別名・出典・資産コード・状態100、数量単位50、位置確認/訂正/対応の理由2,000、点検明細の項目コード100。docs/04の各DDLと一致）。超過は400で拒否し、通ってからDBのCHECKで500にならないようにする。**
 
 | HTTP / code | 意味 |
 |---|---|
@@ -94,16 +94,16 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-41 | PUT /activities/:id/attendance/:memberId | PER-02代理許可 | version,response,reason;D05承認済scope | Attendance |
 | API-42 | POST /activities/:id/actual-results/corrections | PER-04 | resultVersion,ActualInput,reason;新revision | ActivityResult |
 | API-43 | GET /activities/:id/actual-results | PER-01 | revision?;旧版も認可 | ActivityResult＋revisions |
-| API-44 | GET /facilities/:id/inspections | PER-01 | from/to/result/limit/cursor;最新有効版 | Page<Inspection> |
-| API-45 | POST /facilities/:id/location-reviews | PER-03確認許可 | version,locationVersion,decision=request/verify/reject,reason;座標版一致 | Facility＋LocationRevision |
+| API-44 | GET /facilities/:id/inspections | PER-01 | from/to/result/limit/cursor;系列の原本を時系列で返す（訂正前の旧原本も含む。現在版はseriesポインタ） | Page<Inspection> |
+| API-45 | POST /facilities/:id/location-reviews | PER-03確認許可 | version,locationVersion,decision=request/verify/reject,reason(2000まで);座標版一致。**確認者は現状PER-03で暫定（「誰が確認できるか」はD09未決）** | Facility＋LocationRevision |
 | API-46 | POST /inspections/:type/:id/corrections | PER-04 | seriesVersion,InspectionInput,supersedesId,reason;series版/同対象/分岐拒否。**訂正対象はseriesの現在版であること（過去版からの枝分かれは409 VERSION_CONFLICT）。並行の第2訂正もseries版ガードで409。supersedes_id非NULL UNIQUEの二重防御。再訂正は現在版への訂正として重ねる** | Inspection |
 | API-47 | POST /vehicles | PER-03 | assetCode,name,status,storageFacilityId?;番号一意 | Vehicle |
 | API-48 | PATCH /vehicles/:id | PER-03 | version,変更列;参照中物理削除なし | Vehicle |
 | API-49 | POST /equipment | PER-03 | assetCode,name,quantity,quantityUnit,storage;番号一意。**保管先の施設/車両の排他（両方指定）は契約でなくサーバーの422 INVALID_TRANSITION業務規則（docs/14 D22）。契約は形だけ検査する** | Equipment |
 | API-50 | PATCH /equipment/:id | PER-03 | version,変更列;数量非負/保管先 | Equipment |
-| API-51 | GET /assets/:type/:id | PER-01 | type vehicle/equipment;点検/異常/使用履歴cursor | AssetDetail |
+| API-51 | GET /assets/:type/:id | PER-01 | type vehicle/equipment;**応答は資産rootのDTOのみ（provisional）。点検/異常/使用履歴のcursor子Pageは未接続＝残作業（T030/T042/T048で接続）** | AssetDetail |
 | API-52 | GET /analytics | PER-01 | from/to/fiscalYear/memberId/kind;distinct operation、D05年度 | Analytics＋sourceFilters |
-| API-53 | POST /facilities/imports | PER-03 | csvAttachmentId,templateVersion;UTF8/列/座標/重複プレビュー。**解析job(import.parse)の応答はjobs.result_refに`ready:<previewHash>:<有効行数>/<全行数>`を載せ、照会(API-86/101系)がそれを受け取る。プレビューだけで台帳は不変** | ImportBatch(202) |
+| API-53 | POST /facilities/imports | PER-03 | csvAttachmentId,templateVersion;UTF8/列/座標/重複プレビュー。**解析job(import.parse)の応答はjobs.result_refに`ready:<previewHash>:<有効行数>/<全行数>`を載せ、行エラー（先頭分。上限は500字、溢れは`~`）も`:行=理由コード`で併載する。全件はimport_rows台帳、照会はAPI-86。プレビューだけで台帳は不変** | ImportBatch(202) |
 | API-54 | POST /facilities/imports/:id/commit | PER-03 | version,previewHash,conflictResolution;元台帳版一致 | ImportResult(202可) |
 | API-55 | GET /facilities/export | PER-03閲覧＋出力 | FacilityQuery;同ACL/CSV式注入escape | CSV＋exportVersion |
 | API-56 | PUT /assets/:type/:id/inspection-schedule | PER-03 | version(未作成0),nextDueDate,intervalDays?,timezone;日付規則D06 | InspectionSchedule |
@@ -135,7 +135,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-82 | GET /sync/operations/:id | PER-13本人 | なし;本人/端末operation | SyncOperation |
 | API-83 | PUT /attachments/:id/upload | PER-04本人申請 | `x-upload-token`ヘッダー(URLに残さない),本文bytes;実測容量、試行専用キー | UploadAttempt(id,sha256,size,version) |
 | API-84 | POST /attachments/:id/completion | PER-04 | version,uploadAttemptId,sha256;実体HEAD/検査job | Attachment＋Job(202) |
-| API-85 | DELETE /attachments/:id | PER-04管理 | version,reason;有効リンクがある場合422 | 204（D1 tombstone後R2削除job） |
+| API-85 | DELETE /attachments/:id | PER-04（本人分を含む） | version,reason;有効リンクがある場合422。**保持期間の猶予はD10未決のため未実装（tombstone後にjobで即時削除）** | 204（D1 tombstone後R2削除job） |
 | API-86 | GET /jobs/:id | 依頼者（PH0。担当者への拡張はPH4で通知/AI jobの利用時に判断） | なし;機微入力/内部error本文なし | Job(status,attempts,errorCode,resultRef) |
 | API-87 | PATCH /tasks/:id | PER-04/10 | version,status?,assigneeMemberId?,reason;業務対象権限 | Task |
 | API-88 | GET /ai/evaluation-runs | PER-08 | modelId/datasetVersion/limit/cursor | Page<EvaluationRun> |
@@ -147,7 +147,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-94 | GET /inspection-templates | PER-04 | targetType/status/limit/cursor;承認版一覧を担当範囲で取得 | Page<InspectionTemplate> |
 | API-95 | POST /inspection-templates | PER-03様式管理 | name,targetType,itemSchema;code一意/型/必須/結果列挙,D06 | InspectionTemplate(draft) |
 | API-96 | POST /inspection-templates/:id/versions | PER-03様式管理 | version,itemSchema,reason;新draft版/旧版不変 | InspectionTemplateVersion |
-| API-97 | POST /inspection-templates/:id/decision | PER-10様式承認 | version,templateVersionId,decision=request_review/approve/changes_requested,reason;D06承認者/現版。**決定は様式root(inspection_templates)の版ガードで競合を409にし、一版一決定（同じ版への2回目の決定は409）。承認済み版はトリガーで不変** | InspectionTemplateVersion |
+| API-97 | POST /inspection-templates/:id/decision | PER-10様式承認 | version,templateVersionId,decision=request_review/approve/changes_requested,reason;D06承認者/現版。**決定は様式root(inspection_templates)の版ガードで競合を409にし、一版一決定。同じ版への並行の決定は409、承認済み（または差戻し済み）の版への新しい決定は422 INVALID_TRANSITION。他の様式の版IDは404。承認済み版はトリガーで不変** | InspectionTemplateVersion |
 | API-98 | POST /attachment-drafts | PER-04＋対象作成権 | intendedEntityType,parentType?,parentId?;作成権/同unit、15分期限案 | AttachmentDraft(id,version,expiresAt) |
 | API-99 | PATCH /documents/:id/access-policy | PER-11管理 | version,classification,acl[{memberIdまたはroleId,permission,effect}];引下げ承認/同unit | Document＋policyVersion＋reindexJob |
 | API-100 | PUT /notifications/:id/read | 本人recipient | notificationVersion;本人/対象/可視版 | ReadReceipt（recipient.readAt） |

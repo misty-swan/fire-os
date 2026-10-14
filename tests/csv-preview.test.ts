@@ -128,4 +128,40 @@ describe("CSV取り込みのプレビュー (T023)", () => {
     );
     expect(byMember.status).toBe(403);
   });
+
+  it("row_validation_rejects_long_cells_and_non_decimal_coordinates", async () => {
+    const admin = fx.units.a.people.admin;
+
+    // 行ごとの検査: 長すぎる列（DBのCHECK超）・空の座標・16進は行エラー。0.0は有効
+    const rows = [
+      `hydrant,L-1,,35,139,${"長".repeat(101)},出典が長すぎる行`, // location_source >100
+      `hydrant,L-2,${"名".repeat(101)},35,139,架空市台帳,識別名が長すぎる行`, // identifying_name >100
+      `hydrant,L-3,,35,139,架空市台帳,${"備".repeat(1001)}`, // location_note >1000
+      "hydrant,E-1,,,,架空市台帳,座標が両方空", // 空セルは(0,0)として受理しない
+      "hydrant,E-2,,35,,架空市台帳,経度が空", // 空セル（片方）
+      "hydrant,H-1,,35,0x10,架空市台帳,16進の経度", // 16進は不可
+      "hydrant,H-2,,1e2,139,架空市台帳,指数表記", // 指数は不可
+      "hydrant,Z-1,,0.0,0.0,架空市台帳,ゼロ座標は有効", // (0,0)は範囲内の有効な値
+    ];
+    const attachmentId = await readyCsv(admin, rows);
+    const pRes = await fx.client(admin).request(
+      "POST", "/api/v1/facilities/imports", { csvAttachmentId: attachmentId, templateVersion: "csv-facilities-v1" }, idem(),
+    );
+    expect(pRes.status).toBe(202);
+    const preview = (await json(pRes)).data! as { id: string };
+    await runDueJobs(env);
+    const rowsInDb = await fx.rows("import_rows", { batch_id: preview.id });
+    const errorOf = (rowNo: number) => rowsInDb.find((r) => r.row_no === rowNo)?.error as string | null;
+    expect(errorOf(1)).toBe("location_source_too_long");
+    expect(errorOf(2)).toBe("identifying_name_too_long");
+    expect(errorOf(3)).toBe("location_note_too_long");
+    expect(errorOf(4)).toBe("missing_coordinates");
+    expect(errorOf(5)).toBe("missing_coordinates");
+    expect(errorOf(6)).toBe("invalid_longitude");
+    expect(errorOf(7)).toBe("invalid_latitude");
+    expect(errorOf(8)).toBeNull(); // 0.0は有効（空との区別）
+    const validRow = JSON.parse(rowsInDb.find((r) => r.row_no === 8)!.normalized_json as string) as { latitude: number; longitude: number };
+    expect(validRow.latitude).toBe(0);
+    expect(validRow.longitude).toBe(0);
+  });
 });

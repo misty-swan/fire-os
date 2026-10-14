@@ -43,6 +43,17 @@ describe("車両・資機材の台帳 (T025)", () => {
       { assetCode: "HOSE-1", name: "ホース 65mm", quantity: -1, quantityUnit: "本", storage: { facilityId, note: null } }, idem(),
     );
     expect(neg.status).toBe(400);
+    // 日本語の資産コード（契約上は有効）でも監査・台帳ともに登録できる（監査metadataはID・コード形式のみ）
+    const japanese = await fx.client(admin).request(
+      "POST", "/api/v1/equipment",
+      { assetCode: "１号セット", name: "日本語コードの機材", quantity: 1, quantityUnit: "式", storage: { note: "詰所" } }, idem(),
+    );
+    expect(japanese.status).toBe(201);
+    const jpCode = await fx.client(admin).request(
+      "POST", "/api/v1/vehicles",
+      { assetCode: "ポンプ-1号", name: "日本語番号の車両", status: "運用" }, idem(),
+    );
+    expect(jpCode.status).toBe(201);
     const hose = await fx.client(admin).request(
       "POST", "/api/v1/equipment",
       { assetCode: "HOSE-1", name: "ホース 65mm", quantity: 4, quantityUnit: "本", storage: { facilityId } }, idem(),

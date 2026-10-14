@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  Cursor, Id, IdListMaybeEmpty, IDEM, Instant, Latitude, Limit, Longitude, P_ID, Page, Reason, ShortText, Version,
+  Code100, Cursor, Id, IdListMaybeEmpty, IDEM, Instant, Latitude, Limit, Longitude, P_ID, Page, Reason, Reason2000, ShortText, Version,
   defineApi, listQuery, noContent, obj, provisionalDto, OptionalBody, LIMITS,
 } from "./common";
 import { attachmentStates, inspectionResults, locationVerificationStates } from "../states";
@@ -28,10 +28,11 @@ const facilityShape = {
   type: z.enum(facilityTypes),
   latitude: Latitude,
   longitude: Longitude,
-  locationSource: ShortText,
+  // DBのCHECK（facilities.location_source/management_number/identifying_name ≤100）に揃える
+  locationSource: Code100,
   locationNote: OptionalBody.max(1000),
-  managementNumber: ShortText.optional(),
-  identifyingName: ShortText.optional(),
+  managementNumber: Code100.optional(),
+  identifyingName: Code100.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   attachmentIds: IdListMaybeEmpty.optional(),
   /** 新規entityに添付を同時確定する場合の予約ID（API-98）。一回だけ消費 */
@@ -50,7 +51,8 @@ export const InspectionInput = obj({
   checkItems: z
     .array(
       obj({
-        code: ShortText,
+        // 点検明細の項目コード（DBのCHECK inspection_items.item_code ≤100）に揃える
+        code: Code100,
         result: z.enum(inspectionResults),
         value: z.union([z.string().max(LIMITS.titleMax), z.number(), z.boolean()]).optional(),
         note: OptionalBody.optional(),
@@ -127,8 +129,8 @@ export const gisApis = {
       // 座標/出典の変更は位置確認を失効させる（サーバー側）。null可は04で?の列だけ。
       body: obj({
         ...obj(facilityShape).partial().shape,
-        managementNumber: ShortText.nullable().optional(),
-        identifyingName: ShortText.nullable().optional(),
+        managementNumber: Code100.nullable().optional(),
+        identifyingName: Code100.nullable().optional(),
         version: Version,
       }),
       ...IDEM,
@@ -151,7 +153,7 @@ export const gisApis = {
     method: "POST", path: "/facilities/:id/location-reviews", permission: "PER-03確認許可", kind: "mutation", success: [200],
     request: obj({
       params: P_ID,
-      body: obj({ version: Version, locationVersion: Version, decision: z.enum(["request", "verify", "reject"]), reason: Reason }),
+      body: obj({ version: Version, locationVersion: Version, decision: z.enum(["request", "verify", "reject"]), reason: Reason2000 }),
       ...IDEM,
     }),
     response: obj({ facility: Facility, revision: LocationRevision }),
@@ -168,6 +170,8 @@ export const gisApis = {
       validRows: z.number().int().nullable(),
       errorRows: z.number().int().nullable(),
       previewHash: z.string().nullable(),
+      /** 行ごとのエラー（docs/03 SCR-20「行番号付き」。先頭50件。解析前はnull） */
+      errors: z.array(obj({ rowNo: z.number().int().min(1), error: ShortText })).max(50).nullable(),
     }),
   }),
   "API-54": defineApi({

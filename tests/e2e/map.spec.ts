@@ -102,13 +102,15 @@ test("old_map_response_cannot_replace_new_viewport", async ({ page }) => {
 });
 
 test("map_selection_sheet_matches_prototype_and_opens_detail", async ({ page }) => {
-  test.setTimeout(45_000); // 全体試験では負荷が上がるため（1件は数秒で終わる）
+  test.setTimeout(90_000); // 全体試験では負荷が上がるため（単独では数秒。ph1のruntime.test.tsと同じ扱い）
   const seed = await seedOf(page);
   await page.goto("/app/map");
   // 実行ごとに同じ座標の施設が増えるため、PCは右パネルの一覧の最後の行（この実行の施設）から選ぶ
   const target = page.getByRole("button", { name: `消火栓 ${seed.hydrant[0]}` });
   await expect(target.first()).toBeVisible({ timeout: 10_000 });
-  await (isPhone(page.viewportSize()) ? target : target.last()).click();
+  // フル試験では同座標に他の試験の施設が重なり、最前面が別のマーカーになることがある。
+  // ここで確かめたいのはシートの構成（prototype準拠）なので、スマホはヒットテストを強制する
+  await (isPhone(page.viewportSize()) ? target.first().click({ force: true }) : target.last().click());
 
   if (isPhone(page.viewportSize())) {
     // 選択シート: 種別・番号・状態3列・点検する/詳細/経路（prototype の構成）
@@ -123,9 +125,9 @@ test("map_selection_sheet_matches_prototype_and_opens_detail", async ({ page }) 
     await sheet.getByRole("button", { name: "閉じる" }).click();
     await expect(sheet).toBeHidden();
   } else {
-    // PCは右パネルに詳細（一覧に戻れる）
+    // PCは右パネルに詳細（一覧に戻れる）。CTAは「点検を依頼」（prototype Desktop。点検登録へ進む）
     await expect(page.getByText("座標（外部マップへ送る値）")).toBeVisible();
-    await expect(page.getByRole("button", { name: /この施設を点検する/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /点検を依頼/ })).toBeVisible();
     await page.getByRole("button", { name: "一覧に戻る" }).click();
     await expect(page.getByText("施設一覧")).toBeVisible();
   }

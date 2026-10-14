@@ -128,6 +128,14 @@ export function registerAttachmentRoutes(app: ApiApp): void {
       requestHash: await canonicalRequestHash({ method: "DELETE", path: `/attachments/${params.id}/links/${params.linkId}`, baseVersion: body.version, body }),
       expectedAuthzVersion: p.authzVersion,
       roots: [{ table: "attachment_links", id: link.id, expectedVersion: body.version }],
+      conditions: [
+        // unlink済みへの再実行は版は一致しても0行更新になる。書込前の状態で422にする（docs/07 §3.6の遷移）
+        {
+          existsSql: "SELECT 1 FROM attachment_links WHERE id = ? AND unit_id = ? AND unlinked_at IS NULL",
+          binds: [link.id, link.unit_id],
+          failCode: "INVALID_TRANSITION",
+        },
+      ],
       statements: (ctx) => [
         c.env.DB.prepare(
           "UPDATE attachment_links SET unlinked_at = ?, unlink_reason = ?, version = version + 1, updated_at = ?, last_mutation_token = ? " +

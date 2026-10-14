@@ -98,11 +98,66 @@ describe("施設の全件取得 (T020)", () => {
     // 他unitの施設は出ない
     const bList = await json(await fx.client(fx.units.b.people.admin).request("GET", "/api/v1/facilities?type=cistern"));
     expect((bList.data ?? []).map((r) => r.id as string)).not.toContain(cistern);
+  });
 
-    // 点検結果・異常のフィルタは、点検・異常がまだ無いため空（T029/T032でJOINを接続）
-    const byResult = await json(await list(admin, "?inspectionResult=ok"));
-    expect(byResult.data).toEqual([]);
-    const byIssue = await json(await list(admin, "?hasOpenIssue=true"));
-    expect(byIssue.data).toEqual([]);
+  it("filters_by_latest_inspection_result_and_open_issues", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+
+    // 点検・異常を直に用意する（系列は対象ごとに一つ。docs/04「対象一つ」）
+    const seedInspection = async (facilityId: string, result: string) => {
+      const now = new Date().toISOString();
+      const tplId = crypto.randomUUID();
+      const verId = crypto.randomUUID();
+      await env.DB.prepare(
+        "INSERT INTO inspection_templates (id, unit_id, name, target_type, status, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, 'facility', 'active', ?, ?, ?, 'human')",
+      ).bind(tplId, a.id, `様式${tplId.slice(0, 6)}`, now, now, admin.userId).run();
+      await env.DB.prepare(
+        "INSERT INTO inspection_template_versions (id, unit_id, template_id, revision_no, item_schema, status, approved_by_member_id, approved_at, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, 1, '[]', 'approved', ?, ?, ?, ?, ?, 'human')",
+      ).bind(verId, a.id, tplId, admin.memberId!, now, now, now, admin.userId).run();
+      const seriesId = crypto.randomUUID();
+      const inspId = crypto.randomUUID();
+      await env.DB.prepare(
+        "INSERT INTO inspection_series (id, unit_id, facility_id, current_facility_inspection_id, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, ?, ?, ?, ?, 'human')",
+      ).bind(seriesId, a.id, facilityId, inspId, now, now, admin.userId).run();
+      await env.DB.prepare(
+        "INSERT INTO facility_inspections (id, unit_id, series_id, facility_id, template_version_id, inspector_member_id, inspected_at, result, note, location_version, created_at, updated_at, created_by, actor_kind) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, '絞り込み試験の点検', 1, ?, ?, ?, 'human')",
+      ).bind(inspId, a.id, seriesId, facilityId, verId, admin.memberId!, "2026-10-01T00:00:00.000Z", result, now, now, admin.userId).run();
+      return inspId;
+    };
+    const seedIssue = async (facilityId: string, status: string) => {
+      const now = new Date().toISOString();
+      const issueId = crypto.randomUUID();
+      await env.DB.prepare(
+        "INSERT INTO issues (id, unit_id, facility_id, title, description, reported_by, status, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, '絞り込み試験の異常', '開閉の不具合', ?, ?, ?, ?, ?, 'human')",
+      ).bind(issueId, a.id, facilityId, admin.userId, status, now, now, admin.userId).run();
+      return issueId;
+    };
+
+    const okFacility = await seedFacility(a.id, admin.userId, { number: "FILTER-INS-OK", lat: 35.03, lng: 139.03 });
+    const reviewFacility = await seedFacility(a.id, admin.userId, { number: "FILTER-INS-REVIEW", lat: 35.04, lng: 139.04 });
+    const openIssueFacility = await seedFacility(a.id, admin.userId, { number: "FILTER-ISSUE-OPEN", lat: 35.05, lng: 139.05 });
+    const closedIssueFacility = await seedFacility(a.id, admin.userId, { number: "FILTER-ISSUE-CLOSED", lat: 35.06, lng: 139.06 });
+    await seedInspection(okFacility, "ok");
+    await seedInspection(reviewFacility, "needs_review");
+    await seedIssue(openIssueFacility, "reported");
+    await seedIssue(closedIssueFacility, "closed");
+
+    const idsOf = async (query: string) => (await json(await fx.client(admin).request("GET", `/api/v1/facilities${query}`))).data?.map((r) => r.id as string) ?? [];
+
+    // 点検結果のフィルタ: 最新有効（現在版）の点検の結果で絞る（T029/T032とのJOIN接続）
+    expect(await idsOf("?inspectionResult=ok")).toEqual([okFacility]);
+    expect(await idsOf("?inspectionResult=needs_review")).toEqual([reviewFacility]);
+    // 点検が無い施設はどんな結果でも出ない
+    const noInspection = await seedFacility(a.id, admin.userId, { number: "FILTER-INS-NONE", lat: 35.07, lng: 139.07 });
+    expect(await idsOf("?inspectionResult=unknown")).toEqual([]);
+
+    // 開いている異常のフィルタ: closedは含まれない
+    expect(await idsOf("?hasOpenIssue=true")).toEqual([openIssueFacility]);
+    // 異常が閉じたら同じ施設は出なくなる（状態は毎要求で引き直す）
+    await env.DB.prepare("UPDATE issues SET status = 'closed' WHERE facility_id = ?").bind(openIssueFacility).run();
+    expect(await idsOf("?hasOpenIssue=true")).toEqual([]);
+    void noInspection;
   });
 });

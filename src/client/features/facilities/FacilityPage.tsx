@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { api } from "../../api";
-import { PageTitle } from "../../components/Page";
+import { api, ApiError } from "../../api";
+import { SubHeader } from "../../components/Page";
 import { Notice } from "../../components/ui";
 import { Banner, Button, Card, Chip, Icon } from "../../components/ui";
 import { facilityName, locationStatusLabel, type FacilityItem } from "../map/useFacilities";
@@ -14,8 +14,16 @@ interface FacilityDetail extends FacilityItem {
     locationSource: string; verificationStatus: "unverified" | "pending" | "verified" | "rejected";
     verifiedByMemberId: string | null; verifiedAt: string | null; reason: string; createdAt: string;
   }[];
-  openIssues?: { id: string; title: string; status: string }[];
 }
+
+/** 異常の状態（API-15のstatus。生のenumをそのまま見せない） */
+const ISSUE_STATUS_LABELS: Record<string, string> = {
+  reported: "確認待ち",
+  under_review: "確認中",
+  in_progress: "対応中",
+  resolved: "対応実施",
+  closed: "確認終了",
+};
 
 /**
  * 施設の詳細（T022/T034、SCR-04）。台帳・写真・位置（出典/確認対象版）・点検と異常の状態を
@@ -25,7 +33,9 @@ export function FacilityPage() {
   const params = useParams<{ id: string }>();
   const id = params.id!;
   const [facility, setFacility] = useState<FacilityDetail | "loading" | "notfound">("loading");
-  const [reviewState, setReviewState] = useState<"idle" | "busy" | "conflict" | "denied">("idle");
+  const [openIssues, setOpenIssues] = useState<{ id: string; title: string; status: string }[] | null>(null);
+  // 位置確認の結果。409(競合)・403(権限)・404(所在)・結果不明(通信断/5xx)を同じ「失敗」にしない（docs/03 §1.1）
+  const [reviewState, setReviewState] = useState<"idle" | "busy" | "conflict" | "forbidden" | "missing" | "unknown">("idle");
 
   useEffect(() => {
     let alive = true;
@@ -35,6 +45,15 @@ export function FacilityPage() {
         if (alive) setFacility(data);
       } catch {
         if (alive) setFacility("notfound");
+      }
+      // この施設の未終了の異常（API-15。閉じているものは枠に出さない）
+      try {
+        const issues = (await api("API-15", { query: { targetType: "facility", targetId: id } })) as unknown as {
+          id: string; title: string; status: string;
+        }[];
+        if (alive) setOpenIssues(issues.filter((i) => i.status !== "closed"));
+      } catch {
+        if (alive) setOpenIssues([]); // 一覧の取得に失敗しても詳細自体は見せる
       }
     })();
     return () => {
@@ -53,7 +72,8 @@ export function FacilityPage() {
   if (facility === "notfound") {
     return (
       <div className="flex max-w-[720px] flex-col gap-4">
-        <PageTitle eyebrow="FACILITY" className="lg:hidden">施設の詳細</PageTitle>
+        <SubHeader backTo="/app/map" />
+        <h2 className="text-[26px] font-bold leading-[1.3]">施設の詳細</h2>
         <Banner tone="info" eyebrow="NOT FOUND" title="この施設は存在しないか、閲覧できません">
           <Link to="/app/map" className="underline">マップへ戻る</Link>
         </Banner>
@@ -63,6 +83,7 @@ export function FacilityPage() {
 
   const status = locationStatusLabel[facility.verificationStatus];
   const statusTone = status.tone === "ok" ? "ok" : status.tone === "attention" ? "attention" : status.tone === "alert" ? "alert" : "neutral";
+  const latestIssue = openIssues && openIssues.length > 0 ? openIssues[0]! : null;
 
   const review = async (decision: "request" | "verify") => {
     setReviewState("busy");
@@ -78,14 +99,20 @@ export function FacilityPage() {
       });
       setReviewState("idle");
       window.location.reload(); // 確認状態を最新に（他の更新も反映）
-    } catch {
-      setReviewState("conflict");
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : 0;
+      if (status === 409) setReviewState("conflict");
+      else if (status === 403) setReviewState("forbidden");
+      else if (status === 404) setReviewState("missing");
+      else setReviewState("unknown"); // 通信断・5xx・応答が読めない
     }
   };
 
   return (
     <div className="flex max-w-[720px] flex-col gap-4">
-      <PageTitle eyebrow="FACILITY" className="lg:hidden">施設の詳細</PageTitle>
+      <div className="lg:hidden">
+        <SubHeader title="施設の詳細" backTo="/app/map" />
+      </div>
 
       {/* 写真エリア（prototype: 280px・斜線。写真があれば表示） */}
       <div className="relative -mx-4 flex h-[280px] items-center justify-center bg-[linear-gradient(180deg,#16233a,#0b1422)] max-lg:overflow-hidden lg:mx-0 lg:rounded-[20px]">
@@ -111,10 +138,32 @@ export function FacilityPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Chip tone="neutral">{facility.type === "hydrant" ? "消火栓" : facility.type === "cistern" ? "防火水槽" : "格納箱"}</Chip>
           <Chip tone={statusTone}>位置：{status.text}</Chip>
+          <Link
+            to={`/app/facilities/${id}/edit`}
+            className="ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-white/[.08] px-3.5 text-[13px] font-bold text-ink lg:min-h-9"
+          >
+            <Icon name="edit" className="text-[17px]" />
+            編集
+          </Link>
         </div>
         <h2 className="text-[26px] font-bold leading-[1.3]">{facilityName(facility)}</h2>
         <p className="text-[13px] text-ink-sub">{facility.locationNote}</p>
       </div>
+
+      {/* 異常報告の枠（prototype 詳細の「異常報告あり」。未終了の異常があるときだけ出す） */}
+      {latestIssue && (
+        <div className="flex items-start gap-2.5 rounded-[18px] bg-[rgba(255,90,70,.1)] p-3.5 shadow-[inset_0_0_0_1px_rgba(255,90,70,.3)]">
+          <Icon name="report" className="text-[20px] text-alert" />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-[14px] font-bold text-[#ffb0a4]">異常報告あり（{openIssues!.length}件）</span>
+            <span className="line-clamp-2 text-[13px] leading-[1.6] text-[#e7c9c4]">{latestIssue.title}</span>
+            <span className="flex flex-wrap items-center gap-2 text-[12px] text-[#e7c9c4]">
+              <Chip tone={latestIssue.status === "resolved" ? "ok" : "alert"}>{ISSUE_STATUS_LABELS[latestIssue.status] ?? "状態を確認中"}</Chip>
+              <Link to="/app/issues" className="inline-flex min-h-11 items-center underline lg:min-h-9">異常一覧へ</Link>
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* 状態の3行表示（docs/16 T034: 位置/点検結果/異常対応を混同しない） */}
       <Card className="flex flex-col gap-2.5" aria-label="状態">
@@ -122,9 +171,10 @@ export function FacilityPage() {
           <span className="text-ink-sub">位置の確認</span>
           <Chip tone={statusTone}>{facility.verificationStatus === "verified" ? "確認済" : facility.verificationStatus === "pending" ? "確認中" : "未確認"}</Chip>
         </div>
-        <div className="flex items-center justify-between text-[13px]">
+        <div className="flex items-center justify-between gap-3 text-[13px]">
           <span className="text-ink-sub">点検結果</span>
-          <span className="font-mono text-[12px] text-ink-muted">—</span>
+          {/* FacilityDetail DTOには点検の記録が含まれないため、記録が無いことを空表示で示す（docs/03 SCR-04） */}
+          <span className="text-[12px] text-ink-muted">点検の記録はまだありません</span>
         </div>
         <div className="flex items-center justify-between text-[13px]">
           <span className="text-ink-sub">異常対応</span>
@@ -162,12 +212,27 @@ export function FacilityPage() {
                   現地で確認した（確認済みにする）
                 </Button>
               )}
-              {reviewState === "conflict" && (
-                <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3 text-[13px] text-[#ffdca0]">
-                  他の操作で更新されています。画面を再読込してください。
-                </div>
-              )}
             </div>
+            {reviewState === "conflict" && (
+              <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3 text-[13px] text-[#ffdca0]">
+                他の操作で更新されています。画面を再読込してください。
+              </div>
+            )}
+            {reviewState === "forbidden" && (
+              <div role="alert" className="hairline rounded-card bg-[rgba(255,90,70,.08)] p-3 text-[13px] text-[#ffb0a4]">
+                この操作は分団の管理者・幹部だけができます。
+              </div>
+            )}
+            {reviewState === "missing" && (
+              <div role="alert" className="hairline rounded-card bg-[rgba(255,90,70,.08)] p-3 text-[13px] text-[#ffb0a4]">
+                この施設は、すでに削除されている可能性があります。
+              </div>
+            )}
+            {reviewState === "unknown" && (
+              <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3 text-[13px] text-[#ffdca0]">
+                結果を確認できません。通信を確認して、もう一度お試しください。同じ内容で再送しても二重には記録されません。
+              </div>
+            )}
           </div>
         )}
       </Card>

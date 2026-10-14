@@ -37,7 +37,7 @@ export function registerInspectionCorrectionRoutes(app: ApiApp): void {
       operationCode: "inspection.correction",
       idempotencyKey: headers["idempotency-key"],
       requestHashPath: `/inspections/${type}/${params.id}/corrections`,
-      correction: { supersedesId: params.id, reason: body.reason },
+      correction: { supersedesId: params.id, reason: body.reason, seriesVersion: body.seriesVersion },
     });
     const result = await executeMutation(c.env, p, built.spec);
     return ok(c, Inspection.parse(result.data), {}, 201);

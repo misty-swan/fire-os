@@ -68,7 +68,8 @@ describe("点検様式の版と承認 (T027)", () => {
       { version: 2, templateVersionId: v1.id, decision: "approve", reason: "もう一度" }, idem(),
     );
     expect(duplicateDecision.status).toBe(409);
-    expect(((await json(duplicateDecision)).error?.details ?? []).length === 0 || true).toBe(true);
+    // 二重承認はrootの版ガード（version=2は既に消化済み）でVERSION_CONFLICT
+    expect((await json(duplicateDecision)).error?.code).toBe("VERSION_CONFLICT");
 
     // 承認済みの版は不変（DBトリガー）。直接のUPDATE/DELETEも拒否される
     const approvedSchemaAfter = (await fx.rows("inspection_template_versions", { id: v1.id }))[0]!.item_schema as string;
@@ -95,8 +96,14 @@ describe("点検様式の版と承認 (T027)", () => {
       { code: "lights", result: "良好" }, // 車両用の項目。施設用の様式には無い
     ]);
     expect(wrongTargetCheck.valid).toBe(false);
-    const wrongTargetTemplate = { status: 422 };
-    expect(wrongTargetTemplate.status).toBe(422);
+    // 別の様式の版IDでAPI-97を呼ぶと404（他様式の版はこの様式の決定対象にならない。版の状態も変わらない）
+    const wrongTargetTemplate = await fx.client(admin).request(
+      "POST", `/api/v1/inspection-templates/${templateId}/decision`,
+      { version: 2, templateVersionId: vehicle.versionId, decision: "approve", reason: "別様式の版を承認しようとする" }, idem(),
+    );
+    expect(wrongTargetTemplate.status).toBe(404);
+    expect(((await json(wrongTargetTemplate)).error?.code)).toBe("NOT_FOUND");
+    expect((await fx.rows("inspection_template_versions", { id: vehicle.versionId }))[0]!.status).toBe("draft");
 
     // 必須明細の検査（T029の保存でも同じ関数を使う）
     const schema = JSON.parse((await fx.rows("inspection_template_versions", { id: v1.id }))[0]!.item_schema as string) as Parameters<typeof validateItems>[0];
@@ -132,5 +139,52 @@ describe("点検様式の版と承認 (T027)", () => {
     const listData = ((await json(list)).data ?? []) as { id: string }[];
     expect(listData.some((t) => t.id === templateId)).toBe(true);
     expect(listData.every((t) => t.id !== vehicle.id)).toBe(true);
+  });
+
+  it("unapproved_template_version_rejects_inspection_save", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+
+    // 点検先の施設（直接用意する）
+    const facilityId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO facilities (id, unit_id, type, management_number, latitude, longitude, location_note, location_source, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, 'hydrant', ?, 35, 139, 'x', '架空台帳', ?, ?, ?, 'human')",
+    ).bind(facilityId, a.id, `T027-${facilityId.slice(0, 6)}`, now, now, admin.userId).run();
+
+    // 契約の点検結果の語彙で承認を進める様式（docs/05 InspectionInput）
+    const schema = [{ code: "exterior", label: "本体の外観", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] }];
+    const template = await createTemplate(admin, "承認前試験の様式", "facility", schema);
+    expect(template.status).toBe(201);
+    const input = {
+      templateVersionId: template.versionId, inspectedAt: "2026-10-14T07:00:00.000Z", inspectorMemberId: admin.memberId!,
+      result: "ok", checkItems: [{ code: "exterior", result: "ok" }], note: "未承認様式での保存試験", createIssue: false, attachmentIds: [],
+    };
+
+    // draftの版では保存できない（422 INVALID_TRANSITION。docs/16 T027完了条件「未承認版での点検保存は422」）
+    const draftSave = await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/inspections`, input, idem());
+    expect(draftSave.status).toBe(422);
+    expect(((await json(draftSave)).error?.details ?? []).some((d) => d.reason === "template_not_approved")).toBe(true);
+    // 点検も増えていない
+    expect(await fx.rows("facility_inspections", { facility_id: facilityId })).toHaveLength(0);
+
+    // in_reviewでも保存できない
+    await fx.client(admin).request(
+      "POST", `/api/v1/inspection-templates/${template.id}/decision`,
+      { version: 1, templateVersionId: template.versionId, decision: "request_review", reason: "確認のお願い" }, idem(),
+    );
+    const inReviewSave = await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/inspections`, input, idem());
+    expect(inReviewSave.status).toBe(422);
+    expect(await fx.rows("facility_inspections", { facility_id: facilityId })).toHaveLength(0);
+
+    // 承認後は保存できる
+    await fx.client(admin).request(
+      "POST", `/api/v1/inspection-templates/${template.id}/decision`,
+      { version: 2, templateVersionId: template.versionId, decision: "approve", reason: "内容を確認した" }, idem(),
+    );
+    const approvedSave = await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/inspections`, input, idem());
+    expect(approvedSave.status).toBe(201);
+    expect(await fx.rows("facility_inspections", { facility_id: facilityId })).toHaveLength(1);
   });
 });

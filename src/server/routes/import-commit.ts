@@ -2,6 +2,7 @@ import type { AppEnv } from "../env";
 import { bumpDatasetRevision, insertLocationRevision } from "./facility-writes";
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
+import { assertionSql, rootUpdatedExistsSql } from "../mutations/assertion";
 import { requirePermission } from "./invitations";
 import { resolvePrincipal } from "../auth/principal";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../http";
@@ -18,24 +19,36 @@ import { csvCell } from "../gis/csv";
  */
 export async function commitImport(job: LeasedJob, env: AppEnv): Promise<JobOutcome> {
   const batch = await env.DB.prepare("SELECT * FROM import_batches WHERE id = ?").bind(job.sourceId)
-    .first<{ id: string; unit_id: string; status: string; version: number; conflict_resolution: string | null }>();
+    .first<{ id: string; unit_id: string; status: string; version: number; conflict_resolution: string | null; base_dataset_revision: number | null }>();
   if (!batch || batch.unit_id !== job.unitId) return { kind: "stale", errorCode: "batch_missing" };
   if (batch.status === "committed") return { kind: "stale", errorCode: "already_committed" };
   if (batch.status !== "committing") return { kind: "stale", errorCode: "unexpected_status" };
+  const baseRevision = batch.base_dataset_revision;
+  if (baseRevision === null) return { kind: "manual_review", errorCode: "missing_base_revision" };
 
   const CHUNK = 20;
   let committed = 0;
+  let chunkNo = 0;
   for (;;) {
     // 未確定の有効行を取り、版を1つ進める（1チャンク=1batch。外側の更新を検出したら止める）
     const pending = await env.DB.prepare(
       "SELECT id, row_no, normalized_json FROM import_rows WHERE batch_id = ? AND unit_id = ? AND error IS NULL AND committed_facility_id IS NULL ORDER BY row_no LIMIT ?",
     ).bind(batch.id, batch.unit_id, CHUNK).all<{ id: string; row_no: number; normalized_json: string }>();
     if (pending.results.length === 0) break;
-    const unit = await env.DB.prepare("SELECT dataset_revision FROM units WHERE id = ?").bind(batch.unit_id).first<{ dataset_revision: number }>();
-    const revision = unit!.dataset_revision;
+    chunkNo++;
+    // 期待する台帳版=commit開始時の基準版＋このbatchが既に確定したチャンク数（1チャンクで1増分。
+    // チャンクはCHUNK行ずつrow_no順なので、確定済み行数からチャンク数を復元できる。再試行でも+selfの進捗を壊さない）。
+    // 外側が台帳を触っていたらこの検査で失敗し、batch全体が取り消されてjobは再試行（最終的に手動確認）になる
+    const committedSoFar = (await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM import_rows WHERE batch_id = ? AND unit_id = ? AND committed_facility_id IS NOT NULL",
+    ).bind(batch.id, batch.unit_id).first<{ n: number }>())!.n;
+    const expectedRevision = baseRevision + Math.ceil(committedSoFar / CHUNK);
+    const attemptToken = `${job.id}:${chunkNo}`;
+    let seq = 0;
+    const assertion = (existsSql: string, ...binds: unknown[]) =>
+      env.DB.prepare(assertionSql(existsSql)).bind(attemptToken, ++seq, ...binds);
     const stmts: D1PreparedStatement[] = [
-      // 開始時の版が自分の想定と一致すること（外側が触っていたら0行で失敗させる）
-      env.DB.prepare("SELECT 1 FROM units WHERE id = ? AND dataset_revision = ?").bind(batch.unit_id, revision),
+      assertion("SELECT 1 FROM units WHERE id = ? AND dataset_revision = ?", batch.unit_id, expectedRevision),
     ];
     const updatedIds: string[] = [];
     for (const row of pending.results) {
@@ -44,20 +57,34 @@ export async function commitImport(job: LeasedJob, env: AppEnv): Promise<JobOutc
         latitude: number; longitude: number; locationSource: string; locationNote: string;
       };
       if (batch.conflict_resolution === "overwrite") {
-        const existing = await env.DB.prepare("SELECT id, version FROM facilities WHERE unit_id = ? AND type = ? AND management_number = ?")
-          .bind(batch.unit_id, n.type, n.managementNumber).first<{ id: string; version: number }>();
+        const existing = await env.DB.prepare(
+          "SELECT id, version, latitude, longitude, location_source, location_version FROM facilities WHERE unit_id = ? AND type = ? AND management_number = ?",
+        ).bind(batch.unit_id, n.type, n.managementNumber)
+          .first<{ id: string; version: number; latitude: number; longitude: number; location_source: string; location_version: number }>();
         if (existing) {
+          // 座標または出典が変わるなら、位置確認は必ず失効する（docs/11「座標変更は必ず新locationVersion、旧確認を失効」）
+          const locationChanged = existing.latitude !== n.latitude || existing.longitude !== n.longitude || existing.location_source !== n.locationSource;
+          const newLocationVersion = existing.location_version + (locationChanged ? 1 : 0);
+          const nowIso = new Date().toISOString();
           stmts.push(
             env.DB.prepare(
-              "UPDATE facilities SET latitude = ?, longitude = ?, location_source = ?, location_note = ?, version = version + 1, last_mutation_token = ?, updated_at = ? " +
+              "UPDATE facilities SET latitude = ?, longitude = ?, location_source = ?, location_note = ?, " +
+                (locationChanged
+                  ? "location_version = location_version + 1, verification_status = 'unverified', last_verified_at = NULL, verified_by_member_id = NULL, "
+                  : "") +
+                "version = version + 1, last_mutation_token = ?, updated_at = ? " +
                 "WHERE id = ? AND unit_id = ? AND version = ?",
-            ).bind(n.latitude, n.longitude, n.locationSource, n.locationNote, `import:${batch.id}`, new Date().toISOString(), existing.id, batch.unit_id, existing.version),
-            insertLocationRevision(env, {
-              id: crypto.randomUUID(), unitId: batch.unit_id, facilityId: existing.id, locationVersion: 1,
-              latitude: n.latitude, longitude: n.longitude, locationSource: n.locationSource,
-              verificationStatus: "unverified", verifiedByMemberId: null, verifiedAt: null,
-              reason: "CSV取込みで更新", actorUserId: null, now: new Date().toISOString(),
-            }),
+            ).bind(n.latitude, n.longitude, n.locationSource, n.locationNote, `import:${batch.id}`, nowIso, existing.id, batch.unit_id, existing.version),
+            // 更新が本当に1行に効いたこと（0行更新を成功扱いにしない。docs/02 §4と同じ比較更新の検査）
+            ...(locationChanged
+              ? [assertion(rootUpdatedExistsSql("facilities"), existing.id, batch.unit_id, existing.version + 1, `import:${batch.id}`),
+                  insertLocationRevision(env, {
+                    id: crypto.randomUUID(), unitId: batch.unit_id, facilityId: existing.id, locationVersion: newLocationVersion,
+                    latitude: n.latitude, longitude: n.longitude, locationSource: n.locationSource,
+                    verificationStatus: "unverified", verifiedByMemberId: null, verifiedAt: null,
+                    reason: "CSV取込みで更新", actorUserId: null, now: nowIso,
+                  })]
+              : []),
           );
           updatedIds.push(`${row.id}:${existing.id}`);
           continue;
@@ -84,6 +111,8 @@ export async function commitImport(job: LeasedJob, env: AppEnv): Promise<JobOutc
       const [rowId, facilityId] = pair.split(":");
       stmts.push(env.DB.prepare("UPDATE import_rows SET committed_facility_id = ? WHERE id = ? AND committed_facility_id IS NULL").bind(facilityId, rowId));
     }
+    // 検査行の掃除（成功したチャンクにだけ実行される。失敗したbatchは全体が取り消されるため残らない）
+    stmts.push(env.DB.prepare("DELETE FROM mutation_assertions WHERE attempt_token = ?").bind(attemptToken));
     try {
       await env.DB.batch(stmts);
     } catch {

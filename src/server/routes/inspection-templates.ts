@@ -47,7 +47,7 @@ export function registerInspectionTemplateRoutes(app: ApiApp): void {
         { table: "inspection_templates", id },
         { table: "inspection_template_versions", id: versionId },
       ],
-      duplicateOn: ["inspection_templates.unit_id", "inspection_templates.name"],
+      // 同名の様式は許す（DBのUNIQUEは(unit_id,id,name)で実質無効。docs/04に同名一意の規定は無いため）
       statements: (ctx) => [
         c.env.DB.prepare(
           "INSERT INTO inspection_templates (id, unit_id, name, target_type, status, last_mutation_token, created_at, updated_at, created_by, actor_kind) " +

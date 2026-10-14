@@ -69,7 +69,7 @@ export function registerAssetRoutes(app: ApiApp): void {
         ).bind(id, p.unitId, body.assetCode, body.name, body.status, body.storageFacilityId ?? null, ctx.attempt, ctx.now, ctx.now, p.userId),
         bumpDatasetRevision(c.env, p.unitId),
       ],
-      audit: { action: "vehicle.create", entityType: "vehicle", entityId: id, metadata: { code: body.assetCode } },
+      audit: { action: "vehicle.create", entityType: "vehicle", entityId: id },
       event: { entityType: "vehicle", entityId: id, entityVersion: 1, eventType: "vehicle.created" },
       response: { status: 201, sql: VEHICLE_JSON, binds: [id], decode: (j) => Vehicle.parse(j) },
     });
@@ -156,7 +156,7 @@ export function registerAssetRoutes(app: ApiApp): void {
         ),
         bumpDatasetRevision(c.env, p.unitId),
       ],
-      audit: { action: "equipment.create", entityType: "equipment", entityId: id, metadata: { code: body.assetCode } },
+      audit: { action: "equipment.create", entityType: "equipment", entityId: id },
       event: { entityType: "equipment", entityId: id, entityVersion: 1, eventType: "equipment.created" },
       response: { status: 201, sql: EQUIPMENT_JSON, binds: [id], decode: (j) => Equipment.parse(j) },
     });

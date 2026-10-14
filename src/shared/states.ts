@@ -100,11 +100,11 @@ export const contentVersionTransitions: Transitions<(typeof contentVersionStates
 };
 export const attachmentTransitions: Transitions<(typeof attachmentStates)[number]> = {
   pending_upload: ["uploaded", "expired"],
-  uploaded: ["checking"],
-  checking: ["ready", "rejected"],
+  uploaded: ["checking", "deleting"],
+  checking: ["ready", "rejected", "deleting"],
   ready: ["deleting"],
-  rejected: [],
-  expired: [],
+  rejected: ["deleting"],
+  expired: ["deleting"],
   deleting: ["deleted"],
   deleted: [],
 };

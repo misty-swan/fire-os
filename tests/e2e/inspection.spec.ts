@@ -22,9 +22,10 @@ test("inspection_form_preserves_values_after_failed_submission", async ({ page }
   await adminApiData(page.request, "POST", `/api/v1/inspection-templates/${tplData.id}/decision`, { version: 1, templateVersionId: tplData.versions[0]!.id, decision: "request_review", reason: "x" });
   await adminApiData(page.request, "POST", `/api/v1/inspection-templates/${tplData.id}/decision`, { version: 2, templateVersionId: tplData.versions[0]!.id, decision: "approve", reason: "x" });
 
-  // 点検登録を開く
+  // 点検登録を開く。様式は他の試験の承認済み様式と混ざるため、自分の名前のものを選ぶ
   await page.goto(`/app/facilities/${facilityId}/inspections/new`);
   await expect(page.getByRole("heading", { name: "点検登録" })).toBeVisible();
+  await page.getByRole("button", { name: `様式 ${tag}` }).click();
 
   // ステップ1: 「異常あり」を選ぶ（異常起票になる）
   await page.getByRole("button", { name: "異常あり" }).click();
@@ -54,11 +55,11 @@ test("inspection_form_preserves_values_after_failed_submission", async ({ page }
   await page.getByRole("button", { name: "点検を保存" }).click();
   await expect(page).toHaveURL(new RegExp(`/app/facilities/${facilityId}$`), { timeout: 15_000 });
 
-  // 異常あり → 異常の報告が作られている（T029とT034の接続）
+  // 異常あり → 異常の報告が作られている（T029とT034の接続）。このfacilityは毎回新規なので起点つきは必ず1件（二重登録を検出する）
   const issues = await adminApiData(page.request, "GET", `/api/v1/issues?targetType=facility&targetId=${facilityId}`);
   const savedInspections = ((issues.data.data as { originInspectionId: string | null }[]).filter((i) => i.originInspectionId)).length;
-  expect(savedInspections).toBeGreaterThanOrEqual(1);
-  // 訂正前の記録（原本）が残り、位置確認との混同がないことを確認
+  expect(savedInspections).toBe(1);
+  // 位置確認が点検結果と混同されて表示されないこと（点検の記録は位置確認の確認状態を変えない。D06）
   await expect(page.getByLabel("位置確認")).toBeVisible();
   void info;
 });

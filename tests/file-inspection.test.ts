@@ -221,4 +221,42 @@ describe("ファイル検査とready確定 (T016)", () => {
     expect(readyHashAfterLateJob).toBe(readyHashBefore);
     expect((await statusOf(pngId)).status).toBe("ready");
   });
+
+  it("checking_attachment_is_retried_until_limit_not_staled", async () => {
+    const admin = fx.units.a.people.admin;
+
+    // 検査中（checking）にR2障害等で取得できなかった添付は、再試行でstaleにならずcheckingのまま上限まで試される
+    // （docs/07 §3.4「unavailable=再試行」。1回目のchecking遷移でversionが+1済みでも再入できる）
+    const retryId = await makeUploaded(admin, "image/png", pngWithExif());
+    const uploaded = await statusOf(retryId);
+    await env.FILES.delete(uploaded.staging_key!); // 検査対象の実体を消す（unavailable）
+    const rerunJob = async () => {
+      // 同じjobを待機時間の後に再実行する（docs/07 §3.4の再試行。専用の再登録をしない）
+      await env.DB.prepare(
+        "UPDATE jobs SET next_attempt_at = ? WHERE source_type = 'attachment' AND source_id = ? AND kind = 'attachment.inspect' AND status = 'retry_wait'",
+      ).bind(new Date().toISOString(), retryId).run();
+      return runDueJobs(env);
+    };
+
+    await runDueJobs(env); // 1回目: uploaded→checkingに遷移してunavailable（retryable）
+    expect((await statusOf(retryId)).status).toBe("checking");
+    let job = await lastJobOf(retryId);
+    expect(job.status).not.toBe("stale");
+    expect(job.status).toBe("retry_wait");
+    expect(job.error_code).toBe("scanner_unavailable");
+
+    // 2回目: checkingの再入。versionが+1済みでもstaleにせず、もう一度検査を試す（旧実装はここでstaleになっていた）
+    await rerunJob();
+    expect((await statusOf(retryId)).status).toBe("checking"); // readyにもrejectedにもしない
+    job = await lastJobOf(retryId);
+    expect(job.status).toBe("retry_wait");
+    expect(job.error_code).toBe("scanner_unavailable");
+
+    // 上限（3回）まで同じjobが再試行され、それでも駄目なら手動確認。checkingのまま固定される
+    await rerunJob();
+    job = await lastJobOf(retryId);
+    expect(job.status).toBe("manual_review");
+    expect(job.error_code).toBe("scanner_unavailable");
+    expect((await statusOf(retryId)).status).toBe("checking");
+  });
 });

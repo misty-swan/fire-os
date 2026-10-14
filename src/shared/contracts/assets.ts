@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  AssetTarget, Id, IdListMaybeEmpty, IDEM, LIMITS, NonNegative, OptionalBody, P_ID, Page, Reason, Sha256, ShortText, Target,
+  AssetTarget, Code100, Code50, Id, IdListMaybeEmpty, IDEM, LIMITS, NonNegative, OptionalBody, P_ID, Page, Reason, Reason2000, Sha256, ShortText, Target,
   Title, Version, VersionOrZero, BusinessDate, Body, Job, defineApi, listQuery, noContent, obj, provisionalDto,
 } from "./common";
 import { inspectionShape } from "./gis";
@@ -42,7 +42,8 @@ export const Attachment = obj({
 const storage = obj({ facilityId: Id.optional(), vehicleId: Id.optional(), note: OptionalBody.max(1000).optional() });
 
 const templateItem = obj({
-  code: ShortText,
+  // 項目コードは点検明細のitem_code（DBのCHECK ≤100）として保存されるため、様式の時点で100に揃える
+  code: Code100,
   label: ShortText,
   valueType: z.enum(["boolean", "number", "text", "select"]),
   required: z.boolean(),
@@ -81,7 +82,9 @@ export const assetsApis = {
     request: obj({
       params: P_ID,
       body: obj({
-        version: Version, status: z.enum(issueStates).optional(), assigneeMemberId: Id.nullable().optional(), reason: Reason,
+        version: Version, status: z.enum(issueStates).optional(), assigneeMemberId: Id.nullable().optional(),
+        // 対応記録の理由（DBのCHECK issue_events.note ≤2000）に揃える
+        reason: Reason2000,
       }),
       ...IDEM,
     }),
@@ -106,7 +109,7 @@ export const assetsApis = {
     method: "POST", path: "/inspections/:type/:id/corrections", permission: "PER-04", kind: "mutation", success: [201],
     request: obj({
       params: obj({ type: z.enum(["facility", "vehicle", "equipment"]), id: Id }),
-      body: obj({ seriesVersion: Version, supersedesId: Id, reason: Reason, ...inspectionShape }),
+      body: obj({ seriesVersion: Version, supersedesId: Id, reason: Reason2000, ...inspectionShape }),
       ...IDEM,
     }),
     response: provisionalDto(), provisional: true,
@@ -114,7 +117,8 @@ export const assetsApis = {
   "API-47": defineApi({
     method: "POST", path: "/vehicles", permission: "PER-03", kind: "mutation", success: [201],
     request: obj({
-      body: obj({ assetCode: ShortText, name: ShortText, status: ShortText, storageFacilityId: Id.optional() }),
+      // 番号・状態はDBのCHECK（vehicles.asset_code/status ≤100）に揃える
+      body: obj({ assetCode: Code100, name: ShortText, status: Code100, storageFacilityId: Id.optional() }),
       ...IDEM,
     }),
     response: provisionalDto(), provisional: true,
@@ -124,7 +128,7 @@ export const assetsApis = {
     request: obj({
       params: P_ID,
       body: obj({
-        version: Version, assetCode: ShortText.optional(), name: ShortText.optional(), status: ShortText.optional(),
+        version: Version, assetCode: Code100.optional(), name: ShortText.optional(), status: Code100.optional(),
         storageFacilityId: Id.nullable().optional(),
       }),
       ...IDEM,
@@ -134,7 +138,7 @@ export const assetsApis = {
   "API-49": defineApi({
     method: "POST", path: "/equipment", permission: "PER-03", kind: "mutation", success: [201],
     request: obj({
-      body: obj({ assetCode: ShortText, name: ShortText, quantity: NonNegative, quantityUnit: ShortText, storage }),
+      body: obj({ assetCode: Code100, name: ShortText, quantity: NonNegative, quantityUnit: Code50, storage }),
       ...IDEM,
     }),
     response: provisionalDto(), provisional: true,
@@ -144,8 +148,8 @@ export const assetsApis = {
     request: obj({
       params: P_ID,
       body: obj({
-        version: Version, assetCode: ShortText.optional(), name: ShortText.optional(), quantity: NonNegative.optional(),
-        quantityUnit: ShortText.optional(), status: ShortText.optional(), storage: storage.optional(),
+        version: Version, assetCode: Code100.optional(), name: ShortText.optional(), quantity: NonNegative.optional(),
+        quantityUnit: Code50.optional(), status: Code100.optional(), storage: storage.optional(),
       }),
       ...IDEM,
     }),

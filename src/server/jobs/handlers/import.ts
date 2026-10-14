@@ -97,8 +97,26 @@ export async function parseImport(job: LeasedJob, env: AppEnv): Promise<JobOutco
     ).bind(inputHash, previewHash, results.length, validCount, results.length - validCount, unit!.dataset_revision, nowIso, batch.id, batch.unit_id, parsingVersion),
   ]);
   if ((done[0]?.meta.changes ?? 0) !== 1) return { kind: "stale", errorCode: "source_changed" };
-  // resultRefに確定(API-54)に必要なpreview_hashと件数を載せる（依頼者がAPI-86で参照する）
-  return { kind: "succeeded", resultRef: `ready:${previewHash}:${validCount}/${results.length}` };
+  // resultRefに確定(API-54)に必要なpreview_hashと件数を載せる（依頼者がAPI-86で参照する）。
+  // 行エラー（docs/03 SCR-20「行番号付き」）も `:<行>=<理由コード>;…` で先頭分だけ載せる（resultRefは500字まで。
+  // 収まらない分は末尾に `~` を付け、全件はimport_rows台帳側で保持する）
+  const errorsPart = results
+    .filter((r) => r.error !== null)
+    .map((r) => `${r.rowNo}=${r.error}`);
+  let resultRef = `ready:${previewHash}:${validCount}/${results.length}`;
+  if (errorsPart.length > 0) {
+    let suffix = "";
+    for (let i = 0; i < errorsPart.length; i++) {
+      const part = (i === 0 ? ":" : ";") + errorsPart[i]!;
+      if (resultRef.length + suffix.length + part.length + 2 > 496) {
+        suffix += ":~"; // 収らなかった（全件はimport_rows。DB側で保持）
+        break;
+      }
+      suffix += part;
+    }
+    resultRef += suffix;
+  }
+  return { kind: "succeeded", resultRef };
 }
 
 // job登録（Cron/Queueと同じ登録点）

@@ -38,8 +38,8 @@ export function FacilityMarker({
       aria-label={facilityName(facility)}
       aria-pressed={selected}
       onClick={() => onSelect(facility)}
-      style={{ left: `${x}%`, top: `${y}%` }}
-      className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-[5px] outline-none focus-visible:[&>span:first-child]:ring-2 focus-visible:[&>span:first-child]:ring-white/90"
+      style={{ left: `${x}%`, top: `${y}%`, transform: `translate(-50%,-50%) scale(${selected ? 1.25 : 1})`, transition: "transform .25s cubic-bezier(.2,.8,.2,1)" }}
+      className="absolute flex flex-col items-center gap-[5px] outline-none focus-visible:[&>span:first-child]:ring-2 focus-visible:[&>span:first-child]:ring-white/90"
     >
       <span className="relative flex size-10 items-center justify-center">
         <span
@@ -78,8 +78,8 @@ export function TypeChip({
       aria-pressed={on}
       style={{ boxShadow: `inset 0 0 0 1px ${on ? t.color + "88" : "rgba(255,255,255,.08)"}` }}
       className={clsx(
-        "flex h-9 flex-none items-center gap-[7px] rounded-pill px-3 pl-2 text-[12px] font-bold transition",
-        on ? "bg-[rgba(20,30,50,.92)] text-ink" : "bg-[rgba(20,30,50,.6)] text-ink-dim max-lg:min-h-11",
+        "flex h-9 max-lg:min-h-11 flex-none items-center gap-[7px] rounded-pill px-3 pl-2 text-[12px] font-bold transition",
+        on ? "bg-[rgba(20,30,50,.92)] text-ink" : "bg-[rgba(20,30,50,.6)] text-ink-dim",
       )}
     >
       <span aria-hidden="true" className="relative flex size-[18px] items-center justify-center">

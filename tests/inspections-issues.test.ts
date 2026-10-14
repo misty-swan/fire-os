@@ -1,6 +1,10 @@
 import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+import "../src/server/jobs/handlers/attachment"; // 検査jobの登録（ready添付を作るため）
+import { runDueJobs } from "../src/server/jobs/runner";
+import { buildInspectionMutation } from "../src/server/inspections/build";
+import { executeMutation, type Principal } from "../src/server/mutations/execute";
 import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
 
 let fx: TestFixture;
@@ -12,14 +16,65 @@ beforeAll(async () => {
 const idem = () => ({ "idempotency-key": crypto.randomUUID() });
 const json = async (r: Response) => (await r.json()) as { data?: Record<string, unknown>; error?: { code: string; details?: { field: string; reason: string }[] } };
 
+/** 検査を通る最小のPNG（eXIf等なし。内容の検査そのものはT016） */
+const pngBytes = () => {
+  const magic = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  let table: number[] = [];
+  const crc32 = (bytes: Uint8Array) => {
+    if (!table.length) {
+      for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; table[n] = c >>> 0; }
+    }
+    let c = 0xffffffff;
+    for (const b of bytes) c = table[(c ^ b) & 0xff]! ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Uint8Array) => {
+    const out = new Uint8Array(12 + data.length);
+    new DataView(out.buffer).setUint32(0, data.length);
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    out.set(data, 8);
+    new DataView(out.buffer).setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+    return out;
+  };
+  const ihdr = new Uint8Array(13);
+  new DataView(ihdr.buffer).setUint32(0, 1);
+  new DataView(ihdr.buffer).setUint32(4, 1);
+  ihdr.set([8, 6, 0, 0, 0], 8);
+  const parts = [magic, chunk("IHDR", ihdr), chunk("IDAT", new Uint8Array([0x78, 0x9c, 0x63, 0x60, 0x60, 0x60, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01])), chunk("IEND", new Uint8Array(0))];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+};
+
+/** 添付を予約→転送→完了まで進める。runDueJobsUntilReadyで検査を通す（未検査のまま使う試験もある） */
+async function makeUploaded(who: Identity, intended: string): Promise<string> {
+  const dRes = await fx.client(who).request("POST", "/api/v1/attachment-drafts", { intendedEntityType: intended }, idem());
+  const draft = (await json(dRes)).data! as { id: string };
+  const bytes = pngBytes();
+  const iRes = await fx.client(who).request(
+    "POST", "/api/v1/attachments/upload-intents",
+    { target: { type: "attachment_draft", id: draft.id }, contentType: "image/png", byteSize: bytes.byteLength }, idem(),
+  );
+  const intent = (await json(iRes)).data! as { id: string; uploadToken: string };
+  const up = await fx.raw(who)(new Request(`http://example.com/api/v1/attachments/${intent.id}/upload`, {
+    method: "PUT", headers: { "content-type": "application/octet-stream", "x-upload-token": intent.uploadToken }, body: bytes as BufferSource,
+  }));
+  const attempt = (await json(up)).data! as { id: string; sha256: string };
+  await fx.client(who).request("POST", `/api/v1/attachments/${intent.id}/completion`, { version: 1, uploadAttemptId: attempt.id, sha256: attempt.sha256 }, idem());
+  return intent.id;
+}
+
 interface TemplateRef {
   templateId: string;
   facilityVersionId: string;
   vehicleVersionId: string;
+  equipmentVersionId: string;
   facilityTemplateVersion: number;
 }
 
-/** 施設と車両の承認済み様式を用意する（T027の経路） */
+/** 施設と車両・機材の承認済み様式を用意する（T027/T030の経路） */
 async function seedTemplates(admin: Identity): Promise<TemplateRef> {
   // 許可された結果は点検結果の語彙（docs/05 InspectionInput。docs/11 点検結果）
   const facilitySchema = [
@@ -27,7 +82,8 @@ async function seedTemplates(admin: Identity): Promise<TemplateRef> {
     { code: "ground", label: "周辺の環境", valueType: "boolean", required: false },
   ];
   const vehicleSchema = [{ code: "lights", label: "灯火類", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] }];
-  const mk = async (name: string, targetType: "facility" | "vehicle", itemSchema: unknown) => {
+  const equipmentSchema = [{ code: "count", label: "数量の確認", valueType: "number", required: false }];
+  const mk = async (name: string, targetType: "facility" | "vehicle" | "equipment", itemSchema: unknown) => {
     const res = await fx.client(admin).request("POST", "/api/v1/inspection-templates", { name, targetType, itemSchema }, idem());
     const data = ((await res.json()) as { data?: { id: string; version: number; versions: { id: string }[] } }).data;
     if (!data) throw new Error(`template create failed: ${res.status}`);
@@ -35,17 +91,19 @@ async function seedTemplates(admin: Identity): Promise<TemplateRef> {
   };
   const fac = await mk(`施設様式${crypto.randomUUID().slice(0, 6)}`, "facility", facilitySchema);
   const veh = await mk(`車両様式${crypto.randomUUID().slice(0, 6)}`, "vehicle", vehicleSchema);
+  const eqp = await mk(`機材様式${crypto.randomUUID().slice(0, 6)}`, "equipment", equipmentSchema);
   const vFac = fac.versions[0]!.id;
   const vVeh = veh.versions[0]!.id;
-  // 申請→承認（facility）
-  await fx.client(admin).request("POST", `/api/v1/inspection-templates/${fac.id}/decision`, { version: 1, templateVersionId: vFac, decision: "request_review", reason: "確認" }, idem());
-  const approveFac = await json(await fx.client(admin).request("POST", `/api/v1/inspection-templates/${fac.id}/decision`, { version: 2, templateVersionId: vFac, decision: "approve", reason: "確認した" }, idem()));
-  if (!approveFac.data) throw new Error(`facility approve failed: ${JSON.stringify(approveFac)}`);
-  // 申請→承認（vehicle）
-  await fx.client(admin).request("POST", `/api/v1/inspection-templates/${veh.id}/decision`, { version: 1, templateVersionId: vVeh, decision: "request_review", reason: "確認" }, idem());
-  const approveVeh = await json(await fx.client(admin).request("POST", `/api/v1/inspection-templates/${veh.id}/decision`, { version: 2, templateVersionId: vVeh, decision: "approve", reason: "確認した" }, idem()));
-  if (!approveVeh.data) throw new Error("vehicle approve failed");
-  return { templateId: fac.id, facilityVersionId: vFac, vehicleVersionId: vVeh, facilityTemplateVersion: fac.version };
+  const vEqp = eqp.versions[0]!.id;
+  const approve = async (id: string, versionId: string) => {
+    await fx.client(admin).request("POST", `/api/v1/inspection-templates/${id}/decision`, { version: 1, templateVersionId: versionId, decision: "request_review", reason: "確認" }, idem());
+    const done = await json(await fx.client(admin).request("POST", `/api/v1/inspection-templates/${id}/decision`, { version: 2, templateVersionId: versionId, decision: "approve", reason: "確認した" }, idem()));
+    if (!done.data) throw new Error(`approve failed: ${id}`);
+  };
+  await approve(fac.id, vFac);
+  await approve(veh.id, vVeh);
+  await approve(eqp.id, vEqp);
+  return { templateId: fac.id, facilityVersionId: vFac, vehicleVersionId: vVeh, equipmentVersionId: vEqp, facilityTemplateVersion: fac.version };
 }
 
 async function seedFacility(unitId: string, by: string): Promise<string> {
@@ -162,14 +220,28 @@ describe("点検と異常 (T029〜T032)", () => {
     expect(wrongTargetEquipment.status).toBe(422);
     expect(((await json(wrongTargetEquipment)).error?.details ?? []).some((d) => d.reason === "target_type_mismatch")).toBe(true);
 
-    // 異種様式（施設用）は422。二重対象は契約が1対象しか受けない（Targetは1つ）
+    // 異種様式（施設用）は422。その車両の原本は1行も増えない（二重対象・異種様式の失敗が残らない）
     const wrongTemplate = await fx.client(admin).request(
       "POST", "/api/v1/asset-inspections",
       { target: { type: "vehicle", id: vehicle.data.id }, ...vehInput, templateVersionId: t.facilityVersionId }, idem(),
     );
     expect(wrongTemplate.status).toBe(422);
-    const twoTargetsCommitted = ((await env.DB.prepare("SELECT COUNT(*) AS n FROM asset_inspections WHERE vehicle_id = ? AND result = 'x'").bind(vehicle.data.id).first<{ n: number }>())!.n > 0);
-    expect(twoTargetsCommitted).toBe(false);
+    const vehicleInspectionRows = await env.DB.prepare("SELECT COUNT(*) AS n FROM asset_inspections WHERE vehicle_id = ?").bind(vehicle.data.id).first<{ n: number }>();
+    expect(vehicleInspectionRows!.n).toBe(1); // 最初の成功1件のまま
+
+    // 機材への正常点検（機材用の承認済み様式）。対象はちょうど一つ（equipment）
+    const equipmentInput = {
+      templateVersionId: t.equipmentVersionId, inspectedAt: "2026-10-14T04:00:00.000Z",
+      inspectorMemberId: admin.memberId!, result: "ok",
+      checkItems: [{ code: "count", result: "ok", value: 2 }], note: "機材点検の記録", createIssue: false, attachmentIds: [],
+    };
+    const validEquipment = await fx.client(admin).request(
+      "POST", "/api/v1/asset-inspections", { target: { type: "equipment", id: equipment.data.id }, ...equipmentInput }, idem(),
+    );
+    expect(validEquipment.status).toBe(201);
+    const equipmentSeries = await fx.rows("inspection_series", { equipment_id: equipment.data.id });
+    expect(equipmentSeries).toHaveLength(1);
+    expect(((await json(validEquipment)).data! as { seriesId: string }).seriesId).toBe(equipmentSeries[0]!.id);
 
     // 別unitの対象は404（別unitの様式はこの分団では使えないため、対象の存在も見せない）
     const otherUnitVehicle = await (await fx.client(fx.units.b.people.admin).request("POST", "/api/v1/vehicles", { assetCode: "B-P", name: "b", status: "s" }, idem())).json() as { data: { id: string } };
@@ -311,6 +383,12 @@ describe("点検と異常 (T029〜T032)", () => {
     const missingReopenReason = await fx.client(admin).request("PATCH", `/api/v1/issues/${issueId}`, { version: closedVersion, status: "under_review" }, idem());
     expect(missingReopenReason.status).toBe(400); // 再開の理由なしは拒否（理由は契約で必須。docs/05 API-17）
 
+    // 対応記録の理由はDBのCHECK（issue_events.note ≤2000）に揃えた上限。超過は400（通ってから500にならない）
+    const tooLongReason = await fx.client(admin).request(
+      "PATCH", `/api/v1/issues/${issueId}`, { version: closedVersion, status: "closed", reason: "長".repeat(2001) }, idem(),
+    );
+    expect(tooLongReason.status).toBe(400);
+
     // 失敗した更新で履歴は増えない
     const eventsBefore = (await env.DB.prepare("SELECT COUNT(*) AS n FROM issue_events WHERE issue_id = ?").bind(issueId).first<{ n: number }>())!.n;
     const failedUpdate = await fx.client(admin).request("PATCH", `/api/v1/issues/${issueId}`, { version: 1, status: "under_review", reason: "古い版" }, idem());
@@ -326,5 +404,239 @@ describe("点検と異常 (T029〜T032)", () => {
     // 担当割当（PER-05）
     const assign = await fx.client(admin).request("PATCH", `/api/v1/issues/${issueId}`, { version: closedVersion, assigneeMemberId: admin.memberId!, reason: "担当を決めた" }, idem());
     expect(assign.status).toBe(200);
+  });
+
+  it("inspection_links_ready_attachments_and_rejects_uninspected_ones", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+
+    // (a) ready添付をattachmentIdsで渡すと、点検と同じ確定でリンクが作られる（T029: 添付は業務と同時に確定）
+    const readyId = await makeUploaded(admin, "inspection");
+    await runDueJobs(env);
+    const readyStatus = (await fx.rows("attachments", { id: readyId }))[0]!.status;
+    expect(readyStatus).toBe("ready"); // 前提: 検査を通っている
+
+    const res = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { attachmentIds: [readyId] }), idem(),
+    );
+    expect(res.status).toBe(201);
+    const inspection = (await json(res)).data! as { id: string };
+    const links = await fx.rows("attachment_links", { attachment_id: readyId });
+    expect(links).toHaveLength(1);
+    expect(links[0]!.entity_type).toBe("inspection");
+    expect(links[0]!.entity_id).toBe(inspection.id);
+    expect(links[0]!.unlinked_at).toBeNull();
+    // 点検・異常への添付はsensitiveを基本とする（docs/10 §3。basicからの引上げ）
+    expect((await fx.rows("attachments", { id: readyId }))[0]!.classification).toBe("sensitive");
+
+    // (b) 未検査（ready前）の添付を渡すと422で、点検も異常も増えない
+    const uninspectedId = await makeUploaded(admin, "inspection"); // 完了済みだが検査jobは未実行
+    const before = {
+      inspections: (await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections").first<{ n: number }>())!.n,
+      issues: (await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>())!.n,
+    };
+    const notReady = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { attachmentIds: [uninspectedId] }), idem(),
+    );
+    expect(notReady.status).toBe(422);
+    expect(((await json(notReady)).error?.code)).toBe("ATTACHMENT_NOT_READY");
+    const after = {
+      inspections: (await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections").first<{ n: number }>())!.n,
+      issues: (await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>())!.n,
+    };
+    expect(after).toEqual(before); // 失敗した点検・異常は残らない
+    expect(await fx.rows("attachment_links", { attachment_id: uninspectedId })).toHaveLength(0);
+  });
+
+  it("manual_issue_records_only_matching_origin_inspection", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+    const vehicle = await (await fx.client(admin).request("POST", "/api/v1/vehicles", { assetCode: "P-ORG", name: "起点試験車", status: "運用" }, idem())).json() as { data: { id: string } };
+
+    // 施設点検と車両点検を1件ずつ作る（起点の候補）
+    const facilityInspection = await (await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!), idem(),
+    )).json() as { data: { id: string } };
+    const vehicleInspection = await (await fx.client(admin).request(
+      "POST", "/api/v1/asset-inspections",
+      { target: { type: "vehicle", id: vehicle.data.id }, templateVersionId: t.vehicleVersionId, inspectedAt: "2026-10-14T05:00:00.000Z", inspectorMemberId: admin.memberId!, result: "ok", checkItems: [{ code: "lights", result: "ok" }], note: "車両点検", createIssue: false, attachmentIds: [] }, idem(),
+    )).json() as { data: { id: string } };
+
+    // (c) 同対象の起点点検は記録される
+    const okRes = await fx.client(admin).request(
+      "POST", "/api/v1/issues",
+      { target: { type: "facility", id: facilityId }, title: "起点つきの報告", description: "点検で見つけた後に手動で起票", originInspectionId: facilityInspection.data.id, attachmentIds: [] }, idem(),
+    );
+    expect(okRes.status).toBe(201);
+    const withOrigin = (await json(okRes)).data! as { id: string; originInspectionId: string | null };
+    expect(withOrigin.originInspectionId).toBe(facilityInspection.data.id);
+    expect((await fx.rows("issues", { id: withOrigin.id }))[0]!.source_facility_inspection_id).toBe(facilityInspection.data.id);
+
+    // (d) 別対象（車両点検を施設の異常の起点に）は422。起点のない異常も作られない
+    const beforeIssues = (await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>())!.n;
+    const mismatch = await fx.client(admin).request(
+      "POST", "/api/v1/issues",
+      { target: { type: "facility", id: facilityId }, title: "別対象の起点", description: "車両点検を施設の起点にはできない", originInspectionId: vehicleInspection.data.id, attachmentIds: [] }, idem(),
+    );
+    expect(mismatch.status).toBe(422);
+    expect(((await json(mismatch)).error?.details ?? []).some((d) => d.reason === "origin_target_mismatch")).toBe(true);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>()).toEqual({ n: beforeIssues });
+
+    // 存在しない点検を起点にするのは404
+    const ghost = await fx.client(admin).request(
+      "POST", "/api/v1/issues",
+      { target: { type: "facility", id: facilityId }, title: "架空の起点", description: "存在しない点検ID", originInspectionId: crypto.randomUUID(), attachmentIds: [] }, idem(),
+    );
+    expect(ghost.status).toBe(404);
+  });
+
+  it("inspection_series_is_unique_per_target_and_reused", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+
+    // (a) DB制約: 同じ対象に2行の系列は作れない（docs/04「対象一つ」。0014の部分一意索引）
+    const now = new Date().toISOString();
+    const insertSeries = (currentPointer: string) =>
+      env.DB.prepare(
+        "INSERT INTO inspection_series (id, unit_id, facility_id, current_facility_inspection_id, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, ?, ?, ?, ?, 'human')",
+      ).bind(crypto.randomUUID(), a.id, facilityId, currentPointer, now, now, admin.userId);
+    await insertSeries(crypto.randomUUID()).run();
+    await expect(insertSeries(crypto.randomUUID()).run()).rejects.toThrow(/UNIQUE/);
+
+    // (b) 既存の系列がある対象への点検は、その既存系列に載る（新しい系列を作らない）
+    const first = await (await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`, facilityInput(t.facilityVersionId, admin.memberId!), idem(),
+    )).json() as { data: { id: string; seriesId: string; seriesVersion: number } };
+    // 直insertした系列が既にあるので、APIの点検はその系列を使う（versionも既存のまま+1で進む）
+    const seriesForTarget = await fx.rows("inspection_series", { facility_id: facilityId });
+    expect(seriesForTarget.length).toBe(1);
+    expect(seriesForTarget[0]!.id).toBe(first.data.seriesId);
+    expect(first.data.seriesVersion).toBe(2); // 現在版ポインタの更新で1つ進む
+  });
+
+  it("paused_members_cannot_be_inspector_or_assignee", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+
+    // 休団（paused）の団員は点検の実施者になれない（docs/10 PER-04/05の対象条件）
+    const pausedMemberId = a.people.operator.memberId!;
+    await env.DB.prepare("UPDATE members SET status = 'paused' WHERE id = ?").bind(pausedMemberId).run();
+    const res = await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, pausedMemberId), idem(),
+    );
+    expect(res.status).toBe(422);
+    expect(((await json(res)).error?.details ?? []).some((d) => d.reason === "inspector_not_active")).toBe(true);
+    // 異常の担当にもなれない（PER-05）
+    const issue = await (await fx.client(admin).request(
+      "POST", "/api/v1/issues", { target: { type: "facility", id: facilityId }, title: "担当の試験", description: "休団者への割当て", attachmentIds: [] }, idem(),
+    )).json() as { data: { id: string; version: number } };
+    const assign = await fx.client(admin).request(
+      "PATCH", `/api/v1/issues/${issue.data.id}`, { version: issue.data.version, assigneeMemberId: pausedMemberId, reason: "休団者に割当て" }, idem(),
+    );
+    expect(assign.status).toBe(422);
+    expect(((await json(assign)).error?.details ?? []).some((d) => d.reason === "assignee_not_active")).toBe(true);
+  });
+
+  it("inspection_mutation_rolls_back_at_any_statement_position", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+    const principal: Principal = { userId: admin.userId, memberId: admin.memberId!, unitId: a.id, authzVersion: 1 };
+
+    // 明細・異常を含む点検のspecを直接組み立てる（T029の原子性。docs/02 §4「1つのbatchで確定」）
+    const built = await buildInspectionMutation(env, principal, {
+      target: { type: "facility", id: facilityId },
+      input: {
+        templateVersionId: t.facilityVersionId, inspectedAt: "2026-10-14T06:00:00.000Z", inspectorMemberId: admin.memberId!,
+        result: "needs_review", checkItems: [{ code: "exterior", result: "needs_review" }], note: "原子性試験の点検", createIssue: true,
+      },
+      operationCode: "facility_inspection.create",
+      idempotencyKey: crypto.randomUUID(),
+      requestHashPath: `/facilities/${facilityId}/inspections`,
+    });
+    // 新規series+原本+明細+series更新+異常+異常履歴の6文のうち、明細の後(3)と異常の後(5)に失敗を差し込む
+    const statementCount = built.spec.statements({ attempt: "probe", mutationId: "probe", now: new Date().toISOString() }).length;
+    expect(statementCount).toBe(6);
+
+    const counts = async () => ({
+      series: (await env.DB.prepare("SELECT COUNT(*) AS n FROM inspection_series").first<{ n: number }>())!.n,
+      inspections: (await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections").first<{ n: number }>())!.n,
+      items: (await env.DB.prepare("SELECT COUNT(*) AS n FROM inspection_items").first<{ n: number }>())!.n,
+      issues: (await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>())!.n,
+      events: (await env.DB.prepare("SELECT COUNT(*) AS n FROM issue_events").first<{ n: number }>())!.n,
+    });
+    const before = await counts();
+
+    const failAt = async (position: number) => {
+      const spec = { ...built.spec, key: crypto.randomUUID() };
+      const original = spec.statements;
+      spec.statements = (ctx) => {
+        const stmts = original(ctx);
+        // 必ず失敗する文（CHECK(ok=1)違反）を指定位置に差し込む
+        const failing = env.DB.prepare("INSERT INTO mutation_assertions (attempt_token, seq, ok) VALUES (?, 999, 0)").bind(ctx.attempt);
+        return [...stmts.slice(0, position), failing, ...stmts.slice(position)];
+      };
+      await expect(executeMutation(env, principal, spec)).rejects.toBeTruthy();
+    };
+
+    // 明細INSERTの後で失敗 → 原本・明細・series・異常のどれも残らない
+    await failAt(3);
+    expect(await counts()).toEqual(before);
+    // 異常INSERTの後で失敗 → 異常・履歴も含めて全て取り消される
+    await failAt(5);
+    expect(await counts()).toEqual(before);
+
+    // 差し込み無しの同じspecは成功する（失敗注入のせいでないことの対照）
+    const okResult = await executeMutation(env, principal, { ...built.spec, key: crypto.randomUUID() });
+    expect(okResult.status).toBe(201);
+    const after = await counts();
+    expect(after.series).toBe(before.series + 1);
+    expect(after.inspections).toBe(before.inspections + 1);
+    expect(after.issues).toBe(before.issues + 1);
+  });
+
+  it("correction_conflict_is_detected_by_declared_series_version", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+    const made = await (await fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!), idem(),
+    )).json() as { data: { id: string; seriesVersion: number } };
+    expect(made.data.seriesVersion).toBe(2);
+
+    // クライアントが宣言した古いseriesVersionでの訂正は409（docs/05 API-46の「series版ガード」。
+    // サーバーが再読した現在版で黙って通さない。docs/16 T031）
+    const staleVersion = await fx.client(admin).request(
+      "POST", `/api/v1/inspections/facility/${made.data.id}/corrections`,
+      { seriesVersion: 1, supersedesId: made.data.id, reason: "古い版を宣言した訂正", ...facilityInput(t.facilityVersionId, admin.memberId!, { note: "古い版の訂正" }) }, idem(),
+    );
+    expect(staleVersion.status).toBe(409);
+    expect(((await json(staleVersion)).error?.code)).toBe("VERSION_CONFLICT");
+    // 失敗した訂正で原本は増えない
+    expect(await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM facility_inspections WHERE series_id = (SELECT series_id FROM facility_inspections WHERE id = ?)",
+    ).bind(made.data.id).first<{ n: number }>()).toEqual({ n: 1 });
+
+    // 最新のseriesVersionを宣言した訂正は成功する
+    const current = await fx.client(admin).request(
+      "POST", `/api/v1/inspections/facility/${made.data.id}/corrections`,
+      { seriesVersion: made.data.seriesVersion, supersedesId: made.data.id, reason: "数値の誤り訂正", ...facilityInput(t.facilityVersionId, admin.memberId!, { note: "正しい訂正" }) }, idem(),
+    );
+    expect(current.status).toBe(201);
   });
 });

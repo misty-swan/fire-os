@@ -31,6 +31,31 @@ export function registerIssueRoutes(app: ApiApp): void {
     if (!exists || exists.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
     requirePermission(p, "PER-04", { unitId: p.unitId, type: body.target.type, id: body.target.id, ownerMemberId: p.memberId });
 
+    // 起点点検（docs/05 API-16 originInspectionId）。対象が一致する既有の点検だけを起点にできる
+    // （存在しない/別unitは404、対象の一致しない点検は422。docs/04「起点は点検で対象一致」と同じ規則）
+    let originFacilityInspectionId: string | null = null;
+    let originAssetInspectionId: string | null = null;
+    if (body.originInspectionId) {
+      const fac = await c.env.DB.prepare("SELECT unit_id, facility_id FROM facility_inspections WHERE id = ?").bind(body.originInspectionId)
+        .first<{ unit_id: string; facility_id: string }>();
+      if (fac && fac.unit_id === p.unitId) {
+        if (body.target.type !== "facility" || fac.facility_id !== body.target.id) {
+          throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "originInspectionId", reason: "origin_target_mismatch" }]);
+        }
+        originFacilityInspectionId = body.originInspectionId;
+      } else {
+        const asset = await c.env.DB.prepare("SELECT unit_id, vehicle_id, equipment_id FROM asset_inspections WHERE id = ?").bind(body.originInspectionId)
+          .first<{ unit_id: string; vehicle_id: string | null; equipment_id: string | null }>();
+        if (!asset || asset.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
+        const assetType = asset.vehicle_id !== null ? "vehicle" : "equipment";
+        const assetTargetId = asset.vehicle_id ?? asset.equipment_id;
+        if (body.target.type !== assetType || assetTargetId !== body.target.id) {
+          throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "originInspectionId", reason: "origin_target_mismatch" }]);
+        }
+        originAssetInspectionId = body.originInspectionId;
+      }
+    }
+
     const id = crypto.randomUUID();
     const result = await executeMutation(c.env, p, {
       operationCode: "issue.create",
@@ -41,15 +66,24 @@ export function registerIssueRoutes(app: ApiApp): void {
       created: [{ table: "issues", id }],
       statements: (ctx) => [
         c.env.DB.prepare(
-          `INSERT INTO issues (id, unit_id, ${body.target.type}_id, title, description, reported_by, status, last_mutation_token, created_at, updated_at, created_by, actor_kind) ` +
-            "VALUES (?, ?, ?, ?, ?, ?, 'reported', ?, ?, ?, ?, 'human')",
-        ).bind(id, p.unitId, body.target.id, body.title, body.description, p.userId, ctx.attempt, ctx.now, ctx.now, p.userId),
+          `INSERT INTO issues (id, unit_id, ${body.target.type}_id, source_facility_inspection_id, source_asset_inspection_id, title, description, reported_by, status, last_mutation_token, created_at, updated_at, created_by, actor_kind) ` +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reported', ?, ?, ?, ?, 'human')",
+        ).bind(id, p.unitId, body.target.id, originFacilityInspectionId, originAssetInspectionId, body.title, body.description, p.userId, ctx.attempt, ctx.now, ctx.now, p.userId),
         c.env.DB.prepare(
           "INSERT INTO issue_events (id, unit_id, issue_id, action, before_json, after_json, actor_user_id, actor_kind, created_at) VALUES (?, ?, ?, 'reported', '{}', ?, ?, 'human', ?)",
         ).bind(crypto.randomUUID(), p.unitId, id, JSON.stringify({ status: "reported", source: "manual" }), p.userId, ctx.now),
       ],
-      audit: { action: "issue.create", entityType: "issue", entityId: id, metadata: { target: body.target.type, source: "manual" } },
-      event: { entityType: "issue", entityId: id, entityVersion: 1, eventType: "issue.reported", payload: { target: body.target.type } },
+      audit: {
+        action: "issue.create", entityType: "issue", entityId: id,
+        metadata: {
+          target: body.target.type, source: "manual",
+          originKind: originFacilityInspectionId ? "facility_inspection" : originAssetInspectionId ? "asset_inspection" : "none",
+        },
+      },
+      event: {
+        entityType: "issue", entityId: id, entityVersion: 1, eventType: "issue.reported",
+        payload: { target: body.target.type, originKind: originFacilityInspectionId ? "facility_inspection" : originAssetInspectionId ? "asset_inspection" : "none" },
+      },
       response: { status: 201, sql: ISSUE_JSON, binds: [id], decode: (j) => Issue.parse(j) },
     });
     return ok(c, result.data, {}, 201);
@@ -115,8 +149,13 @@ export function registerIssueRoutes(app: ApiApp): void {
       throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "reason", reason: "reason_required" }]);
     }
     if (body.assigneeMemberId) {
-      const m = await c.env.DB.prepare("SELECT unit_id FROM members WHERE id = ?").bind(body.assigneeMemberId).first<{ unit_id: string }>();
+      // 担当は有効な団員だけ（休団・退団に割当てない。docs/10 PER-05の対象条件）
+      const m = await c.env.DB.prepare("SELECT unit_id, status FROM members WHERE id = ?").bind(body.assigneeMemberId)
+        .first<{ unit_id: string; status: string }>();
       if (!m || m.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
+      if (m.status !== "active") {
+        throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "assigneeMemberId", reason: "assignee_not_active" }]);
+      }
     }
     const changed = [
       ...(statusChange ? ["status"] : []),

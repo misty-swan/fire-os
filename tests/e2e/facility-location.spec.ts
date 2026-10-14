@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { adminApi, apiHeaders, BASE } from "./helpers";
 
 /**
  * 施設の登録・詳細・位置（T022、SCR-04/05）。
@@ -66,27 +65,20 @@ test("gps_denial_allows_manual_entry_without_tracking", async ({ page, context }
   if (popup) await popup.close();
   expect(new URL(url).searchParams.get("destination")).toBe(`${LAT},${LNG}`);
 
-  // 座標を変えると位置確認が失効する（docs/11）: 編集はAPIで行い、詳細の表示が切り替わることを確認
+  // 座標を変えると位置確認が失効する（docs/11）: 編集UI（API-13）から座標を変え、詳細の表示が切り替わることを確認
   const id = new URL(page.url()).pathname.split("/").pop()!;
-  const detail = await (await page.request.fetch(`${BASE}/api/v1/facilities/${id}`, { headers: apiHeaders() })).json() as {
-    data: { version: number; locationVersion: number; verificationStatus: string };
-  };
-  const patched = await adminApi(request2Of(page), "PATCH", `/api/v1/facilities/${id}`, {
-    version: detail.data.version,
-    latitude: 35.5,
-    longitude: 139.5,
-    locationSource: "現地測量",
-    locationNote: "位置を修正した",
-  });
-  expect(patched.status).toBe(200);
-  await page.reload();
+  await page.getByRole("link", { name: "編集" }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/facilities/${id}/edit$`));
+  // 編集画面には「座標・出典を変えると確認が失効する」注記が出る
+  await expect(page.getByText(/位置確認は失効/)).toBeVisible();
+  await page.getByLabel("緯度").fill("35.5");
+  await page.getByLabel("経度").fill("139.5");
+  await page.getByLabel("位置の出典").fill("現地測量");
+  await page.getByLabel("目印・場所のメモ").fill("位置を修正した");
+  await page.getByRole("button", { name: "変更を保存" }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/facilities/${id}$`), { timeout: 15_000 });
   await expect(page.getByText("位置：未確認")).toBeVisible(); // 旧確認は失効済み
   await expect(page.getByText(/座標v2/)).toBeVisible(); // 履歴に新しい版が残る
   void isPhone;
   void info;
 });
-
-function request2Of(page: import("@playwright/test").Page) {
-  // page.requestは画面と同じセッション（管理者storageState）を持つ
-  return page.request;
-}

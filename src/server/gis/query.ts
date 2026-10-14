@@ -63,10 +63,18 @@ export async function queryFacilities(env: Pick<AppEnv, "DB">, unitId: string, s
     where.push("(management_number LIKE ? ESCAPE '\\' OR identifying_name LIKE ? ESCAPE '\\')");
     binds.push(`%${likeEscape(query.q)}%`, `%${likeEscape(query.q)}%`);
   }
-  // 点検結果・開いている異常のフィルタは、その表ができるT029/T032でJOINとして接続する。
-  // この時点で点検・異常は存在しないため、条件が指定されたら0件が正しい答えになる
-  if (query.inspectionResult) where.push("0 = 1");
-  if (query.hasOpenIssue) where.push("0 = 1");
+  // 点検結果のフィルタ: 最新有効版（inspection_seriesの現在版ポインタ）の点検の結果で絞る（docs/04 §3.3）
+  if (query.inspectionResult) {
+    where.push(
+      "EXISTS (SELECT 1 FROM inspection_series s JOIN facility_inspections i ON i.id = s.current_facility_inspection_id " +
+        "WHERE s.facility_id = facilities.id AND i.result = ?)",
+    );
+    binds.push(query.inspectionResult);
+  }
+  // 開いている異常: closed以外の異常が1つでもある施設（docs/11 異常）
+  if (query.hasOpenIssue) {
+    where.push("EXISTS (SELECT 1 FROM issues q WHERE q.facility_id = facilities.id AND q.status <> 'closed')");
+  }
 
   if (cursorValue) {
     const cursor = (await decodeGisCursor(key, cursorValue))!;

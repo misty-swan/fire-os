@@ -200,4 +200,47 @@ describe("添付の予約とアップロード (T015)", () => {
     const ghostCompletion = await fx.client(admin).request("POST", `/api/v1/attachments/${ghost}/completion`, { version: 1, uploadAttemptId: ghost, sha256: "a".repeat(64) }, idem());
     expect(ghostCompletion.status).toBe(404);
   });
+
+  it("draft_classification_follows_intent_and_link_checks_intended_target", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+
+    // (a) 点検を意図した予約の添付はsensitiveになる（docs/10 §3。点検・異常は現場写真を含み得る）
+    const { intent: inspectionIntent } = await makeDraftAndIntent(admin, "inspection");
+    expect(inspectionIntent).toBeTruthy();
+    expect((await fx.rows("attachments", { id: inspectionIntent!.id }))[0]!.classification).toBe("sensitive");
+    // 施設を意図した予約はbasicのまま（分類の引上げは点検・異常へのリンク時だけ）
+    const { intent: facilityIntent } = await makeDraftAndIntent(admin, "facility");
+    expect((await fx.rows("attachments", { id: facilityIntent!.id }))[0]!.classification).toBe("basic");
+
+    // (b) 施設を意図した予約を点検へはリンクできない（docs/05「最終link先を検査」。意図と一致しない消費は422）
+    const { planAttachmentLinks } = await import("../src/server/attachments/link");
+    const facilityDraft = (await fx.rows("attachment_drafts", { intended_entity_type: "facility" })).at(-1)!;
+    await expect(
+      planAttachmentLinks(env, a.id, admin.userId, {
+        target: { type: "inspection", id: crypto.randomUUID() },
+        draftId: facilityDraft.id as string,
+        targetCreatedInBatch: true,
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_TRANSITION", details: [{ reason: "draft_intended_mismatch" }] });
+    // 予約は消費されていない（422の後にそのまま施設へ使える）
+    expect((await fx.rows("attachment_drafts", { id: facilityDraft.id as string }))[0]!.status).toBe("prepared");
+
+    // 親の型とIDの片方だけでは予約を作れない（不整合な予約=DBのCHECK違反500を防ぐ）
+    const halfParent = await fx.client(admin).request(
+      "POST", "/api/v1/attachment-drafts", { intendedEntityType: "facility", parentType: "facility" }, idem(),
+    );
+    expect(halfParent.status).toBe(400);
+    expect(((await json(halfParent)).error?.details ?? []).some((d) => d.reason === "parent_type_and_id_set_together")).toBe(true);
+  });
+
+  it("empty_upload_body_is_rejected_without_attempt", async () => {
+    const admin = fx.units.a.people.admin;
+    const { intent } = await makeDraftAndIntent(admin, "facility");
+    // 0バイトの転送は400（attemptを作らないため500のUploadAttempt.parseにならない）
+    const empty = await rawUpload(admin, intent!.id, intent!.uploadToken, new Uint8Array(0));
+    expect(empty.status).toBe(400);
+    expect(((await json(empty)).error?.details ?? []).some((d) => d.reason === "empty_body")).toBe(true);
+    expect(await fx.rows("upload_attempts", { attachment_id: intent!.id })).toHaveLength(0);
+  });
 });

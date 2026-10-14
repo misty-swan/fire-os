@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api";
+import { MutationStatus } from "../../components/MutationStatus";
 import { PageTitle } from "../../components/Page";
 import { Banner, Button, Card, Chip, TextField } from "../../components/ui";
 import { useMutation } from "../../useMutation";
@@ -78,6 +79,8 @@ export function IssueCreateForm({ onCreated }: { onCreated?: () => void }) {
       <TextField name="issue-desc" label="内容" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="状況・位置など" error={errors.find((e) => e.field === "description")?.reason} />
       {create.state.kind === "conflict" && <Banner tone="warning" eyebrow="CONFLICT" title="他の操作で更新されています" />}
       {create.state.kind === "unknown" && <Banner tone="warning" eyebrow="UNKNOWN" title="結果を確認できません" />}
+      {/* 報告の成功はトースト（docs/03 §1.1。savedのときだけ出す） */}
+      <MutationStatus state={create.state.kind === "saved" ? create.state : { kind: "idle" }} toastBottom={110} />
       <Button busy={create.saving} onClick={() => void submit()}>
         {create.state.kind === "processing" ? "処理中（完了ではありません）" : "報告する"}
       </Button>

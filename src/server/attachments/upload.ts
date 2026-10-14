@@ -60,6 +60,10 @@ export function registerUploadRoutes(app: ApiApp): void {
     if (body.intendedEntityType === "attachment_draft") {
       throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "intendedEntityType", reason: "unsupported_entity_type" }]);
     }
+    // 親の指定は型とIDの両方が必要（片方だけではDBのCHECK違反=500になる不整合な予約を作らせない）
+    if (!!body.parentType !== !!body.parentId) {
+      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "parentType", reason: "parent_type_and_id_set_together" }]);
+    }
     // 親が指定されているときは、親の存在・所属・作成権を確かめる（存在しない親への予約を作らない）
     if (body.parentType && body.parentId) {
       const table = ATTACHMENT_TARGET_TABLES[body.parentType];
@@ -112,10 +116,11 @@ export function registerUploadRoutes(app: ApiApp): void {
     }
 
     const conditions: { existsSql: string; binds: unknown[]; failCode: "INVALID_TRANSITION" | "NOT_FOUND" }[] = [];
+    let classification: "basic" | "sensitive";
     if (body.target.type === "attachment_draft") {
-      const draft = await c.env.DB.prepare("SELECT id, unit_id, owner_user_id, status, expires_at FROM attachment_drafts WHERE id = ?")
+      const draft = await c.env.DB.prepare("SELECT id, unit_id, owner_user_id, status, expires_at, intended_entity_type FROM attachment_drafts WHERE id = ?")
         .bind(body.target.id)
-        .first<{ id: string; unit_id: string; owner_user_id: string; status: string; expires_at: string }>();
+        .first<{ id: string; unit_id: string; owner_user_id: string; status: string; expires_at: string; intended_entity_type: string }>();
       if (!draft || draft.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
       if (draft.owner_user_id !== p.userId) throw new HttpError("FORBIDDEN"); // 予約は作った人だけが使える
       if (draft.status !== "prepared") {
@@ -129,6 +134,8 @@ export function registerUploadRoutes(app: ApiApp): void {
         binds: [draft.id, p.unitId, new Date().toISOString()],
         failCode: "INVALID_TRANSITION",
       });
+      // 予約の意図（intended_entity_type）で分類を決める。点検・異常への添付は現場写真を含み得るためsensitive（docs/10 §3）
+      classification = SENSITIVE_TARGET_TYPES.has(draft.intended_entity_type) ? "sensitive" : "basic";
     } else {
       const table = ATTACHMENT_TARGET_TABLES[body.target.type];
       if (!table) throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "target.type", reason: "unsupported_entity_type" }]);
@@ -136,12 +143,12 @@ export function registerUploadRoutes(app: ApiApp): void {
       if (!exists) throw new HttpError("NOT_FOUND");
       requirePermission(p, "PER-04", { unitId: p.unitId, type: body.target.type, id: body.target.id });
       conditions.push({ existsSql: `SELECT 1 FROM ${table} WHERE id = ? AND unit_id = ?`, binds: [body.target.id, p.unitId], failCode: "NOT_FOUND" });
+      classification = SENSITIVE_TARGET_TYPES.has(body.target.type) ? "sensitive" : "basic";
     }
 
     const id = crypto.randomUUID();
     const token = newUploadToken();
     const tokenHash = await uploadTokenHash(token);
-    const classification = SENSITIVE_TARGET_TYPES.has(body.target.type) ? "sensitive" : "basic";
     const result = await executeMutation(c.env, p, {
       operationCode: "attachment.intent.create",
       key: headers["idempotency-key"],
@@ -193,6 +200,10 @@ export function registerUploadRoutes(app: ApiApp): void {
     const read = await readBodyCapped(c.req.raw.body, limit);
     if ("over" in read) {
       throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "actual_size_over_limit" }]);
+    }
+    // 0バイトの転送は試行として成立しない（UploadAttemptのmin 1。attemptを作らないのでDBもR2も汚さない）
+    if (read.size === 0) {
+      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "empty_body" }]);
     }
     const digest = await sha256OfBytes(read.bytes);
     const attemptId = crypto.randomUUID();

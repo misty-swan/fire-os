@@ -70,7 +70,10 @@ export function registerImportPreviewRoutes(app: ApiApp): void {
         status: 202,
         sql: "SELECT json_object('id', b.id, " +
           "'jobId', (SELECT j.id FROM jobs j WHERE j.source_type = 'import_batch' AND j.source_id = b.id AND j.kind = 'import.parse' ORDER BY j.created_at DESC LIMIT 1), " +
-          "'status', b.status, 'version', b.version, 'totalRows', b.total_rows, 'validRows', b.valid_rows, 'errorRows', b.error_rows, 'previewHash', b.preview_hash) " +
+          "'status', b.status, 'version', b.version, 'totalRows', b.total_rows, 'validRows', b.valid_rows, 'errorRows', b.error_rows, 'previewHash', b.preview_hash, " +
+          // 行ごとのエラー（docs/03 SCR-20「行番号付き」）。解析が済むまでは行が無いのでNULL。載せるのは先頭50件
+          "'errors', (SELECT CASE WHEN COUNT(*) = 0 THEN NULL ELSE json_group_array(json_object('rowNo', r.row_no, 'error', r.error)) END " +
+          "FROM (SELECT row_no, error FROM import_rows WHERE batch_id = b.id AND error IS NOT NULL ORDER BY row_no LIMIT 50) r)) " +
           "FROM import_batches b WHERE b.id = ?",
         binds: [id],
         decode: (j) => ({
@@ -82,6 +85,7 @@ export function registerImportPreviewRoutes(app: ApiApp): void {
           validRows: (j as { validRows: number | null }).validRows ?? null,
           errorRows: (j as { errorRows: number | null }).errorRows ?? null,
           previewHash: (j as { previewHash: string | null }).previewHash ?? null,
+          errors: ((j as { errors: { rowNo: number; error: string }[] | null }).errors ?? null),
         }),
       },
     });

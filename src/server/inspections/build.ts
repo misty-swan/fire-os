@@ -6,6 +6,7 @@ import { HttpError } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation, type ExtraCondition, type MutationSpec, type RootGuard } from "../mutations/execute";
 import { validateItems, type InspectionItemInput } from "./validate-items";
+import { planAttachmentLinks } from "../attachments/link";
 
 /**
  * 点検（docs/04 inspection_items、docs/05 InspectionInput/DTO）。T029で暫定DTOから確定した応答の形。
@@ -42,6 +43,8 @@ export interface InspectionInputData {
   checkItems: { code: string; result: string; value?: string | number | boolean; note?: string }[];
   note: string;
   createIssue: boolean;
+  /** ready添付を点検と同じ確定でリンクする（docs/05 InspectionInput.attachmentIds。未検査は422 ATTACHMENT_NOT_READY） */
+  attachmentIds?: string[];
 }
 
 export interface SeriesRow {
@@ -85,8 +88,8 @@ export async function buildInspectionMutation(
     operationCode: string;
     idempotencyKey: string;
     requestHashPath: string;
-    /** 訂正（T031）のときだけ。元の原本のIDと訂正理由 */
-    correction?: { supersedesId: string; reason: string };
+    /** 訂正（T031）のときだけ。元の原本のIDと訂正理由、クライアントが宣言したseries版（docs/05 API-46のseries版ガード） */
+    correction?: { supersedesId: string; reason: string; seriesVersion: number };
   },
 ): Promise<BuiltInspection> {
   const { target, input, correction } = opts;
@@ -124,10 +127,13 @@ export async function buildInspectionMutation(
     throw new HttpError("VALIDATION_ERROR", undefined, check.errors.slice(0, 10).map((e) => ({ field: `checkItems.${e.code}`, reason: e.reason })));
   }
 
-  // 3) 実施者の所属（対象と同じunitの団員）
-  const inspector = await env.DB.prepare("SELECT unit_id FROM members WHERE id = ?").bind(input.inspectorMemberId)
-    .first<{ unit_id: string }>();
+  // 3) 実施者の所属（対象と同じunitの団員）。休団・退団の団員は実施者にできない（docs/10 PER-04の対象条件）
+  const inspector = await env.DB.prepare("SELECT unit_id, status FROM members WHERE id = ?").bind(input.inspectorMemberId)
+    .first<{ unit_id: string; status: string }>();
   if (!inspector || inspector.unit_id !== principal.unitId) throw new HttpError("NOT_FOUND");
+  if (inspector.status !== "active") {
+    throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "inspectorMemberId", reason: "inspector_not_active" }]);
+  }
 
   // 4) series（既存があれば使う。無ければ同じbatchで作る）
   const seriesColumn = target.type === "facility" ? "facility_id" : target.type === "vehicle" ? "vehicle_id" : "equipment_id";
@@ -150,8 +156,14 @@ export async function buildInspectionMutation(
   if (issueId) created.push({ table: "issues", id: issueId });
 
   if (existingSeries) {
-    // 既存seriesの現在版ガード（訂正の競合・並行の点検の両方をここで検出する）
-    roots.push({ table: "inspection_series", id: existingSeries.id, expectedVersion: existingSeries.version });
+    // 既存seriesの現在版ガード（訂正の競合・並行の点検の両方をここで検出する）。
+    // 訂正はクライアントが宣言したseriesVersionで競合を検出する（docs/05 API-46の「series版ガード」。
+    // 再読した現在版で黙って通すと、古い版を見ていた画面からの訂正がそのまま通ってしまう）。
+    // 非訂正の作成は従来どおり再読値（並行の初回点検の競合は系列の一意索引とポインタ更新で守る）
+    roots.push({
+      table: "inspection_series", id: existingSeries.id,
+      expectedVersion: correction ? correction.seriesVersion : existingSeries.version,
+    });
   }
   if (correction) {
     if (!existingSeries) throw new HttpError("NOT_FOUND");
@@ -164,6 +176,16 @@ export async function buildInspectionMutation(
       failCode: "VERSION_CONFLICT",
     });
   }
+
+  // ready添付のリンク（docs/05 InspectionInput.attachmentIds）。リンク先の点検行はこのbatchで作るため
+  // 存在条件を付けず、リンク文は点検のINSERTと同じbatchに入れる（docs/07 §3.5「添付は業務と同時に確定」）
+  const link = (input.attachmentIds?.length ?? 0) > 0
+    ? await planAttachmentLinks(env, principal.unitId, principal.userId, {
+        target: { type: "inspection", id: inspectionId },
+        attachmentIds: input.attachmentIds!,
+        targetCreatedInBatch: true,
+      })
+    : null;
 
   const statements = (ctx: { attempt: string; now: string }): D1PreparedStatement[] => {
     const stmts: D1PreparedStatement[] = [];
@@ -245,8 +267,11 @@ export async function buildInspectionMutation(
     expectedAuthzVersion: principal.authzVersion,
     roots,
     created,
-    conditions,
-    statements: statements as unknown as (ctx: { attempt: string; now: string }) => D1PreparedStatement[],
+    conditions: [...conditions, ...(link?.conditions ?? [])],
+    statements: (ctx) => [
+      ...statements(ctx),
+      ...(link ? link.statements(ctx) : []),
+    ] as unknown as D1PreparedStatement[],
     audit: {
       action: `${target.type}_inspection.create`, entityType: target.type === "facility" ? "facility_inspection" : "asset_inspection",
       entityId: inspectionId, metadata: { result: input.result, issue: input.createIssue ? "created" : "none" },
@@ -255,7 +280,13 @@ export async function buildInspectionMutation(
       entityType: target.type === "facility" ? "facility_inspection" : "asset_inspection", entityId: inspectionId,
       entityVersion: 1, eventType: "inspection.created", payload: { result: input.result },
     },
-    duplicateOn: ["facility_inspections.supersedes_id", "asset_inspections.supersedes_id"],
+    duplicateOn: [
+      "facility_inspections.supersedes_id",
+      "asset_inspections.supersedes_id",
+      // 対象ごとの系列は一つ（docs/04。0014の部分一意索引。二重作成は409 DUPLICATE）
+      ...(newSeriesId ? [`index:uq_series_${target.type}`] : []),
+      ...(link ? link.duplicateOn : []),
+    ],
     response: { status: 201, sql: responseSql, binds: [inspectionId], decode: (j) => Inspection.parse(j) },
   };
 

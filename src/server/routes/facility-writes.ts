@@ -63,7 +63,7 @@ export function registerFacilityWriteRoutes(app: ApiApp): void {
     const id = crypto.randomUUID();
     // 添付の予約があれば、施設の作成と同じbatchで消費してリンクする（T017）
     const link = body.attachmentDraftId
-      ? await planAttachmentLinks(c.env, p.unitId, p.userId, { target: { type: "facility", id }, draftId: body.attachmentDraftId })
+      ? await planAttachmentLinks(c.env, p.unitId, p.userId, { target: { type: "facility", id }, draftId: body.attachmentDraftId, targetCreatedInBatch: true })
       : null;
     const result = await executeMutation(c.env, p, {
       operationCode: "facility.create",
@@ -131,6 +131,8 @@ export function registerFacilityWriteRoutes(app: ApiApp): void {
       requestHash: await canonicalRequestHash({ method: "PATCH", path: `/facilities/${params.id}`, baseVersion: body.version, body }),
       expectedAuthzVersion: p.authzVersion,
       roots: [{ table: "facilities", id: params.id, expectedVersion: body.version }],
+      // 番号の変更が既存の施設と重複したら409（D19案: 分団×種別×番号の一意。API-11と同じ宣言）
+      duplicateOn: ["facilities.unit_id", "facilities.type", "facilities.management_number"],
       statements: (ctx) => [
         c.env.DB.prepare(
           `UPDATE facilities SET ${[...sets, "version = version + 1", "last_mutation_token = ?", "updated_at = ?"].join(", ")} WHERE id = ? AND unit_id = ? AND version = ?`,

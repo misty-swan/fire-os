@@ -27,7 +27,8 @@ export function SubHeader({
   backTo,
   closeIcon,
 }: {
-  title: string;
+  /** 画面名。見出し（h2）はページ側で持つ場合があるので省略可 */
+  title?: string;
   sub?: string;
   right?: ReactNode;
   /** 戻り先。省略時はブラウザの履歴を1つ戻る */
@@ -51,7 +52,7 @@ export function SubHeader({
         </button>
       )}
       <div className="flex min-w-0 flex-1 flex-col gap-px">
-        <span className="truncate text-[16px] font-bold">{title}</span>
+        {title && <span className="truncate text-[16px] font-bold">{title}</span>}
         {sub && <span className="truncate text-[11px] text-ink-muted">{sub}</span>}
       </div>
       {right}

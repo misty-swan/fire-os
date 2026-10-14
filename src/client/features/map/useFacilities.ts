@@ -78,8 +78,8 @@ export function useFacilities(query: FacilitiesQuery): {
 /** 種別の日本語ラベル・形・色（prototype の TYPES と docs/03 のトークン） */
 export const FACILITY_TYPES = {
   hydrant: { label: "消火栓", color: "#e8432a", icon: "fire_hydrant", radius: "50%", tf: "none" },
-  cistern: { label: "防火水槽", color: "#2f7fe0", icon: "water_drop", radius: "4px", tf: "none" },
-  box: { label: "格納箱", color: "#f08a24", icon: "inventory_2", radius: "3px", tf: "rotate(45deg) scale(.8)" },
+  cistern: { label: "防火水槽", color: "#2f7fe0", icon: "water_drop", radius: "9px", tf: "none" },
+  box: { label: "格納箱", color: "#f08a24", icon: "inventory_2", radius: "7px", tf: "rotate(45deg) scale(.86)" },
 } as const;
 
 export type FacilityType = keyof typeof FACILITY_TYPES;

@@ -25,6 +25,21 @@ interface TemplateDto {
 }
 
 type ItemSchemaEntry = { code: string; label: string; valueType: "boolean" | "number" | "text" | "select"; required: boolean; allowedResults?: string[] };
+
+/** 版の差分（docs/16 T028「新旧の版比較」の最小実装。code・label・valueType・requiredの変化を示す） */
+function diffSchema(a: ItemSchemaEntry[], b: ItemSchemaEntry[]) {
+  const aBy = new Map(a.map((e) => [e.code, e]));
+  const bBy = new Map(b.map((e) => [e.code, e]));
+  const added = b.filter((e) => !aBy.has(e.code));
+  const removed = a.filter((e) => !bBy.has(e.code));
+  const changed = b.filter((e) => {
+    const old = aBy.get(e.code);
+    return old !== undefined && (old.label !== e.label || old.valueType !== e.valueType || old.required !== e.required);
+  });
+  return { added, removed, changed };
+}
+
+const DESC = { added: "追加", removed: "削除", changed: "変更" } as const;
 const DEFAULT_SCHEMA: ItemSchemaEntry[] = [
   { code: "exterior", label: "本体の外観", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] },
 ];
@@ -37,6 +52,7 @@ export function InspectionTemplatesPanel() {
   const [schemaText, setSchemaText] = useState(JSON.stringify(DEFAULT_SCHEMA, null, 2));
   const [editing, setEditing] = useState<TemplateDto | null>(null);
   const [editSchema, setEditSchema] = useState("");
+  const [compare, setCompare] = useState<{ templateId: string; a: number; b: number } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -220,8 +236,86 @@ export function InspectionTemplatesPanel() {
               編集（新しい版）
             </Button>
           )}
+
+          {/* 版を比較（docs/16 T028。2つの版を選ぶと項目の追加/削除/変更を示す） */}
+          {t.versions.length >= 2 && (
+            <div className="flex flex-col gap-2">
+              {compare?.templateId === t.id ? (
+                <VersionCompare versions={t.versions} a={compare.a} b={compare.b} onSelect={(which, idx) => setCompare({ templateId: t.id, a: which === "a" ? idx : compare.a, b: which === "b" ? idx : compare.b })} onClose={() => setCompare(null)} />
+              ) : (
+                <Button
+                  variant="secondary"
+                  className="max-lg:min-h-11 self-start px-4"
+                  onClick={() => setCompare({ templateId: t.id, a: 0, b: t.versions.length - 1 })}
+                >
+                  <Icon name="compare_arrows" className="text-[18px]" />
+                  版を比較
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </Card>
+  );
+}
+
+/** 版の比較表示。古い版(a)と新しい版(b)を選ぶと項目差分の表を出す */
+function VersionCompare({
+  versions, a, b, onSelect, onClose,
+}: {
+  versions: TemplateVersionDto[];
+  a: number;
+  b: number;
+  onSelect: (which: "a" | "b", index: number) => void;
+  onClose: () => void;
+}) {
+  const diff = diffSchema(versions[a!]?.itemSchema ?? [], versions[b!]?.itemSchema ?? []);
+  const rows: { kind: keyof typeof DESC; entry: ItemSchemaEntry }[] = [
+    ...diff.added.map((entry) => ({ kind: "added" as const, entry })),
+    ...diff.removed.map((entry) => ({ kind: "removed" as const, entry })),
+    ...diff.changed.map((entry) => ({ kind: "changed" as const, entry })),
+  ];
+  const revLabel = (v: TemplateVersionDto) => `rev${v.revisionNo} · ${v.status === "approved" ? "承認済" : v.status === "in_review" ? "確認中" : v.status === "changes_requested" ? "差戻し" : "下書き"}`;
+  return (
+    <div className="flex flex-col gap-2 rounded-[14px] bg-white/[.04] p-3" aria-label="版の比較">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-bold text-ink-sub">版の比較</span>
+        <button type="button" onClick={onClose} className="text-[12px] text-ink-muted underline">閉じる</button>
+      </div>
+      <div className="flex gap-2">
+        <label className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-[10px] bg-white/[.05] px-2.5">
+          <span className="text-[10px] text-ink-muted">古い版</span>
+          <select value={a} onChange={(e) => onSelect("a", Number(e.target.value))} className="border-none bg-transparent text-[12px] font-bold text-ink outline-none">
+            {versions.map((v, i) => (
+              <option key={v.id} value={i}>{revLabel(v)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-[10px] bg-white/[.05] px-2.5">
+          <span className="text-[10px] text-ink-muted">新しい版</span>
+          <select value={b} onChange={(e) => onSelect("b", Number(e.target.value))} className="border-none bg-transparent text-[12px] font-bold text-ink outline-none">
+            {versions.map((v, i) => (
+              <option key={v.id} value={i}>{revLabel(v)}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-[12px] text-ink-muted">この2つの版に項目の差分はありません。</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {rows.map(({ kind, entry }, i) => (
+            <li key={`${kind}-${entry.code}-${i}`} className="flex items-baseline gap-2 text-[12px] leading-[1.6]">
+              <span className={`flex-none font-bold ${kind === "added" ? "text-ok" : kind === "removed" ? "text-alert" : "text-attention"}`}>{DESC[kind]}</span>
+              <span className="font-mono text-ink-muted">{entry.code}</span>
+              <span className="min-w-0 flex-1 text-ink-sub">
+                {entry.label} · {entry.valueType}{entry.required ? " · 必須" : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

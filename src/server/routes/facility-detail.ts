@@ -56,8 +56,8 @@ export function registerFacilityDetailRoutes(app: ApiApp): void {
     // リンク済み添付（idと状態だけ。本文の取得はAPI-27が毎回ACLを検査する）
     const attachments = await c.env.DB.prepare(
       "SELECT a.id, a.status FROM attachments a JOIN attachment_links l ON l.attachment_id = a.id AND l.unit_id = a.unit_id " +
-        "WHERE l.entity_type = 'facility' AND l.entity_id = ? AND l.unlinked_at IS NULL ORDER BY a.id",
-    ).bind(params.id).all<{ id: string; status: string }>();
+        "WHERE l.entity_type = 'facility' AND l.entity_id = ? AND l.unit_id = ? AND l.unlinked_at IS NULL ORDER BY a.id",
+    ).bind(params.id, p.unitId).all<{ id: string; status: string }>();
 
     const locationHistory = page.map((r) => LocationRevision.parse({
       id: r.id, locationVersion: r.location_version, eventNo: r.event_no, latitude: r.latitude, longitude: r.longitude,

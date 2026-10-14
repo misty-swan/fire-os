@@ -166,6 +166,14 @@ describe("添付のリンク・取得・削除 (T017)", () => {
       { version: linkRow.version as number, reason: "誤登録のため解除" }, idem(),
     );
     expect(unlink.status).toBe(204);
+    // unlink済みのリンクに現行版で再unlinkすると422（0行UPDATEを500にしない）
+    const unlinkedCurrentVersion = (await fx.rows("attachment_links", { id: linkRow.id as string }))[0]!.version as number;
+    const reUnlink = await fx.client(admin).request(
+      "DELETE", `/api/v1/attachments/${first.id}/links/${linkRow.id}`,
+      { version: unlinkedCurrentVersion, reason: "もう一度解除" }, idem(),
+    );
+    expect(reUnlink.status).toBe(422);
+    expect(((await json(reUnlink)).error?.code)).toBe("INVALID_TRANSITION");
     const unlinkedRow = (await fx.rows("attachment_links", { attachment_id: first.id }))[0]!;
     expect(unlinkedRow.unlink_reason).toBe("誤登録のため解除");
     expect(unlinkedRow.unlinked_at).not.toBeNull();

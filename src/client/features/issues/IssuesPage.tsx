@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { api } from "../../api";
+import { ConfirmDialog } from "../../components/Overlay";
+import { MutationStatus } from "../../components/MutationStatus";
 import { PageTitle } from "../../components/Page";
-import { Banner, Card, Chip, Icon } from "../../components/ui";
+import { Banner, Button, Card, Chip, Icon, TextArea } from "../../components/ui";
+import { clsx } from "clsx";
 import { IssueCreateForm } from "./IssueCreateForm";
+import { useMutation } from "../../useMutation";
 
 /**
- * 異常の一覧（T034、SCR-07。prototypeの点検管理に相当）。
- * 状態は色と文字で示す（docs/03: 色だけに頼らない）。起点点検・対象を辿れる。
+ * 異常の一覧と操作（T034、SCR-07。prototypeの点検管理に相当。prototypeに完成形が無いため共通部品で構成）。
+ * 状態は色と文字で示す（docs/03: 色だけに頼らない）。行を押すと展開し、状態の操作（API-17）と
+ * 担当の変更ができる。起点点検・対象を辿れる。
  */
 
 interface IssueRow {
@@ -35,6 +40,7 @@ export function IssuesPage() {
   const [issues, setIssues] = useState<IssueRow[] | "loading" | "error">("loading");
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [reloadKey, setReloadKey] = useState(0);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -104,13 +110,23 @@ export function IssuesPage() {
       <div className="flex flex-col gap-2">
         {shown.map((i) => {
           const meta = STATUS_LABELS[i.status];
+          const open = openId === i.id;
           return (
             <Card key={i.id} className="flex flex-col gap-2">
-              <div className="flex items-start justify-between gap-2">
-                <span className="min-w-0 text-[14px] font-bold">{i.title}</span>
+              {/* 行押下で展開し、状態の操作と担当の変更を出す */}
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setOpenId(open ? null : i.id)}
+                className="flex items-start justify-between gap-2 text-left"
+              >
+                <span className="min-w-0 text-[14px] font-bold">
+                  {i.title}
+                  <Icon name={open ? "expand_less" : "expand_more"} className="ml-1 align-[-4px] text-[18px] text-ink-muted" />
+                </span>
                 <Chip tone={meta.tone}>{meta.label}</Chip>
-              </div>
-              <p className="line-clamp-2 text-[12px] leading-[1.6] text-ink-sub">{i.description}</p>
+              </button>
+              <p className={clsx("text-[12px] leading-[1.6] text-ink-sub", !open && "line-clamp-2")}>{i.description}</p>
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-ink-muted">
                 <span>{i.target.type === "facility" ? "施設" : i.target.type === "vehicle" ? "車両" : "資機材"}</span>
                 {i.originInspectionId && (
@@ -124,6 +140,7 @@ export function IssuesPage() {
                   <Icon name="chevron_right" className="text-[15px]" />
                 </Link>
               </div>
+              {open && <IssueActions issue={i} onChanged={() => setReloadKey((k) => k + 1)} />}
             </Card>
           );
         })}
@@ -132,14 +149,183 @@ export function IssuesPage() {
   );
 }
 
-/** 異常の詳細シート（対象の詳細画面に埋め込む。確認/却下/再開の操作）。 */
-export function IssueActionsCard({ issue }: { issue: { id: string; version: number; status: string } }) {
-  const [state, setState] = useState<"idle" | "busy" | "saved">("idle");
-  void state; void setState;
+/** 状態の遷移ボタン（docs/11の許可辺のみ。API-17は理由が常に必須） */
+interface NextAction {
+  next: IssueRow["status"];
+  label: string;
+  /** 終了・再開は空で、理由入力の確認ダイアログを出す */
+  presetReason: string;
+}
+const NEXT_ACTIONS: Partial<Record<IssueRow["status"], NextAction[]>> = {
+  reported: [{ next: "under_review", label: "確認する", presetReason: "内容を確認しました" }],
+  under_review: [
+    { next: "in_progress", label: "対応開始", presetReason: "対応を開始しました" },
+    { next: "closed", label: "確認終了", presetReason: "" }, // 終了は理由入力の確認ダイアログ
+  ],
+  in_progress: [{ next: "resolved", label: "対応実施", presetReason: "対応を実施しました" }],
+  resolved: [{ next: "closed", label: "確認終了", presetReason: "" }],
+  closed: [{ next: "under_review", label: "再開", presetReason: "" }], // 再開も理由必須
+};
+
+/** 展開領域: 状態の操作（API-17）と担当の変更（API-02で団員を選ぶ）。終了・再開は理由入力の確認ダイアログ */
+function IssueActions({ issue, onChanged }: { issue: IssueRow; onChanged: () => void }) {
+  const save = useMutation("API-17");
+  const [confirm, setConfirm] = useState<{ next: IssueRow["status"]; label: string } | null>(null);
+  const [reason, setReason] = useState("");
+  const [reasonTouched, setReasonTouched] = useState(false);
+  const [members, setMembers] = useState<{ id: string; displayName: string }[] | null>(null);
+  const [assignee, setAssignee] = useState<string>(issue.assigneeMemberId ?? "");
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const data = (await api("API-02", { query: { limit: 200 } })) as unknown as { id: string; displayName: string }[];
+        if (alive) setMembers(data);
+      } catch {
+        if (alive) setMembers([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const reasonError = reasonTouched && confirm && reason.trim() === "" ? "理由を入力してください" : undefined;
+
+  // 一覧の再読込で新版が来たら、担当の選択も最新に揃える
+  useEffect(() => {
+    setAssignee(issue.assigneeMemberId ?? "");
+  }, [issue.assigneeMemberId]);
+
+  const runTransition = async (next: IssueRow["status"], presetReason: string) => {
+    const finalReason = presetReason || reason.trim();
+    if (!finalReason) {
+      setReasonTouched(true);
+      return;
+    }
+    const res = await save.run({
+      params: { id: issue.id },
+      body: { version: issue.version, status: next, reason: finalReason },
+    });
+    if (res) {
+      setConfirm(null);
+      setReason("");
+      setReasonTouched(false);
+      onChanged(); // 一覧を再読込（新しい状態と版を取る）
+    }
+  };
+
+  const runAssignee = async (memberId: string | null) => {
+    const res = await save.run({
+      params: { id: issue.id },
+      body: { version: issue.version, assigneeMemberId: memberId, reason: memberId ? "担当を更新しました" : "担当を外しました" },
+    });
+    if (res) onChanged();
+  };
+
+  const actions = NEXT_ACTIONS[issue.status] ?? [];
+  const closedLabel = issue.status === "closed" ? "再開しますか" : "確認終了にしますか";
+
   return (
-    <Card className="flex flex-col gap-2">
-      <span className="text-[12px] font-bold text-ink-sub">異常の対応</span>
-      <p className="text-[12px] text-ink-muted">状態の変更は異常一覧から行えます（現在: {issue.status}）。</p>
-    </Card>
+    <div className="flex flex-col gap-3 rounded-[18px] bg-white/[.03] p-3" aria-label="異常の操作">
+      <span className="text-[12px] font-bold text-ink-sub">状態の操作</span>
+      <div className="flex flex-wrap gap-2">
+        {actions.map((a) => (
+          <Button
+            key={a.next}
+            variant={a.next === "closed" ? "secondary" : "primary"}
+            busy={save.saving}
+            className="!h-[46px] !w-auto px-4 !text-[13px] max-lg:min-h-11"
+            onClick={() => (a.presetReason ? void runTransition(a.next, a.presetReason) : setConfirm({ next: a.next, label: a.label }))}
+          >
+            {a.label}
+          </Button>
+        ))}
+        {actions.length === 0 && <span className="text-[12px] text-ink-muted">この状態から次の操作はありません。</span>}
+      </div>
+
+      <span className="text-[12px] font-bold text-ink-sub">担当</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="hairline flex h-[46px] min-w-0 flex-1 items-center gap-2 rounded-xl bg-white/[.06] px-3">
+          <span className="sr-only">担当者を選ぶ</span>
+          <Icon name="person" className="text-[18px] text-ink-muted" />
+          <select
+            value={assignee}
+            onChange={(e) => setAssignee(e.target.value)}
+            className="min-w-0 flex-1 border-none bg-transparent text-[13px] font-medium text-ink outline-none"
+          >
+            <option value="">未担当</option>
+            {(members ?? []).map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button
+          variant="secondary"
+          busy={save.saving}
+          disabled={members === null || assignee === (issue.assigneeMemberId ?? "")}
+          className="!h-[46px] !w-auto px-4 !text-[13px] max-lg:min-h-11"
+          onClick={() => void runAssignee(assignee === "" ? null : assignee)}
+        >
+          担当を更新
+        </Button>
+        {issue.assigneeMemberId && (
+          <Button
+            variant="secondary"
+            busy={save.saving}
+            className="!h-[46px] !w-auto px-4 !text-[13px] max-lg:min-h-11"
+            onClick={() => {
+              setAssignee("");
+              void runAssignee(null);
+            }}
+          >
+            担当を外す
+          </Button>
+        )}
+      </div>
+      {members === null && <p className="text-[12px] text-ink-muted">団員の一覧を読み込んでいます…</p>}
+
+      {/* 409は競合、422は状態の問題、通信断は結果不明。保存済みはトースト（docs/03 §1.1） */}
+      <MutationStatus state={save.state} toastBottom={110} />
+      {save.state.kind === "rejected" && save.state.details.length > 0 && (
+        <Banner tone="warning" eyebrow="STATE" role="alert" title="理由を確認してください">
+          <ul className="list-disc pl-4">
+            {save.state.details.map((d, i) => (
+              <li key={i}>{d.field}: {d.reason}</li>
+            ))}
+          </ul>
+        </Banner>
+      )}
+
+      {confirm && (
+        <ConfirmDialog
+          title={closedLabel}
+          confirmLabel={confirm.label}
+          busy={save.saving}
+          danger={confirm.next === "closed"}
+          onConfirm={() => void runTransition(confirm.next, "")}
+          onCancel={() => {
+            setConfirm(null);
+            setReason("");
+            setReasonTouched(false);
+          }}
+        >
+          <p>「{issue.title}」を{confirm.next === "closed" ? "確認終了にします。終了後も「再開」で戻せます。" : "確認中に戻します。"}</p>
+          <TextArea
+            name="issue-reason"
+            label="理由（必須）"
+            value={reason}
+            onChange={(e) => {
+              setReason(e.target.value);
+              setReasonTouched(true);
+            }}
+            error={reasonError}
+          />
+        </ConfirmDialog>
+      )}
+    </div>
   );
 }

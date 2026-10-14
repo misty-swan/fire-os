@@ -8,6 +8,7 @@ import { useFacilities } from "../map/useFacilities";
 /**
  * 施設のCSV取込み（T024、SCR-20。docs/03: プレビュー→確定→結果→再プレビュー）。
  * プレビューでは台帳は変更されない。プレビュー後に台帳が変わると確定は409になり、再プレビューを促す。
+ * 解析後は行番号付きのエラー（docs/03 SCR-20）を示し、台帳の書き出し（API-55）へも導線を作る。
  */
 
 interface PreviewResponse {
@@ -20,10 +21,60 @@ interface PreviewResponse {
   previewHash: string;
 }
 
+/** 行エラーの理由コード → 日本語（src/server/gis/csv.ts の validateFacilityRow と重複分） */
+const ROW_ERROR_LABELS: Record<string, string> = {
+  column_count: "列の数がヘッダーと一致しません",
+  invalid_type: "種別は hydrant・cistern・box のどれかで指定してください",
+  missing_ident: "管理番号か識別名のどちらかが必要です",
+  management_number_too_long: "管理番号は100文字以内にしてください",
+  identifying_name_too_long: "識別名は100文字以内にしてください",
+  location_source_too_long: "位置の出典は100文字以内にしてください",
+  location_note_too_long: "目印・場所のメモは1000文字以内にしてください",
+  missing_coordinates: "緯度・経度が空です",
+  invalid_latitude: "緯度が不正です（-90〜90の十進数）",
+  invalid_longitude: "経度が不正です（-180〜180の十進数）",
+  missing_source: "位置の出典が空です",
+  missing_note: "目印・場所のメモが空です",
+  duplicate_number_in_file: "同じ管理番号の行がファイルの中にもあります",
+  duplicate_number_in_master: "同じ種別・管理番号が台帳に既にあります",
+};
+
+const rowErrorLabel = (code: string) => ROW_ERROR_LABELS[code] ?? `未対応のエラー（${code}）`;
+
+/** 解析jobのresultRefから、件数と行エラー（先頭分。上限はresultRefの500字）を読む */
+function parseResultRef(ref: string): {
+  previewHash: string; validRows: number; totalRows: number;
+  rowErrors: { rowNo: number; error: string }[]; rowErrorsTruncated: boolean;
+} | null {
+  const match = /ready:([0-9a-f]{64}):(\d+)\/(\d+)/.exec(ref);
+  if (!match) return null;
+  const prefix = `ready:${match[1]!}:${match[2]}/${match[3]}`;
+  const rest = ref.slice(prefix.length);
+  const truncated = rest.endsWith(":~");
+  const body = truncated ? rest.slice(0, -":~".length) : rest;
+  const rowErrors = body
+    .split(";")
+    .filter((p) => p !== "")
+    .map((p) => {
+      const [rowNo, code] = p.replace(/^:/, "").split("=");
+      return { rowNo: Number(rowNo), error: code ?? "" };
+    })
+    .filter((e) => Number.isFinite(e.rowNo) && e.error !== "");
+  return {
+    previewHash: match[1]!,
+    validRows: Number(match[2]),
+    totalRows: Number(match[3]),
+    rowErrors,
+    rowErrorsTruncated: truncated,
+  };
+}
+
 export function ImportPage() {
   const { items, reload } = useFacilities({});
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [rowErrors, setRowErrors] = useState<{ rowNo: number; error: string }[]>([]);
+  const [rowErrorsTruncated, setRowErrorsTruncated] = useState(false);
   const [phase, setPhase] = useState<"idle" | "uploading" | "inspecting" | "parsing" | "committing" | "committed" | "conflict" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -43,6 +94,8 @@ export function ImportPage() {
     setPhase("uploading");
     setMessage(null);
     setPreview(null);
+    setRowErrors([]);
+    setRowErrorsTruncated(false);
     try {
       const draft = await api("API-98", { body: { intendedEntityType: "import_batch" } });
       const intent = await api("API-26", { body: { target: { type: "attachment_draft", id: draft.id }, contentType: "text/csv", byteSize: f.size } });
@@ -59,15 +112,17 @@ export function ImportPage() {
       if (inspect?.status !== "succeeded") throw new Error("inspect_timeout");
       setPhase("parsing");
       const preview = (await api("API-53", { body: { csvAttachmentId: intent.id, templateVersion: "csv-facilities-v1" } })) as unknown as PreviewResponse;
-      // 解析job（API-86）の結果から件数と確定用のpreviewHashを取り出す
+      // 解析job（API-86）の結果から件数・確定用のpreviewHash・行エラーを取り出す
       const parseJob = await waitJob(preview.jobId, 40);
-      const match = /ready:([0-9a-f]{64}):(\d+)\/(\d+)/.exec(parseJob?.resultRef ?? "");
-      if (parseJob?.status !== "succeeded" || !match) throw new Error("parse_failed");
+      const parsed = parseJob?.status === "succeeded" ? parseResultRef(parseJob.resultRef ?? "") : null;
+      if (!parsed) throw new Error("parse_failed");
       setPreview({
         id: preview.id, jobId: preview.jobId, version: 3, // pending(1)→parsing(2)→ready(3)
-        previewHash: match[1]!, validRows: Number(match[2]), totalRows: Number(match[3]),
-        errorRows: Number(match[3]) - Number(match[2]),
+        previewHash: parsed.previewHash, validRows: parsed.validRows, totalRows: parsed.totalRows,
+        errorRows: parsed.totalRows - parsed.validRows,
       });
+      setRowErrors(parsed.rowErrors);
+      setRowErrorsTruncated(parsed.rowErrorsTruncated);
       setPhase("idle");
       setMessage(null);
     } catch (e) {
@@ -117,6 +172,8 @@ export function ImportPage() {
               onChange={(e) => {
                 setFile(e.target.files?.[0] ?? null);
                 setPreview(null);
+                setRowErrors([]);
+                setRowErrorsTruncated(false);
                 setPhase("idle");
                 setMessage(null);
               }}
@@ -141,13 +198,40 @@ export function ImportPage() {
             <div className="rounded-[14px] bg-ok/10 p-3"><div className="font-mono text-[18px] font-bold text-ok">{preview.validRows ?? "—"}</div><div className="text-[11px] text-ink-muted">取込可能</div></div>
             <div className="rounded-[14px] bg-[rgba(255,90,70,.1)] p-3"><div className="font-mono text-[18px] font-bold text-alert">{preview.errorRows ?? "—"}</div><div className="text-[11px] text-ink-muted">エラー</div></div>
           </div>
-          {preview.errorRows !== null && preview.errorRows > 0 && (
+          {/* 行ごとのエラー（docs/03 SCR-20「行番号付き」） */}
+          {rowErrors.length > 0 && (
+            <div className="flex flex-col gap-1.5" aria-label="行のエラー">
+              <span className="text-[12px] font-bold text-ink-sub">行のエラー（{rowErrorsTruncated ? "先頭分のみ" : `${rowErrors.length}件`}）</span>
+              <ul className="fo-scroll max-h-56 overflow-y-auto rounded-[14px] bg-[rgba(255,90,70,.07)] p-2 shadow-[inset_0_0_0_1px_rgba(255,90,70,.25)]">
+                {rowErrors.map((e) => (
+                  <li key={e.rowNo} className="flex gap-2.5 px-1.5 py-1 text-[12px] leading-[1.6]">
+                    <span className="flex-none font-mono font-semibold text-[#ffb0a4]">{e.rowNo}行目</span>
+                    <span className="text-[#e7c9c4]">{rowErrorLabel(e.error)}</span>
+                  </li>
+                ))}
+              </ul>
+              {rowErrorsTruncated && <p className="text-[11px] text-ink-muted">表示は先頭分だけです。CSVを修正すると、次のプレビューで続きが分かります。</p>}
+              <Notice tone="warning" icon="warning">エラーの行は取り込まれません。CSVを修正して再度プレビューできます。</Notice>
+            </div>
+          )}
+          {rowErrors.length === 0 && preview.errorRows !== null && preview.errorRows > 0 && (
             <Notice tone="warning" icon="warning">エラーの行は取り込まれません。CSVを修正して再度プレビューできます。</Notice>
           )}
           <Button busy={phase === "committing"} onClick={() => void commit()} disabled={(preview.validRows ?? 0) === 0} className="self-start max-lg:min-h-11 px-6">
             {phase === "committing" ? "確定中…" : "この内容で確定する"}
           </Button>
         </Card>
+      )}
+
+      {/* 台帳の書き出し（API-55。GET CSV。same-originなのでcookieが付く）。プレビューが済んだら案内する */}
+      {preview && (
+        <a
+          href="/api/v1/facilities/export"
+          className="hairline flex min-h-11 items-center gap-2.5 self-start rounded-card bg-white/[.04] px-3.5 text-[13px] font-bold text-ink-sub hover:bg-white/[.07]"
+        >
+          <Icon name="download" className="text-[18px]" />
+          現在の台帳を書き出す（CSV）
+        </a>
       )}
 
       {phase === "committed" && (
@@ -166,5 +250,3 @@ export function ImportPage() {
     </div>
   );
 }
-
-

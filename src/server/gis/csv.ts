@@ -70,8 +70,21 @@ export function validateFacilityRow(cells: string[]): { ok: true; normalized: Re
   if (cells.length !== CSV_COLUMNS.length) return { ok: false, error: "column_count" };
   if (!["hydrant", "cistern", "box"].includes(trim(type))) return { ok: false, error: "invalid_type" };
   if (!trim(managementNumber) && !trim(identifyingName)) return { ok: false, error: "missing_ident" };
-  const lat = Number(trim(latitude));
-  const lng = Number(trim(longitude));
+  // 文字数はDBのCHECKに揃える（facilities.management_number/identifying_name/location_source ≤100、location_note ≤1000）。
+  // 契約の共通上限より長い値は、確定時の500ではなく行エラーとしてpreviewで見せる
+  if (trim(managementNumber).length > 100) return { ok: false, error: "management_number_too_long" };
+  if (trim(identifyingName).length > 100) return { ok: false, error: "identifying_name_too_long" };
+  if (trim(locationSource).length > 100) return { ok: false, error: "location_source_too_long" };
+  if (trim(locationNote).length > 1000) return { ok: false, error: "location_note_too_long" };
+  // 座標は空でない10進数だけ（空セルは0にならないようにする。16進・指数・全角は不可）
+  const latText = trim(latitude);
+  const lngText = trim(longitude);
+  if (!latText || !lngText) return { ok: false, error: "missing_coordinates" };
+  const DECIMAL = /^[+-]?\d+(\.\d+)?$/;
+  if (!DECIMAL.test(latText)) return { ok: false, error: "invalid_latitude" };
+  if (!DECIMAL.test(lngText)) return { ok: false, error: "invalid_longitude" };
+  const lat = Number(latText);
+  const lng = Number(lngText);
   if (!Number.isFinite(lat) || lat < -90 || lat > 90) return { ok: false, error: "invalid_latitude" };
   if (!Number.isFinite(lng) || lng < -180 || lng > 180) return { ok: false, error: "invalid_longitude" };
   if (!trim(locationSource)) return { ok: false, error: "missing_source" };
