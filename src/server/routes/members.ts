@@ -5,6 +5,7 @@ import { project } from "../auth/projection";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
+import { disableUser } from "../auth/disable";
 import { requirePermission } from "./invitations";
 
 type MemberRow = {
@@ -147,19 +148,33 @@ export function registerMemberRoutes(app: ApiApp): void {
     const current = await c.env.DB.prepare(`SELECT ${COLS} FROM members m WHERE m.id = ? AND m.unit_id = ?`).bind(params.id, p.unitId).first<MemberRow>();
     if (!current) throw new HttpError("NOT_FOUND"); // 別unitも同じ応答
 
-    const { version, privateFields, status, ...basic } = body;
+    const { version, privateFields, status, reason, ...basic } = body;
     const basicKeys = Object.keys(basic).filter((k) => (basic as Record<string, unknown>)[k] !== undefined);
     const privKeys = Object.keys(privateFields ?? {}).filter((k) => (privateFields as Record<string, unknown>)[k] !== undefined);
-    if (basicKeys.length + privKeys.length === 0 && status === undefined) {
+    const statusChange = status !== undefined && status !== current.status;
+    if (basicKeys.length + privKeys.length === 0 && !statusChange) {
       throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "no_changes" }]);
     }
     if (basicKeys.length > 0) requirePermission(p, "PER-06", { unitId: p.unitId, type: "member", id: params.id });
     if (privKeys.length > 0) requirePermission(p, "PER-06", { unitId: p.unitId, type: "member_private", id: params.id, ownerMemberId: params.id });
-    if (status !== undefined && status !== current.status) {
+    if (statusChange) {
       requirePermission(p, "PER-07", { unitId: p.unitId, type: "member", id: params.id });
-      // アカウントのある団員の状態変更は、利用停止（全セッション失効・認可版の増分）と一体で行う手順(T012)に限る
+      // 状態を変える操作には理由が要る（変更された行に残す。監査には複製しない）
+      if (!reason) throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "reason", reason: "reason_required" }]);
       if (current.user_id) {
-        throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "account_status_change_requires_disable_flow" }]);
+        // アカウントのある団員：停止は「状態＋利用者の停止＋認可版の増分＋全セッション失効」を一体で行う（T012）。
+        // 再開（active）は未提供：停止した認証を復活させる手順は別途設計する
+        if (status === "active") throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "reactivation_not_supported" }]);
+        if (basicKeys.length + privKeys.length > 0) {
+          throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "status", reason: "status_change_must_be_alone" }]);
+        }
+        const u = await c.env.DB.prepare("SELECT authz_version FROM users WHERE id = ?").bind(current.user_id).first<{ authz_version: number }>();
+        const out = await disableUser(c, p, {
+          memberId: params.id, version, status: status as "paused" | "retired", reason,
+          expectedAuthzVersion: u!.authz_version, key: headers["idempotency-key"],
+          requestHash: await canonicalRequestHash({ method: "PATCH", path: `/members/${params.id}`, baseVersion: version, body }),
+        });
+        return ok(c, out.member);
       }
     }
 
@@ -171,7 +186,7 @@ export function registerMemberRoutes(app: ApiApp): void {
     if (body.squad !== undefined) col("squad", body.squad);
     if (body.qualifications !== undefined) col("qualifications", JSON.stringify(body.qualifications));
     if (body.joinedOn !== undefined) col("joined_at", joinedAtOf(body.joinedOn));
-    if (status !== undefined) col("status", status);
+    if (statusChange) { col("status", status); col("status_reason", reason); }
 
     const changed = [...basicKeys, ...(status !== undefined ? ["status"] : []), ...(privKeys.length ? ["privateFields"] : [])].join(".");
     const result = await executeMutation(c.env, p, {
@@ -181,7 +196,7 @@ export function registerMemberRoutes(app: ApiApp): void {
       expectedAuthzVersion: p.authzVersion,
       roots: [{ table: "members", id: params.id, expectedVersion: version }],
       // 状態を変えるとき、アカウントが付いていないことを書込と同じ瞬間に確認する（事前の読取との競合を防ぐ）
-      conditions: status !== undefined && status !== current.status
+      conditions: statusChange
         ? [{ existsSql: "SELECT 1 FROM members WHERE id = ? AND unit_id = ? AND user_id IS NULL", binds: [params.id, p.unitId], failCode: "INVALID_TRANSITION" }]
         : [],
       statements: (ctx) => {
@@ -212,7 +227,7 @@ export function registerMemberRoutes(app: ApiApp): void {
           );
         }
         // 休団・退団にしたら、未使用の招待は取り消す（受領されて復活しないように）
-        if (status !== undefined && status !== "active") {
+        if (statusChange && status !== "active") {
           stmts.push(
             c.env.DB.prepare(
               "UPDATE invitations SET status = 'cancelled', cancelled_at = ?, cancel_reason = 'member_inactive', version = version + 1, updated_at = ?, last_mutation_token = ? WHERE member_id = ? AND unit_id = ? AND status = 'pending'",

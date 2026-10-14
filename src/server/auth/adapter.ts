@@ -9,6 +9,8 @@ export interface AuthIdentity {
   email: string;
   twoFactorEnabled: boolean;
   sessionId: string;
+  /** セッションの作成時刻（ISO、ミリ秒Z）。業務側の失効基準時刻(users.session_revoked_before)との比較に使う */
+  sessionCreatedAt: string;
 }
 
 export interface AuthService {
@@ -41,6 +43,7 @@ export function createAuthService(env: AuthEnv, deps: AuthDeps = {}): AuthServic
         email: result.user.email,
         twoFactorEnabled: Boolean((result.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled),
         sessionId: result.session.id,
+        sessionCreatedAt: new Date(result.session.createdAt).toISOString(),
       };
     },
     async revokeAll(authId) {

@@ -30,6 +30,7 @@ interface PrincipalRow {
   user_id: string;
   authz_version: number;
   user_status: string;
+  session_revoked_before: string | null;
   member_id: string;
   member_status: string;
   unit_id: string;
@@ -40,7 +41,7 @@ interface PrincipalRow {
 }
 
 const BASE_SQL =
-  "SELECT u.id AS user_id, u.authz_version, u.status AS user_status, m.id AS member_id, m.status AS member_status, m.unit_id, " +
+  "SELECT u.id AS user_id, u.authz_version, u.status AS user_status, u.session_revoked_before, m.id AS member_id, m.status AS member_status, m.unit_id, " +
   "n.status AS unit_status, m.display_name, m.rank, n.name AS unit_name " +
   "FROM users u JOIN members m ON m.user_id = u.id JOIN units n ON n.id = m.unit_id WHERE ";
 
@@ -58,6 +59,7 @@ export async function resolvePrincipal(c: ApiContext): Promise<AuthzPrincipal> {
   let where: string;
   let key: string;
   let mfaEnabled = false;
+  let sessionCreatedAt: string | null = null;
   const testHeader = testIdentityAllowed(c) ? c.req.header("x-test-identity") : undefined;
   if (testHeader) {
     let userId: unknown;
@@ -76,12 +78,18 @@ export async function resolvePrincipal(c: ApiContext): Promise<AuthzPrincipal> {
     where = "u.auth_id = ?";
     key = identity.authId;
     mfaEnabled = identity.twoFactorEnabled;
+    sessionCreatedAt = identity.sessionCreatedAt;
   }
 
   const row = await c.env.DB.prepare(BASE_SQL + where).bind(key).first<PrincipalRow>();
   if (!row) throw unauthenticated("account_not_linked");
   if (row.user_status !== "active" || row.member_status !== "active" || row.unit_status !== "active") {
     throw unauthenticated("account_disabled");
+  }
+
+  // 全セッション失効(API-38)の基準時刻より前のセッションは、認証ライブラリ側の削除が済んでいなくても拒否する
+  if (sessionCreatedAt && row.session_revoked_before && sessionCreatedAt <= row.session_revoked_before) {
+    throw unauthenticated("session_revoked");
   }
 
   const nowIso = new Date().toISOString();

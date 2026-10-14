@@ -75,7 +75,7 @@ describe("名簿 (T011)", () => {
     const staleEdit = await patch(admin, made.body.data!.id, { version: 1, rank: "部長" });
 
     // 退団は論理状態。履歴の参照（招待・監査）は残り、DBは物理削除を拒否する
-    const retire = await patch(admin, made.body.data!.id, { version: 2, status: "retired" });
+    const retire = await patch(admin, made.body.data!.id, { version: 2, status: "retired", reason: "転居" });
     expect(retire.status).toBe(200);
     await env.DB.prepare("INSERT INTO invitations (id, unit_id, member_id, kind, email_hash, token_hash, status, expires_at, intended_authz, created_at, updated_at, created_by, actor_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
       .bind(crypto.randomUUID(), a.id, made.body.data!.id, "invite", "a".repeat(64), "b".repeat(64), "pending", "2099-01-01T00:00:00.000Z", "{}", NOW, NOW, admin.userId, "human").run();
@@ -144,9 +144,9 @@ describe("名簿 (T011)", () => {
       (await env.DB.prepare("SELECT payload_minimal FROM domain_events").all()).results,
     ]);
     for (const secret of ["架空 権限確認", "090-5555-6666", "090-9999-9999", "090-0000-0001"]) expect(dump).not.toContain(secret);
-    // 在団→休団など、アカウントのある団員の状態変更は利用停止の手順(T012)で行う。ここでは拒否して成功と見せない
-    const linked = await patch(a.people.admin, a.people.operator.memberId!, { version: 1, status: "paused" });
-    expect(linked.status).toBe(422);
+    // 状態の変更には理由が要る。アカウントのある団員の停止は利用停止の手順（tests/revocation.test.ts）
+    expect((await patch(a.people.admin, a.people.operator.memberId!, { version: 1, status: "paused" })).status).toBe(400);
+    expect((await patch(a.people.admin, m.id, { version: m.version, status: "paused" })).status).toBe(400);
   });
 
   it("db_rejects_unapproved_private_columns_and_duplicate_profiles", async () => {

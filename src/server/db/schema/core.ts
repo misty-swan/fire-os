@@ -18,6 +18,8 @@ export const users = sqliteTable("users", {
   status: text("status", { enum: ["active", "disabled"] }).notNull(),
   authzVersion: integer("authz_version").notNull().default(1),
   disabledAt: text("disabled_at"),
+  disabledReason: text("disabled_reason"),
+  sessionRevokedBefore: text("session_revoked_before"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -50,6 +52,7 @@ export const members = sqliteTable(
     /** JSON配列（資格・講習。最大10件） */
     qualifications: text("qualifications").notNull().default("[]"),
     status: text("status", { enum: ["active", "paused", "retired"] }).notNull(),
+    statusReason: text("status_reason"),
     ...rootColumns,
   },
   (t) => [index("idx_members_unit_status").on(t.unitId, t.status)],
@@ -62,6 +65,7 @@ export const memberRoles = sqliteTable("member_roles", {
   roleId: text("role_id").notNull(),
   grantedBy: text("granted_by").notNull(),
   revokedAt: text("revoked_at"),
+  changeReason: text("change_reason"),
   ...rootColumns,
 });
 
@@ -75,6 +79,7 @@ export const scopeAssignments = sqliteTable("scope_assignments", {
   permissions: text("permissions").notNull(),
   expiresAt: text("expires_at"),
   revokedAt: text("revoked_at"),
+  changeReason: text("change_reason"),
   ...rootColumns,
 });
 

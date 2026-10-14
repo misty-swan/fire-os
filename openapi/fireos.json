@@ -1240,6 +1240,11 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
                   }
                 },
                 "required": [
@@ -8476,7 +8481,7 @@
         "summary": "API-37 PUT /members/:id/roles",
         "x-permission": "PER-07",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -8514,16 +8519,78 @@
                     "data": {
                       "type": "object",
                       "properties": {
+                        "memberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
                         "authzVersion": {
                           "type": "integer",
-                          "minimum": 0,
+                          "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "roleCodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "member",
+                              "operator",
+                              "officer",
+                              "admin"
+                            ]
+                          }
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "entityType": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "entityId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "permissions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^PER-(0[1-9]|1[0-4])$"
+                                }
+                              },
+                              "expiresAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "entityType",
+                              "entityId",
+                              "permissions",
+                              "expiresAt"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
-                        "authzVersion"
+                        "memberId",
+                        "version",
+                        "authzVersion",
+                        "roleCodes",
+                        "scopes"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -8719,7 +8786,7 @@
         "summary": "API-38 POST /users/:id/session-revocations",
         "x-permission": "PER-07/本人",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -8756,8 +8823,30 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "userId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "authzVersion": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "sessionRevocation": {
+                          "type": "string",
+                          "enum": [
+                            "completed",
+                            "pending"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "userId",
+                        "authzVersion",
+                        "sessionRevocation"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

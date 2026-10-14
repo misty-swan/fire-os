@@ -9,6 +9,9 @@ const randomIp = () => `198.51.100.${Math.floor(Math.random() * 250) + 1}`;
 
 /** 実ブラウザのように Cookie を持ち回り、同じoriginからの要求として Origin を付ける試験用クライアント */
 export class Browser {
+  /** loginAs が設定する：この端末のログイン情報（試験用） */
+  email = "";
+  authId = "";
   private jar = new Map<string, string>();
   constructor(
     private readonly send: (req: Request) => Promise<Response>,
@@ -118,5 +121,15 @@ export async function loginAs(identity: { userId: string; unitId: string }, opts
     env.DB.prepare("UPDATE invitations SET status = 'cancelled', cancelled_at = ? WHERE member_id = ? AND status = 'pending'").bind("2026-10-13T00:00:00.000Z", spare.id),
     env.DB.prepare("UPDATE auth_users SET two_factor_enabled = ? WHERE id = ?").bind(opts.mfa ? 1 : 0, up.data.user.id),
   ]);
+  b.email = email;
+  b.authId = up.data.user.id;
+  return b;
+}
+
+/** 同じ利用者の別の端末でパスワードログインする（loginAs の資格情報） */
+export async function signInAnotherDevice(first: Browser): Promise<Browser> {
+  const b = await workerBrowser();
+  const r = await b.json("POST", "/api/auth/sign-in/email", { email: first.email, password: GOOD_PASSWORD });
+  if (r.status !== 200) throw new Error(`別端末のログイン失敗 ${r.status}`);
   return b;
 }

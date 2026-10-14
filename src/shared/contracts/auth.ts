@@ -14,6 +14,27 @@ export const Scope = obj({
   permissions: z.array(PerCode).min(1).max(14),
   expiresAt: z.iso.datetime().optional(),
 });
+/** 応答の担当。期限なしは null */
+export const ScopeOut = obj({
+  entityType: ShortText,
+  entityId: Id,
+  permissions: z.array(PerCode),
+  expiresAt: z.string().nullable(),
+});
+/** 役割・担当を全置換した結果（API-37）。authzVersion は変更後の対象利用者の認可版 */
+export const MemberRoles = obj({
+  memberId: Id,
+  version: z.number().int().min(1),
+  authzVersion: z.number().int().min(1),
+  roleCodes: z.array(z.enum(roleCodes)),
+  scopes: z.array(ScopeOut),
+});
+/** 全セッション失効の結果（API-38）。completed=認証側のセッションを削除済み、pending=失敗して再試行待ち（業務側は新規要求を既に拒否） */
+export const RevocationResult = obj({
+  userId: Id,
+  authzVersion: z.number().int().min(1),
+  sessionRevocation: z.enum(["completed", "pending"]),
+});
 
 export const Me = obj({
   profile: obj({ memberId: Id, displayName: ShortText, rank: ShortText.nullable() }),
@@ -125,6 +146,8 @@ export const authApis = {
         rank: ShortText.nullable().optional(), squad: ShortText.nullable().optional(),
         qualifications: Qualifications.optional(), joinedOn: BusinessDate.nullable().optional(),
         privateFields: PrivateFields.optional(),
+        /** 休団・退団（利用停止）には必須。理由は変更された行に残し、監査には複製しない */
+        reason: Reason.optional(),
       }),
       ...IDEM,
     }),
@@ -168,7 +191,7 @@ export const authApis = {
       }),
       ...IDEM,
     }),
-    response: z.looseObject({ authzVersion: z.number().int().min(0) }), provisional: true,
+    response: MemberRoles,
   }),
   "API-38": defineApi({
     method: "POST", path: "/users/:id/session-revocations", permission: "PER-07/本人", kind: "mutation", success: [200],
@@ -177,6 +200,6 @@ export const authApis = {
       body: obj({ expectedAuthzVersion: z.number().int().min(0), reason: Reason }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    response: RevocationResult,
   }),
 } as const;
