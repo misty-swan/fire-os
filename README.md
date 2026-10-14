@@ -52,6 +52,10 @@ v0.2の54要件ID/本文/受入を保全：機能41＋非機能10＝51件は初�
 
 開発コマンド: `npm ci` / `npm run typecheck` / `npm run check:contracts` / `npx vitest --run`（Workers試験とclient試験）/ `npm run test:e2e`（要`npx playwright install chromium`）/ `npm run build` / `npm run dev`。
 
+## 画面を手元で見る
+
+`npm run demo`（初回は管理者の招待リンクが表示される。一度しか表示されない）→ ブラウザで `http://localhost:8787/login`。前回のデータのまま再起動できる。最初からやり直すときは `npm run demo:reset`。架空データ・ローカルのD1だけで、実Cloudflareにはつながない。止めるときは `Ctrl+C`。保存済みのスクリーンショットは `docs/evidence/ph1/`。
+
 ## 次に進む条件
 
 14の業務判断と技術検証を進め、各PH前にOpenAPI/DDL/固定版/fixtureを契約化。全採用機能/品質/復元/許諾/運用が揃った時だけ13で判定する。今回の成果物は設計文書でありアプリ実装や稼働保証ではない。技術の公式情報は各設計章のリンクを参照し、実装/公開前に変更を再確認する。

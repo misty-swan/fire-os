@@ -20,7 +20,9 @@
     "migrate": "tsx scripts/migrate.ts",
     "generate:contracts": "tsx scripts/check-contracts.ts --write",
     "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
-    "dev:vars": "tsx scripts/ensure-dev-vars.ts"
+    "dev:vars": "tsx scripts/ensure-dev-vars.ts",
+    "demo": "tsx scripts/demo.ts",
+    "demo:reset": "tsx scripts/demo.ts --reset"
   },
   "dependencies": {
     "better-auth": "1.7.7",
