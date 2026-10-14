@@ -12,7 +12,18 @@ const errText = (e: unknown) => AUTH_MESSAGES[e instanceof AuthError ? e.kind : 
 
 /** URLの # 以降（招待・再設定のtoken）を読み、読んだらアドレスから消す。tokenを履歴・共有・Refererに残さない */
 function useFragmentSecret(key: "invite" | "reset"): string | null {
-  const [value] = useState(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.hash.slice(1)).get(key)));
+  const read = () => (typeof window === "undefined" ? null : new URLSearchParams(window.location.hash.slice(1)).get(key));
+  const [value, setValue] = useState<string | null>(read);
+  // 同じ画面のまま別の招待リンクを開いた（# だけが変わる）場合も、新しいtokenを読む
+  useEffect(() => {
+    const onHash = () => {
+      const v = read();
+      if (v) setValue(v);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (value) window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }, [value]);
@@ -191,7 +202,7 @@ export function LoginPage() {
   if (inviteToken) {
     return (
       <AuthLayout hint="招待は、分団の管理者が発行します">
-        <InvitationPage token={inviteToken} next={next} />
+        <InvitationPage key={inviteToken} token={inviteToken} next={next} />
       </AuthLayout>
     );
   }

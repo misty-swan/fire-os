@@ -65,17 +65,26 @@ export function registerMemberRoutes(app: ApiApp): void {
     const canManage = authorize(p, "PER-07", { unitId: p.unitId, type: "member" }).allowed;
     // 許可列は、本人または担当(scope)を持つ団員の分だけ読む（対象外の行は読まない）
     const readable = page.filter((r) => authorize(p, "PER-06", { unitId: p.unitId, type: "member_private", id: r.id, ownerMemberId: r.id }).allowed).map((r) => r.id);
-    const [roles, invites, profiles] = await c.env.DB.batch([
+    const [roles, invites, profiles, accounts, scopeRows] = await c.env.DB.batch([
       c.env.DB.prepare("SELECT mr.member_id, r.code FROM member_roles mr JOIN roles r ON r.id = mr.role_id WHERE mr.unit_id = ? AND mr.revoked_at IS NULL AND mr.member_id IN (SELECT value FROM json_each(?)) AND ?")
         .bind(p.unitId, ids, canManage ? 1 : 0),
       c.env.DB.prepare("SELECT member_id, id, version, expires_at FROM invitations WHERE unit_id = ? AND status = 'pending' AND member_id IN (SELECT value FROM json_each(?)) AND ?")
         .bind(p.unitId, ids, canManage ? 1 : 0),
       c.env.DB.prepare("SELECT member_id, allowed_fields FROM member_private_profiles WHERE unit_id = ? AND member_id IN (SELECT value FROM json_each(?))")
         .bind(p.unitId, JSON.stringify(readable)),
+      c.env.DB.prepare("SELECT m.id AS member_id, u.id AS user_id, u.authz_version FROM members m JOIN users u ON u.id = m.user_id WHERE m.unit_id = ? AND m.id IN (SELECT value FROM json_each(?)) AND ?")
+        .bind(p.unitId, ids, canManage ? 1 : 0),
+      c.env.DB.prepare("SELECT member_id, entity_type, entity_id, permissions, expires_at FROM scope_assignments WHERE unit_id = ? AND revoked_at IS NULL AND member_id IN (SELECT value FROM json_each(?)) AND ?")
+        .bind(p.unitId, ids, canManage ? 1 : 0),
     ]);
     const roleMap = new Map<string, string[]>();
     for (const r of roles!.results as { member_id: string; code: string }[]) roleMap.set(r.member_id, [...(roleMap.get(r.member_id) ?? []), r.code]);
     const inviteMap = new Map((invites!.results as { member_id: string; id: string; version: number; expires_at: string }[]).map((i) => [i.member_id, i]));
+    const accountMap = new Map((accounts!.results as { member_id: string; user_id: string; authz_version: number }[]).map((a) => [a.member_id, a]));
+    const scopeMap = new Map<string, { entityType: string; entityId: string; permissions: string[]; expiresAt: string | null }[]>();
+    for (const s of scopeRows!.results as { member_id: string; entity_type: string; entity_id: string; permissions: string; expires_at: string | null }[]) {
+      scopeMap.set(s.member_id, [...(scopeMap.get(s.member_id) ?? []), { entityType: s.entity_type, entityId: s.entity_id, permissions: JSON.parse(s.permissions) as string[], expiresAt: s.expires_at }]);
+    }
     const profileMap = new Map((profiles!.results as { member_id: string; allowed_fields: string }[]).map((r) => [r.member_id, JSON.parse(r.allowed_fields) as Record<string, string>]));
 
     const data = page.map((r) => {
@@ -88,6 +97,9 @@ export function registerMemberRoutes(app: ApiApp): void {
         dto.roleCodes = (roleMap.get(r.id) ?? []).filter((x): x is (typeof roleCodes)[number] => (roleCodes as readonly string[]).includes(x));
         const inv = inviteMap.get(r.id);
         dto.invitation = inv ? { id: inv.id, version: inv.version, expiresAt: inv.expires_at } : null;
+        const acct = accountMap.get(r.id);
+        dto.account = acct ? { userId: acct.user_id, authzVersion: acct.authz_version } : null;
+        dto.scopes = scopeMap.get(r.id) ?? [];
       }
       const fields = profileMap.get(r.id);
       if (fields && Object.keys(fields).length > 0) dto.privateFields = fields;

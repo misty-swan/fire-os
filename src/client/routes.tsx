@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { Navigate, createBrowserRouter, createMemoryRouter, type RouteObject } from "react-router";
 import { AppShell, useOnline } from "./components/AppShell";
+import { AccessPanel } from "./features/admin/AccessPanel";
 import { LoginPage } from "./features/auth/LoginPage";
+import { MembersPage } from "./features/members/MembersPage";
 import { MeGate, type MeData } from "./me";
 import { MenuPage } from "./components/MenuPage";
 import { MobileTopRow, PageTitle } from "./components/Page";
@@ -39,6 +41,8 @@ export function ScreenPlaceholder({ screen }: { screen: ScreenDef }) {
  */
 export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-01": <LoginPage />,
+  "SCR-15": <MembersPage />,
+  "SCR-17": <AccessPanel />,
 };
 
 function toRoutes(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject[] {

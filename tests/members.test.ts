@@ -199,8 +199,12 @@ describe("名簿 (T011)", () => {
     // 管理権を持つ者にだけ roleCodes / invitation が付く
     const adminRow = (await get("")).data.find((r) => r.id === f.units.a.people.admin.memberId)!;
     expect(adminRow.roleCodes).toEqual(["admin"]);
+    // 権限変更・失効に必要な利用者IDと認可版、現在の担当は管理権の保持者にだけ
+    expect((adminRow as unknown as { account: { userId: string; authzVersion: number } }).account).toEqual({ userId: f.units.a.people.admin.userId, authzVersion: 1 });
+    const opRow = (await get("")).data.find((r) => r.id === f.units.a.people.operator.memberId) as unknown as { scopes: { entityType: string }[] };
+    expect(opRow.scopes).toEqual([expect.objectContaining({ entityType: "facility" })]);
     const asMember = (await (await f.client(f.units.a.people.member).request("GET", "/api/v1/members")).json()) as { data: MemberDto[] };
-    expect(asMember.data.every((r) => r.roleCodes === undefined && r.invitation === undefined)).toBe(true);
+    expect(asMember.data.every((r) => r.roleCodes === undefined && r.invitation === undefined && (r as unknown as { account?: unknown }).account === undefined && (r as unknown as { scopes?: unknown }).scopes === undefined)).toBe(true);
     // 停止ユーザーは名簿も取得できない
     expect((await f.client(f.units.a.people.suspended).request("GET", "/api/v1/members")).status).toBe(401);
   });

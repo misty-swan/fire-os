@@ -9,7 +9,7 @@ import { FormErrors, errorFor } from "../src/client/components/FormErrors";
 import { LeaveConfirm } from "../src/client/components/LeaveConfirm";
 import { MutationStatus } from "../src/client/components/MutationStatus";
 import { Button, TextField } from "../src/client/components/ui";
-import { buildRoutes } from "../src/client/routes";
+import { buildRoutes, screenElements } from "../src/client/routes";
 import { bottomTabs, matchScreen, screens } from "../src/client/screens";
 import { _resetPendingKeysForTest, useMutation } from "../src/client/useMutation";
 
@@ -445,7 +445,8 @@ describe("screen registry (T005)", () => {
 
   it("every_screen_renders_a_visible_not_implemented_placeholder", () => {
     const concrete = (p: string) => p.replace(/:type/g, "vehicle").replace(/:id/g, "abc");
-    for (const sc of screens.filter((s) => s.id !== "SCR-01")) {
+    // 実装済みの画面（screenElementsに登録）はプレースホルダーではない
+    for (const sc of screens.filter((s) => !screenElements[s.id])) {
       const router = createMemoryRouter(buildRoutes({}, { me: TEST_ME }), { initialEntries: [concrete(sc.path)] });
       const { unmount } = render(<RouterProvider router={router} />);
       expect(screen.getByRole("heading", { level: 2, name: sc.title }), sc.id).toBeTruthy();

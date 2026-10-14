@@ -93,6 +93,9 @@ export const Member = obj({
   hasAccount: z.boolean(),
   roleCodes: z.array(z.enum(roleCodes)).optional(),
   invitation: obj({ id: Id, version: z.number().int().min(1), expiresAt: z.string() }).nullable().optional(),
+  /** 管理権(PER-07)を持つ者にだけ：権限変更・全セッション失効の操作に必要な利用者IDと認可版、現在の担当 */
+  account: obj({ userId: Id, authzVersion: z.number().int().min(1) }).nullable().optional(),
+  scopes: z.array(ScopeOut).optional(),
   privateFields: obj({ phone: PrivateText.optional(), emergencyContact: PrivateText.optional() }).optional(),
 });
 
