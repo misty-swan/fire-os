@@ -59,14 +59,67 @@ export const Attendance = obj({
 });
 export type AttendanceDto = z.infer<typeof Attendance>;
 
-/** 予定の詳細（API-07「可視出欠と現在実績を含む」）。実績の子Page（ActivityResult）はT037で接続する */
+/**
+ * 実参加の1行（docs/04:93 activity_actual_participants）。
+ * 出欠(Attendance)とは別物で、回答を実参加へコピーしない（docs/11 実参加行）。
+ * 個人時間は全体時間と別列。不明はNULL（docs/05 §3「未知時刻は欠落表示」）
+ */
+export const ActivityResultParticipant = obj({
+  memberId: Id,
+  actualStatus: z.enum(actualParticipationStates),
+  individualStartsAt: Instant.nullable(),
+  individualEndsAt: Instant.nullable(),
+});
+export type ActivityResultParticipantDto = z.infer<typeof ActivityResultParticipant>;
+
+/**
+ * 実績の版（docs/04:92 activity_result_revisions）。訂正は新revisionを作り原本は不変（docs/11 §3）。
+ * 訂正版だけsupersedesId（訂正元）とcorrectionReason（理由必須）を持つ
+ */
+export const ActivityResultRevision = obj({
+  id: Id,
+  resultId: Id,
+  revisionNo: z.number().int().min(1),
+  actualStartsAt: Instant.nullable(),
+  actualEndsAt: Instant.nullable(),
+  content: Body,
+  supersedesId: Id.nullable(),
+  correctionReason: Reason2000.nullable(),
+  participants: z.array(ActivityResultParticipant).max(LIMITS.arrayMax),
+  createdAt: Instant,
+});
+export type ActivityResultRevisionDto = z.infer<typeof ActivityResultRevision>;
+
+/**
+ * 実績root（docs/04:91 activity_results）。activity_id UNIQUE（1活動1実績。docs/05 API-09「未作成のみ」）。
+ * currentRevisionは現在の訂正版へのポインタ。API-09/42の応答とAPI-07の詳細に載る
+ */
+export const ActivityResult = obj({
+  id: Id,
+  activityId: Id,
+  version: Version,
+  currentRevisionId: Id,
+  currentRevision: ActivityResultRevision,
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type ActivityResultDto = z.infer<typeof ActivityResult>;
+
+/** 実績と全版（API-43。docs/05:96「ActivityResult＋revisions」。revision?で旧版も取得可） */
+export const ActivityResultHistory = obj({
+  result: ActivityResult,
+  revisions: z.array(ActivityResultRevision).min(1).max(LIMITS.arrayMax),
+});
+export type ActivityResultHistoryDto = z.infer<typeof ActivityResultHistory>;
+
+/** 予定の詳細（API-07「可視出欠と現在実績を含む」）。実績未作成の活動はresult=null（docs/05 §1） */
 export const ActivityDetail = obj({
   ...Activity.shape,
   /** 対象者はsnapshot（activity_audience）。名簿変更で母数を変えない（docs/04） */
   audience: z.array(Id).max(LIMITS.arrayMax),
   attendance: z.array(Attendance).max(LIMITS.arrayMax),
-  /** 現在実績。activity_resultsを作るAPI（API-09）はT037のため、接続までは常にnull */
-  result: z.null(),
+  /** 現在実績（activity_results。未作成はnull） */
+  result: ActivityResult.nullable(),
 });
 export type ActivityDetailDto = z.infer<typeof ActivityDetail>;
 
@@ -127,7 +180,7 @@ export const operationsApis = {
   "API-09": defineApi({
     method: "POST", path: "/activities/:id/actual-results", permission: "PER-04", kind: "mutation", success: [201],
     request: obj({ params: P_ID, body: obj({ activityVersion: Version, ...actualShape }), ...IDEM }),
-    response: provisionalDto(), provisional: true,
+    response: ActivityResult,
   }),
   "API-39": defineApi({
     method: "PATCH", path: "/activities/:id", permission: "PER-03", kind: "mutation", success: [200],
@@ -161,13 +214,14 @@ export const operationsApis = {
   }),
   "API-42": defineApi({
     method: "POST", path: "/activities/:id/actual-results/corrections", permission: "PER-04", kind: "mutation", success: [201],
-    request: obj({ params: P_ID, body: obj({ resultVersion: Version, ...actualShape, reason: Reason }), ...IDEM }),
-    response: provisionalDto(), provisional: true,
+    // 訂正理由はactivity_result_revisions.correction_reasonのCHECK（≤2000）に揃える（docs/04:92「訂正は理由必須」。API-39/40と同じ扱い）
+    request: obj({ params: P_ID, body: obj({ resultVersion: Version, ...actualShape, reason: Reason2000 }), ...IDEM }),
+    response: ActivityResult,
   }),
   "API-43": defineApi({
     method: "GET", path: "/activities/:id/actual-results", permission: "PER-01", kind: "get", success: [200],
     request: obj({ params: P_ID, query: obj({ revision: z.coerce.number().int().min(1).optional() }) }),
-    response: z.looseObject({}), provisional: true,
+    response: ActivityResultHistory,
   }),
   "API-21": defineApi({
     method: "GET", path: "/incidents", permission: "PER-01", kind: "list", success: [200],

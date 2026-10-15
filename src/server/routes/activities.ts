@@ -2,6 +2,7 @@ import { Activity, ActivityDetail } from "../../shared/contracts/operations";
 import { activityTransitions, canTransition } from "../../shared/states";
 import { authorize } from "../auth/authorize";
 import { resolvePrincipal } from "../auth/principal";
+import { loadActivityResult } from "./activity-results";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
@@ -12,7 +13,7 @@ import { requirePermission } from "./invitations";
  * 出来事root（operations）と予定root（activities）と対象snapshot（activity_audience）を同じbatchで確定する。
  * 遷移は docs/11 の許可辺のみ（draft→scheduled/cancelled、scheduled→in_progress/cancelled、
  * in_progress→completed、completed→in_progress。cancelledは終端）。中止で既存出欠を削除しない。
- * 出欠の回答（API-08/41）と実績（API-09/42/43）はT036/T037で実装する。
+ * 出欠の回答はattendance.ts（API-08/41、T036）、実績はactivity-results.ts（API-09/42/43、T037）。
  */
 
 const ACTIVITY_JSON =
@@ -294,8 +295,8 @@ export function registerActivityRoutes(app: ApiApp): void {
       .filter((r) => canManage || r.member_id === p.memberId)
       .map((r) => ({ id: r.id, version: r.version, memberId: r.member_id, response: r.response, respondedAt: r.responded_at }));
 
-    // 現在実績。activity_resultsを作るAPI（API-09）はT037のため、接続までは常にnull（docs/16 T037）
-    const result = null;
+    // 現在実績（activity_results。未作成はnull。docs/05 API-07「可視出欠と現在実績を含む」）
+    const result = await loadActivityResult(c.env, p.unitId, params.id);
 
     const detail = ActivityDetail.parse({
       ...Activity.parse({
