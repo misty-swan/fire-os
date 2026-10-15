@@ -5,6 +5,7 @@ import {
 import {
   canTransition, notificationApprovalTransitions, notificationChannels,
 } from "../../shared/states";
+import { cancelUnsentDeliveryStatements } from "../notifications/dispatcher";
 import { authorize } from "../auth/authorize";
 import { resolvePrincipal } from "../auth/principal";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
@@ -43,9 +44,23 @@ const RECIPIENT_VISIBLE_SQL = `('${RECIPIENT_VISIBLE.join("', '")}')`;
 
 type NotificationChannel = (typeof notificationChannels)[number];
 
-/** 宛先の参照（docs/04「連絡先生値をジョブへ複製しない」）。inappは本人の受信箱。生値は保存しない */
-const addressRefFor = (channel: NotificationChannel, memberId: string): string =>
-  `member:${memberId}#${channel === "inapp" ? "inbox" : channel}`;
+/**
+ * 宛先の参照（docs/04「連絡先生値をジョブへ複製しない」）。inappは本人の受信箱。生値は保存しない。
+ *
+ * 【到達不明（unknown）の試験/デモ用の規約（docs/03 §1.1に記録。T052）】
+ * 実チャネル（Web Push/email）はD13未了承で未実装のため、「providerで宛先が解決できず送受の
+ * 成否が不明になる」状態を実データで再現できない。そこでinappに限り、対象団員の班（squad）が
+ * 「連絡先未登録」のときに限り宛先参照を内部試験値 `unknown:<memberId>#inbox` にする
+ * （member_private_profiles由来の実連絡先ではない。Secretは無い）。inapp provider（provider.ts）は
+ * address_refが `unknown:` 接頭辞のとき結果unknownを返す。班が通常値なら通常の参照になり、
+ * 本番のinapp（内部成立）の挙動は変わらない（規約はdraft作成時の班値で固定される）。
+ */
+export const UNKNOWN_ADDRESS_SQUAD = "連絡先未登録";
+
+const addressRefFor = (channel: NotificationChannel, memberId: string, squad: string | null = null): string => {
+  if (channel === "inapp" && squad === UNKNOWN_ADDRESS_SQUAD) return `unknown:${memberId}#inbox`;
+  return `member:${memberId}#${channel === "inapp" ? "inbox" : channel}`;
+};
 
 interface NotificationRow {
   id: string; unit_id: string; version: number; source_type: string; source_id: string;
@@ -215,8 +230,10 @@ const SENDER_JSON =
   "'audienceMemberIds', json((SELECT json_group_array(member_id) FROM (SELECT DISTINCT member_id " +
     "FROM notification_recipients WHERE notification_id = notifications.id AND unit_id = notifications.unit_id) ORDER BY member_id)), " +
   "'recipients', json((SELECT json_group_array(json_object('memberId', member_id, 'channel', channel, " +
-      "'addressRef', address_ref, 'readAt', read_at)) FROM (SELECT member_id, channel, address_ref, read_at " +
-      "FROM notification_recipients WHERE notification_id = notifications.id AND unit_id = notifications.unit_id) " +
+      "'addressRef', address_ref, 'readAt', read_at, 'deliveryStatus', (SELECT d.status FROM notification_deliveries d " +
+        "WHERE d.recipient_id = recipients.id AND d.unit_id = recipients.unit_id " +
+        "ORDER BY d.created_at DESC, d.id DESC LIMIT 1))) FROM (SELECT id, unit_id, member_id, channel, address_ref, read_at " +
+      "FROM notification_recipients WHERE notification_id = notifications.id AND unit_id = notifications.unit_id) AS recipients " +
     "ORDER BY member_id, channel)), " +
   "'deliveryJob', json((SELECT json_object('jobId', j.id, 'status', j.status) FROM jobs j " +
     "WHERE j.unit_id = notifications.unit_id AND j.kind = 'notification.deliver' AND j.source_type = 'notification' " +
@@ -289,6 +306,13 @@ export function registerNotificationRoutes(app: ApiApp): void {
       channels: body.channels,
     });
     const id = crypto.randomUUID();
+    // 宛先参照は団員の班（squad）で決まる部分がある（到達不明の試験/デモ用規約。addressRefForの注記）
+    const audienceRows = proposal.audienceMemberIds.length
+      ? (await c.env.DB.prepare(
+          `SELECT id, squad FROM members WHERE id IN (${proposal.audienceMemberIds.map(() => "?").join(",")})`,
+        ).bind(...proposal.audienceMemberIds).all<{ id: string; squad: string | null }>()).results
+      : [];
+    const squadOf = new Map(audienceRows.map((r) => [r.id, r.squad]));
     // 承認固定に使うhash（bodyHash=本文のSHA-256、audienceHash=対象memberId整列配列の正規化JSONのSHA-256）。
     // docs/04:139にhash列はaudience_hashしか無いためbodyHashは応答時に計算して載せる
     const bodyHash = await sha256Hex(proposal.body);
@@ -312,7 +336,7 @@ export function registerNotificationRoutes(app: ApiApp): void {
             c.env.DB.prepare(
               "INSERT INTO notification_recipients (id, unit_id, notification_id, member_id, channel, address_ref, actor_user_id, actor_kind, created_at) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, 'human', ?)",
-            ).bind(crypto.randomUUID(), p.unitId, id, memberId, channel, addressRefFor(channel, memberId), p.userId, ctx.now),
+            ).bind(crypto.randomUUID(), p.unitId, id, memberId, channel, addressRefFor(channel, memberId, squadOf.get(memberId) ?? null), p.userId, ctx.now),
           ),
         ),
         c.env.DB.prepare(
@@ -330,13 +354,18 @@ export function registerNotificationRoutes(app: ApiApp): void {
     return ok(c, result.data, {}, 201);
   });
 
-  // --- API-64: 明示承認／取消（approveは202=永続job受付。cancelはjobを作らないため200） ---
+  // --- API-64: 明示承認／取消／未送分取消（approveは202=永続job受付。cancel/cancel_unsentはjobを作らないため200） ---
   defineRoute(app, "API-64", async (c) => {
     const p = await resolvePrincipal(c);
     const { params, body, headers } = await parseApiRequest(c, "API-64");
     const current = await loadNotification(c, params.id, p.unitId);
     requirePermission(p, "PER-12", { unitId: p.unitId, type: "notification", id: params.id });
     const approve = body.decision === "approve";
+    // 未送分取消（docs/11「未送分取消はdeliveries単位」）は承認状態を変えない自己辺のため
+    // notificationApprovalTransitionsに無い。承認後の状態（approved/dispatching/finished/failed）から許可する。
+    // 終端（finished/failed）でも未送（pending）の残があり得る（受付>=1でfinished等。docs/11 確定規則）
+    const cancelUnsent = body.decision === "cancel_unsent";
+    const cancelUnsentFrom: readonly string[] = ["approved", "dispatching", "finished", "failed"];
     // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 鍵が既にある（=再送の）ときは
     // 現在の状態では不可になる変更（二重承認・承認済みの取消）でも保存済み応答を返す必要があるため、
     // 新しい操作のときだけ状態前提を検査してからbatchに入る（T045/T041と同じ流儀）
@@ -344,18 +373,30 @@ export function registerNotificationRoutes(app: ApiApp): void {
       "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
     ).bind(p.userId, "notification.approval", headers["idempotency-key"]).first();
 
+    // 未送分取消の説明に使う宛先と、取消対象の事前件数（details用の案内値。batch内の確定数と瞬間的にずれ得る）
+    const cancelUnsentRecipients = cancelUnsent
+      ? (await c.env.DB.prepare(
+          "SELECT id, channel FROM notification_recipients WHERE notification_id = ? AND unit_id = ?",
+        ).bind(params.id, p.unitId).all<{ id: string; channel: string }>()).results
+      : [];
+
     if (!knownKey) {
       // 旧版は先に409（docs/05 §2「旧版409」。executeMutationのdiagnoseと同じ順: 版→状態）
       if (body.version !== current.version) throw new HttpError("VERSION_CONFLICT");
       // 遷移はdocs/11の許可辺のみ（draft→approved/cancelled。approved→cancelledは無い＝docs/16 T050裁定）
-      if (!canTransition(notificationApprovalTransitions, current.status as keyof typeof notificationApprovalTransitions, approve ? "approved" : "cancelled")) {
+      if (cancelUnsent) {
+        if (!cancelUnsentFrom.includes(current.status)) {
+          throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
+        }
+      } else if (!canTransition(notificationApprovalTransitions, current.status as keyof typeof notificationApprovalTransitions, approve ? "approved" : "cancelled")) {
         throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
       }
       // 承認固定: 承認者は「見た本文/対象」のhashを付ける。変わっていれば（別draftのhash・旧版）409
-      if ((await sha256Hex(bodyOf(current))) !== body.bodyHash) {
+      // （hashはapproveだけが要求する。cancel/cancel_unsentは承認対象の固定を伴わない）
+      if (approve && (await sha256Hex(bodyOf(current))) !== body.bodyHash) {
         throw new HttpError("VERSION_CONFLICT", undefined, [{ field: "bodyHash", reason: "stale_body_hash" }]);
       }
-      if (current.audience_hash !== body.audienceHash) {
+      if (approve && current.audience_hash !== body.audienceHash) {
         throw new HttpError("VERSION_CONFLICT", undefined, [{ field: "audienceHash", reason: "stale_audience_hash" }]);
       }
       // 承認時に対象団員が現在有効（active・同unit）かを再検査する（docs/16 T050裁定。
@@ -379,15 +420,17 @@ export function registerNotificationRoutes(app: ApiApp): void {
       expectedAuthzVersion: p.authzVersion,
       roots: [{
         table: "notifications", id: params.id, expectedVersion: body.version,
-        allowedStates: { column: "status", values: ["draft"] },
+        allowedStates: { column: "status", values: cancelUnsent ? [...cancelUnsentFrom] : ["draft"] },
       }],
       conditions: [
         // batch内でも承認固定を再検査する（読んでからの競合で古い対象を承認させない。announcement既読と同じ流儀）
-        {
-          existsSql: "SELECT 1 FROM notifications WHERE id = ? AND unit_id = ? AND audience_hash = ?",
-          binds: [params.id, p.unitId, body.audienceHash],
-          failCode: "VERSION_CONFLICT",
-        },
+        ...(approve
+          ? [{
+              existsSql: "SELECT 1 FROM notifications WHERE id = ? AND unit_id = ? AND audience_hash = ?",
+              binds: [params.id, p.unitId, body.audienceHash],
+              failCode: "VERSION_CONFLICT" as const,
+            }]
+          : []),
         ...(approve
           ? [{
               existsSql:
@@ -404,17 +447,30 @@ export function registerNotificationRoutes(app: ApiApp): void {
               "UPDATE notifications SET status = 'approved', approved_by = ?, approved_at = ?, version = version + 1, last_mutation_token = ?, updated_at = ? " +
                 "WHERE id = ? AND unit_id = ? AND version = ?",
             ).bind(p.userId, ctx.now, ctx.attempt, ctx.now, params.id, p.unitId, body.version)]
-          : [c.env.DB.prepare(
-              "UPDATE notifications SET status = 'cancelled', version = version + 1, last_mutation_token = ?, updated_at = ? " +
-                "WHERE id = ? AND unit_id = ? AND version = ?",
-            ).bind(ctx.attempt, ctx.now, params.id, p.unitId, body.version)]),
+          : cancelUnsent
+            ? [
+                // 未送分取消は承認状態を変えず版だけ進める（並行の承認系操作と競合を見える化するため）
+                c.env.DB.prepare(
+                  "UPDATE notifications SET version = version + 1, last_mutation_token = ?, updated_at = ? " +
+                    "WHERE id = ? AND unit_id = ? AND version = ?",
+                ).bind(ctx.attempt, ctx.now, params.id, p.unitId, body.version),
+                ...cancelUnsentDeliveryStatements(c.env.DB, p.unitId, params.id, cancelUnsentRecipients, ctx.now, "manual_cancel"),
+              ]
+            : [c.env.DB.prepare(
+                "UPDATE notifications SET status = 'cancelled', version = version + 1, last_mutation_token = ?, updated_at = ? " +
+                  "WHERE id = ? AND unit_id = ? AND version = ?",
+              ).bind(ctx.attempt, ctx.now, params.id, p.unitId, body.version)]),
         c.env.DB.prepare(
           "INSERT INTO notification_events (id, unit_id, notification_id, action, details, actor_user_id, actor_kind, created_at) " +
             "VALUES (?, ?, ?, ?, ?, ?, 'human', ?)",
         ).bind(
           crypto.randomUUID(), p.unitId, params.id,
-          approve ? "approval.approved" : "draft.cancelled",
-          JSON.stringify({ decision: body.decision, deliveryJob: approve ? "queued" : "none" }), p.userId, ctx.now,
+          approve ? "approval.approved" : cancelUnsent ? "approval.unsent_cancelled" : "draft.cancelled",
+          JSON.stringify({
+            decision: body.decision,
+            deliveryJob: approve ? "queued" : "none",
+            ...(cancelUnsent ? { ensured: cancelUnsentRecipients.length } : {}),
+          }), p.userId, ctx.now,
         ),
         // 配送jobを1本だけ同batchで登録。handler（deliveries生成・provider呼出し・approved→dispatching）はT051
         ...(approve
@@ -432,15 +488,22 @@ export function registerNotificationRoutes(app: ApiApp): void {
       ],
       audit: {
         action: "notification.approval", entityType: "notification", entityId: params.id,
-        metadata: { decision: body.decision, ...(approve ? { deliveryJob: "queued" } : {}) },
+        metadata: {
+          decision: body.decision,
+          ...(approve ? { deliveryJob: "queued" } : {}),
+          ...(cancelUnsent ? { ensured: cancelUnsentRecipients.length } : {}),
+        },
       },
       event: {
         entityType: "notification", entityId: params.id, entityVersion: body.version + 1,
-        eventType: approve ? "notification.approved" : "notification.cancelled", payload: { decision: body.decision },
+        eventType: approve ? "notification.approved" : cancelUnsent ? "notification.unsent_cancelled" : "notification.cancelled",
+        payload: { decision: body.decision },
       },
       response: {
         status: approve ? 202 : 200,
-        sql: SENDER_JSON, binds: [body.bodyHash, params.id],
+        sql: SENDER_JSON,
+        // bodyHashはapproveの要求値。cancel/cancel_unsentでは承認対象の固定を伴わないため現行本文から計算する
+        binds: [approve ? body.bodyHash! : await sha256Hex(bodyOf(current)), params.id],
         decode: (j) => Notification.parse(j),
       },
     });
@@ -460,6 +523,10 @@ export function registerNotificationRoutes(app: ApiApp): void {
     if (query.status) {
       where.push("n.status = ?");
       binds.push(query.status);
+    }
+    // 未読だけ（T052。API-28のnotifications指標＝自分宛・未読の件数と同じ条件。docs/05 API-67行）
+    if (query.unread === true) {
+      where.push("r.read_at IS NULL");
     }
 
     const key = await signingKey(c.env.BETTER_AUTH_SECRET);

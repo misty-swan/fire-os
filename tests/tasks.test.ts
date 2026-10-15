@@ -154,4 +154,65 @@ describe("業務タスク (T049)", () => {
     const afterCancel = await fx.client(admin).request("PATCH", `/api/v1/tasks/${secondId}`, { version: 2, status: "in_progress", reason: "取消後の変更" }, idem());
     expect(afterCancel.status).toBe(422);
   });
+
+  /** T052: 自分の担当タスクの一覧（API-102。docs/03 SCR-21「自分の担当タスク一覧・期限・履歴」。API-28 myTasksと同じ条件） */
+  it("my_task_list_serves_active_tasks_with_history", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin; // 分団長（PER-04。タスクを作ってmemberに割当てる）
+    const member = a.people.member; // 担当者（PER-01で自分の分だけを読む）
+
+    const createRes = await fx.client(admin).request("POST", "/api/v1/tasks", {
+      title: "ポンプ車の定期点検の段取り", assigneeMemberId: member.memberId, dueDate: "2026-12-10",
+    }, idem());
+    expect(createRes.status).toBe(201); // 実装前は未接続routeのJSON 404で赤になる
+    const created = (await json(createRes)).data! as { id: string; version: number };
+
+    // --- 自分の担当タスクだけが現れる（作成者でないadminの一覧には出ない。assignee=本人の条件） ---
+    const myList = (await json(await fx.client(member).request("GET", "/api/v1/tasks/me?limit=200"))).data as unknown as {
+      id: string; title: string; status: string; dueDate: string | null; assigneeMemberId: string | null;
+      events: { action: string; reason: string | null; after: Record<string, unknown> }[];
+    }[];
+    const mine = myList.find((row) => row.id === created.id);
+    expect(mine).toBeDefined();
+    expect(mine!.status).toBe("open");
+    expect(mine!.dueDate).toBe("2026-12-10");
+    expect(mine!.assigneeMemberId).toBe(member.memberId);
+    // 履歴（task_events）が行に付く（API-70と同じ「詳細応答にevents」流儀。初行は作成）
+    expect(mine!.events.length).toBeGreaterThanOrEqual(1);
+    expect(mine!.events[0]!.action).toBe("created");
+
+    // 進めても同じ行のeventsに積まれる（open→in_progress→done）
+    for (const [version, status] of [[1, "in_progress"], [2, "done"]] as const) {
+      const patchRes = await fx.client(admin).request("PATCH", `/api/v1/tasks/${created.id}`, {
+        version, status, reason: "段取りを進めた",
+      }, idem());
+      expect(patchRes.status).toBe(200);
+    }
+    const afterList = (await json(await fx.client(member).request("GET", "/api/v1/tasks/me?limit=200"))).data as unknown as { id: string }[];
+    // 完了済みは既定の一覧（＝ダッシュボードのmyTasks指標と同じ条件）から外れる
+    expect(afterList.some((row) => row.id === created.id)).toBe(false);
+    // status=doneで確認できる（再開の導線）。履歴には理由付きの状態変更が残る
+    const doneQuery = (await json(await fx.client(member).request("GET", "/api/v1/tasks/me?status=done&limit=200"))).data as unknown as {
+      id: string; events: { action: string; reason: string | null }[];
+    }[];
+    const doneRow = doneQuery.find((row) => row.id === created.id);
+    expect(doneRow).toBeDefined();
+    expect(doneRow!.events.map((e) => e.action)).toEqual(["created", "status.open_to_in_progress", "status.in_progress_to_done"]);
+    expect(doneRow!.events[2]!.reason).toBe("段取りを進めた");
+
+    // --- 担当でないタスクは自分の一覧に現れない（officerの担当・別分団とも） ---
+    const officerTask = await fx.client(admin).request("POST", "/api/v1/tasks", {
+      title: "幹部担当のタスク", assigneeMemberId: admin.memberId,
+    }, idem());
+    expect(officerTask.status).toBe(201);
+    const officerTaskId = ((await json(officerTask)).data! as { id: string }).id;
+    const memberAgain = (await json(await fx.client(member).request("GET", "/api/v1/tasks/me?limit=200"))).data as unknown as { id: string }[];
+    expect(memberAgain.some((row) => row.id === officerTaskId)).toBe(false);
+    // 未知のstatus指定は400（列挙外は拒否。docs/05 §1）
+    const unknownStatus = await fx.client(member).request("GET", "/api/v1/tasks/me?status=archived");
+    expect(unknownStatus.status).toBe(400);
+    // 停止された利用者は主体を引けない（401。PER-01の前置）
+    const suspended = await fx.client(a.people.suspended).request("GET", "/api/v1/tasks/me");
+    expect(suspended.status).toBe(401);
+  });
 });

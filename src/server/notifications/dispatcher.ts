@@ -241,6 +241,37 @@ export interface DeliveryCancellation {
 }
 
 /**
+ * 未送分取消の1batch分の文（API-64 decision=cancel_unsentがexecuteMutationのstatementsで使う。T052）。
+ * cancelUnsentDeliveries（下）と同じ内容を「文の配列」として返すだけにし、APIは
+ * 版の進行・監査・outboxと同じbatchに載せて確定させる（docs/04 §1「業務更新は1つのbatch」）。
+ * recipientsは呼び出し側が読んで渡す（statementsは同期のため内部で読めない）。
+ */
+export function cancelUnsentDeliveryStatements(
+  db: D1Database,
+  unitId: string,
+  notificationId: string,
+  recipients: readonly { id: string; channel: string }[],
+  now: string,
+  reason: string,
+): D1PreparedStatement[] {
+  const statements: D1PreparedStatement[] = recipients.map((r) =>
+    db.prepare(
+      "INSERT INTO notification_deliveries (id, unit_id, recipient_id, delivery_key, attempt_count, status, provider_id, actor_kind, created_at) " +
+        "VALUES (?, ?, ?, ?, 1, 'pending', NULL, 'system', ?) ON CONFLICT (delivery_key) DO NOTHING",
+    ).bind(crypto.randomUUID(), unitId, r.id, deliveryKeyFor(notificationId, r.id, r.channel), now),
+  );
+  statements.push(db.prepare(
+    // pendingだけ取消（docs/11 deliveryTransitions: pending→cancelledのみ）
+    "UPDATE notification_deliveries SET status = 'cancelled' " +
+      "WHERE unit_id = ?2 AND status = 'pending' AND recipient_id IN " +
+      "(SELECT id FROM notification_recipients WHERE notification_id = ?3 AND unit_id = ?2)",
+  ).bind(now, unitId, notificationId));
+  statements.push(eventStatement(db, unitId, notificationId, "dispatch.cancelled",
+    { ensured: recipients.length, reason }, now));
+  return statements;
+}
+
+/**
  * 未送分の取消（docs/11「未送分取消はdeliveries単位の取消」。T051）。
  * 承認後の通知（approved/dispatching）について、まだ送っていない配送（pending）だけをcancelledにする。
  * 送信済み（provider_accepted/unknown）と拒否後の再送待ち（retry_wait）は遷移に無いため戻さない
@@ -261,26 +292,9 @@ export async function cancelUnsentDeliveries(
     ).bind(notificationId, unitId).all<{ id: string; channel: string }>()
   ).results;
   if (recipients.length === 0) return { cancelled: 0, ensured: 0 };
-  const statements: D1PreparedStatement[] = recipients.map((r) =>
-    env.DB.prepare(
-      "INSERT INTO notification_deliveries (id, unit_id, recipient_id, delivery_key, attempt_count, status, provider_id, actor_kind, created_at) " +
-        "VALUES (?, ?, ?, ?, 1, 'pending', NULL, 'system', ?) ON CONFLICT (delivery_key) DO NOTHING",
-    ).bind(crypto.randomUUID(), unitId, r.id, deliveryKeyFor(notificationId, r.id, r.channel), now),
+  const results = await env.DB.batch(
+    cancelUnsentDeliveryStatements(env.DB, unitId, notificationId, recipients, now, opts.reason ?? "manual_cancel"),
   );
-  statements.push(env.DB.prepare(
-    // pendingだけ取消（docs/11 deliveryTransitions: pending→cancelledのみ）
-    "UPDATE notification_deliveries SET status = 'cancelled' " +
-      "WHERE unit_id = ?2 AND status = 'pending' AND recipient_id IN " +
-      "(SELECT id FROM notification_recipients WHERE notification_id = ?3 AND unit_id = ?2)",
-  ).bind(now, unitId, notificationId));
-  const results = await env.DB.batch(statements);
-  const cancelled = results[results.length - 1]?.meta.changes ?? 0;
-  await env.DB.prepare(
-    "INSERT INTO notification_events (id, unit_id, notification_id, action, details, actor_kind, created_at) " +
-      "VALUES (?, ?, ?, 'dispatch.cancelled', ?, 'system', ?)",
-  ).bind(
-    crypto.randomUUID(), unitId, notificationId,
-    JSON.stringify({ cancelled, ensured: recipients.length, reason: opts.reason ?? "manual_cancel" }), now,
-  ).run();
+  const cancelled = results[results.length - 2]?.meta.changes ?? 0;
   return { cancelled, ensured: recipients.length };
 }

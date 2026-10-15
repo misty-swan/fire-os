@@ -253,9 +253,9 @@ export function DashboardPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
-      {/* スマホの最上段（通信状態・DEMO・通知。prototype ホームの1行目）。その下に日付と画面名・挨拶 */}
+      {/* スマホの最上段（通信状態・DEMO・通知。prototype ホームの1行目）。未読の点は接続済みの通知指標（T052） */}
       <div>
-        <MobileTopRow online={online} />
+        <MobileTopRow online={online} unread={(data?.notifications.count ?? 0) > 0} />
       </div>
       <PageTitle eyebrow={dateLabel} className="lg:hidden">
         ホーム

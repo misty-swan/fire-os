@@ -359,6 +359,29 @@ export const Task = obj({
 });
 export type TaskDto = z.infer<typeof Task>;
 
+/** タスクの履歴1行（docs/04:138 task_events「状態変更と同commit」。before/afterは状態・担当など小さな値。T052） */
+export const TaskEvent = obj({
+  id: Id,
+  action: ShortText,
+  before: z.record(z.string(), z.unknown()),
+  after: z.record(z.string(), z.unknown()),
+  /** 再開・変更の理由（API-87のreason。初行createdはnull） */
+  reason: Reason2000.nullable(),
+  createdAt: Instant,
+});
+export type TaskEventDto = z.infer<typeof TaskEvent>;
+
+/**
+ * 自分のタスク（API-102の1行。Task＋履歴。T052）。
+ * eventsは出動詳細（API-70）と同じ「詳細応答に履歴を載せる」流儀。タスク履歴の読み取りAPIは無いため
+ * 一覧の行に載せる（自分が担当のタスクだけなので、他者の履歴を返さない）。
+ */
+export const TaskDetail = obj({
+  ...Task.shape,
+  events: z.array(TaskEvent).max(LIMITS.arrayMax),
+});
+export type TaskDetailDto = z.infer<typeof TaskDetail>;
+
 export const operationsApis = {
   "API-05": defineApi({
     method: "GET", path: "/activities", permission: "PER-01", kind: "list", success: [200],
@@ -560,5 +583,16 @@ export const operationsApis = {
     }),
     // T049でprovisionalから厳格化。遷移はdocs/11の許可辺のみ（done→in_progressは再開理由必須、cancelledは終端）
     response: Task,
+  }),
+  /**
+   * 自分の担当タスクの一覧（T052、SCR-21「自分の担当タスク一覧」。docs/03 SCR-21/02、API-28のmyTasksと同じ条件）。
+   * status省略時は open/assigned/in_progress（＝ダッシュボードのmyTasks指標とhref先の一覧の件数が一致する
+   * 条件そのもの）。status指定時はその状態だけ（完了済みの確認・再開に使う）。履歴はAPI-70と同じ
+   * 「詳細応答にeventsを載せる」流儀で行ごとに付く（task_eventsの読み取りAPIは無い。docs/03 SCR-21「履歴」）
+   */
+  "API-102": defineApi({
+    method: "GET", path: "/tasks/me", permission: "PER-01", kind: "list", success: [200],
+    request: obj({ query: listQuery({ status: z.enum(taskStates).optional() }) }),
+    response: Page(TaskDetail),
   }),
 } as const;

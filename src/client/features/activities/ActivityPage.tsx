@@ -5,7 +5,7 @@ import { ConfirmDialog } from "../../components/Overlay";
 import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { MutationStatus } from "../../components/MutationStatus";
 import { SubHeader } from "../../components/Page";
-import { Banner, Button, Card, Chip, TextArea } from "../../components/ui";
+import { Banner, Button, Card, Chip, Icon, TextArea } from "../../components/ui";
 import { initialOf, useMe } from "../../me";
 import { useMutation } from "../../useMutation";
 import type { ActivityDetailDto, ActivityResultDto, ActivityResultRevisionDto } from "../../../shared/contracts/operations";
@@ -269,6 +269,16 @@ export function ActivityPage() {
         </div>
         {!canManage && <p className="text-[12px] text-ink-muted">他の人の回答は、幹部だけに表示されます。</p>}
         {canManage && <AttendanceList activityId={id} rows={audienceRows} me={me.profile.memberId} nameOf={nameOf} onChanged={() => setReloadKey((k) => k + 1)} />}
+        {/* 未回答者への通知（T052。源=この活動の未回答者抽出。SCR-21の作成 flow へ。docs/03 §1.1-14） */}
+        {canManage && (
+          <Link
+            to={`/app/tasks-notifications/notifications/new?source=activity&id=${id}`}
+            className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-pill bg-white/[.08] px-4 text-[13px] font-bold text-ink"
+          >
+            <Icon name="notifications" className="text-[17px]" />
+            未回答の人に通知を作成
+          </Link>
+        )}
       </section>
 
       {/* 参加予定（出欠）と実参加（実績）は別の枠で必ず並べて示す（docs/11:34 固定語彙） */}

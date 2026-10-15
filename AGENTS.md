@@ -21,7 +21,7 @@
 ```bash
 npm ci                  # Node >=22（.nvmrc は26）
 npm run typecheck       # tsc --noEmit
-npm run check:contracts # 101 API台帳×docs/05の表×openapi/fireos.json の一致検査
+npm run check:contracts # 102 API台帳×docs/05の表×openapi/fireos.json の一致検査
 npm run build           # vite build → dist/client
 npx vitest --run        # workers（実workerd＋D1/Queues）と client（jsdom）の両プロジェクト
 npm run test:e2e        # Playwright（要: npx playwright install chromium）

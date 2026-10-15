@@ -1,9 +1,10 @@
-import { Task } from "../../shared/contracts/operations";
+import { Task, TaskDetail } from "../../shared/contracts/operations";
 import { taskTransitions } from "../../shared/states";
 import { authorize, type ResourceRef } from "../auth/authorize";
 import { resolvePrincipal, type AuthzPrincipal } from "../auth/principal";
 import type { AppEnv } from "../env";
-import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../http";
+import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
+import { sha256Hex } from "../mutations/hash";
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation, type MutationContext } from "../mutations/execute";
 import { requirePermission } from "./invitations";
@@ -19,6 +20,11 @@ import { requirePermission } from "./invitations";
  *   T054共用の作成文はbuildTaskEffect（API-68のAI起点と同じ文を使う）。
  * - 変更（API-87）はversion比較更新。遷移はdocs/11の許可辺のみ（taskTransitions）、再開（done→in_progress）
  *   は理由必須、cancelledは終端。担当者変更はopen/assigned/in_progressから可能。
+ * - 一覧（API-102、T052）は自分が担当のタスクだけ（docs/03 SCR-21「自分の担当タスク一覧」。docs/05 API-102）。
+ *   既定は活動中（open/assigned/in_progress）＝ダッシュボード（API-28）のmyTasks指標とhref先の一覧の
+ *   件数が一致する条件そのもの。status指定時はその状態だけ（完了済みの確認・再開に使う）。
+ *   履歴（task_events）は出動詳細（API-70）と同じ「応答にeventsを載せる」流儀で行ごとに付く
+ *   （タスク履歴の読み取りAPIは無く、自分が担当のタスクの履歴だけを返す）。
  * - 履歴（task_events）・監査・outboxは業務書込と同じbatchで確定する（docs/11 §1「成功時だけ履歴と監査」）。
  */
 
@@ -28,6 +34,9 @@ const TASK_JSON =
   "'dueDate', due_date, 'sourceEvaluationId', source_evaluation_id, 'sourceIssueId', source_issue_id, " +
   "'sourceDecisionId', source_decision_id, 'effectOperationId', effect_operation_id, 'createdAt', created_at, 'updatedAt', updated_at) " +
   "FROM tasks WHERE id = ?";
+
+/** API-102の既定条件＝ダッシュボードのmyTasks指標と同じ「担当の活動中タスク」（docs/05 API-28行） */
+const ACTIVE_TASK_STATUSES: readonly string[] = ["open", "assigned", "in_progress"];
 
 /** 担当者変更ができる状態（docs/16 T049裁定: open/assigned/in_progressから。done/cancelledでは422） */
 const ASSIGNABLE_STATES: readonly string[] = ["open", "assigned", "in_progress"];
@@ -137,6 +146,76 @@ export async function buildTaskEffect(ctx: TaskEffectContext, input: TaskEffectI
 }
 
 export function registerTaskRoutes(app: ApiApp): void {
+  // --- API-102: 自分の担当タスクの一覧（T052。固定パス /tasks/me。:idの一覧APIは無いため照合順の衝突は無い。
+  //     cursorはお知らせ（API-24）と同じHMAC署名（条件を変えた続き取得・改変cursorは409 SNAPSHOT_CHANGED）） ---
+  defineRoute(app, "API-102", async (c) => {
+    const p = await resolvePrincipal(c);
+    const { query } = await parseApiRequest(c, "API-102");
+    requirePermission(p, "PER-01", { unitId: p.unitId, type: "task" });
+
+    const statuses = query.status ? [query.status] : ACTIVE_TASK_STATUSES;
+    const where = ["t.unit_id = ?", "t.assignee_member_id = ?", `t.status IN (${statuses.map(() => "?").join(",")})`];
+    const binds: unknown[] = [p.unitId, p.memberId, ...statuses];
+
+    // 条件の指紋はcursor自体を除いて計算する（announcements.tsと同じ。改変cursor・別条件の続き取得は409）
+    const key = await taskCursorKey(c.env.BETTER_AUTH_SECRET);
+    const { cursor: cursorValue, ...filterOnly } = query;
+    const filterHash = await sha256Hex(JSON.stringify({ statuses: [...statuses].sort(), ...filterOnly }));
+    if (cursorValue) {
+      const cursor = await decodeTaskCursor(key, cursorValue);
+      if (!cursor || cursor.filterHash !== filterHash) throw new HttpError("SNAPSHOT_CHANGED");
+      // 新しい順（作成降順）の続き。同時刻はid降順で並べ、取りこぼしも重複も作らない
+      where.push("(t.created_at < ? OR (t.created_at = ? AND t.id < ?))");
+      binds.push(cursor.createdAt, cursor.createdAt, cursor.id);
+    }
+
+    interface TaskRow {
+      id: string; version: number; title: string; assignee_member_id: string | null; status: string;
+      due_date: string | null; source_evaluation_id: string | null; source_issue_id: string | null;
+      source_decision_id: string | null; effect_operation_id: string | null; created_at: string; updated_at: string;
+    }
+    const rows = (
+      await c.env.DB.prepare(
+        "SELECT t.id, t.version, t.title, t.assignee_member_id, t.status, t.due_date, t.source_evaluation_id, " +
+          "t.source_issue_id, t.source_decision_id, t.effect_operation_id, t.created_at, t.updated_at " +
+          `FROM tasks t WHERE ${where.join(" AND ")} ORDER BY t.created_at DESC, t.id DESC LIMIT ?`,
+      ).bind(...binds, query.limit + 1).all<TaskRow>()
+    ).results;
+    const page = rows.slice(0, query.limit);
+
+    // 履歴（docs/04:138 task_events）。挿入順（rowid。incidents.tsのeventsと同じ）で古い順に載せる
+    interface EventRow { task_id: string; id: string; action: string; before_json: string; after_json: string; reason: string | null; created_at: string }
+    const eventRows = page.length
+      ? (await c.env.DB.prepare(
+          `SELECT e.task_id, e.id, e.action, e.before_json, e.after_json, e.reason, e.created_at ` +
+            `FROM task_events e WHERE e.unit_id = ? AND e.task_id IN (${page.map(() => "?").join(",")}) ORDER BY e.rowid`,
+        ).bind(p.unitId, ...page.map((r) => r.id)).all<EventRow>()).results
+      : [];
+    const eventsOf = (taskId: string) =>
+      eventRows
+        .filter((e) => e.task_id === taskId)
+        .map((e) => ({
+          id: e.id, action: e.action,
+          before: JSON.parse(e.before_json) as Record<string, unknown>,
+          after: JSON.parse(e.after_json) as Record<string, unknown>,
+          reason: e.reason, createdAt: e.created_at,
+        }));
+
+    const items = page.map((t) =>
+      TaskDetail.parse({
+        id: t.id, version: t.version, title: t.title, assigneeMemberId: t.assignee_member_id, status: t.status,
+        dueDate: t.due_date, sourceEvaluationId: t.source_evaluation_id, sourceIssueId: t.source_issue_id,
+        sourceDecisionId: t.source_decision_id, effectOperationId: t.effect_operation_id,
+        createdAt: t.created_at, updatedAt: t.updated_at, events: eventsOf(t.id),
+      }),
+    );
+    if (rows.length > query.limit) {
+      const last = page[page.length - 1]!;
+      return ok(c, items, { nextCursor: await encodeTaskCursor(key, { filterHash, createdAt: last.created_at, id: last.id }) });
+    }
+    return ok(c, items);
+  });
+
   // --- API-68: 手動/承認済みAI起点のタスク作成 ---
   defineRoute(app, "API-68", async (c) => {
     const p = await resolvePrincipal(c);
@@ -258,4 +337,38 @@ export function registerTaskRoutes(app: ApiApp): void {
     });
     return ok(c, result.data);
   });
+}
+
+// --- API-102の署名付きcursor（announcements.ts / notifications.tsと同じ流儀。改変cursorは409 SNAPSHOT_CHANGED） ---
+
+interface TaskCursor {
+  filterHash: string;
+  createdAt: string;
+  id: string;
+}
+
+const taskCursorKey = (secret: string): Promise<CryptoKey> =>
+  crypto.subtle.importKey("raw", new TextEncoder().encode(`task-cursor:${secret}`), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+
+const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+const unb64url = (s: string) => Uint8Array.from(atob(s.replaceAll("-", "+").replaceAll("_", "/")), (ch) => ch.charCodeAt(0));
+
+async function encodeTaskCursor(key: CryptoKey, cursor: TaskCursor): Promise<string> {
+  const payload = b64url(new TextEncoder().encode(JSON.stringify(cursor)));
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return `${payload}.${b64url(new Uint8Array(sig))}`;
+}
+
+async function decodeTaskCursor(key: CryptoKey, value: string): Promise<TaskCursor | null> {
+  const [payload, sig] = value.split(".");
+  if (!payload || !sig) return null;
+  try {
+    const valid = await crypto.subtle.verify("HMAC", key, unb64url(sig) as BufferSource, new TextEncoder().encode(payload));
+    if (!valid) return null;
+    const parsed = JSON.parse(new TextDecoder().decode(unb64url(payload))) as TaskCursor;
+    if (typeof parsed.filterHash !== "string" || typeof parsed.createdAt !== "string" || typeof parsed.id !== "string") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }

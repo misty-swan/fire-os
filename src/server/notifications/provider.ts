@@ -50,11 +50,20 @@ export function channelProvider(channel: NotificationChannel): NotificationProvi
  * アプリ内はnotification_recipients行そのものが受信箱（API-67/100が読む）で、外部への送出が無い。
  * そのためsendは内部成立＝即座に受付済みを返す（providerIdは内部識別子）。
  * Web Push/emailの実providerはD13の了承後にregisterChannelProviderで追加する（docs/evidence/V06-delivery.md）。
+ *
+ * 【到達不明（unknown）の試験/デモ用の規約（docs/03 §1.1に記録。T052）】
+ * 実チャネルが無いため「providerで宛先が解決できず、送受の成否が不明（unknown）になる」状態を実データで
+ * 再現できない。そこでこのproviderに限り、address_refが `unknown:` 接頭辞（notifications.tsの
+ * UNKNOWN_ADDRESS_SQUAD＝班が「連絡先未登録」の団員に付く内部試験値。実連絡先ではない。Secretは無い）
+ * のときだけ結果unknownを返す。接頭辞が無い通常の参照は内部成立のままで、本番のinapp挙動は変わらない。
+ * unknownの意味論（無条件再送しない・照会/人確認に回す）は実チャネルと同じで、画面の配送結果の
+ * 「到達不明」表示と「結果を確認」導線の検証（T052のe2e）に使う。
  */
 registerChannelProvider({
   channel: "inapp",
   id: "internal-inbox",
-  async send() {
+  async send({ addressRef }) {
+    if (addressRef.startsWith("unknown:")) return { kind: "unknown" };
     return { kind: "provider_accepted", providerId: "internal-inbox" };
   },
 });

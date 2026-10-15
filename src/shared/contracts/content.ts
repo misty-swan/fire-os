@@ -50,12 +50,17 @@ export type AnnouncementDto = z.infer<typeof Announcement>;
 export const notificationSourceTypes = ["activity", "announcement", "inspection_due"] as const;
 export type NotificationSourceType = (typeof notificationSourceTypes)[number];
 
-/** 対象者1行（docs/04:140）。addressRefは連絡先の「参照」（例: member:<memberId>#inbox）。生値は載せない */
+/**
+ * 対象者1行（docs/04:140）。addressRefは連絡先の「参照」（例: member:<memberId>#inbox）。生値は載せない。
+ * deliveryStatusは送信者（PER-12）投影だけに載る自分の宛先ごとの配送の現在状態（docs/11 配送。
+ * 行がまだ無い＝job未実行はnull。T052。対象者本人の投影には載らない＝本人はmyDeliveryを見る）
+ */
 export const NotificationRecipient = obj({
   memberId: Id,
   channel: z.enum(notificationChannels),
   addressRef: ShortText,
   readAt: Instant.nullable(),
+  deliveryStatus: z.enum(deliveryStates).nullable().optional(),
 });
 
 /** 配送jobの状態（API-64/65の送信者投影。jobの実行（deliveries生成）はT051の配送handler） */
@@ -184,11 +189,18 @@ export const contentApis = {
     response: Notification,
   }),
   "API-64": defineApi({
-    // approveは配送jobの受付（202=業務完了でない。docs/05 §1）。cancelはjobを作らないため200
+    // approveは配送jobの受付（202=業務完了でない。docs/05 §1）。cancelはjobを作らないため200。
+    // cancel_unsentは承認後の未送分取消（deliveries単位。docs/11「未送分取消」。T052でAPI化。
+    // 承認状態は変えないため200。bodyHash/audienceHashはapproveだけが要求する）
     method: "POST", path: "/notifications/:id/approval", permission: "PER-12", kind: "job", success: [200, 202],
     request: obj({
       params: P_ID,
-      body: obj({ version: Version, bodyHash: Sha256, audienceHash: Sha256, decision: z.enum(["approve", "cancel"]) }),
+      body: obj({
+        version: Version,
+        // 承認固定のhashはapproveの要求（サーバーが検査。cancel/cancel_unsentでは使わないため任意）
+        bodyHash: Sha256.optional(), audienceHash: Sha256.optional(),
+        decision: z.enum(["approve", "cancel", "cancel_unsent"]),
+      }),
       ...IDEM,
     }),
     response: Notification,
@@ -199,7 +211,9 @@ export const contentApis = {
   }),
   "API-67": defineApi({
     method: "GET", path: "/notifications/me", permission: "PER-01", kind: "list", success: [200],
-    request: obj({ query: listQuery({ status: z.enum(notificationApprovalStates).optional() }) }),
+    // unread=true（T052）: 自分の分のうち未読（recipients.read_at IS NULL）だけ。docs/05 API-28の
+    // notifications指標（自分宛・未読の件数）と同じ条件で、href先の一覧の件数と一致させる
+    request: obj({ query: listQuery({ status: z.enum(notificationApprovalStates).optional(), unread: z.stringbool().optional() }) }),
     response: Page(MyNotification),
   }),
   "API-100": defineApi({

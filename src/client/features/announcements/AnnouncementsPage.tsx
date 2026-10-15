@@ -433,10 +433,14 @@ function AnnouncementDetail({ id }: { id: string }) {
       <MutationStatus state={archive.state} toastBottom={100} />
       <MutationStatus state={unlink.state} toastBottom={100} />
 
-      {/* 通知依頼の導線は後続の通知タスク（PH4）で接続するため無効表示（docs/03に記録） */}
-      {canManage && (
-        <Notice tone="ai" icon="notifications_paused">
-          対象者への通知の依頼は、通知機能（後のフェーズ）で接続されます。現時点では一覧とホームのお知らせ欄から読めます。
+      {/* 通知への導線（T052で接続。源=このお知らせ。SCR-21の作成 flow へ。docs/03 §1.1-14） */}
+      {canManage && (detail.status === "draft" || detail.status === "published") && (
+        <Notice tone="info" icon="notifications">
+          対象者へのお知らせを通知として届けるには、
+          <Link to={`/app/tasks-notifications/notifications/new?source=announcement&id=${id}`} className="underline">
+            タスク・通知で「お知らせの内容を通知」の下書きを作成
+          </Link>
+          してください（承認してから送信されます）。
         </Notice>
       )}
 

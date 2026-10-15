@@ -174,13 +174,12 @@ describe("ホームの指標と同じ条件の一覧への遷移 (T047)", () => 
     const hiddenDataContributed = [b1Id, bi1].some((id) => drilldownJoined.includes(id));
     expect(hiddenDataContributed).toBe(false);
 
-    // 接続済みの指標（点検期限=T048で接続。seedが無いので0件。一覧との一致は下のit）。
-    // 通知・自分のタスク（PH4）は0件ではなく未接続として返る
+    // 接続済みの指標。通知（T052で接続）は自分宛・未読の件数、自分のタスクは担当の活動中タスク。
+    // hrefはタスク・通知画面（SCR-21）のタブで、それぞれAPI-67（unread=true）・API-102と同じ条件で数えているため
+    // 一覧の件数と必ず一致する（下のitで実データで確認する）。このitではseedが無いので0件
     expect(data.inspectionDue).toMatchObject({ count: 0, href: "/app/assets?due=overdue", connected: true });
-    for (const m of [data.notifications, data.myTasks]) {
-      expect(m.connected).toBe(false);
-      expect(m.href).toBeNull();
-    }
+    expect(data.notifications).toMatchObject({ count: 0, href: "/app/tasks-notifications?tab=notifications&unread=true", connected: true });
+    expect(data.myTasks).toMatchObject({ count: 0, href: "/app/tasks-notifications?tab=tasks", connected: true });
 
     // 幹部の視点: officerはa1・a3の対象で未回答 → 2件
     const officerRes = await fx.client(officer).request("GET", "/api/v1/dashboard");
@@ -264,5 +263,93 @@ describe("ホームの指標と同じ条件の一覧への遷移 (T047)", () => 
     expect(ids).not.toContain(dueTodayVehicle);
     expect(ids).not.toContain(retiredVehicle);
     expect(ids).not.toContain(plainEquipment);
+  });
+
+  it("dashboard_task_and_notification_metrics_match_their_lists (T052)", async () => {
+    const a = fx.units.a;
+    const b = fx.units.b;
+    const admin = a.people.admin; // 分団長（PER-04/12。タスクの作成と通知の承認）
+    const member = a.people.member; // ダッシュボードの主体（PER-01）
+    const officer = a.people.officer; // 通知の対象者（自分は既読にする）
+
+    // --- seed: タスク。memberの担当は「open（活動中）」と「done（完了済み）」の2件。officerの担当も1件。
+    // 別分団（unit b）にも1件（memberには見えない。PER-01＝自unit） ---
+    const mkTask = async (title: string, assignee: string | undefined) => {
+      const res = await fx.client(admin).request("POST", "/api/v1/tasks", {
+        title, dueDate: "2026-12-01", ...(assignee ? { assigneeMemberId: assignee } : {}),
+      }, idem());
+      expect(res.status).toBe(201);
+      return ((await json(res)).data! as { id: string; version: number });
+    };
+    const openTask = await mkTask("消火栓の表示板交換（T052）", member.memberId!);
+    const doneTask = await mkTask("資機材の注文（T052・完了）", member.memberId!);
+    await mkTask("訓練の備品確認（T052・幹部担当）", officer.memberId!);
+    const bTaskRes = await fx.client(b.people.admin).request("POST", "/api/v1/tasks", {
+      title: "別分団のタスク（T052）", assigneeMemberId: b.people.member.memberId!, dueDate: "2026-12-02",
+    }, idem());
+    expect(bTaskRes.status).toBe(201);
+    const bTaskId = ((await json(bTaskRes)).data! as { id: string }).id;
+    // doneTaskを完了まで進める（open→in_progress→done。openTaskは活動中のまま残す）
+    await fx.client(admin).request("PATCH", `/api/v1/tasks/${doneTask.id}`, { version: 1, status: "in_progress", reason: "試験の進行" }, idem());
+    const doneRes = await fx.client(admin).request("PATCH", `/api/v1/tasks/${doneTask.id}`, { version: 2, status: "done", reason: "試験の進行" }, idem());
+    expect(doneRes.status).toBe(200);
+
+    // --- seed: 通知。活動の未回答抽出（対象=memberとofficer）でdraft→承認（API-63/64） ---
+    const actRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "通知指標の源（T052）", kind: "訓練", plannedStartsAt: days(7), locationText: "架空市中央公園",
+      ownerMemberId: officer.memberId!, audienceMemberIds: [member.memberId!, officer.memberId!],
+    }, idem());
+    expect(actRes.status).toBe(201);
+    const actId = ((await json(actRes)).data! as { id: string }).id;
+    const draftRes = await fx.client(admin).request("POST", "/api/v1/notifications/drafts", {
+      source: { type: "activity", id: actId }, channels: ["inapp"],
+    }, idem());
+    expect(draftRes.status).toBe(201);
+    const draft = (await json(draftRes)).data! as { id: string; version: number; bodyHash: string; audienceHash: string };
+    const approveRes = await fx.client(admin).request("POST", `/api/v1/notifications/${draft.id}/approval`, {
+      version: draft.version, bodyHash: draft.bodyHash, audienceHash: draft.audienceHash, decision: "approve",
+    }, idem());
+    expect(approveRes.status).toBe(202);
+    // 承認で版が進む。officerは自分の分を既読にする（memberは未読のまま＝unread指標の検証対象）
+    const officerView = (await json(await fx.client(officer).request("GET", `/api/v1/notifications/${draft.id}`))).data! as { version: number };
+    const readRes = await fx.client(officer).request("PUT", `/api/v1/notifications/${draft.id}/read`, {
+      notificationVersion: officerView.version,
+    }, idem());
+    expect(readRes.status).toBe(200);
+
+    // --- ホーム（member）: 通知=自分宛・未読の1件、自分のタスク=担当の活動中（open）1件 ---
+    const res = await fx.client(member).request("GET", "/api/v1/dashboard");
+    expect(res.status).toBe(200);
+    const data = (await json(res)).data! as unknown as DashboardData;
+    expect(data.notifications.connected).toBe(true);
+    expect(data.myTasks.connected).toBe(true);
+    expect(data.notifications.href).toBe("/app/tasks-notifications?tab=notifications&unread=true");
+    expect(data.myTasks.href).toBe("/app/tasks-notifications?tab=tasks");
+
+    // 指標とhref先の一覧（同じ条件のAPI-67 unread=true／API-102）の件数が一致する（docs/05 API-28）
+    const unreadList = ((await json(await fx.client(member).request("GET", "/api/v1/notifications/me?unread=true&limit=200")))
+      .data ?? []) as unknown as { id: string; myReadAt: string | null }[];
+    expect(data.notifications.count).toBe(unreadList.length);
+    expect(unreadList.map((r) => r.id)).toEqual([draft.id]);
+    expect(unreadList.every((r) => r.myReadAt === null)).toBe(true);
+    const taskList = ((await json(await fx.client(member).request("GET", "/api/v1/tasks/me?limit=200")))
+      .data ?? []) as unknown as { id: string; status: string }[];
+    expect(data.myTasks.count).toBe(taskList.length);
+    expect(taskList.map((r) => r.id)).toEqual([openTask.id]);
+    expect(taskList.every((r) => ["open", "assigned", "in_progress"].includes(r.status))).toBe(true);
+
+    // --- officer（自分は既読・担当タスク1件）と別分団（タスクは漏れない） ---
+    const officerData = (await json(await fx.client(officer).request("GET", "/api/v1/dashboard"))).data! as unknown as DashboardData;
+    expect(officerData.notifications.count).toBe(0); // 自分の分は既読済み
+    expect(officerData.myTasks.count).toBe(1);
+    // memberから別分団のタスクは件数にも一覧にも現れない（PER-01＝自unit）
+    const bMemberList = ((await json(await fx.client(b.people.member).request("GET", "/api/v1/tasks/me?limit=200"))).data ?? []) as unknown as { id: string }[];
+    expect(bMemberList.map((r) => r.id)).toEqual([bTaskId]);
+    expect(taskList.some((r) => r.id === bTaskId)).toBe(false);
+
+    // --- 完了済みは既定の一覧から外れるが、status=doneで確認できる（再開の導線。docs/11 業務タスク） ---
+    const doneList = ((await json(await fx.client(member).request("GET", "/api/v1/tasks/me?status=done&limit=200")))
+      .data ?? []) as unknown as { id: string }[];
+    expect(doneList.map((r) => r.id)).toEqual([doneTask.id]);
   });
 });

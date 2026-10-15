@@ -12,8 +12,8 @@ const ID = "11111111-1111-4111-8111-111111111111";
 const ID2 = "22222222-2222-4222-8222-222222222222";
 const KEY = { "idempotency-key": "key-1" };
 
-// docs/05 §4 の101行を独立に数え上げた期待値（API-01〜API-101）
-const expected101Ids = Array.from({ length: 101 }, (_, i) => `API-${String(i + 1).padStart(2, "0")}`);
+// docs/05 §4 の102行を独立に数え上げた期待値（API-01〜API-102。102はT052のGET /tasks/me）
+const expectedApiIds = Array.from({ length: 102 }, (_, i) => `API-${String(i + 1).padStart(2, "0")}`);
 
 const validFacility = {
   type: "hydrant", latitude: 35.0, longitude: 139.0, locationSource: "現地確認", locationNote: "交差点北側", managementNumber: "H-001",
@@ -22,7 +22,7 @@ const validFacility = {
 describe("contracts (T002)", () => {
   it("contract_registry_is_complete_and_strict", () => {
     const registryIds = [...apiIds];
-    expect(registryIds).toEqual(expected101Ids);
+    expect(registryIds).toEqual(expectedApiIds);
 
     // 未知列
     const unknownField = safeParseRequest("API-11", { body: { ...validFacility, role: "admin" }, headers: KEY });
@@ -191,7 +191,7 @@ describe("contracts (T002)", () => {
     const doc = buildOpenApi() as { openapi: string; paths: Record<string, Record<string, { operationId: string; parameters: { name: string; in: string }[] }>> };
     expect(doc.openapi).toBe("3.1.0");
     const ops = Object.values(doc.paths).flatMap((p) => Object.values(p));
-    expect(ops).toHaveLength(100); // API-36は x-external-apis
+    expect(ops).toHaveLength(101); // API-36は x-external-apis（101+1=102 API。T052でAPI-102を追加）
     const put = doc.paths["/api/v1/activities/{id}/attendance/me"]?.put;
     expect(put?.operationId).toBe("API-08");
     expect(put?.parameters.some((p) => p.name === "idempotency-key" && p.in === "header")).toBe(true);

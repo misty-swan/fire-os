@@ -337,9 +337,142 @@ describe("通知の明示承認・本人既読 (T050)", () => {
     const hash = await sha256Hex(canonicalJson([member.memberId!]));
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  /**
+   * T052: 承認後の「未送分取消」のAPI（API-64 decision=cancel_unsent。docs/11「未送分取消はdeliveries単位」）と、
+   * 本人一覧の未読条件（API-67 unread=true＝API-28 notifications指標と同じ条件）、
+   * 到達不明の試験/デモ用規約（班が「連絡先未登録」の団員の宛先参照はunknown:接頭辞になり、
+   * inapp providerは結果unknownを返す。docs/03 §1.1に記録。実チャネル無しで「受付≠到達不明」を再現する）。
+   */
+  it("approved_unsent_cancel_via_api_unread_list_and_unknown_convention", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const officer = a.people.officer;
+    const member = a.people.member;
+    const officerId = a.people.officer.memberId!;
+    const memberId = a.people.member.memberId!;
+
+    // --- 到達不明の規約: memberの班を内部試験値にする（試験のみの変更。実データに無い値。docs/03 §1.1） ---
+    await env.DB.prepare("UPDATE members SET squad = '連絡先未登録', updated_at = ? WHERE id = ?")
+      .bind(new Date().toISOString(), memberId).run();
+
+    interface DraftRow {
+      id: string; version: number; bodyHash: string; audienceHash: string;
+      recipients: { memberId: string; addressRef: string; deliveryStatus?: string | null }[];
+    }
+    const createDraft = async (): Promise<DraftRow> => {
+      const activityId = await createActivity([memberId, officerId]);
+      const res = await fx.client(admin).request("POST", "/api/v1/notifications/drafts", {
+        source: { type: "activity", id: activityId }, channels: ["inapp"],
+      }, idem());
+      expect(res.status).toBe(201);
+      return (await json(res)).data! as unknown as DraftRow;
+    };
+    /** 他のit・先行のjobを拾わないようにしてから、指定のjobだけを1件実行する（notification-delivery.test.tsと同じ流儀） */
+    const runOneJob = async (jobId: string) => {
+      await env.DB.prepare("UPDATE jobs SET status = 'cancelled' WHERE status IN ('queued', 'running', 'retry_wait') AND id != ?")
+        .bind(jobId).run();
+      await env.DB.prepare("UPDATE jobs SET next_attempt_at = '2000-01-01T00:00:00.000Z' WHERE id = ?").bind(jobId).run();
+      const { leaseJob, completeJob } = await import("../src/server/jobs/store");
+      const { handleJob } = await import("../src/server/jobs/runner");
+      const leased = (await leaseJob(env, new Date().toISOString()))!;
+      expect(leased.id).toBe(jobId);
+      const outcome = await handleJob(leased, env);
+      expect(await completeJob(env, leased, outcome, new Date().toISOString())).toBe(true);
+    };
+    const deliveryStatusOf = async (notificationId: string, memberId: string) => {
+      const rows = await env.DB.prepare(
+        "SELECT d.status FROM notification_deliveries d JOIN notification_recipients r ON r.id = d.recipient_id AND r.unit_id = d.unit_id " +
+          "WHERE r.notification_id = ? AND r.member_id = ?",
+      ).bind(notificationId, memberId).all<{ status: string }>();
+      return rows.results[0]?.status ?? null;
+    };
+
+    // --- draft1: 宛先参照に規約が効く（班が連絡先未登録の団員はunknown:接頭辞の内部試験値） ---
+    const draft = await createDraft();
+    const byMember = (id: string) => draft.recipients.find((r) => r.memberId === id)!;
+    expect(byMember(memberId).addressRef).toBe(`unknown:${memberId}#inbox`);
+    expect(byMember(officerId).addressRef).toBe(`member:${officerId}#inbox`);
+
+    // --- 承認（202。配送jobを1本受け付ける） ---
+    const approveRes = await fx.client(admin).request("POST", `/api/v1/notifications/${draft.id}/approval`, {
+      version: draft.version, bodyHash: draft.bodyHash, audienceHash: draft.audienceHash, decision: "approve",
+    }, idem());
+    expect(approveRes.status).toBe(202);
+
+    // --- 承認後の未送分取消（API-64 decision=cancel_unsent。200。承認状態は変わらない） ---
+    const cancelUnsentRes = await fx.client(admin).request("POST", `/api/v1/notifications/${draft.id}/approval`, {
+      version: draft.version + 1, decision: "cancel_unsent",
+    }, idem());
+    expect(cancelUnsentRes.status).toBe(200);
+    const cancelled = (await json(cancelUnsentRes)).data! as unknown as DraftRow & { status: string };
+    expect(cancelled.status).toBe("approved"); // 取消は承認状態を変えない（docs/11 通知承認行）
+    expect(cancelled.version).toBe(draft.version + 2);
+    expect(cancelled.recipients.every((r) => r.deliveryStatus === "cancelled")).toBe(true);
+    // 旧版（取消で版が進んだ後）での取消は409
+    const staleCancel = await fx.client(admin).request("POST", `/api/v1/notifications/${draft.id}/approval`, {
+      version: draft.version + 1, decision: "cancel_unsent",
+    }, idem());
+    expect(staleCancel.status).toBe(409);
+    // draftにはcancel_unsentは使えない（422。draft取消はdecision=cancel）
+    const draft2 = await createDraft();
+    const draftUnsentCancel = await fx.client(admin).request("POST", `/api/v1/notifications/${draft2.id}/approval`, {
+      version: draft2.version, decision: "cancel_unsent",
+    }, idem());
+    expect(draftUnsentCancel.status).toBe(422);
+
+    // --- 取消後のjobが走っても送らない（行は確保済み・pending無し。docs/11「取消後のjob実行は送らない」） ---
+    const jobRow = (await fx.rows("jobs", { dedupe_key: `${a.id}|notification.deliver|${draft.id}|${draft.version}` }))[0]! as unknown as { id: string };
+    await runOneJob(jobRow.id);
+    expect(await deliveryStatusOf(draft.id, memberId)).toBe("cancelled");
+    expect(await deliveryStatusOf(draft.id, officerId)).toBe("cancelled");
+    expect(((await fx.rows("notifications", { id: draft.id }))[0]!.status)).toBe("finished"); // 受付0・全件取消はfinished
+
+    // --- draft3: 規約どおりmemberは到達不明・officerは受付（受付と到達不明を別表示するための実データ） ---
+    const draft3 = await createDraft();
+    expect(byMemberOf(draft3, memberId).addressRef).toBe(`unknown:${memberId}#inbox`);
+    const approve3Res = await fx.client(admin).request("POST", `/api/v1/notifications/${draft3.id}/approval`, {
+      version: draft3.version, bodyHash: draft3.bodyHash, audienceHash: draft3.audienceHash, decision: "approve",
+    }, idem());
+    expect(approve3Res.status).toBe(202);
+    const job3 = (await fx.rows("jobs", { dedupe_key: `${a.id}|notification.deliver|${draft3.id}|${draft3.version}` }))[0]! as unknown as { id: string };
+    await runOneJob(job3.id);
+    expect(await deliveryStatusOf(draft3.id, officerId)).toBe("provider_accepted"); // inapp内部成立＝受付
+    expect(await deliveryStatusOf(draft3.id, memberId)).toBe("unknown"); // 宛先参照が解決できない（試験/デモ用規約）
+
+    // --- 送信者投影（API-65）のrecipientsに配送状態が載る（配送結果の別表示に使う。T052） ---
+    const senderView = (await json(await fx.client(admin).request("GET", `/api/v1/notifications/${draft3.id}`))).data! as unknown as DraftRow;
+    expect(byMemberOf(senderView, officerId).deliveryStatus).toBe("provider_accepted");
+    expect(byMemberOf(senderView, memberId).deliveryStatus).toBe("unknown");
+
+    // --- 本人一覧の未読条件（API-67 unread=true。API-28 notifications指標と同じ条件） ---
+    const officerView = (await json(await fx.client(officer).request("GET", `/api/v1/notifications/${draft3.id}`))).data! as { version: number };
+    const officerRead = await fx.client(officer).request("PUT", `/api/v1/notifications/${draft3.id}/read`, {
+      notificationVersion: officerView.version,
+    }, idem());
+    expect(officerRead.status).toBe(200);
+    const unreadOfficer = (await json(await fx.client(officer).request("GET", "/api/v1/notifications/me?unread=true&limit=200"))).data as unknown as { id: string }[];
+    expect(unreadOfficer.some((row) => row.id === draft3.id)).toBe(false); // 既読済みは未読一覧に出ない
+    const unreadMember = (await json(await fx.client(member).request("GET", "/api/v1/notifications/me?unread=true&limit=200"))).data as unknown as { id: string; myReadAt: string | null }[];
+    expect(unreadMember.some((row) => row.id === draft3.id && row.myReadAt === null)).toBe(true);
+    // unread指定なし（通常の全件）には既読も現れる
+    const allOfficer = (await json(await fx.client(officer).request("GET", "/api/v1/notifications/me?limit=200"))).data as unknown as { id: string }[];
+    expect(allOfficer.some((row) => row.id === draft3.id)).toBe(true);
+
+    // --- 規約はdraft作成時の班値で決まる: 班を戻すと以後の宛先参照は通常値 ---
+    await env.DB.prepare("UPDATE members SET squad = '2班', updated_at = ? WHERE id = ?")
+      .bind(new Date().toISOString(), memberId).run();
+    const draft4 = await createDraft();
+    expect(byMemberOf(draft4, memberId).addressRef).toBe(`member:${memberId}#inbox`);
+  });
 });
 
 /** テスト内で幹部（officer）のmemberIdを取るヘルパー */
 function officerOf(a: TestFixture["units"]["a"]): string {
   return a.people.officer.memberId!;
+}
+
+/** 通知の対象者1行をmemberIdで引く（T052の試験用） */
+function byMemberOf<T extends { recipients: { memberId: string }[] }>(draft: T, memberId: string): T["recipients"][number] {
+  return draft.recipients.find((r) => r.memberId === memberId)!;
 }

@@ -24,7 +24,13 @@ import { attendanceResponses } from "../../shared/states";
  *   facilityはAPI-56の対象外（/assets配下はvehicle/equipmentのみ）のためcount対象外。廃止資産は除外
  *   （docs/14 D24の両建て）。hrefはAPI-18/19に`due=overdue`を付けた一覧（/app/assets?due=overdue）で、
  *   **件数は一覧（API-18＋API-19）と同じoverdueAssetConditionで数える**ため必ず一致する
- * - 通知・自分のタスク: API-67/API-68 は PH4 のため**未接続**（connected=false。docs/16 T047「0件と未実装を混同しない」）
+ * - 通知（T052で接続）: 自分宛・未読（recipients.read_at IS NULL）の通知の件数。API-67（unread=true）と
+ *   同じ条件（対象者に見える承認状態 approved/dispatching/finished/failed のみ）で数え、hrefは
+ *   タスク・通知画面（SCR-21）の通知タブの未読絞り込み（?tab=notifications&unread=true）。
+ *   その一覧の件数と必ず一致する（tests/dashboard.test.tsがAPI-67 unread=trueで確認する）
+ * - 自分のタスク（T052で接続）: 自分が担当（assignee）かつ活動中（open/assigned/in_progress）の件数。
+ *   API-102（GET /tasks/me）のstatus省略時と同じ条件で数え、hrefはタスクタブ（?tab=tasks）。
+ *   その一覧の件数と必ず一致する（tests/dashboard.test.tsがAPI-102で確認する）
  *
  * period は DASH-02（API-52、PH4）の期間集計用の予約で、T047では語彙が定まらないため値を受けない（指定は400）。
  */
@@ -94,6 +100,24 @@ export function registerDashboardRoutes(app: ApiApp): void {
       (await countOverdueAssets(c, p.unitId, "vehicles", todayJst)) +
       (await countOverdueAssets(c, p.unitId, "equipment", todayJst));
 
+    // 通知（T052で接続）: 自分宛・未読（recipients.read_at IS NULL）の件数（API-67にunread=trueを付けた
+    // 一覧と同じ条件。docs/05 API-28「countはその一覧の件数と必ず一致させる」）。hrefはタスク・通知画面
+    // （SCR-21）の通知タブの未読絞り込み
+    const notificationCount = (
+      await c.env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM notifications n JOIN notification_recipients r ON r.notification_id = n.id AND r.unit_id = n.unit_id " +
+          "WHERE n.unit_id = ? AND r.member_id = ? AND n.status IN ('approved', 'dispatching', 'finished', 'failed') AND r.read_at IS NULL",
+      ).bind(p.unitId, me).first<{ n: number }>()
+    )?.n ?? 0;
+
+    // 自分のタスク（T052で接続）: 自分が担当（assignee）かつ活動中（open/assigned/in_progress）の件数
+    // （API-102の既定条件＝status省略とまったく同じ。docs/05 API-28）。hrefはタスク・通知画面のタスクタブ
+    const myTaskCount = (
+      await c.env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM tasks WHERE unit_id = ? AND assignee_member_id = ? AND status IN ('open', 'assigned', 'in_progress')",
+      ).bind(p.unitId, me).first<{ n: number }>()
+    )?.n ?? 0;
+
     // hrefは一覧画面がそのまま受けるfilterクエリ（T039の活動一覧・T034の点検管理と同じURL）
     const nextActivity = DashboardNextActivity.parse({
       count: upcomingCount, href: `/app/activities?status=scheduled&from=${encodeURIComponent(now)}`, connected: true,
@@ -112,8 +136,10 @@ export function registerDashboardRoutes(app: ApiApp): void {
       inspectionDue: DashboardMetric.parse({
         count: inspectionDueCount, href: "/app/assets?due=overdue", connected: true,
       }),
-      notifications: DashboardMetric.parse({ count: 0, href: null, connected: false }),
-      myTasks: DashboardMetric.parse({ count: 0, href: null, connected: false }),
+      notifications: DashboardMetric.parse({
+        count: notificationCount, href: "/app/tasks-notifications?tab=notifications&unread=true", connected: true,
+      }),
+      myTasks: DashboardMetric.parse({ count: myTaskCount, href: "/app/tasks-notifications?tab=tasks", connected: true }),
     });
     return ok(c, data);
   });
