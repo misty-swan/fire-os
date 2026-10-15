@@ -1,0 +1,14 @@
+{
+  "note": "帳票様式のallowlist（docs/04 §3.5末尾、docs/14 D20）。hashは対応するartifactをJSON.parse→JSON.stringifyした正規化JSON（UTF-8）のSHA-256で、取得時に再計算して照合する（不一致は422でfail-closed）。artifactは架空の検証設定であり、実在の団体・正式帳票・承認を示さない（docs/14 D06の点検様式と同じ扱い）。manifestはサーバーが読み込むだけで、API経由のCRUDは提供しない（docs/04「新しい業務管理CRUDがあるとは主張しない」）",
+  "templates": [
+    {
+      "id": "test-activity",
+      "version": "test-activity-v1",
+      "file": "test-activity-v1.json",
+      "hash": "dea6a16e6daf045ef7978d0a0fceed2ce705bee8544ef95705954f8c7d77e862",
+      "fieldSchemaSummary": ["activityTitle", "participantCount", "actualPeriod", "summary", "approver"],
+      "sourceRef": "架空の様式A『活動報告書』（実在しない検証用の参照名）",
+      "approverSectionNote": "承認者欄（作成者/承認者/承認日）を設置。承認の記録はAPI-60（T058）"
+    }
+  ]
+}

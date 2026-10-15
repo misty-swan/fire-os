@@ -4,7 +4,8 @@ import {
   obj, provisionalDto,
 } from "./common";
 import {
-  announcementStates, attachmentStates, deliveryStates, jobStates, notificationApprovalStates, notificationChannels,
+  announcementStates, attachmentStates, contentVersionStates, deliveryStates, jobStates, notificationApprovalStates,
+  notificationChannels,
 } from "../states";
 
 export const ReadReceipt = obj({ readAt: z.iso.datetime(), revisionNo: z.number().int().min(1).optional(), notificationVersion: z.number().int().min(1).optional() });
@@ -116,6 +117,56 @@ export type MyNotificationDto = z.infer<typeof MyNotification>;
 const ReviewVerb = z.enum(["request_review", "approve", "changes_requested"]);
 const sourceVersions = z.record(z.string(), Version);
 
+// --- 報告書（T056。docs/04:146/147、docs/05 API-58/59/62、docs/11 報告書/文書版、docs/14 D20） ---
+
+/**
+ * 版の参照源（docs/04:147 source_versions）。activityの版・実績の版/訂正番号は**サーバーが実績から計算して
+ * 記録する**（docs/16 T056「数値は実績からサーバー計算」。使用した様式版はtemplate_version列）。
+ * 元実績の更新は「保存した版と現行版の不一致」で検出できる
+ */
+const ReportSourceVersions = obj({
+  activityVersion: Version,
+  resultVersion: Version,
+  resultRevisionNo: Version,
+});
+
+/** 帳票の版（docs/04:147）。内容列（text等）は旧版不変。承認列は承認済み（approved）だけが持つ */
+export const ReportVersion = obj({
+  id: Id,
+  reportId: Id,
+  /** 使用した様式版（allowlist設定artifact。config/report-templates/manifest.jsonでhash固定） */
+  templateVersion: ShortText,
+  revisionNo: Version,
+  text: Body,
+  /** 様式の必須欄で未記入のもの（サーバー計算） */
+  missingFields: z.array(ShortText).max(LIMITS.arrayMax),
+  sourceVersions: ReportSourceVersions,
+  /** AI生成時のモデル（手動下書きはNULL。T057以降） */
+  modelId: z.string().max(200).nullable(),
+  status: z.enum(contentVersionStates),
+  approvedBy: Id.nullable(),
+  approvedAt: Instant.nullable(),
+  createdAt: Instant,
+});
+export type ReportVersionDto = z.infer<typeof ReportVersion>;
+
+/** 帳票root（docs/04:146）。kindはT056では手動下書きのみ（AI下書きはT057以降でCHECK拡張） */
+export const Report = obj({
+  id: Id,
+  version: Version,
+  activityId: Id,
+  kind: z.literal("manual"),
+  currentDraftVersionId: Id.nullable(),
+  currentApprovedVersionId: Id.nullable(),
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type ReportDto = z.infer<typeof Report>;
+
+/** docs/05 API-58「Report＋ReportVersion」（API-62の作成直後応答も同じ形。activity-resultsのAPI-43と同じ流儀） */
+export const ReportHistory = obj({ report: Report, versions: z.array(ReportVersion) });
+export type ReportHistoryDto = z.infer<typeof ReportHistory>;
+
 const AclEntry = obj({
   memberId: Id.optional(),
   roleId: Id.optional(),
@@ -224,11 +275,16 @@ export const contentApis = {
   // --- 報告書 ---
   "API-58": defineApi({
     method: "GET", path: "/reports/:id", permission: "PER-11", kind: "get", success: [200],
+    // **未承認版は担当のみ**（docs/05 API-58。担当=作成者＋activity担当owner。担当外は承認版だけが見え、
+    // 承認版が無い場合は存在も見せないため404。T056実装）
     request: obj({ params: P_ID, query: obj({ revision: z.coerce.number().int().min(1).optional() }) }),
-    response: z.looseObject({}), provisional: true,
+    response: ReportHistory,
   }),
   "API-59": defineApi({
     method: "POST", path: "/reports/:id/versions", permission: "PER-10", kind: "mutation", success: [201],
+    // 新draft版（docs/11「差戻し後/承認後訂正は新draft版、旧版不変」。旧版409はrootの版ガード）。
+    // 入力のsourceVersionsはdocs/05どおり受理するが、activity/resultの版は**サーバーが現行実績から
+    // 再計算して保存する**（docs/16 T056。入力を信用しない。様式版は直前版から引継ぎ）
     request: obj({
       params: P_ID,
       body: obj({
@@ -236,7 +292,7 @@ export const contentApis = {
       }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    response: ReportVersion,
   }),
   "API-60": defineApi({
     method: "POST", path: "/reports/:id/decision", permission: "PER-10", kind: "mutation", success: [200],
@@ -253,11 +309,14 @@ export const contentApis = {
   }),
   "API-62": defineApi({
     method: "POST", path: "/reports/manual", permission: "PER-04", kind: "mutation", success: [201],
+    // 手動下書き（AI停止でも人の入力で帳票を作れる）。templateVersionはallowlist外・hash不一致が422
+    // （docs/04 §3.5末尾「存在しない版は422」）。resultVersionは実績rootの版ガード（旧版409）。
+    // source_versions（activity/resultの版）はサーバーが実績から計算して記録する（docs/16 T056）
     request: obj({
       body: obj({ activityId: Id, resultVersion: Version, templateVersion: ShortText, text: Body }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: ReportHistory,
   }),
   // --- 文書 ---
   "API-73": defineApi({

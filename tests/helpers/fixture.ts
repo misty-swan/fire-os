@@ -72,6 +72,8 @@ const TABLES = new Set([
   "jobs",
   // PH4: 通知（T050）
   "notifications", "notification_recipients", "notification_deliveries", "notification_events",
+  // PH4: 報告書（T056）
+  "reports", "report_versions", "content_version_events",
 ]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 

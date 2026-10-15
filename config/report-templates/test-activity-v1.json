@@ -1,0 +1,19 @@
+{
+  "id": "test-activity",
+  "version": "test-activity-v1",
+  "title": "活動報告書（検証用）",
+  "note": "架空の検証設定。実在の団体・正式様式・承認を示さない（docs/14 D06の点検様式と同じ扱い。docs/14 D20）",
+  "sourceRef": "架空の様式A『活動報告書』（実在しない検証用の参照名。原様式の入手と版管理はdocs/14 D20で承認後に差し替える）",
+  "approverSection": {
+    "label": "承認者欄",
+    "items": ["作成者", "承認者", "承認日"],
+    "note": "帳票の承認はAPI-60（T058）の決定操作で記録する。この欄は様式上の配置の定義"
+  },
+  "fieldSchema": [
+    { "code": "activityTitle", "label": "活動名", "valueType": "text", "source": "computed", "computedFrom": "activityTitle" },
+    { "code": "participantCount", "label": "参加人数", "valueType": "number", "source": "computed", "computedFrom": "actualParticipants" },
+    { "code": "actualPeriod", "label": "実施日時", "valueType": "text", "source": "computed", "computedFrom": "actualTimes" },
+    { "code": "summary", "label": "実施内容", "valueType": "text", "source": "input", "required": true },
+    { "code": "approver", "label": "承認者欄", "valueType": "approverSection", "source": "approverSection" }
+  ]
+}

@@ -32,6 +32,7 @@ import { registerResourceUsageRoutes } from "./routes/resource-usages";
 import { registerOperationLinkRoutes } from "./routes/incident-activity";
 import { registerAnnouncementRoutes } from "./routes/announcements";
 import { registerNotificationRoutes } from "./routes/notifications";
+import { registerReportRoutes } from "./routes/reports";
 import { registerClassificationRoutes } from "./routes/ai-classification";
 import { registerAiDecisionRoutes } from "./routes/ai-decisions";
 import { registerDashboardRoutes } from "./routes/dashboard";
@@ -77,6 +78,8 @@ export function registerRoutes(app: ApiApp): void {
   registerAnnouncementRoutes(app);
   // GET /notifications/me（API-67）は /notifications/:id（API-65）とpathが重なるため先に登録する（docs/05 §1、Honoは登録順）
   registerNotificationRoutes(app);
+  // 固定パス（/reports/manual）は /reports/:id より先に照合する（docs/05 §1、Honoは登録順）
+  registerReportRoutes(app);
   registerClassificationRoutes(app);
   registerAiDecisionRoutes(app);
   registerDashboardRoutes(app);
