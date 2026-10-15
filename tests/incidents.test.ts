@@ -256,4 +256,74 @@ describe("模擬・訓練・実出動記録と状態API (T040)", () => {
     // 検収（ブリーフのassertion）
     expect(implicitNotificationCount).toBe(0);
   });
+
+  it("same_key_resend_returns_saved_response_for_create_and_update (docs/05 §2)", async () => {
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 応答が届かなかった操作のリトライが
+    // 現在の状態を前提とした業務エラー（activityAlreadyLinked 409・voided 422・no_changes 400）になってはいけない
+    const a = fx.units.a;
+    const admin = a.people.admin;
+
+    // リンク先の活動（API-06）
+    const actRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "出動再送試験用の予定",
+      kind: "訓練",
+      plannedStartsAt: "2026-11-05T01:00:00.000Z",
+      locationText: "架空市第五堤防",
+      ownerMemberId: admin.memberId!,
+      audienceMemberIds: [admin.memberId!],
+    }, idem());
+    expect(actRes.status).toBe(201);
+    const activityId = ((await json(actRes)).data! as { id: string }).id;
+
+    // --- API-22: activityId付きの出動登録 → 同キー再送は409ではなく元の201 ---
+    const incidentBody = {
+      kind: "training", occurredAt: "2026-11-05T02:00:00.000Z",
+      summary: "活動へ紐づける出動（再送試験用・架空）", activityId,
+    };
+    const createKey = crypto.randomUUID();
+    const first = await fx.client(admin).request("POST", "/api/v1/incidents", incidentBody, { "idempotency-key": createKey });
+    expect(first.status).toBe(201);
+    const incident = (await json(first)).data! as unknown as IncidentData;
+    expect(incident.activityId).toBe(activityId);
+
+    const replay = await fx.client(admin).request("POST", "/api/v1/incidents", incidentBody, { "idempotency-key": createKey });
+    expect(replay.status).toBe(201);
+    expect((await json(replay)).data).toEqual(incident as unknown as Record<string, unknown>);
+    expect(await fx.rows("incidents", { activity_id: activityId })).toHaveLength(1);
+    expect(await fx.rows("domain_events", { entity_type: "incident", entity_id: incident.id })).toHaveLength(1);
+
+    // --- API-69: 状態遷移（recording→active）→ 同キー再送はno_changes 400ではなく元の応答 ---
+    const patchKey = crypto.randomUUID();
+    const patchBody = { version: 1, status: "active", reason: "出動を開始" };
+    const patchRes = await fx.client(admin).request("PATCH", `/api/v1/incidents/${incident.id}`, patchBody, { "idempotency-key": patchKey });
+    expect(patchRes.status).toBe(200);
+    const active = (await json(patchRes)).data! as unknown as IncidentData;
+
+    const patchReplay = await fx.client(admin).request("PATCH", `/api/v1/incidents/${incident.id}`, patchBody, { "idempotency-key": patchKey });
+    expect(patchReplay.status).toBe(200);
+    expect((await json(patchReplay)).data).toEqual(active as unknown as Record<string, unknown>);
+    expect((await fx.rows("incidents", { id: incident.id }))[0]!.version).toBe(2);
+
+    // --- API-69: voidedへの遷移（recording→voided。docs/11の許可辺）→ 終端になった後の同キー再送も
+    // voided_is_terminalの422ではなく元の応答 ---
+    const secondRes = await fx.client(admin).request("POST", "/api/v1/incidents", {
+      kind: "simulation", occurredAt: "2026-11-06T02:00:00.000Z", summary: "無効化する出動（再送試験用・架空）",
+    }, idem());
+    expect(secondRes.status).toBe(201);
+    const second = (await json(secondRes)).data! as unknown as IncidentData;
+
+    const voidKey = crypto.randomUUID();
+    const voidBody = { version: 1, status: "voided", reason: "誤登録のため無効化（試験用・架空）" };
+    const voidRes = await fx.client(admin).request("PATCH", `/api/v1/incidents/${second.id}`, voidBody, { "idempotency-key": voidKey });
+    expect(voidRes.status).toBe(200);
+    const voided = (await json(voidRes)).data! as unknown as IncidentData;
+
+    const voidReplay = await fx.client(admin).request("PATCH", `/api/v1/incidents/${second.id}`, voidBody, { "idempotency-key": voidKey });
+    expect(voidReplay.status).toBe(200);
+    expect((await json(voidReplay)).data).toEqual(voided as unknown as Record<string, unknown>);
+    // 再送で状態は戻らない・動かない
+    const afterRow = (await fx.rows("incidents", { id: second.id }))[0]!;
+    expect(afterRow.status).toBe("voided");
+    expect(afterRow.version).toBe(2);
+  });
 });

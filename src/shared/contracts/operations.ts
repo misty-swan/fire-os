@@ -392,7 +392,7 @@ export const operationsApis = {
     method: "PUT", path: "/activities/:id/attendance/:memberId", permission: "PER-02代理許可", kind: "mutation", success: [200, 201],
     request: obj({
       params: obj({ id: Id, memberId: Id }),
-      body: obj({ version: VersionOrZero, response: z.enum(attendanceResponses), reason: Reason }),
+      body: obj({ version: VersionOrZero, response: z.enum(attendanceResponses), reason: Reason2000 }),
       ...IDEM,
     }),
     response: Attendance,
@@ -439,7 +439,8 @@ export const operationsApis = {
         version: VersionOrZero,
         attendanceStatus: z.enum(mobilizationStates),
         times: obj({ mobilizedAt: Instant.optional(), arrivedAt: Instant.optional(), returnedAt: Instant.optional() }).optional(),
-        reason: Reason.optional(),
+        // 理由はincident_participant_events.reasonのCHECK（≤2000）に揃える（docs/05 §1。API-41と同じ扱い）
+        reason: Reason2000.optional(),
       }),
       ...IDEM,
     }),

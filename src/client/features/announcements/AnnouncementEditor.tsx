@@ -93,7 +93,8 @@ export function AnnouncementEditor(props: { mode: "create" } | { mode: "edit"; i
         setOriginal(data);
         setTitle(data.title);
         setBody(data.body);
-        setAudience(new Set(data.audienceMemberIds));
+        // 編集画面はPER-03保持者専用なので対象者一覧は必ず載る（docs/05 §1）。型上は任意のため空に広げる
+        setAudience(new Set(data.audienceMemberIds ?? []));
         setLoadState("ready");
       } catch {
         if (alive) setLoadState("error");
@@ -120,7 +121,9 @@ export function AnnouncementEditor(props: { mode: "create" } | { mode: "edit"; i
     const diff: Record<string, unknown> = {};
     if (title.trim() !== o.title) diff.title = title.trim();
     if (body !== o.body) diff.body = body;
-    const audienceChanged = audience.size !== o.audienceMemberIds.length || [...audience].some((mid) => !o.audienceMemberIds.includes(mid));
+    // 編集は変更のあった列だけを送る（API-72は部分更新）。対象は集合の比較（対象者一覧は管理権限の応答に必ず載る）
+    const originalAudience = o.audienceMemberIds ?? [];
+    const audienceChanged = audience.size !== originalAudience.length || [...audience].some((mid) => !originalAudience.includes(mid));
     if (audienceChanged) diff.audienceMemberIds = [...audience];
     return diff;
   }, [original, title, body, audience]);

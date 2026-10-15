@@ -231,4 +231,47 @@ describe("参集・到着・帰還の本人/代理記録 (T041)", () => {
       version: 2, attendanceStatus: "returned", mobilizedAt: null, arrivedAt: null, returnedAt: "2026-10-10T23:42:00.000Z",
     });
   });
+
+  it("proxy_reason_is_capped_at_2000_chars (docs/05 §1)", async () => {
+    // 参集記録（API-23）の理由はincident_participant_events.reason（DBのCHECK 1〜2000）に揃える。
+    // 共通上限のまま通すとDBのCHECKで500になるため、超過は入力で400にする
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const member = a.people.member;
+
+    const createRes = await fx.client(admin).request("POST", "/api/v1/incidents", {
+      kind: "training", occurredAt: "2026-11-15T01:00:00.000Z", summary: "理由上限試験用の出動（試験用・架空）",
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const incidentId = ((await json(createRes)).data! as { id: string }).id;
+
+    // D08の代理scope（entity_type='member'×PER-04）を管理者へ付与（T041と同じ流儀。
+    // 同じテーブルを他の試験も使うため、既に付与済みのときは無視する）
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO scope_assignments (id, unit_id, member_id, entity_type, entity_id, permissions, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, ?, 'member', ?, ?, ?, ?, ?, 'human')",
+    ).bind(
+      crypto.randomUUID(), a.id, admin.memberId, member.memberId, JSON.stringify(["PER-04"]),
+      new Date().toISOString(), new Date().toISOString(), admin.userId,
+    ).run();
+
+    // 2,001字の理由は400 VALIDATION_ERROR（DBの500経路に通さない）
+    const tooLong = await fx.client(admin).request(
+      "PUT",
+      `/api/v1/incidents/${incidentId}/participants/${member.memberId}`,
+      { version: 0, attendanceStatus: "returned", times: { returnedAt: "2026-11-15T02:00:00.000Z" }, reason: "あ".repeat(2001) },
+      idem(),
+    );
+    expect(tooLong.status).toBe(400);
+    expect((await json(tooLong)).error?.code).toBe("VALIDATION_ERROR");
+
+    // 2,000字ちょうどは検査を通る（未作成→帰還の201）
+    const ok2000 = await fx.client(admin).request(
+      "PUT",
+      `/api/v1/incidents/${incidentId}/participants/${member.memberId}`,
+      { version: 0, attendanceStatus: "returned", times: { returnedAt: "2026-11-15T02:00:00.000Z" }, reason: "い".repeat(2000) },
+      idem(),
+    );
+    expect(ok2000.status).toBe(201);
+  });
 });

@@ -249,7 +249,7 @@ export function DashboardPage() {
   const dateLabel = `${now.getMonth() + 1}月${now.getDate()}日（${WEEKDAYS[now.getDay()]}）· ${me.unitName}`;
   const hour = now.getHours();
   const greeting = hour < 4 ? "こんばんは" : hour < 11 ? "おはようございます" : hour < 18 ? "こんにちは" : "こんばんは";
-  const givenName = me.profile.displayName.trim().split(/\s+/).pop() ?? me.profile.displayName;
+  const familyName = me.profile.displayName.trim().split(/\s+/)[0] ?? me.profile.displayName; // 姓（先頭トークン。prototype:117「佐藤さん」）
 
   return (
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
@@ -261,7 +261,7 @@ export function DashboardPage() {
         ホーム
       </PageTitle>
       <p className="-mt-3 text-[22px] font-bold leading-[1.35] lg:hidden">
-        {greeting}、{givenName}さん
+        {greeting}、{familyName}さん
       </p>
 
       {phase === "loading" && (

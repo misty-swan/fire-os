@@ -8130,7 +8130,7 @@
                   "reason": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 20000
+                    "maxLength": 2000
                   }
                 },
                 "required": [
@@ -8327,7 +8327,6 @@
                           "revisionNo",
                           "status",
                           "publishedAt",
-                          "audienceMemberIds",
                           "createdByMemberId",
                           "readAt",
                           "attachments",
@@ -8573,7 +8572,6 @@
                         "revisionNo",
                         "status",
                         "publishedAt",
-                        "audienceMemberIds",
                         "createdByMemberId",
                         "readAt",
                         "attachments",
@@ -11873,7 +11871,7 @@
                   "reason": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 20000
+                    "maxLength": 2000
                   }
                 },
                 "required": [
@@ -18336,7 +18334,6 @@
                         "revisionNo",
                         "status",
                         "publishedAt",
-                        "audienceMemberIds",
                         "createdByMemberId",
                         "readAt",
                         "attachments",

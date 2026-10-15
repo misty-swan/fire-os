@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
+import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { MutationStatus } from "../../components/MutationStatus";
 import { Banner, Button, Card, Chip, TextField } from "../../components/ui";
 import { useMutation } from "../../useMutation";
@@ -233,152 +234,157 @@ export function ResourceUsageEditor(props: EditorProps) {
   if (completed && props.mode === "edit") {
     return (
       <Card aria-label="使用履歴の編集" className="flex flex-col gap-3">
-        <MutationStatus state={{ kind: "saved" }} toastBottom={110} />
+        <MutationStatus state={{ kind: "saved" }} toastBottom={100} />
         <p className="text-[13px] text-ink-sub">使用履歴を保存しました。取り消した行は履歴として残ります。</p>
       </Card>
     );
   }
 
   return (
-    <Card className="flex flex-col gap-4" aria-label={editing ? "使用履歴の編集" : "使用履歴の下書き"}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[14px] font-bold">車両・機材の使用</span>
-        <span className="text-[12px] text-ink-muted">台帳の数量は動きません（記録だけです）</span>
-      </div>
+    <>
+      <Card className="flex flex-col gap-4" aria-label={editing ? "使用履歴の編集" : "使用履歴の下書き"}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[14px] font-bold">車両・機材の使用</span>
+          <span className="text-[12px] text-ink-muted">台帳の数量は動きません（記録だけです）</span>
+        </div>
 
-      {assets !== null && assets.length === 0 && (
-        <Banner tone="info" eyebrow="EMPTY" title="選べる車両・資機材がありません">
-          <span>
-            台帳に登録すると選べます。<a className="underline" href="/app/assets">車両・資機材へ</a>
-          </span>
-        </Banner>
-      )}
+        {assets !== null && assets.length === 0 && (
+          <Banner tone="info" eyebrow="EMPTY" title="選べる車両・資機材がありません">
+            <span>
+              台帳に登録すると選べます。<a className="underline" href="/app/assets">車両・資機材へ</a>
+            </span>
+          </Banner>
+        )}
 
-      <ul className="flex flex-col gap-2.5">
-        {rows.map((r, i) => {
-          const n = i + 1;
-          const known = nameOf(r.target);
-          return (
-            <li key={r.id ?? `new-${i}`} className="flex flex-col gap-2.5 rounded-field bg-white/[.04] p-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-[11px] font-semibold text-ink-muted">{n}行目</span>
-                {known && <Chip tone="neutral">{known.type === "vehicle" ? "車両" : "資機材"}</Chip>}
-                <button
-                  type="button"
-                  onClick={() => removeRow(i)}
-                  className="ml-auto inline-flex min-h-11 items-center text-[12px] font-bold text-ink-sub underline lg:min-h-9"
-                >
-                  この行を外す
-                </button>
-              </div>
-              <label className="hairline flex h-[54px] items-center gap-2 rounded-field bg-white/[.06] px-4">
-                <span className="text-[12px] font-bold text-ink-sub">対象</span>
-                <select
-                  aria-label={`使用履歴 ${n}行目の対象`}
-                  value={r.target ? `${r.target.type}:${r.target.id}` : ""}
-                  onChange={(e) => {
-                    const [type, id] = e.target.value.split(":");
-                    updateRow(i, { target: id ? { type: type as "vehicle" | "equipment", id } : null });
-                  }}
-                  className="min-w-0 flex-1 border-none bg-transparent text-[14px] font-medium text-ink outline-none"
-                >
-                  <option value="">選んでください</option>
-                  {(assets ?? []).map((a) => (
-                    <option key={`${a.type}:${a.id}`} value={`${a.type}:${a.id}`}>
-                      {a.name}（{a.assetCode}）
-                    </option>
+        <ul className="flex flex-col gap-2.5">
+          {rows.map((r, i) => {
+            const n = i + 1;
+            const known = nameOf(r.target);
+            return (
+              <li key={r.id ?? `new-${i}`} className="flex flex-col gap-2.5 rounded-field bg-white/[.04] p-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] font-semibold text-ink-muted">{n}行目</span>
+                  {known && <Chip tone="neutral">{known.type === "vehicle" ? "車両" : "資機材"}</Chip>}
+                  <button
+                    type="button"
+                    onClick={() => removeRow(i)}
+                    className="ml-auto inline-flex min-h-11 items-center text-[12px] font-bold text-ink-sub underline lg:min-h-9"
+                  >
+                    この行を外す
+                  </button>
+                </div>
+                <label className="hairline flex h-[54px] items-center gap-2 rounded-field bg-white/[.06] px-4">
+                  <span className="text-[12px] font-bold text-ink-sub">対象</span>
+                  <select
+                    aria-label={`使用履歴 ${n}行目の対象`}
+                    value={r.target ? `${r.target.type}:${r.target.id}` : ""}
+                    onChange={(e) => {
+                      const [type, id] = e.target.value.split(":");
+                      updateRow(i, { target: id ? { type: type as "vehicle" | "equipment", id } : null });
+                    }}
+                    className="min-w-0 flex-1 border-none bg-transparent text-[14px] font-medium text-ink outline-none"
+                  >
+                    <option value="">選んでください</option>
+                    {(assets ?? []).map((a) => (
+                      <option key={`${a.type}:${a.id}`} value={`${a.type}:${a.id}`}>
+                        {a.name}（{a.assetCode}）
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="grid gap-2.5 lg:grid-cols-3">
+                  <TextField
+                    name={`usage-${n}-quantity`}
+                    label={`使用履歴 ${n}行目の数量`}
+                    inputMode="decimal"
+                    value={r.quantity}
+                    onChange={(e) => updateRow(i, { quantity: e.target.value })}
+                    error={errors.find((e) => e.field === `rows.${i}.quantity`)?.reason}
+                  />
+                  <TextField
+                    name={`usage-${n}-from`}
+                    label={`使用履歴 ${n}行目の開始`}
+                    type="datetime-local"
+                    value={r.from}
+                    onChange={(e) => updateRow(i, { from: e.target.value })}
+                  />
+                  <TextField
+                    name={`usage-${n}-to`}
+                    label={`使用履歴 ${n}行目の終了`}
+                    type="datetime-local"
+                    value={r.to}
+                    onChange={(e) => updateRow(i, { to: e.target.value })}
+                  />
+                </div>
+                <p className="text-[11px] text-ink-muted">わからない時刻は空欄にしてください（未記載のまま残ります）。</p>
+              </li>
+            );
+          })}
+          {rows.length === 0 && <li className="text-[13px] text-ink-sub">使用の行はまだありません。</li>}
+        </ul>
+
+        <Button variant="secondary" className="!h-[46px] !w-auto self-start px-4 !text-[13px] max-lg:min-h-11" onClick={addRow}>
+          行を追加
+        </Button>
+
+        {editing && (
+          <>
+            <TextField
+              name="usage-reason"
+              label="編集の理由（必須）"
+              value={reason}
+              onChange={(e) => {
+                setTouched(true);
+                setReason(e.target.value);
+              }}
+              placeholder="例: 忘れていた使用を追加"
+              error={errors.find((e) => e.field === "reason")?.reason}
+            />
+            {cancelledRows.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[12px] font-bold text-ink-sub">取り消された行（履歴として残ります。編集はできません）</span>
+                <ul className="flex flex-col gap-1">
+                  {cancelledRows.map((r) => (
+                    <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-field bg-white/[.03] px-3 py-1.5 text-[12px] text-ink-muted">
+                      <span className="font-mono">{r.usedFrom ? r.usedFrom.slice(0, 10) : "日時未記録"}</span>
+                      <span>数量 {r.quantity}</span>
+                      <Chip tone="neutral">取消</Chip>
+                    </li>
                   ))}
-                </select>
-              </label>
-              <div className="grid gap-2.5 lg:grid-cols-3">
-                <TextField
-                  name={`usage-${n}-quantity`}
-                  label={`使用履歴 ${n}行目の数量`}
-                  inputMode="decimal"
-                  value={r.quantity}
-                  onChange={(e) => updateRow(i, { quantity: e.target.value })}
-                  error={errors.find((e) => e.field === `rows.${i}.quantity`)?.reason}
-                />
-                <TextField
-                  name={`usage-${n}-from`}
-                  label={`使用履歴 ${n}行目の開始`}
-                  type="datetime-local"
-                  value={r.from}
-                  onChange={(e) => updateRow(i, { from: e.target.value })}
-                />
-                <TextField
-                  name={`usage-${n}-to`}
-                  label={`使用履歴 ${n}行目の終了`}
-                  type="datetime-local"
-                  value={r.to}
-                  onChange={(e) => updateRow(i, { to: e.target.value })}
-                />
+                </ul>
               </div>
-              <p className="text-[11px] text-ink-muted">わからない時刻は空欄にしてください（未記載のまま残ります）。</p>
-            </li>
-          );
-        })}
-        {rows.length === 0 && <li className="text-[13px] text-ink-sub">使用の行はまだありません。</li>}
-      </ul>
-
-      <Button variant="secondary" className="!h-[46px] !w-auto self-start px-4 !text-[13px] max-lg:min-h-11" onClick={addRow}>
-        行を追加
-      </Button>
-
-      {editing && (
-        <>
-          <TextField
-            name="usage-reason"
-            label="編集の理由（必須）"
-            value={reason}
-            onChange={(e) => {
-              setTouched(true);
-              setReason(e.target.value);
-            }}
-            placeholder="例: 忘れていた使用を追加"
-            error={errors.find((e) => e.field === "reason")?.reason}
-          />
-          {cancelledRows.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[12px] font-bold text-ink-sub">取り消された行（履歴として残ります。編集はできません）</span>
-              <ul className="flex flex-col gap-1">
-                {cancelledRows.map((r) => (
-                  <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-field bg-white/[.03] px-3 py-1.5 text-[12px] text-ink-muted">
-                    <span className="font-mono">{r.usedFrom ? r.usedFrom.slice(0, 10) : "日時未記録"}</span>
-                    <span>数量 {r.quantity}</span>
-                    <Chip tone="neutral">取消</Chip>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {save.state.kind === "conflict" && (
-            <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
-              他の操作で使用履歴が更新されています。閉じて画面を開き直し、最新の内容でやり直してください。この操作は保存されていません。
-            </div>
-          )}
-          {save.state.kind === "rejected" && (
-            <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
-              この内容では保存できません（取り消した行を編集していないか確認してください）。
-            </div>
-          )}
-          {save.state.kind === "unknown" && (
-            <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
-              結果を確認できません。同じ内容で再送しても二重には登録されません。
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button busy={save.saving} onClick={() => void submit()} className="min-w-[200px] flex-1">
-              使用履歴を保存
-            </Button>
-            {props.onCancel && (
-              <Button variant="secondary" busy={save.saving} className="flex-none px-4" onClick={props.onCancel}>
-                閉じる
-              </Button>
             )}
-          </div>
-        </>
-      )}
-    </Card>
+            {save.state.kind === "conflict" && (
+              <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
+                他の操作で使用履歴が更新されています。閉じて画面を開き直し、最新の内容でやり直してください。この操作は保存されていません。
+              </div>
+            )}
+            {save.state.kind === "rejected" && (
+              <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
+                この内容では保存できません（取り消した行を編集していないか確認してください）。
+              </div>
+            )}
+            {save.state.kind === "unknown" && (
+              <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
+                結果を確認できません。同じ内容で再送しても二重には登録されません。
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button busy={save.saving} onClick={() => void submit()} className="min-w-[200px] flex-1">
+                使用履歴を保存
+              </Button>
+              {props.onCancel && (
+                <Button variant="secondary" busy={save.saving} className="flex-none px-4" onClick={props.onCancel}>
+                  閉じる
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </Card>
+      {/* 未保存の離脱は確認ダイアログ（docs/03:78）。編集モードの入力あり・未保存の間だけ有効
+          （下書きモードは出動の登録フォーム側のLeaveConfirmに従う） */}
+      {editing && <LeaveConfirm dirty={touched} />}
+    </>
   );
 }

@@ -267,8 +267,11 @@ function AnnouncementDetail({ id }: { id: string }) {
   }
 
   const meta = ANNOUNCEMENT_STATUS[detail.status];
-  const audience = detail.audienceMemberIds;
-  const inAudience = audience.includes(me.profile.memberId);
+  // 対象者ID一覧は管理権限（PER-03）の応答にだけ載る。対象者の応答では省略されるため
+  // 「公開済なら閲覧できる＝対象者」と可視性の規則で代替する（docs/05 §1。一覧は対象者だけに現れる）
+  const inAudience = detail.audienceMemberIds
+    ? detail.audienceMemberIds.includes(me.profile.memberId)
+    : detail.status !== "draft";
   const readyAttachments = detail.attachments.filter((a) => a.status === "ready");
 
   return (
@@ -298,18 +301,23 @@ function AnnouncementDetail({ id }: { id: string }) {
             : `公開日時 ${fmtInstant(detail.publishedAt ?? "")}`}
         </InfoRow>
         <InfoRow icon="groups">
-          公開先 {audience.length}人
-          <span className="mt-1 flex flex-wrap gap-1">
-            {audience.map((memberId) => (
-              <span key={memberId} className="inline-flex items-center gap-1.5 rounded-pill bg-white/[.06] px-2 py-0.5 text-[12px] font-medium">
-                <span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-[#1a2740] text-[9px] font-bold text-[#c3cad6]">
-                  {initialOf(nameOf(memberId) ?? "?")}
-                </span>
-                {nameOf(memberId) ?? "読み込み中…"}
-                {memberId === me.profile.memberId && <span className="text-[11px] text-ink-muted">（自分）</span>}
+          {/* 公開先の一覧は管理権限（PER-03）の応答にだけ載る。対象者の詳細では省略（docs/05 §1） */}
+          {detail.audienceMemberIds && (
+            <>
+              公開先 {detail.audienceMemberIds.length}人
+              <span className="mt-1 flex flex-wrap gap-1">
+                {detail.audienceMemberIds.map((memberId) => (
+                  <span key={memberId} className="inline-flex items-center gap-1.5 rounded-pill bg-white/[.06] px-2 py-0.5 text-[12px] font-medium">
+                    <span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-[#1a2740] text-[9px] font-bold text-[#c3cad6]">
+                      {initialOf(nameOf(memberId) ?? "?")}
+                    </span>
+                    {nameOf(memberId) ?? "読み込み中…"}
+                    {memberId === me.profile.memberId && <span className="text-[11px] text-ink-muted">（自分）</span>}
+                  </span>
+                ))}
               </span>
-            ))}
-          </span>
+            </>
+          )}
         </InfoRow>
       </Card>
 
@@ -449,9 +457,10 @@ function AnnouncementDetail({ id }: { id: string }) {
         >
           <p>公開すると対象者の一覧に現れ、対象者は本文の確認（既読）を求められます。公開後も編集できますが、その場合は新しい版になります。</p>
           <div className="hairline rounded-card bg-white/[.04] p-3">
-            <h3 className="text-[13px] font-bold">公開先（{audience.length}人）</h3>
+            {/* 公開確認は管理権限（PER-03）専用なので対象者一覧は必ず載る（docs/05 §1） */}
+            <h3 className="text-[13px] font-bold">公開先（{(detail.audienceMemberIds ?? []).length}人）</h3>
             <ul className="mt-1.5 flex flex-col gap-1">
-              {audience.map((memberId) => (
+              {(detail.audienceMemberIds ?? []).map((memberId) => (
                 <li key={memberId} className="text-[13px] font-medium">
                   {nameOf(memberId) ?? "読み込み中…"}
                   {memberId === me.profile.memberId && <span className="ml-1 text-[11px] text-ink-muted">（自分）</span>}

@@ -157,4 +157,8 @@ test("edited_announcement_requires_new_read", async ({ page, browser, request },
   expect(unauthorizedPublish.status()).toBe(403); // docs/10 PER-03: 一般団員の直接更新は403
   // 403の後も公開中のまま（勝手に終了されていない）
   await expect(memberPage.getByText("公開中").first()).toBeVisible();
+  // 対象者の画面には公開/編集/終了などの変更操作が出ない（PER-03の操作は幹部だけ。docs/03 §1.1-11）
+  await expect(memberPage.getByRole("button", { name: "公開する" })).toHaveCount(0);
+  await expect(memberPage.getByRole("link", { name: "編集" })).toHaveCount(0);
+  await expect(memberPage.getByRole("button", { name: "終了する" })).toHaveCount(0);
 });

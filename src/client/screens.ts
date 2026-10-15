@@ -35,7 +35,7 @@ export const screens: ScreenDef[] = [
   s({ id: "SCR-04", path: "/app/facilities/:id", title: "施設の詳細", summary: "台帳/写真/位置出典/確認対象版/点検/異常、編集/位置確認/外部経路", ownerTask: "T022", phase: "PH2", tab: "map" }),
   s({ id: "SCR-06", path: "/app/facilities/:id/inspections/new", title: "点検登録", summary: "承認様式版/項目結果/実施日時/実施者/コメント/写真/異常起票", ownerTask: "T033", phase: "PH2", tab: "map", hideNav: true }),
   s({ id: "SCR-07", path: "/app/issues", title: "点検管理", summary: "未確認/確認中/対応中/対応実施/終了、起点点検、担当/理由/履歴", ownerTask: "T034", phase: "PH2", tab: "map" }),
-  s({ id: "SCR-08", path: "/app/activities", title: "予定・活動", desktopTitle: "予定・出欠", summary: "予定/実績の一覧、日付/種別/参加者/状態検索", ownerTask: "T039", phase: "PH3", tab: "activities" }),
+  s({ id: "SCR-08", path: "/app/activities", title: "予定・活動", desktopTitle: "予定・出欠", summary: "予定/実績の一覧、日付/種別/参加者/状態/実参加/未回答検索", ownerTask: "T039", phase: "PH3", tab: "activities" }),
   s({ id: "SCR-10", path: "/app/activities/new", aliases: ["/app/activities/:id/edit"], title: "予定の登録", summary: "日時/場所/担当/対象者/回答期限", ownerTask: "T039", phase: "PH3", tab: "activities" }),
   s({ id: "SCR-09", path: "/app/activities/:id", title: "予定・活動の詳細", summary: "本人出欠/対象者、予定編集/中止、実績入力/訂正、使用資産/報告書", ownerTask: "T039", phase: "PH3", tab: "activities" }),
   s({ id: "SCR-19", path: "/app/reports/:id/draft", aliases: ["/app/reports"], title: "活動記録", desktopTitle: "活動記録・承認", summary: "生成依頼/処理中、下書き/不足欄、編集/版/承認/出力（PCは一覧と詳細を併置）", ownerTask: "T059", phase: "PH4", tab: "activities" }),

@@ -266,5 +266,131 @@ describe("お知らせの公開対象・版・本人既読 (T045)", () => {
     expect(reviseRes.status).toBe(200);
     const memberRevised = await listFor(fx.client(member));
     expect(memberRevised.readAt).toBeNull();
+
+    // --- ready検査済みの添付をお知らせへリンクすると、応答のattachmentsに載る（docs/05 API-24/25/72。
+    // API-25/72にattachmentIdsの入力経路は無いため、検査済みのready添付を直接リンクして応答投影を検査する） ---
+    const photoId = crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO attachments (id, unit_id, owner_user_id, owner_member_id, intent_target_type, intent_target_id, ready_key, content_type, byte_size, sha256, status, expires_at, classification, upload_token_hash, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, ?, ?, 'announcement', ?, ?, 'image/png', 100, ?, 'ready', ?, ?, ?, ?, ?, ?, 'human')",
+    ).bind(
+      photoId, a.id, admin.userId, admin.memberId!, id, `ready/${photoId}`, "a".repeat(64),
+      nowIso, "basic", "b".repeat(64), nowIso, nowIso, admin.userId,
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO attachment_links (id, unit_id, attachment_id, entity_type, entity_id, linked_by, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, ?, 'announcement', ?, ?, ?, ?, ?, 'human')",
+    ).bind(crypto.randomUUID(), a.id, photoId, id, admin.userId, nowIso, nowIso, admin.userId).run();
+
+    const withPhoto = await listFor(fx.client(member));
+    expect(withPhoto.attachments).toHaveLength(1);
+    expect(withPhoto.attachments[0]).toMatchObject({ id: photoId, status: "ready", contentType: "image/png" });
+    expect(typeof (withPhoto.attachments[0] as { linkId: string }).linkId).toBe("string"); // unlinkに渡すlinkId
+  });
+
+  it("same_key_resend_returns_saved_response_for_update_and_read (docs/05 §2)", async () => {
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 応答が届かなかった操作のリトライが
+    // 現在の状態を前提とした業務エラー（archived 422・no_changes 400・既読の404）になってはいけない
+    const a = fx.units.a;
+    const admin = a.people.admin; // PER-03保持
+    const member = a.people.member; // 対象者
+
+    const createRes = await fx.client(admin).request("POST", "/api/v1/announcements", {
+      title: "再送試験のお知らせ",
+      body: "同キー再送は元の応答を返す（試験用・架空）。",
+      audienceMemberIds: [member.memberId!],
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const created = (await json(createRes)).data! as { id: string };
+
+    // --- API-72: 公開 → 同キー再送はno_changes 400ではなく元の応答 ---
+    const publishKey = crypto.randomUUID();
+    const publishBody = { version: 1, status: "published" };
+    const publishRes = await fx.client(admin).request("PATCH", `/api/v1/announcements/${created.id}`, publishBody, { "idempotency-key": publishKey });
+    expect(publishRes.status).toBe(200);
+    const published = (await json(publishRes)).data! as Record<string, unknown>;
+
+    const publishReplay = await fx.client(admin).request("PATCH", `/api/v1/announcements/${created.id}`, publishBody, { "idempotency-key": publishKey });
+    expect(publishReplay.status).toBe(200);
+    expect((await json(publishReplay)).data).toEqual(published);
+    expect((await fx.rows("announcements", { id: created.id }))[0]!.version).toBe(2);
+    // 再送で更新のイベントは増えない（作成のイベントと合わせて2件のまま）
+    expect(await fx.rows("domain_events", { entity_type: "announcement", entity_id: created.id, event_type: "announcement.updated" })).toHaveLength(1);
+
+    // --- API-66: 対象者の既読 → アーカイブ後の同キー再送でも元の領収（404ではなく） ---
+    const readKey = crypto.randomUUID();
+    const readRes = await fx.client(member).request("PUT", `/api/v1/announcements/${created.id}/read`, { revisionNo: 1 }, { "idempotency-key": readKey });
+    expect(readRes.status).toBe(200);
+    const receipt = (await json(readRes)).data! as { readAt: string; revisionNo: number };
+
+    // アーカイブ（終端。別キー）
+    const archiveRes = await fx.client(admin).request("PATCH", `/api/v1/announcements/${created.id}`, {
+      version: 2, status: "archived",
+    }, idem());
+    expect(archiveRes.status).toBe(200);
+
+    // アーカイブ後の既読（新しいキー＝新しい操作）は404（現在の状態で検査）
+    const newKeyRead = await fx.client(member).request("PUT", `/api/v1/announcements/${created.id}/read`, { revisionNo: 1 }, idem());
+    expect(newKeyRead.status).toBe(404);
+    // 同キー再送は元の領収（docs/05 §2）
+    const readReplay = await fx.client(member).request("PUT", `/api/v1/announcements/${created.id}/read`, { revisionNo: 1 }, { "idempotency-key": readKey });
+    expect(readReplay.status).toBe(200);
+    expect((await json(readReplay)).data).toEqual(receipt as unknown as Record<string, unknown>);
+    expect(await fx.rows("announcement_reads", { announcement_id: created.id })).toHaveLength(1);
+
+    // 同キー別本文は409（docs/05 §2。保存済み応答の本文一致検査）
+    const mismatchRead = await fx.client(member).request("PUT", `/api/v1/announcements/${created.id}/read`, { revisionNo: 2 }, { "idempotency-key": readKey });
+    expect(mismatchRead.status).toBe(409);
+    expect((await json(mismatchRead)).error?.code).toBe("IDEMPOTENCY_MISMATCH");
+    const mismatchPublish = await fx.client(admin).request("PATCH", `/api/v1/announcements/${created.id}`, {
+      version: 1, status: "published", title: "別本文での再送",
+    }, { "idempotency-key": publishKey });
+    expect(mismatchPublish.status).toBe(409);
+    expect((await json(mismatchPublish)).error?.code).toBe("IDEMPOTENCY_MISMATCH");
+  });
+
+  it("audience_ids_are_projected_to_managers_only (docs/05 §1)", async () => {
+    // 対象者ID一覧（他対象者のIDを含む）は管理権限（PER-03）の応答だけに載せる。対象者には省略する
+    const a = fx.units.a;
+    const admin = a.people.admin; // PER-03保持（officer/adminは所属内で管理権）
+    const member = a.people.member; // 対象者（PER-03非保持）
+    const operator = a.people.operator; // 対象者（scopeは施設のみ＝お知らせの管理権なし）
+
+    const createRes = await fx.client(admin).request("POST", "/api/v1/announcements", {
+      title: "対象者一覧の投影試験",
+      body: "対象者ID一覧は管理権限だけが受け取る（試験用・架空）。",
+      audienceMemberIds: [member.memberId!, operator.memberId!, admin.memberId!], // 管理権限のまま対象にも入る
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const created = (await json(createRes)).data! as { id: string; audienceMemberIds?: string[] };
+    // 管理権限の作成応答（API-25）には対象者一覧が含まれる
+    expect([...(created.audienceMemberIds ?? [])].sort()).toEqual(
+      [member.memberId!, operator.memberId!, admin.memberId!].sort(),
+    );
+
+    // 公開（API-72の応答も管理権限なので含まれる）
+    const publishRes = await fx.client(admin).request("PATCH", `/api/v1/announcements/${created.id}`, {
+      version: 1, status: "published",
+    }, idem());
+    expect(publishRes.status).toBe(200);
+    const published = (await json(publishRes)).data! as { audienceMemberIds?: string[] };
+    expect(Array.isArray(published.audienceMemberIds)).toBe(true);
+
+    // 対象者（PER-03非保持）の一覧（API-24）には対象者ID一覧が現れない
+    const memberList = (await json(await fx.client(member).request("GET", "/api/v1/announcements"))).data! as Record<string, unknown>[];
+    const memberRow = memberList.find((r) => r.id === created.id)!;
+    expect(memberRow).toBeTruthy();
+    expect(memberRow).not.toHaveProperty("audienceMemberIds");
+    // 本文・既読・添付など他の列は対象者にも載る
+    expect(memberRow).toMatchObject({ title: "対象者一覧の投影試験", readAt: null, attachments: [] });
+
+    // 管理権限の一覧には含まれる（管理者は対象にも入っているため公開行が見える）
+    const adminList = (await json(await fx.client(admin).request("GET", "/api/v1/announcements"))).data! as Record<string, unknown>[];
+    const adminRow = adminList.find((r) => r.id === created.id)!;
+    expect(adminRow).toBeTruthy();
+    expect([...(adminRow.audienceMemberIds as string[])].sort()).toEqual(
+      [member.memberId!, operator.memberId!, admin.memberId!].sort(),
+    );
   });
 });

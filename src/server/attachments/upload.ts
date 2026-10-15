@@ -20,14 +20,16 @@ import {
 } from "./sizes";
 
 /**
- * intent対象として存在確認できる業務表（PH2時点）。表がまだ無い種別（activity等）はPH3以降に追加する。
- * 多態の点検(inspection)・issues等は、その表ができるタスクでここへ追加する。
- * announcementはT046（お知らせの添付。詳細画面から追加・解除し、対象者に見える形で表示する）
+ * intent対象として存在確認できる業務表（docs/05 API-26行「facility/vehicle/equipment/activity/announcement」）。
+ * activityはT035でactivities行が出来たため対象に含める。announcementはT046（お知らせの添付。
+ * 詳細画面から追加・解除し、対象者に見える形で表示する）。
+ * 多態の点検(inspection)・issues等は、その表ができるタスクでここへ追加する
  */
 export const ATTACHMENT_TARGET_TABLES: Record<string, string> = {
   facility: "facilities",
   vehicle: "vehicles",
   equipment: "equipment",
+  activity: "activities",
   announcement: "announcements",
 };
 

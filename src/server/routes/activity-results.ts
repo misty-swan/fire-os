@@ -172,9 +172,18 @@ export function registerActivityResultRoutes(app: ApiApp): void {
     requirePermission(p, "PER-04", { unitId: p.unitId, type: "activity", id: params.id, ownerMemberId: activity.owner_member_id });
     validateActualInput(body);
 
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 鍵が既にある（=再送の）ときは
+    // 現在の状態では不可になる変更（既存rootの再作成）でも保存済み応答を返す必要があるため、
+    // 新しい操作のときだけ「未作成のみ」の状態前提を検査してからbatchに入る（T041/T042と同じ流儀）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "activity.result.create", headers["idempotency-key"]).first();
+
     // 未作成のみ（docs/05 API-09）。再作成は409。同時の初回作成はUNIQUE(unit,activity)＋duplicateOnでも409
-    const existing = await c.env.DB.prepare("SELECT id FROM activity_results WHERE unit_id = ? AND activity_id = ?")
-      .bind(p.unitId, params.id).first<{ id: string }>();
+    const existing = knownKey
+      ? null
+      : await c.env.DB.prepare("SELECT id FROM activity_results WHERE unit_id = ? AND activity_id = ?")
+          .bind(p.unitId, params.id).first<{ id: string }>();
     if (existing) throw new HttpError("DUPLICATE");
 
     const resultId = crypto.randomUUID();

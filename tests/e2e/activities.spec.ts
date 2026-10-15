@@ -83,7 +83,23 @@ test("planned_answer_and_actual_presence_have_separate_labels", async ({ page, b
   await officerPage.goto(activityUrl);
   await expect(officerPage.getByRole("button", { name: "実績を入力" })).toBeVisible();
   await officerPage.getByRole("button", { name: "実績を入力" }).click();
-  const form = officerPage.getByLabel("実績の入力");
+  let form = officerPage.getByLabel("実績の入力");
+  await form.getByLabel("活動の内容").fill(`ポンプ車操法を実施 ${tag}`);
+
+  // --- 4a) 未保存の離脱は確認ダイアログ（docs/03:78「既定=編集に戻る」。実績フォームの離脱ガード） ---
+  await officerPage.getByRole("link", { name: "戻る", exact: true }).click();
+  const leaveDialog = officerPage.getByRole("dialog", { name: "保存されていない変更があります" });
+  await expect(leaveDialog).toBeVisible();
+  await leaveDialog.getByRole("button", { name: "編集に戻る" }).click();
+  await expect(form.getByLabel("活動の内容")).toHaveValue(new RegExp(tag)); // 戻れば入力は保持される
+  await officerPage.getByRole("link", { name: "戻る", exact: true }).click();
+  await leaveDialog.getByRole("button", { name: "保存せずに移動する" }).click();
+  await expect(officerPage).toHaveURL(/\/app\/activities$/); // 保存せずに移動を選ぶと実際に離れる
+
+  // --- 4b) 離脱でフォームは閉じているため開き直し、改めて入力して保存する ---
+  await officerPage.goto(activityUrl);
+  await officerPage.getByRole("button", { name: "実績を入力" }).click();
+  form = officerPage.getByLabel("実績の入力");
   await form.getByLabel("活動の内容").fill(`ポンプ車操法を実施 ${tag}`);
   await form.getByLabel("実施（開始）").fill(localInput(7 * 864e5));
   await form.getByLabel("実施（終了）").fill(localInput(7 * 864e5 + 2 * 3600e3));

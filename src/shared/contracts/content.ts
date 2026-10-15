@@ -22,7 +22,8 @@ export const AnnouncementAttachment = obj({
  * 行われ旧版は不変（docs/11「編集で新revision」）。publishedAtは公開操作時刻または作成時に指定した
  * publishAt（公開への遷移はAPI-72の明示操作。自動公開jobは無い。docs/16 T045）。
  * createdByMemberIdは作成者（users→membersの解決。画面の「作成者」表示。T046）。
- * readAtは**この要求の本人**による現行版の既読日時（未読はnull。旧版の既読は含めない＝改版で未読に戻る。docs/11「既読は版に束縛」）
+ * readAtは**この要求の本人**による現行版の既読日時（未読はnull。旧版の既読は含めない＝改版で未読に戻る。docs/11「既読は版に束縛」）。
+ * audienceMemberIdsは**管理権限（PER-03）の要求にだけ載る**（他対象者のID一覧を対象者に返さない。API-24の対象者応答では省略）
  */
 export const Announcement = obj({
   id: Id,
@@ -32,7 +33,7 @@ export const Announcement = obj({
   revisionNo: Version,
   status: z.enum(announcementStates),
   publishedAt: Instant.nullable(),
-  audienceMemberIds: z.array(Id),
+  audienceMemberIds: z.array(Id).optional(),
   createdByMemberId: Id.nullable(),
   readAt: Instant.nullable(),
   attachments: z.array(AnnouncementAttachment),

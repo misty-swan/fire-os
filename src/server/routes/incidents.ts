@@ -70,6 +70,12 @@ export function registerIncidentRoutes(app: ApiApp): void {
     const p = await resolvePrincipal(c);
     const { body, headers } = await parseApiRequest(c, "API-22");
     requirePermission(p, "PER-04", { unitId: p.unitId, type: "incident" });
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 鍵が既にある（=再送の）ときは
+    // 現在の状態では不可になる変更（一活動一出動の競合リンク）でも保存済み応答を返す必要があるため、
+    // 新しい操作のときだけ状態前提を検査する（T041/T042/T043と同じ流儀）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "incident.create", headers["idempotency-key"]).first();
     // activityIdは同unitの既存活動だけ（docs/04 activity_id UNIQUE/FK。1活動にリンクできる出動は1件）。
     // 検査（同unit・一活動一出動）と生存operationの特定はAPI-71と共通のresolveActivityForLinkへ集約し、
     // 作成時リンクでも同じ規則を適用する（T043。docs/04:94「リンク時operation一致」。
@@ -79,7 +85,7 @@ export function registerIncidentRoutes(app: ApiApp): void {
     let linkOperation: { operationId: string; operationVersion: number } | null = null;
     if (body.activityId) {
       const target = await resolveActivityForLink(c, p.unitId, body.activityId);
-      const dup = activityAlreadyLinked(target);
+      const dup = knownKey ? null : activityAlreadyLinked(target);
       if (dup) throw dup;
       activityId = target.activityId;
       linkOperation = { operationId: target.operationId, operationVersion: target.operationVersion };
@@ -204,19 +210,27 @@ export function registerIncidentRoutes(app: ApiApp): void {
     const { params, body, headers } = await parseApiRequest(c, "API-69");
     const current = await loadIncident(c, params.id, p.unitId);
     requirePermission(p, "PER-04", { unitId: p.unitId, type: "incident", id: params.id });
-    // voidedは終端（docs/11「voidedは閲覧のみ」）。種別・概要・状態のいずれの変更も不可
-    if (current.status === "voided") {
-      throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "voided_is_terminal" }]);
-    }
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 鍵が既にある（=再送の）ときは
+    // 現在の状態では不可になる変更（voided終端・遷移・変更点なし）でも保存済み応答を返す必要があるため、
+    // 新しい操作のときだけ状態前提を検査してからbatchに入る（T041/T042/T043と同じ流儀）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "incident.update", headers["idempotency-key"]).first();
 
     const statusChange = body.status !== undefined && body.status !== current.status;
-    if (statusChange && !canTransition(incidentTransitions, current.status as keyof typeof incidentTransitions, body.status!)) {
-      throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
-    }
     const kindChange = body.kind !== undefined && body.kind !== current.kind;
     const summaryChange = body.summary !== undefined && body.summary !== current.summary;
-    if (!statusChange && !kindChange && !summaryChange) {
-      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "no_changes" }]);
+    if (!knownKey) {
+      // voidedは終端（docs/11「voidedは閲覧のみ」）。種別・概要・状態のいずれの変更も不可
+      if (current.status === "voided") {
+        throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "voided_is_terminal" }]);
+      }
+      if (statusChange && !canTransition(incidentTransitions, current.status as keyof typeof incidentTransitions, body.status!)) {
+        throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
+      }
+      if (!statusChange && !kindChange && !summaryChange) {
+        throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "no_changes" }]);
+      }
     }
     // 理由はdocs/11「訂正/無効化理由」。契約（Reason2000）で必須・上限済み
 

@@ -154,4 +154,51 @@ describe("本人・許可代理の出欠 (T036)", () => {
     expect(await fx.rows("audit_logs", { entity_type: "activity_attendance", entity_id: memberRow.id as string })).toHaveLength(5);
     expect(await fx.rows("domain_events", { entity_type: "activity_attendance", entity_id: memberRow.id as string })).toHaveLength(5);
   });
+
+  it("proxy_reason_is_capped_at_2000_chars (docs/05 §1)", async () => {
+    // 代理回答（API-41）の理由はattendance_events.reason（DBのCHECK 1〜2000）に揃える。
+    // 共通上限のまま通すとDBのCHECKで500になるため、超過は入力で400にする
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const officer = a.people.officer;
+    const member = a.people.member;
+
+    const createRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "理由上限試験用の予定",
+      kind: "訓練",
+      plannedStartsAt: "2099-11-05T01:00:00.000Z",
+      locationText: "架空市第五集会所",
+      ownerMemberId: admin.memberId!,
+      audienceMemberIds: [member.memberId!, officer.memberId!],
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const activityId = ((await json(createRes)).data! as { id: string }).id;
+    // 出欠の受付は公開済（scheduled）のみ（docs/11 出欠）
+    expect((await fx.client(admin).request("PATCH", `/api/v1/activities/${activityId}`, {
+      version: 1, status: "scheduled", reason: "対象を確定して公開",
+    }, idem())).status).toBe(200);
+
+    // D05の代理scope（entity_type='member'×PER-02）を幹部へ付与（attendance T036と同じ流儀。
+    // 同じテーブルを他の試験も使うため、既に付与済みのときは無視する）
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO scope_assignments (id, unit_id, member_id, entity_type, entity_id, permissions, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, ?, 'member', ?, ?, ?, ?, ?, 'human')",
+    ).bind(
+      crypto.randomUUID(), a.id, officer.memberId, member.memberId, JSON.stringify(["PER-02"]),
+      new Date().toISOString(), new Date().toISOString(), admin.userId,
+    ).run();
+
+    // 2,001字の理由は400 VALIDATION_ERROR（DBの500経路に通さない）
+    const tooLong = await fx.client(officer).request("PUT", `/api/v1/activities/${activityId}/attendance/${member.memberId}`, {
+      version: 0, response: "attending", reason: "あ".repeat(2001),
+    }, idem());
+    expect(tooLong.status).toBe(400);
+    expect((await json(tooLong)).error?.code).toBe("VALIDATION_ERROR");
+
+    // 2,000字ちょうどは検査を通る（未作成→参加の201）
+    const ok2000 = await fx.client(officer).request("PUT", `/api/v1/activities/${activityId}/attendance/${member.memberId}`, {
+      version: 0, response: "attending", reason: "い".repeat(2000),
+    }, idem());
+    expect(ok2000.status).toBe(201);
+  });
 });

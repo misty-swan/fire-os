@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "../../api";
 import { ConfirmDialog } from "../../components/Overlay";
+import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { MutationStatus } from "../../components/MutationStatus";
 import { SubHeader } from "../../components/Page";
 import { Banner, Button, Card, Chip, Icon, Notice, TextArea, TextField } from "../../components/ui";
@@ -238,8 +239,8 @@ export function IncidentPage() {
         </Banner>
       )}
 
-      {/* 状態の操作（API-69。理由必須。voidedは終端なので操作を出さない） */}
-      {!voided && (
+      {/* 状態の操作（API-69。理由必須。voidedは終端なので操作を出さない。権限が無い利用者には操作自体を出さない＝docs/03 §1.1-10の流儀） */}
+      {!voided && canManage && (
         <div className="flex flex-wrap items-center gap-2">
           {(STATUS_TRANSITIONS[detail.status] ?? []).map((t) => (
             <Button
@@ -270,9 +271,9 @@ export function IncidentPage() {
           </Button>
         </div>
       )}
-      <MutationStatus state={transition.state} toastBottom={110} />
+      <MutationStatus state={transition.state} toastBottom={100} />
       {/* リンクの保存結果はダイアログを閉じたあとも出す（ダイアログ内は失敗の案内だけ） */}
-      {!linking && <MutationStatus state={link.state} toastBottom={110} />}
+      {!linking && <MutationStatus state={link.state} toastBottom={100} />}
 
       {/* 関連活動（API-71で既存活動とリンク。リンク後は双方の詳細から相互導線） */}
       <section className="flex flex-col gap-2" aria-label="関連活動">
@@ -384,13 +385,15 @@ export function IncidentPage() {
         </Card>
       </section>
 
-      {/* 状態変更の確認（API-69は理由必須。docs/11「訂正/無効化理由」） */}
+      {/* 状態変更の確認（API-69は理由必須。docs/11「訂正/無効化理由」）。
+          理由が空のまま実行を送って422にしないよう、空の間は実行を無効化する（LinkDialogと同じ流儀） */}
       {statusTarget && (
         <ConfirmDialog
           title={statusTarget === "voided" ? "この出動記録を無効にしますか" : `この出動記録を「${INCIDENT_STATUS[statusTarget as keyof typeof INCIDENT_STATUS].label}」にしますか`}
           confirmLabel={statusTarget === "voided" ? "無効にする" : "変更する"}
           busy={transition.saving}
           danger={statusTarget === "voided"}
+          confirmDisabled={statusReason.trim() === ""}
           onConfirm={() => void runStatus(statusTarget)}
           onCancel={() => setStatusTarget(null)}
         >
@@ -628,7 +631,7 @@ function LinkDialog({
         {selected && !selectedDetail && !selectedError && <p className="text-[12px] text-ink-muted">活動の最新の状態を確認しています…</p>}
         {selectedError && <p className="text-[12px] font-medium text-attention">活動の詳細を読めません。閉じて開き直してください。</p>}
         {/* 失敗は共通の状態表示（保存済みのトーストだけはダイアログを閉じた側の画面で出す） */}
-        <MutationStatus state={mutation.state.kind === "saved" || mutation.state.kind === "idle" ? { kind: "idle" } : mutation.state} toastBottom={110} />
+        <MutationStatus state={mutation.state.kind === "saved" || mutation.state.kind === "idle" ? { kind: "idle" } : mutation.state} toastBottom={100} />
       </div>
     </ConfirmDialog>
   );
@@ -850,6 +853,7 @@ function ProxyRecord({
   const close = () => {
     setOpen(false);
     setMemberId("");
+    setStatus("arrived"); // 初期値に戻す（開き直した直後に離脱ガードが有効にならないように）
     setTimes({ mobilizedAt: "", arrivedAt: "", returnedAt: "" });
     setReason("");
     record.reset();
@@ -874,60 +878,68 @@ function ProxyRecord({
   };
 
   return (
-    <Card className="flex flex-col gap-3" aria-label="代理での参集の記録">
-      <span className="text-[13px] font-bold">代理で参集を記録</span>
-      <label className="hairline flex h-[54px] items-center gap-2 rounded-field bg-white/[.06] px-4">
-        <span className="text-[12px] font-bold text-ink-sub">団員</span>
-        <select
-          aria-label="代理で記録する団員"
-          value={memberId}
-          onChange={(e) => setMemberId(e.target.value)}
-          className="min-w-0 flex-1 border-none bg-transparent text-[14px] font-medium text-ink outline-none"
-        >
-          <option value="">選んでください</option>
-          {members.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.displayName}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="代理で記録する状態">
-        {(["mobilizing", "arrived", "returned", "unavailable"] as const).map((s) => {
-          const meta = PARTICIPANT_META[s];
-          const on = status === s;
-          return (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setStatus(s)}
-              className={`flex min-h-11 flex-1 items-center justify-center rounded-field px-3 text-[13px] font-bold ${on ? "bg-ember text-white" : "bg-white/[.06] text-ink-sub"}`}
-            >
-              {meta.label}
-            </button>
-          );
-        })}
-      </div>
-      <TimeFields value={times} onChange={setTimes} />
-      <TextField
-        name="proxy-reason"
-        label="代理で記録する理由（任意）"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        placeholder="例: 本人から電話で連絡"
+    <>
+      <Card className="flex flex-col gap-3" aria-label="代理での参集の記録">
+        <span className="text-[13px] font-bold">代理で参集を記録</span>
+        <label className="hairline flex h-[54px] items-center gap-2 rounded-field bg-white/[.06] px-4">
+          <span className="text-[12px] font-bold text-ink-sub">団員</span>
+          <select
+            aria-label="代理で記録する団員"
+            value={memberId}
+            onChange={(e) => setMemberId(e.target.value)}
+            className="min-w-0 flex-1 border-none bg-transparent text-[14px] font-medium text-ink outline-none"
+          >
+            <option value="">選んでください</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="代理で記録する状態">
+          {(["mobilizing", "arrived", "returned", "unavailable"] as const).map((s) => {
+            const meta = PARTICIPANT_META[s];
+            const on = status === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setStatus(s)}
+                className={`flex min-h-11 flex-1 items-center justify-center rounded-field px-3 text-[13px] font-bold ${on ? "bg-ember text-white" : "bg-white/[.06] text-ink-sub"}`}
+              >
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
+        <TimeFields value={times} onChange={setTimes} />
+        <TextField
+          name="proxy-reason"
+          label="代理で記録する理由（任意）"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="例: 本人から電話で連絡"
+        />
+        <p className="text-[11px] text-ink-muted">代理での記録には、その団員を対象にした担当（scope）が必要です。無ければ保存が拒否されます。</p>
+        <MutationStatus state={record.state} toastBottom={100} />
+        <div className="flex gap-2">
+          <Button busy={record.saving} onClick={() => void submit()} className="!h-[46px] max-lg:min-h-11 !text-[13px]">
+            代理で記録を保存
+          </Button>
+          <Button variant="secondary" busy={record.saving} onClick={close} className="!h-[46px] max-lg:min-h-11 flex-none px-4 !text-[13px]">
+            閉じる
+          </Button>
+        </div>
+      </Card>
+      {/* 入力あり・未保存の間だけ離脱を確認する（docs/03:78。開いただけ・閉じた直後は出さない） */}
+      <LeaveConfirm
+        dirty={
+          memberId !== "" || status !== "arrived" || times.mobilizedAt !== "" || times.arrivedAt !== "" || times.returnedAt !== "" || reason.trim() !== ""
+        }
       />
-      <p className="text-[11px] text-ink-muted">代理での記録には、その団員を対象にした担当（scope）が必要です。無ければ保存が拒否されます。</p>
-      <MutationStatus state={record.state} toastBottom={100} />
-      <div className="flex gap-2">
-        <Button busy={record.saving} onClick={() => void submit()} className="!h-[46px] max-lg:min-h-11 !text-[13px]">
-          代理で記録を保存
-        </Button>
-        <Button variant="secondary" busy={record.saving} onClick={close} className="!h-[46px] max-lg:min-h-11 flex-none px-4 !text-[13px]">
-          閉じる
-        </Button>
-      </div>
-    </Card>
+    </>
   );
 }
 
@@ -993,37 +1005,50 @@ function RecordForm({
     await onSubmit(status, payloadTimes);
   };
   return (
-    <Card className="flex flex-col gap-3" aria-label={label}>
-      <span className="text-[13px] font-bold">{label}</span>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="状態">
-        {choices.map((c) => {
-          const on = status === c.value;
-          return (
-            <button
-              key={c.value}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setStatus(c.value)}
-              className={`flex min-h-11 flex-1 items-center justify-center rounded-field px-3 text-[13px] font-bold ${on ? "bg-ember text-white" : "bg-white/[.06] text-ink-sub"}`}
-            >
-              {c.label}
-            </button>
-          );
-        })}
-      </div>
-      <TimeFields value={times} onChange={setTimes} />
-      <p className="text-[11px] text-ink-muted">わからない時刻は空欄にしてください（既存の時刻は維持され、未知のまま残ります）。</p>
-      {touched && noChange && <p className="text-[12px] font-medium text-attention">状態か時刻を変えてください</p>}
-      <MutationStatus state={state} toastBottom={100} />
-      <div className="flex gap-2">
-        <Button busy={busy} onClick={() => void submit()} className="!h-[46px] max-lg:min-h-11 !text-[13px]">
-          {submitLabel}
-        </Button>
-        <Button variant="secondary" busy={busy} onClick={onCancel} className="!h-[46px] max-lg:min-h-11 flex-none px-4 !text-[13px]">
-          閉じる
-        </Button>
-      </div>
-    </Card>
+    <>
+      <Card className="flex flex-col gap-3" aria-label={label}>
+        <span className="text-[13px] font-bold">{label}</span>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="状態">
+          {choices.map((c) => {
+            const on = status === c.value;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  setTouched(true);
+                  setStatus(c.value);
+                }}
+                className={`flex min-h-11 flex-1 items-center justify-center rounded-field px-3 text-[13px] font-bold ${on ? "bg-ember text-white" : "bg-white/[.06] text-ink-sub"}`}
+              >
+                {c.label}
+              </button>
+            );
+          })}
+        </div>
+        <TimeFields
+          value={times}
+          onChange={(next) => {
+            setTouched(true);
+            setTimes(next);
+          }}
+        />
+        <p className="text-[11px] text-ink-muted">わからない時刻は空欄にしてください（既存の時刻は維持され、未知のまま残ります）。</p>
+        {touched && noChange && <p className="text-[12px] font-medium text-attention">状態か時刻を変えてください</p>}
+        <MutationStatus state={state} toastBottom={100} />
+        <div className="flex gap-2">
+          <Button busy={busy} onClick={() => void submit()} className="!h-[46px] max-lg:min-h-11 !text-[13px]">
+            {submitLabel}
+          </Button>
+          <Button variant="secondary" busy={busy} onClick={onCancel} className="!h-[46px] max-lg:min-h-11 flex-none px-4 !text-[13px]">
+            閉じる
+          </Button>
+        </div>
+      </Card>
+      {/* 未保存の離脱は確認ダイアログ（docs/03:78）。触っていない・初期値に戻した状態では出さない */}
+      <LeaveConfirm dirty={touched && !noChange} />
+    </>
   );
 }
 

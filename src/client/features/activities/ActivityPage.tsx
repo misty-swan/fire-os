@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api } from "../../api";
 import { ConfirmDialog } from "../../components/Overlay";
+import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { MutationStatus } from "../../components/MutationStatus";
 import { SubHeader } from "../../components/Page";
 import { Banner, Button, Card, Chip, TextArea } from "../../components/ui";
@@ -189,7 +190,7 @@ export function ActivityPage() {
           <span aria-hidden="true" className="size-2 rounded-[2px]" style={{ background: kindColor(detail.kind) }} />
           {detail.kind}
         </span>
-        <h2 className="text-[26px] font-bold leading-[1.3]">{detail.title}</h2>
+        <h2 className="text-[28px] font-bold leading-[1.3]">{detail.title}</h2>
       </div>
 
       {/* 日時・場所・担当・締切（prototype の情報カード。持ち物は契約に無い列のため出さない） */}
@@ -424,13 +425,15 @@ export function ActivityPage() {
         )}
       </section>
 
-      {/* 中止（API-40。出欠・対象・履歴は保持される。docs/11 §3） */}
+      {/* 中止（API-40。出欠・対象・履歴は保持される。docs/11 §3）。
+          理由が空のまま実行を送って422にしないよう、空の間は実行を無効化する（AnnouncementEditorと同じ流儀） */}
       {confirmCancel && (
         <ConfirmDialog
           title="この予定を中止しますか"
           confirmLabel="中止にする"
           busy={cancel.saving}
           danger
+          confirmDisabled={cancelReason.trim() === ""}
           onConfirm={async () => {
             const r = await cancel.run({ params: { id }, body: { version: detail.version, reason: cancelReason.trim() } });
             if (r) {
@@ -696,6 +699,8 @@ function ProxyAnswer({
           閉じる
         </Button>
       </div>
+      {/* 入力あり・未保存の間だけ離脱を確認する（docs/03:78。自分の出欠は押した瞬間に保存されるため対象外） */}
+      <LeaveConfirm dirty={reason.trim() !== "" || response !== "参加"} />
     </div>
   );
 }

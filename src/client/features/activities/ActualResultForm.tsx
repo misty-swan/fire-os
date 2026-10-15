@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Card, TextArea, TextField } from "../../components/ui";
+import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { AttachmentUploader } from "../attachments/AttachmentUploader";
 import { FormErrors } from "../../components/FormErrors";
 import { MutationStatus } from "../../components/MutationStatus";
@@ -157,117 +158,151 @@ export function ActualResultForm({
   }
 
   return (
-    <Card aria-label={mode === "create" ? "実績の入力" : "実績の訂正"} className="flex flex-col gap-4">
-      <p className="text-[12px] leading-[1.6] text-ink-muted">
-        {mode === "create"
-          ? "その日の実参加と活動の内容を記録します。出欠の回答はコピーされません（実参加は別の記録です）。"
-          : "訂正は新しい版として保存され、原本の版は残ります。参加者はこの内容で全て入れ替わります。"}
-      </p>
-      <TextArea name="content" label="活動の内容" value={content} onChange={(e) => setContent(e.target.value)} placeholder="例: ポンプ車操法を実施。放水訓練と整備点検も実施" />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <TextField name="actualStartsAt" label="実施（開始）" type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
-        <TextField name="actualEndsAt" label="実施（終了）" type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
-      </div>
-      <p className="text-[12px] text-ink-muted">わからない時刻は空欄のままにしてください（未記載として保存し、推測しません）。</p>
-
-      <div className="flex flex-col gap-2">
-        <span className="text-[12px] font-bold text-ink-sub">実参加（対象者ごとの記録）</span>
-        <ul className="flex flex-col gap-2">
-          {audience.map((m) => (
-            <li key={m.memberId} className="flex flex-col gap-2 rounded-[14px] bg-white/[.04] p-2.5">
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{m.displayName}</span>
-                <select
-                  aria-label={`${m.displayName}さんの実参加`}
-                  value={wordOf(status[m.memberId] ?? "unconfirmed")}
-                  onChange={(e) => {
-                    setTouched(true);
-                    setStatus((prev) => ({ ...prev, [m.memberId]: valueOf(e.target.value) }));
-                  }}
-                  className="hairline h-[46px] max-lg:min-h-11 rounded-xl bg-white/[.06] px-3 text-[13px] font-medium text-ink outline-none"
-                >
-                  {STATUS_WORDS.map((s) => (
-                    <option key={s.value} value={s.word}>
-                      {s.word}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {status[m.memberId] !== "unconfirmed" && (
-                <div className="grid gap-2 lg:grid-cols-2">
-                  <TextField
-                    name={`ind-start-${m.memberId}`}
-                    label={`${m.displayName}さんの個人開始（任意）`}
-                    type="datetime-local"
-                    value={indStart[m.memberId] ?? ""}
-                    onChange={(e) => {
-                      setTouched(true);
-                      setIndStart((prev) => ({ ...prev, [m.memberId]: e.target.value }));
-                    }}
-                  />
-                  <TextField
-                    name={`ind-end-${m.memberId}`}
-                    label={`${m.displayName}さんの個人終了（任意）`}
-                    type="datetime-local"
-                    value={indEnd[m.memberId] ?? ""}
-                    onChange={(e) => {
-                      setTouched(true);
-                      setIndEnd((prev) => ({ ...prev, [m.memberId]: e.target.value }));
-                    }}
-                  />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <span className="text-[12px] font-bold text-ink-sub">写真・記録</span>
-        <AttachmentUploader
-          target={{ type: "activity", id: activityId }}
-          onReady={(ids) => setAttachmentIds(ids)}
-          onChange={setBusyAttachments}
-        />
-      </div>
-
-      {mode === "correct" && (
-        <TextArea
-          name="correction-reason"
-          label="訂正理由（必須）"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="例: 後半から参加していたため欠席扱いを訂正"
-        />
-      )}
-
-      <FormErrors issues={errors} labels={{ content: "活動の内容", actualEndsAt: "実施（終了）", reason: "訂正理由" }} />
-      {save.state.kind === "conflict" && (
-        <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
+    <>
+      <Card aria-label={mode === "create" ? "実績の入力" : "実績の訂正"} className="flex flex-col gap-4">
+        <p className="text-[12px] leading-[1.6] text-ink-muted">
           {mode === "create"
-            ? "すでに実績が作られています（1活動1実績）。詳細を再読み込みして確認してください。"
-            : "他の訂正と競合しています。詳細を再読み込みして最新の版を確認してください。"}
+            ? "その日の実参加と活動の内容を記録します。出欠の回答はコピーされません（実参加は別の記録です）。"
+            : "訂正は新しい版として保存され、原本の版は残ります。参加者はこの内容で全て入れ替わります。"}
+        </p>
+        <TextArea
+          name="content"
+          label="活動の内容"
+          value={content}
+          onChange={(e) => {
+            setTouched(true);
+            setContent(e.target.value);
+          }}
+          placeholder="例: ポンプ車操法を実施。放水訓練と整備点検も実施"
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <TextField
+            name="actualStartsAt"
+            label="実施（開始）"
+            type="datetime-local"
+            value={startsAt}
+            onChange={(e) => {
+              setTouched(true);
+              setStartsAt(e.target.value);
+            }}
+          />
+          <TextField
+            name="actualEndsAt"
+            label="実施（終了）"
+            type="datetime-local"
+            value={endsAt}
+            onChange={(e) => {
+              setTouched(true);
+              setEndsAt(e.target.value);
+            }}
+          />
         </div>
-      )}
-      {save.state.kind === "rejected" && (
-        <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
-          この状態では実行できません。予定の版が変わっているか、対象者以外を実参加にしようとしています。再読み込みして確認してください。
+        <p className="text-[12px] text-ink-muted">わからない時刻は空欄のままにしてください（未記載として保存し、推測しません）。</p>
+
+        <div className="flex flex-col gap-2">
+          <span className="text-[12px] font-bold text-ink-sub">実参加（対象者ごとの記録）</span>
+          <ul className="flex flex-col gap-2">
+            {audience.map((m) => (
+              <li key={m.memberId} className="flex flex-col gap-2 rounded-[14px] bg-white/[.04] p-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{m.displayName}</span>
+                  <select
+                    aria-label={`${m.displayName}さんの実参加`}
+                    value={wordOf(status[m.memberId] ?? "unconfirmed")}
+                    onChange={(e) => {
+                      setTouched(true);
+                      setStatus((prev) => ({ ...prev, [m.memberId]: valueOf(e.target.value) }));
+                    }}
+                    className="hairline h-[46px] max-lg:min-h-11 rounded-xl bg-white/[.06] px-3 text-[13px] font-medium text-ink outline-none"
+                  >
+                    {STATUS_WORDS.map((s) => (
+                      <option key={s.value} value={s.word}>
+                        {s.word}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {status[m.memberId] !== "unconfirmed" && (
+                  <div className="grid gap-2 lg:grid-cols-2">
+                    <TextField
+                      name={`ind-start-${m.memberId}`}
+                      label={`${m.displayName}さんの個人開始（任意）`}
+                      type="datetime-local"
+                      value={indStart[m.memberId] ?? ""}
+                      onChange={(e) => {
+                        setTouched(true);
+                        setIndStart((prev) => ({ ...prev, [m.memberId]: e.target.value }));
+                      }}
+                    />
+                    <TextField
+                      name={`ind-end-${m.memberId}`}
+                      label={`${m.displayName}さんの個人終了（任意）`}
+                      type="datetime-local"
+                      value={indEnd[m.memberId] ?? ""}
+                      onChange={(e) => {
+                        setTouched(true);
+                        setIndEnd((prev) => ({ ...prev, [m.memberId]: e.target.value }));
+                      }}
+                    />
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
-      )}
-      {save.state.kind === "unknown" && (
-        <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
-          結果を確認できません。同じ内容で再送しても二重には登録されません。
+
+        <div className="flex flex-col gap-2">
+          <span className="text-[12px] font-bold text-ink-sub">写真・記録</span>
+          <AttachmentUploader
+            target={{ type: "activity", id: activityId }}
+            onReady={(ids) => setAttachmentIds(ids)}
+            onChange={setBusyAttachments}
+          />
         </div>
-      )}
-      <MutationStatus state={save.state.kind === "saved" ? SAVED : { kind: "idle" }} toastBottom={100} />
-      <div className="flex flex-wrap gap-2">
-        <Button busy={save.saving || busyAttachments} onClick={() => void submit()} className="min-w-[180px] flex-1">
-          {mode === "create" ? "実績を保存" : "訂正を保存"}
-        </Button>
-        <Button variant="secondary" busy={save.saving} onClick={onCancel} className="max-lg:min-h-11 flex-none px-4">
-          やめる
-        </Button>
-      </div>
-    </Card>
+
+        {mode === "correct" && (
+          <TextArea
+            name="correction-reason"
+            label="訂正理由（必須）"
+            value={reason}
+            onChange={(e) => {
+              setTouched(true);
+              setReason(e.target.value);
+            }}
+            placeholder="例: 後半から参加していたため欠席扱いを訂正"
+          />
+        )}
+
+        <FormErrors issues={errors} labels={{ content: "活動の内容", actualEndsAt: "実施（終了）", reason: "訂正理由" }} />
+        {save.state.kind === "conflict" && (
+          <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
+            {mode === "create"
+              ? "すでに実績が作られています（1活動1実績）。詳細を再読み込みして確認してください。"
+              : "他の訂正と競合しています。詳細を再読み込みして最新の版を確認してください。"}
+          </div>
+        )}
+        {save.state.kind === "rejected" && (
+          <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
+            この状態では実行できません。予定の版が変わっているか、対象者以外を実参加にしようとしています。再読み込みして確認してください。
+          </div>
+        )}
+        {save.state.kind === "unknown" && (
+          <div role="alert" className="hairline rounded-card bg-[rgba(255,195,92,.08)] p-3.5 text-[13px] text-[#ffdca0]">
+            結果を確認できません。同じ内容で再送しても二重には登録されません。
+          </div>
+        )}
+        <MutationStatus state={save.state.kind === "saved" ? SAVED : { kind: "idle" }} toastBottom={100} />
+        <div className="flex flex-wrap gap-2">
+          <Button busy={save.saving || busyAttachments} onClick={() => void submit()} className="min-w-[180px] flex-1">
+            {mode === "create" ? "実績を保存" : "訂正を保存"}
+          </Button>
+          <Button variant="secondary" busy={save.saving} onClick={onCancel} className="max-lg:min-h-11 flex-none px-4">
+            やめる
+          </Button>
+        </div>
+      </Card>
+      {/* 未保存の離脱は確認ダイアログ（docs/03:78「既定=編集に戻る」）。保存済み・空のフォームでは出ない */}
+      <LeaveConfirm dirty={touched} />
+    </>
   );
 }

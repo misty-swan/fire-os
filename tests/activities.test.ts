@@ -167,4 +167,61 @@ describe("活動（予定）の公開・変更・中止 (T035)", () => {
     };
     expect(memberDetail.attendance.map((r) => r.memberId)).toEqual([member.memberId]);
   });
+
+  it("same_key_resend_returns_saved_response_for_update_and_cancel (docs/05 §2)", async () => {
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 応答が届かなかった操作のリトライが
+    // 現在の状態を前提とした業務エラー（no_changes 400・cancelled→cancelled 422）になってはいけない
+    const a = fx.units.a;
+    const admin = a.people.admin;
+
+    const createRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "再送試験用の予定",
+      kind: "訓練",
+      plannedStartsAt: "2026-11-10T01:00:00.000Z",
+      locationText: "架空市第三体育館",
+      ownerMemberId: admin.memberId!,
+      audienceMemberIds: [admin.memberId!],
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const created = (await json(createRes)).data! as { id: string; version: number };
+
+    // --- API-39: draft→scheduled。draftからの公開は理由が要らない（docs/11） ---
+    const publishKey = crypto.randomUUID();
+    const publishBody = { version: 1, status: "scheduled" };
+    const publishRes = await fx.client(admin).request("PATCH", `/api/v1/activities/${created.id}`, publishBody, { "idempotency-key": publishKey });
+    expect(publishRes.status).toBe(200);
+    const published = (await json(publishRes)).data! as Record<string, unknown>;
+
+    // 同キー再送: 適用済みで「変更点なし」になっても400ではなく元の応答
+    const publishReplay = await fx.client(admin).request("PATCH", `/api/v1/activities/${created.id}`, publishBody, { "idempotency-key": publishKey });
+    expect(publishReplay.status).toBe(200);
+    expect((await json(publishReplay)).data).toEqual(published);
+    // 再送で状態・版・イベントは動かない（更新のイベントは初回の1件だけ。再送で増えない）
+    const afterReplay = (await fx.rows("activities", { id: created.id }))[0]!;
+    expect(afterReplay.status).toBe("scheduled");
+    expect(afterReplay.version).toBe(2);
+    expect(await fx.rows("domain_events", { entity_type: "activity", entity_id: created.id, event_type: "activity.updated" })).toHaveLength(1);
+
+    // --- API-40: 中止。同キー再送はcancelled→cancelledの422ではなく元の応答 ---
+    const cancelKey = crypto.randomUUID();
+    const cancelBody = { version: 2, reason: "台風接近のため中止" };
+    const cancelRes = await fx.client(admin).request("POST", `/api/v1/activities/${created.id}/cancellation`, cancelBody, { "idempotency-key": cancelKey });
+    expect(cancelRes.status).toBe(200);
+    const cancelled = (await json(cancelRes)).data! as Record<string, unknown>;
+
+    const cancelReplay = await fx.client(admin).request("POST", `/api/v1/activities/${created.id}/cancellation`, cancelBody, { "idempotency-key": cancelKey });
+    expect(cancelReplay.status).toBe(200);
+    expect((await json(cancelReplay)).data).toEqual(cancelled);
+    const afterCancelReplay = (await fx.rows("activities", { id: created.id }))[0]!;
+    expect(afterCancelReplay.status).toBe("cancelled");
+    expect(afterCancelReplay.version).toBe(3);
+    expect(await fx.rows("domain_events", { entity_type: "activity", entity_id: created.id, event_type: "activity.cancelled" })).toHaveLength(1);
+
+    // 同キー別本文は409（docs/05 §2。保存済み応答の本文一致検査）
+    const mismatch = await fx.client(admin).request("POST", `/api/v1/activities/${created.id}/cancellation`, {
+      version: 2, reason: "別の理由での再送",
+    }, { "idempotency-key": cancelKey });
+    expect(mismatch.status).toBe(409);
+    expect((await json(mismatch)).error?.code).toBe("IDEMPOTENCY_MISMATCH");
+  });
 });

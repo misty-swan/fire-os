@@ -243,4 +243,50 @@ describe("添付の予約とアップロード (T015)", () => {
     expect(((await json(empty)).error?.details ?? []).some((d) => d.reason === "empty_body")).toBe(true);
     expect(await fx.rows("upload_attempts", { attachment_id: intent!.id })).toHaveLength(0);
   });
+
+  it("activity_target_accepts_intent_upload_and_completion (docs/05 API-26)", async () => {
+    // docs/05 API-26行「対象はfacility/vehicle/equipment/activity/announcement」: 活動実績の写真など、
+    // 活動を直接の親とするintentを作れる（422 unsupported_entity_typeにしない）
+    const admin = fx.units.a.people.admin;
+
+    const aRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "添付intent試験用の予定",
+      kind: "訓練",
+      plannedStartsAt: "2026-11-25T01:00:00.000Z",
+      locationText: "架空市第六堤防",
+      ownerMemberId: admin.memberId!,
+      audienceMemberIds: [admin.memberId!],
+    }, idem());
+    expect(aRes.status).toBe(201);
+    const activityId = ((await json(aRes)).data! as { id: string }).id;
+
+    // intent（対象=activity。活動はPER-04の所属内報告で親を確認できる）
+    const iRes = await fx.client(admin).request(
+      "POST",
+      "/api/v1/attachments/upload-intents",
+      { target: { type: "activity", id: activityId }, contentType: "image/png", byteSize: 100 },
+      idem(),
+    );
+    expect(iRes.status).toBe(201);
+    const intent = (await json(iRes)).data! as { id: string; uploadToken: string };
+    expect((await fx.rows("attachments", { id: intent.id }))[0]!.intent_target_type).toBe("activity");
+
+    // 転送（API-83）→ completion（API-84）まで進む
+    const bytes = pngBytes(7);
+    const up = await rawUpload(admin, intent.id, intent.uploadToken, bytes);
+    expect(up.status).toBe(200);
+    const attempt = (await json(up)).data! as { id: string; sha256: string };
+    expect(attempt.sha256).toBe(await sha256(bytes));
+
+    const cRes = await fx.client(admin).request(
+      "POST",
+      `/api/v1/attachments/${intent.id}/completion`,
+      { version: 1, uploadAttemptId: attempt.id, sha256: attempt.sha256 },
+      idem(),
+    );
+    expect(cRes.status).toBe(202);
+    const completed = (await json(cRes)).data! as { attachment: { status: string }; job: { status: string } };
+    expect(completed.attachment.status).toBe("uploaded");
+    expect(completed.job.status).toBe("queued");
+  });
 });

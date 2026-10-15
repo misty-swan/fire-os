@@ -329,4 +329,42 @@ describe("活動実績・実参加・訂正版 (T037)", () => {
     // 出欠も実績に影響されない（回答版が進んでいない）
     expect(detailAfter.attendance).toEqual(attendanceBefore);
   });
+
+  it("same_key_resend_of_creation_returns_saved_result (docs/05 §2)", async () => {
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 応答が届かなかった作成のリトライが
+    // 既存rootの409 DUPLICATEになってはいけない（T041/T042/T043と同じ鍵先読みの流儀）
+    const a = fx.units.a;
+    const admin = a.people.admin;
+
+    const createActivity = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "実績再送試験用の予定",
+      kind: "訓練",
+      plannedStartsAt: "2026-11-20T01:00:00.000Z",
+      locationText: "架空市第四堤防",
+      ownerMemberId: admin.memberId!,
+      audienceMemberIds: [admin.memberId!],
+    }, idem());
+    expect(createActivity.status).toBe(201);
+    const activityId = ((await json(createActivity)).data! as { id: string }).id;
+
+    const body = {
+      activityVersion: 1,
+      content: "堤防の点検を実施（再送試験用・架空）。",
+      participants: [{ memberId: admin.memberId!, actualStatus: "participated" }],
+      attachmentIds: [],
+    };
+    const firstKey = crypto.randomUUID();
+    const first = await fx.client(admin).request("POST", `/api/v1/activities/${activityId}/actual-results`, body, { "idempotency-key": firstKey });
+    expect(first.status).toBe(201);
+    const createdResult = (await json(first)).data! as Record<string, unknown>;
+
+    // 同キー再送: 409 DUPLICATEではなく元の201応答
+    const replay = await fx.client(admin).request("POST", `/api/v1/activities/${activityId}/actual-results`, body, { "idempotency-key": firstKey });
+    expect(replay.status).toBe(201);
+    expect((await json(replay)).data).toEqual(createdResult);
+    // 再送で実績・イベントは増えない
+    expect(await fx.rows("activity_results", { activity_id: activityId })).toHaveLength(1);
+    const resultId = (createdResult as { id: string }).id;
+    expect(await fx.rows("domain_events", { entity_type: "activity_result", entity_id: resultId })).toHaveLength(1);
+  });
 });

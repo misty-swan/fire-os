@@ -49,10 +49,13 @@ interface AnnouncementRow {
   audience_json: string; created_by_member_id?: string | null; my_read_at?: string | null; attachments_json?: string;
 }
 
-const toAnnouncementDto = (r: AnnouncementRow, audience: string[]) =>
+const toAnnouncementDto = (r: AnnouncementRow, audience: string[] | null) =>
   Announcement.parse({
     id: r.id, version: r.version, title: r.title, body: r.body, revisionNo: r.revision_no, status: r.status,
-    publishedAt: r.published_at, audienceMemberIds: audience, createdByMemberId: r.created_by_member_id ?? null,
+    publishedAt: r.published_at,
+    // 対象者ID一覧（他対象者のIDを含む）は管理権限（PER-03）の応答だけに載せる（docs/05 §1。nullは省略）
+    ...(audience === null ? {} : { audienceMemberIds: audience }),
+    createdByMemberId: r.created_by_member_id ?? null,
     readAt: r.my_read_at ?? null, attachments: r.attachments_json ? (JSON.parse(r.attachments_json) as unknown) : [],
     createdAt: r.created_at, updatedAt: r.updated_at,
   });
@@ -207,7 +210,11 @@ async function queryAnnouncements(c: ApiContext): Promise<{ items: AnnouncementD
   ).results;
 
   const page = rows.slice(0, query.limit);
-  const items = page.map((r) => toAnnouncementDto(r, JSON.parse(r.audience_json) as string[]));
+  // 対象者ID一覧は管理権限（PER-03）の応答だけに載せる（docs/05 §1。全件管理権 or その行がscope対象）。
+  // 対象者には省略する（他対象者のID一覧を配信しない。API-25/72は管理権限専用なので必ず載る）
+  const items = page.map((r) =>
+    toAnnouncementDto(r, manage.all || scopedIds.includes(r.id) ? (JSON.parse(r.audience_json) as string[]) : null),
+  );
   if (rows.length > query.limit) {
     const last = page[page.length - 1]!;
     return { items, nextCursor: await encodeCursor(key, { filterHash, createdAt: last.created_at, id: last.id }) };
@@ -270,22 +277,30 @@ export function registerAnnouncementRoutes(app: ApiApp): void {
     const { params, body, headers } = await parseApiRequest(c, "API-72");
     const current = await loadAnnouncement(c, params.id, p.unitId);
     requirePermission(p, "PER-03", { unitId: p.unitId, type: "announcement", id: params.id });
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 鍵が既にある（=再送の）ときは
+    // 現在の状態では不可になる変更（archived終端・遷移・変更点なし）でも保存済み応答を返す必要があるため、
+    // 新しい操作のときだけ状態前提を検査してからbatchに入る（T041/T042と同じ流儀）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "announcement.update", headers["idempotency-key"]).first();
 
     const statusChange = body.status !== undefined && body.status !== current.status;
-    if (statusChange && !canTransition(announcementTransitions, current.status as keyof typeof announcementTransitions, body.status!)) {
-      throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
-    }
-    // archivedは終端（docs/11 お知らせ）。状態遷移だけでなく内容/対象の変更も受け付けない
-    if (!statusChange && current.status === "archived") {
-      throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "archived_is_terminal" }]);
-    }
-
     const audienceChange = body.audienceMemberIds !== undefined;
     const audience = audienceChange ? [...new Set(body.audienceMemberIds!)].sort() : [];
     if (audienceChange) await requireAudienceMembers(c, p.unitId, audience);
     const contentChange = body.title !== undefined || body.body !== undefined || audienceChange;
-    if (!statusChange && !contentChange) {
-      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "no_changes" }]);
+
+    if (!knownKey) {
+      if (statusChange && !canTransition(announcementTransitions, current.status as keyof typeof announcementTransitions, body.status!)) {
+        throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
+      }
+      // archivedは終端（docs/11 お知らせ）。状態遷移だけでなく内容/対象の変更も受け付けない
+      if (!statusChange && current.status === "archived") {
+        throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "archived_is_terminal" }]);
+      }
+      if (!statusChange && !contentChange) {
+        throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "no_changes" }]);
+      }
     }
 
     // title/body/対象の変更は新revision（docs/11「編集で新revision」。revision_no増分。旧revisionは不変）。
@@ -368,32 +383,41 @@ export function registerAnnouncementRoutes(app: ApiApp): void {
     const p = await resolvePrincipal(c);
     const { params, body, headers } = await parseApiRequest(c, "API-66");
     const current = await loadAnnouncement(c, params.id, p.unitId);
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 鍵が既にある（=再送の）ときは
+    // 現在の状態では不可になる変更（アーカイブ後・旧版指定・対象外）でも保存済み領収を返す必要があるため、
+    // 状態前提（公開・対象・現行版）を検査せずexecuteMutationへ渡す（T041と同じ流儀。
+    // 認可の再検査と本文の一致検査はexecuteMutationが行う。同キー別本文は409 IDEMPOTENCY_MISMATCH）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "announcement.read", headers["idempotency-key"]).first();
 
-    // 公開前draft・archivedへの既読は拒否する（docs/16 T045。存在も明かさない404）。
-    // 公開済でなければ、対象者・管理権保持者のどちらにも存在を見せない
-    if (current.status !== "published") throw new HttpError("NOT_FOUND");
-    // 対象者だけが自分の既読を作れる（docs/04:135「本人のみ」）。対象外は404（存在を明かさない）だが、
-    // 管理権（PER-03）保持者による対象者分の既読操作（代理read＝本人以外の操作）は403で拒否する
-    // （docs/11「既読は版に束縛」＝既読は本人の操作。docs/16 T045）
-    const inAudience = await c.env.DB.prepare(
-      "SELECT 1 FROM announcement_audience WHERE announcement_id = ? AND member_id = ?",
-    ).bind(params.id, p.memberId).first();
-    if (!inAudience) {
-      const manage = authorize(p, "PER-03", { unitId: p.unitId, type: "announcement", id: params.id });
-      if (manage.allowed) throw new HttpError("FORBIDDEN", undefined, [{ field: "permission", reason: "read_is_self_only" }]);
-      throw new HttpError("NOT_FOUND");
-    }
-    // 既読は版に束縛（docs/11 お知らせ行）。現行版以外のrevisionNoは受け付けない（旧版は既に読めない）
-    if (body.revisionNo !== current.revision_no) {
-      throw new HttpError("NOT_FOUND", undefined, [{ field: "revisionNo", reason: "revision_not_current" }]);
-    }
+    if (!knownKey) {
+      // 公開前draft・archivedへの既読は拒否する（docs/16 T045。存在も明かさない404）。
+      // 公開済でなければ、対象者・管理権保持者のどちらにも存在を見せない
+      if (current.status !== "published") throw new HttpError("NOT_FOUND");
+      // 対象者だけが自分の既読を作れる（docs/04:135「本人のみ」）。対象外は404（存在を明かさない）だが、
+      // 管理権（PER-03）保持者による対象者分の既読操作（代理read＝本人以外の操作）は403で拒否する
+      // （docs/11「既読は版に束縛」＝既読は本人の操作。docs/16 T045）
+      const inAudience = await c.env.DB.prepare(
+        "SELECT 1 FROM announcement_audience WHERE announcement_id = ? AND member_id = ?",
+      ).bind(params.id, p.memberId).first();
+      if (!inAudience) {
+        const manage = authorize(p, "PER-03", { unitId: p.unitId, type: "announcement", id: params.id });
+        if (manage.allowed) throw new HttpError("FORBIDDEN", undefined, [{ field: "permission", reason: "read_is_self_only" }]);
+        throw new HttpError("NOT_FOUND");
+      }
+      // 既読は版に束縛（docs/11 お知らせ行）。現行版以外のrevisionNoは受け付けない（旧版は既に読めない）
+      if (body.revisionNo !== current.revision_no) {
+        throw new HttpError("NOT_FOUND", undefined, [{ field: "revisionNo", reason: "revision_not_current" }]);
+      }
 
-    // 既読済みなら同じ領収書を返す（行を増やさず初回readAtを保持。docs/05 §2の同キー再送と同じ結果）
-    const existing = await c.env.DB.prepare(
-      "SELECT read_at, revision_no FROM announcement_reads WHERE announcement_id = ? AND revision_no = ? AND member_id = ?",
-    ).bind(params.id, body.revisionNo, p.memberId).first<{ read_at: string; revision_no: number }>();
-    if (existing) {
-      return ok(c, ReadReceipt.parse({ readAt: existing.read_at, revisionNo: existing.revision_no }));
+      // 既読済みなら同じ領収書を返す（行を増やさず初回readAtを保持）
+      const existing = await c.env.DB.prepare(
+        "SELECT read_at, revision_no FROM announcement_reads WHERE announcement_id = ? AND revision_no = ? AND member_id = ?",
+      ).bind(params.id, body.revisionNo, p.memberId).first<{ read_at: string; revision_no: number }>();
+      if (existing) {
+        return ok(c, ReadReceipt.parse({ readAt: existing.read_at, revisionNo: existing.revision_no }));
+      }
     }
 
     const id = crypto.randomUUID();

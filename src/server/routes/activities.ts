@@ -132,34 +132,41 @@ export function registerActivityRoutes(app: ApiApp): void {
     const { params, body, headers } = await parseApiRequest(c, "API-39");
     const current = await loadActivity(c, params.id, p.unitId);
     requirePermission(p, "PER-03", { unitId: p.unitId, type: "activity", id: params.id, ownerMemberId: current.owner_member_id });
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 鍵が既にある（=再送の）ときは
+    // 現在の状態では不可になる変更（遷移・逆順時刻・変更点なし・理由不足）でも保存済み応答を返す
+    // 必要があるため、新しい操作のときだけ状態前提を検査してからbatchに入る（T041/T042と同じ流儀）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "activity.update", headers["idempotency-key"]).first();
 
     const statusChange = body.status !== undefined && body.status !== current.status;
-    if (statusChange && !canTransition(activityTransitions, current.status as keyof typeof activityTransitions, body.status!)) {
-      throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
-    }
-    // 日時は「現在値＋入力」で検査する（片方だけのPATCHで逆順を作れないように）
-    const startsAt = body.plannedStartsAt ?? current.planned_starts_at;
-    const endsAt = body.plannedEndsAt !== undefined ? body.plannedEndsAt : current.planned_ends_at;
-    if (endsBeforeStart(startsAt, endsAt)) {
-      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "plannedEndsAt", reason: "end_before_start" }]);
-    }
-
     const audienceChange = body.audienceMemberIds !== undefined;
     const audience = audienceChange ? [...new Set(body.audienceMemberIds!)] : [];
     if (audienceChange) await requireAudienceMembers(c, p.unitId, audience);
     const ownerChange = body.ownerMemberId !== undefined && body.ownerMemberId !== current.owner_member_id;
-    if (ownerChange) await requireActiveMember(c, p.unitId, body.ownerMemberId!);
-
+    if (ownerChange && !knownKey) await requireActiveMember(c, p.unitId, body.ownerMemberId!);
     const contentChange =
       body.title !== undefined || body.kind !== undefined || body.plannedStartsAt !== undefined ||
       body.plannedEndsAt !== undefined || body.locationText !== undefined || body.responseDueAt !== undefined || ownerChange;
-    if (!statusChange && !contentChange && !audienceChange) {
-      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "no_changes" }]);
-    }
-    // 公開済（draft以降）の変更と中止は理由が要る（docs/11「理由」、docs/05 API-39「公開済の変更理由」）
-    const reasonRequired = (current.status !== "draft" && (contentChange || statusChange || audienceChange)) || body.status === "cancelled";
-    if (reasonRequired && !body.reason?.trim()) {
-      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "reason", reason: "reason_required" }]);
+
+    if (!knownKey) {
+      if (statusChange && !canTransition(activityTransitions, current.status as keyof typeof activityTransitions, body.status!)) {
+        throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
+      }
+      // 日時は「現在値＋入力」で検査する（片方だけのPATCHで逆順を作れないように）
+      const startsAt = body.plannedStartsAt ?? current.planned_starts_at;
+      const endsAt = body.plannedEndsAt !== undefined ? body.plannedEndsAt : current.planned_ends_at;
+      if (endsBeforeStart(startsAt, endsAt)) {
+        throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "plannedEndsAt", reason: "end_before_start" }]);
+      }
+      if (!statusChange && !contentChange && !audienceChange) {
+        throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "(body)", reason: "no_changes" }]);
+      }
+      // 公開済（draft以降）の変更と中止は理由が要る（docs/11「理由」、docs/05 API-39「公開済の変更理由」）
+      const reasonRequired = (current.status !== "draft" && (contentChange || statusChange || audienceChange)) || body.status === "cancelled";
+      if (reasonRequired && !body.reason?.trim()) {
+        throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "reason", reason: "reason_required" }]);
+      }
     }
 
     const sets: string[] = [];
@@ -236,7 +243,12 @@ export function registerActivityRoutes(app: ApiApp): void {
     const { params, body, headers } = await parseApiRequest(c, "API-40");
     const current = await loadActivity(c, params.id, p.unitId);
     requirePermission(p, "PER-03", { unitId: p.unitId, type: "activity", id: params.id, ownerMemberId: current.owner_member_id });
-    if (!canTransition(activityTransitions, current.status as keyof typeof activityTransitions, "cancelled")) {
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 鍵が既にある（=再送の）ときは
+    // 適用済みでcancelled（終端への遷移検査に掛かる）でも保存済み応答を返す（T041/T042と同じ流儀）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "activity.cancel", headers["idempotency-key"]).first();
+    if (!knownKey && !canTransition(activityTransitions, current.status as keyof typeof activityTransitions, "cancelled")) {
       throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
     }
 
