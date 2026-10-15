@@ -8142,7 +8142,7 @@
         "summary": "API-24 GET /announcements",
         "x-permission": "PER-01",
         "x-kind": "list",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "status",
@@ -8205,13 +8205,61 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 9007199254740991
-                          }
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "body": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 20000
+                          },
+                          "revisionNo": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "draft",
+                              "published",
+                              "archived"
+                            ]
+                          },
+                          "publishedAt": {
+                            "anyOf": [
+                              {},
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "audienceMemberIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            }
+                          },
+                          "createdAt": {},
+                          "updatedAt": {}
                         },
                         "required": [
                           "id",
-                          "version"
+                          "version",
+                          "title",
+                          "body",
+                          "revisionNo",
+                          "status",
+                          "publishedAt",
+                          "audienceMemberIds",
+                          "createdAt",
+                          "updatedAt"
                         ],
-                        "additionalProperties": {}
+                        "additionalProperties": false
                       }
                     },
                     "meta": {
@@ -8299,7 +8347,7 @@
         "summary": "API-25 POST /announcements",
         "x-permission": "PER-03",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "idempotency-key",
@@ -8336,13 +8384,61 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
-                        }
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "body": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        },
+                        "revisionNo": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "published",
+                            "archived"
+                          ]
+                        },
+                        "publishedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "audienceMemberIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          }
+                        },
+                        "createdAt": {},
+                        "updatedAt": {}
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "title",
+                        "body",
+                        "revisionNo",
+                        "status",
+                        "publishedAt",
+                        "audienceMemberIds",
+                        "createdAt",
+                        "updatedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -17690,7 +17786,7 @@
         "summary": "API-72 PATCH /announcements/:id",
         "x-permission": "PER-03",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -17736,13 +17832,61 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
-                        }
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "body": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        },
+                        "revisionNo": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "published",
+                            "archived"
+                          ]
+                        },
+                        "publishedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "audienceMemberIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          }
+                        },
+                        "createdAt": {},
+                        "updatedAt": {}
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "title",
+                        "body",
+                        "revisionNo",
+                        "status",
+                        "publishedAt",
+                        "audienceMemberIds",
+                        "createdAt",
+                        "updatedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

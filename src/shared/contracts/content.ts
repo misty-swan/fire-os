@@ -7,6 +7,26 @@ import { announcementStates } from "../states";
 
 export const ReadReceipt = obj({ readAt: z.iso.datetime(), revisionNo: z.number().int().min(1).optional(), notificationVersion: z.number().int().min(1).optional() });
 
+/**
+ * お知らせ（docs/04:132 announcements）。audienceMemberIdsは現行版（revisionNo）の対象snapshot
+ * （announcement_revisions.audience_snapshot。docs/04:133/134）。title/body/対象の変更は新revisionで
+ * 行われ旧版は不変（docs/11「編集で新revision」）。publishedAtは公開操作時刻または作成時に指定した
+ * publishAt（公開への遷移はAPI-72の明示操作。自動公開jobは無い。docs/16 T045）
+ */
+export const Announcement = obj({
+  id: Id,
+  version: Version,
+  title: Title,
+  body: Body,
+  revisionNo: Version,
+  status: z.enum(announcementStates),
+  publishedAt: Instant.nullable(),
+  audienceMemberIds: z.array(Id),
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type AnnouncementDto = z.infer<typeof Announcement>;
+
 /** 版判定の共通3値。docs/05 API-60/75/97 */
 const ReviewVerb = z.enum(["request_review", "approve", "changes_requested"]);
 const sourceVersions = z.record(z.string(), Version);
@@ -41,7 +61,7 @@ export const contentApis = {
   "API-24": defineApi({
     method: "GET", path: "/announcements", permission: "PER-01", kind: "list", success: [200],
     request: obj({ query: listQuery({ status: z.enum(announcementStates).optional() }) }),
-    response: Page(provisionalDto()), provisional: true,
+    response: Page(Announcement),
   }),
   "API-25": defineApi({
     method: "POST", path: "/announcements", permission: "PER-03", kind: "mutation", success: [201],
@@ -49,7 +69,7 @@ export const contentApis = {
       body: obj({ title: Title, body: Body, audienceMemberIds: IdList, publishAt: Instant.optional() }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Announcement,
   }),
   "API-72": defineApi({
     method: "PATCH", path: "/announcements/:id", permission: "PER-03", kind: "mutation", success: [200],
@@ -61,7 +81,7 @@ export const contentApis = {
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Announcement,
   }),
   "API-66": defineApi({
     method: "PUT", path: "/announcements/:id/read", permission: "本人", kind: "mutation", success: [200],

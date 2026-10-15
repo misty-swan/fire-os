@@ -60,6 +60,8 @@ const TABLES = new Set([
   "incidents", "incident_events", "incident_participants", "incident_participant_events",
   // PH3: 車両/機材の使用履歴（T042）
   "resource_usages", "resource_usage_events",
+  // PH3: お知らせ（T045）
+  "announcements", "announcement_revisions", "announcement_audience", "announcement_reads",
 ]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 
