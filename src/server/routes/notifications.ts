@@ -57,7 +57,7 @@ type NotificationChannel = (typeof notificationChannels)[number];
  */
 export const UNKNOWN_ADDRESS_SQUAD = "連絡先未登録";
 
-const addressRefFor = (channel: NotificationChannel, memberId: string, squad: string | null = null): string => {
+export const addressRefFor = (channel: NotificationChannel, memberId: string, squad: string | null = null): string => {
   if (channel === "inapp" && squad === UNKNOWN_ADDRESS_SQUAD) return `unknown:${memberId}#inbox`;
   return `member:${memberId}#${channel === "inapp" ? "inbox" : channel}`;
 };

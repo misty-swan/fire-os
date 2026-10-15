@@ -113,9 +113,9 @@ export interface TaskEffectInput {
  * 承認済みAI起点のタスク作成文（task本体＋task_events初行）。監査/outboxは積まない
  * （呼び出し側のmutationが一mutation一eventで1回だけ積む。docs/16 T049裁定）。
  * task_eventsの初行はdecision源を残す（docs/04「task_events…追記履歴」）。
+ * taskIdは呼び出し側で採番できる（T054の承認mutationがcreated検査に使う。省略時はここで採番）。
  */
-function taskEffectStatements(ctx: TaskEffectContext, input: TaskEffectInput): D1PreparedStatement[] {
-  const taskId = crypto.randomUUID();
+export function taskEffectStatements(ctx: TaskEffectContext, input: TaskEffectInput, taskId: string = crypto.randomUUID()): D1PreparedStatement[] {
   return [
     ctx.env.DB.prepare(
       "INSERT INTO tasks (id, unit_id, source_evaluation_id, source_issue_id, title, assignee_member_id, status, due_date, source_decision_id, effect_operation_id, last_mutation_token, created_at, updated_at, created_by, actor_kind) " +
@@ -232,6 +232,8 @@ export function registerTaskRoutes(app: ApiApp): void {
     const source: "manual" | "ai_decision" = decision ? "ai_decision" : "manual";
 
     const id = crypto.randomUUID();
+    // AI起点のタスクIDは文の中で使うIDと一致させる（created検査が実際の行を見る。T054で接続）
+    const aiTaskId = crypto.randomUUID();
     const result = await executeMutation(c.env, p, {
       operationCode: "task.create",
       key: headers["idempotency-key"],
@@ -239,7 +241,7 @@ export function registerTaskRoutes(app: ApiApp): void {
       expectedAuthzVersion: p.authzVersion,
       // 新規作成のみの操作（更新rootは無い。createdの存在検査で成功を確認する）
       roots: [],
-      created: [{ table: "tasks", id }],
+      created: [{ table: "tasks", id: decision ? aiTaskId : id }],
       // 承認済みeffectの二重適用（同effect_operation_idの2回目の作成）は業務上の重複=409 DUPLICATE
       duplicateOn: ["index:uq_task_effect_operation"],
       statements: (ctx) =>
@@ -255,6 +257,7 @@ export function registerTaskRoutes(app: ApiApp): void {
                 assigneeMemberId: body.assigneeMemberId ?? null,
                 dueDate: body.dueDate ?? null,
               },
+              aiTaskId,
             )
           : [
               c.env.DB.prepare(
