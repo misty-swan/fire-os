@@ -222,6 +222,29 @@ export const IncidentDetail = obj({
 });
 export type IncidentDetailDto = z.infer<typeof IncidentDetail>;
 
+/**
+ * リンクの応答に載る対応情報（docs/05 API-71「Incident＋OperationLink」。T043）。
+ * 旧出動側operationはcountable=0で残り（行は履歴/監査参照のために保持）、旧ID/理由は
+ * incident_eventsと監査へ残す（docs/04:103「旧operationを非計数化し旧ID/理由をイベントへ残す」）。
+ * retainedUsageIdsは生存operationへ付け替えた（または元から属する）使用履歴の全行ID
+ */
+export const OperationLink = obj({
+  incidentId: Id,
+  activityId: Id,
+  /** 生存operation（活動側。docs/04:103「活動側operationへ付替」。以後の使用履歴編集API-57の対象） */
+  operationId: Id,
+  /** 非計数化された旧出動側operation（docs/04「無効時countable=0」。参照は可能） */
+  retiredOperationId: Id,
+  /** リンク後の生存operationの版 */
+  operationVersion: Version,
+  retainedUsageIds: z.array(Id).max(LIMITS.arrayMax),
+});
+export type OperationLinkDto = z.infer<typeof OperationLink>;
+
+/** API-71の応答（docs/05:125「Incident＋OperationLink」。リンク後の出動と対応情報） */
+export const OperationLinkResult = obj({ incident: Incident, link: OperationLink });
+export type OperationLinkResultDto = z.infer<typeof OperationLinkResult>;
+
 const actualShape = {
   content: Body,
   actualStartsAt: Instant.optional(),
@@ -379,11 +402,13 @@ export const operationsApis = {
       params: P_ID,
       body: obj({
         version: Version, activityId: Id, activityVersion: Version,
-        operationVersions: z.record(Id, Version), reason: Reason,
+        operationVersions: z.record(Id, Version), reason: Reason2000,
       }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    // docs/05 API-71行どおりIncident＋OperationLink（T043でprovisionalから厳格化）。
+    // reasonはincident_events/activity_eventsのreasonのCHECK（≤2000）に揃える（API-69/39/40と同じ扱い）
+    response: OperationLinkResult,
   }),
   "API-57": defineApi({
     method: "PUT", path: "/operations/:id/resource-usages", permission: "PER-04", kind: "mutation", success: [200],

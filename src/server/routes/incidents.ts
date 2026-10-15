@@ -3,8 +3,9 @@ import { canTransition, incidentTransitions } from "../../shared/states";
 import { resolvePrincipal } from "../auth/principal";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
-import { executeMutation } from "../mutations/execute";
+import { executeMutation, type ExtraCondition } from "../mutations/execute";
 import { requirePermission } from "./invitations";
+import { activityAlreadyLinked, activityNotLinkedCondition, resolveActivityForLink } from "../operations/link";
 import { buildResourceUsageMutation, toResourceUsageDto, type ResourceUsageRowShape } from "./resource-usages";
 
 /**
@@ -16,7 +17,8 @@ import { buildResourceUsageMutation, toResourceUsageDto, type ResourceUsageRowSh
  * 出来事root（operations）と出動rootを同じbatchで確定し、voidedでcountable=0にする（docs/04「無効時countable=0」）。
  * 出動命令は自動発行しない（docs/11「正式指令を発行しない」）。登録・状態変更は監査/outboxまで一つのbatch。
  * 参集（API-23）はincident-participants.ts（T041）、使用履歴（API-57/22のresourceUsages）は
- * resource-usages.ts（T042で接続）、活動operationの統合（API-71）はT043。
+ * resource-usages.ts（T042で接続）、既存活動とのoperation統合（API-71と作成時リンクの共通処理）は
+ * operations/link.ts（T043で接続。docs/04:94「リンク時operation一致」）。
  */
 
 const INCIDENT_JSON =
@@ -69,28 +71,32 @@ export function registerIncidentRoutes(app: ApiApp): void {
     const { body, headers } = await parseApiRequest(c, "API-22");
     requirePermission(p, "PER-04", { unitId: p.unitId, type: "incident" });
     // activityIdは同unitの既存活動だけ（docs/04 activity_id UNIQUE/FK。1活動にリンクできる出動は1件）。
-    // 既存活動とのoperation統合（付替え）はAPI-71＝T043で共通処理へ接続する
+    // 検査（同unit・一活動一出動）と生存operationの特定はAPI-71と共通のresolveActivityForLinkへ集約し、
+    // 作成時リンクでも同じ規則を適用する（T043。docs/04:94「リンク時operation一致」。
+    // 出動は生まれたときから活動のoperationへ属し、使用履歴も同じoperationに作る。別operationは作らない）
     let activityId: string | null = null;
+    /** リンク時の生存operation（活動側）と現行版。未リンクはnull（新しいoperationをこのbatchで作る） */
+    let linkOperation: { operationId: string; operationVersion: number } | null = null;
     if (body.activityId) {
-      const activity = await c.env.DB.prepare("SELECT unit_id FROM activities WHERE id = ?").bind(body.activityId)
-        .first<{ unit_id: string }>();
-      if (!activity || activity.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
-      const linked = await c.env.DB.prepare("SELECT id FROM incidents WHERE unit_id = ? AND activity_id = ?")
-        .bind(p.unitId, body.activityId).first<{ id: string }>();
-      if (linked) throw new HttpError("DUPLICATE", undefined, [{ field: "activityId", reason: "activity_already_linked" }]);
-      activityId = body.activityId;
+      const target = await resolveActivityForLink(c, p.unitId, body.activityId);
+      const dup = activityAlreadyLinked(target);
+      if (dup) throw dup;
+      activityId = target.activityId;
+      linkOperation = { operationId: target.operationId, operationVersion: target.operationVersion };
     }
 
-    const operationId = crypto.randomUUID();
+    const operationId = linkOperation?.operationId ?? crypto.randomUUID();
     const id = crypto.randomUUID();
     // 使用履歴の作成（T042。docs/05 API-22行「resourceUsagesの保存はT042で共通関数経由」）。
     // buildResourceUsageMutationが検査（対象ちょうど一つ/quantity>0/時間/同unit・存在）と
     // INSERT文＋履歴文＋資産の存在条件を組み立て、下のexecuteMutationと同じbatchに取り込む
     // （出来事root/出動/使用履歴/監査/outboxを1つのbatchで確定。docs/02 §4。一mutation一event）。
-    // 作成経路ではoperationを行と同じbatchで作るため、operation版のガードも増分もしない
+    // 未リンクではoperationを行と同じbatchで作るためoperation版のガードも増分もしない。
+    // リンク時は既存の活動側operationへ属するため、operation版のガードと増分は下のroot＋文で行う
     const usages = body.resourceUsages?.length
       ? await buildResourceUsageMutation(c, {
-          principal: p, operationId, operationVersion: 0, operationCreatedInBatch: true,
+          principal: p, operationId, operationVersion: linkOperation?.operationVersion ?? 0,
+          operationCreatedInBatch: linkOperation === null,
           usages: body.resourceUsages, reason: null,
           idempotencyKey: headers["idempotency-key"], requestPath: "/incidents",
           requestBody: { resourceUsages: body.resourceUsages },
@@ -102,29 +108,52 @@ export function registerIncidentRoutes(app: ApiApp): void {
       key: headers["idempotency-key"],
       requestHash: await canonicalRequestHash({ method: "POST", path: "/incidents", body }),
       expectedAuthzVersion: p.authzVersion,
-      roots: [],
+      // リンク時は既存の活動側operationを比較更新でガードし（先行変更は409）、成功時に増分する
+      roots: linkOperation
+        ? [{ table: "operations", id: operationId, expectedVersion: linkOperation.operationVersion }]
+        : [],
       created: [
-        { table: "operations", id: operationId }, { table: "incidents", id },
+        ...(linkOperation ? [] : [{ table: "operations", id: operationId }]),
+        { table: "incidents", id },
         ...(usages?.created ?? []),
       ],
-      // 使用履歴の対象資産の存在はbatch内でも再検査する（読み取り後の廃止は404。docs/05 §1）
-      conditions: usages?.conditions ?? [],
+      conditions: [
+        // リンク先の活動と一活動一出動はbatch内でも再検査する（読み取り後の先行リンクは409。docs/05 §1）
+        ...(linkOperation
+          ? ([
+              { existsSql: "SELECT 1 FROM activities WHERE id = ? AND unit_id = ?", binds: [body.activityId, p.unitId], failCode: "NOT_FOUND" },
+              activityNotLinkedCondition(p.unitId, body.activityId!),
+            ] satisfies ExtraCondition[])
+          : []),
+        // 使用履歴の対象資産の存在もbatch内で再検査する（読み取り後の廃止は404。docs/05 §1）
+        ...(usages?.conditions ?? []),
+      ],
       statements: (ctx) => [
-        // 出来事root（docs/04「共通出来事」）。種別は出動。状態は子rootに合わせ、集計対象として作る
-        c.env.DB.prepare(
-          "INSERT INTO operations (id, unit_id, kind, status, countable, last_mutation_token, created_at, updated_at, created_by, actor_kind) " +
-            "VALUES (?, ?, 'incident', 'recording', 1, ?, ?, ?, ?, 'human')",
-        ).bind(operationId, p.unitId, ctx.attempt, ctx.now, ctx.now, p.userId),
+        // 出来事root（docs/04「共通出来事」）。未リンクは種別=出動の新しいrootを作り、
+        // リンク時は活動側operationの版を増分する（出動と使用履歴が加わるため。docs/04:100と同じ）
+        ...(linkOperation
+          ? [c.env.DB.prepare(
+              "UPDATE operations SET version = version + 1, last_mutation_token = ?, updated_at = ? " +
+                "WHERE id = ? AND unit_id = ? AND version = ?",
+            ).bind(ctx.attempt, ctx.now, operationId, p.unitId, linkOperation.operationVersion)]
+          : [c.env.DB.prepare(
+              "INSERT INTO operations (id, unit_id, kind, status, countable, last_mutation_token, created_at, updated_at, created_by, actor_kind) " +
+                "VALUES (?, ?, 'incident', 'recording', 1, ?, ?, ?, ?, 'human')",
+            ).bind(operationId, p.unitId, ctx.attempt, ctx.now, ctx.now, p.userId)]),
         c.env.DB.prepare(
           "INSERT INTO incidents (id, unit_id, operation_id, activity_id, kind, occurred_at, summary, status, last_mutation_token, created_at, updated_at, created_by, actor_kind) " +
             "VALUES (?, ?, ?, ?, ?, ?, ?, 'recording', ?, ?, ?, ?, 'human')",
         ).bind(id, p.unitId, operationId, activityId, body.kind, body.occurredAt, body.summary, ctx.attempt, ctx.now, ctx.now, p.userId),
-        // 履歴の初行（docs/04:95。作成を前後JSONで記録する。issue_eventsと同じ流儀）
+        // 履歴の初行（docs/04:95。作成を前後JSONで記録する。リンク時はactivityIdも残す。issue_eventsと同じ流儀）
         c.env.DB.prepare(
           "INSERT INTO incident_events (id, unit_id, incident_id, action, before_json, after_json, reason, actor_user_id, actor_kind, created_at) " +
             "VALUES (?, ?, ?, 'create', '{}', ?, NULL, ?, 'human', ?)",
-        ).bind(crypto.randomUUID(), p.unitId, id, JSON.stringify({ status: "recording", kind: body.kind }), p.userId, ctx.now),
-        // 使用履歴（docs/04:100。operations/incidentsのINSERTより後なので、同一batch内のFKも成立する）
+        ).bind(
+          crypto.randomUUID(), p.unitId, id,
+          JSON.stringify(activityId ? { status: "recording", kind: body.kind, activityId } : { status: "recording", kind: body.kind }),
+          p.userId, ctx.now,
+        ),
+        // 使用履歴（docs/04:100。operations/incidentsの書込より後なので、同一batch内のFKも成立する）
         ...(usages ? usages.statements(ctx) : []),
       ],
       audit: {

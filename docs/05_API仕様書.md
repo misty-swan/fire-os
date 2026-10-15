@@ -73,7 +73,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-19 | GET /equipment | PER-01 | q/status/storage/limit/cursor | Page<Equipment> |
 | API-20 | POST /asset-inspections | PER-04 | Target(vehicle/equipment)＋InspectionInput | Inspection |
 | API-21 | GET /incidents | PER-01 | kind/from/to/status/limit/cursor;機微scope | Page<Incident> |
-| API-22 | POST /incidents | PER-04 | kind,occurredAt,summary,activityId?,resourceUsages?;operation生成/共用;activityIdは同unitの既存活動と未リンクのみ（リンク済み409）。resourceUsagesは同一batchで作成（T042で共通関数buildResourceUsageMutation経由に接続。対象/数量/時間/資産の検査とresource_usage_events初行も同batch。一mutation一event） | Incident |
+| API-22 | POST /incidents | PER-04 | kind,occurredAt,summary,activityId?,resourceUsages?;operation生成/共用;activityIdは同unitの既存活動と未リンクのみ（リンク済み409）。**activityId指定時は活動側operationへ一致させ（docs/04:94「リンク時operation一致」T043）、別operationを作らず生存operationの版を比較更新で増分する**。resourceUsagesは同一batchで作成（T042で共通関数buildResourceUsageMutation経由に接続。対象/数量/時間/資産の検査とresource_usage_events初行も同batch。一mutation一event） | Incident |
 | API-23 | PUT /incidents/:id/participants/:memberId | PER-04 | version(未作成0),attendanceStatus,times?,reason?;本人/代理/時刻。times省略は既存維持（未知NULLを保持）、既知時刻の順序は両方既知のみ検査（400）。代理はmember×PER-04のscope（D08。理由は任意）。同一状態への再送は時刻の訂正、変更点なしは400。unconfirmedは行なしで表現 | Participant |
 | API-24 | GET /announcements | PER-01 | status/limit/cursor;可視公開対象のみ | Page<Announcement> |
 | API-25 | POST /announcements | PER-03 | title,body,audienceMemberIds,publishAt?;最初draft | Announcement |
@@ -122,7 +122,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-68 | POST /tasks | PER-04/10 | title,assigneeMemberId?,dueDate?,sourceDecisionId?;AI効果は承認済 | Task |
 | API-69 | PATCH /incidents/:id | PER-04 | version,status?,kind?,summary?,reason（必須。訂正/無効化理由）;許可遷移。voidedは終端（変更は422） | Incident |
 | API-70 | GET /incidents/:id | PER-01限定 | なし;参集/活動/使用履歴/イベント | IncidentDetail |
-| API-71 | PUT /incidents/:id/activity | PER-04 | version,activityId,activityVersion,operationVersions,reason;両rootロック | Incident＋OperationLink |
+| API-71 | PUT /incidents/:id/activity | PER-04 | version,activityId,activityVersion,operationVersions,reason（2,000）;両root＋双方のoperation版を同一batchの比較更新でロック（不一致は409で全体不変。キー不足400）。競合リンク（既存の別出動あり）409、リンク済み出動の付け替えとvoided出動は422。出動と使用履歴を活動側operationへ付替し旧operationはcountable=0で履歴/監査参照可、旧ID/理由はincident_eventsへ | Incident＋OperationLink |
 | API-72 | PATCH /announcements/:id | PER-03 | version,title?,body?,status?,audienceMemberIds?;新revision | Announcement |
 | API-73 | POST /documents | PER-11管理 | title,classification,acl;D20許諾 | Document |
 | API-74 | POST /documents/:id/versions | PER-11管理 | version,attachmentId,licenseRef;ready原本/抽出job | DocumentVersion＋Job(202) |

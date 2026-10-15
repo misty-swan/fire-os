@@ -17274,7 +17274,7 @@
         "summary": "API-71 PUT /incidents/:id/activity",
         "x-permission": "PER-04",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -17311,8 +17311,128 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "incident": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "operationId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "activityId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "simulation",
+                                "training",
+                                "actual_record"
+                              ]
+                            },
+                            "occurredAt": {},
+                            "summary": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 20000
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "recording",
+                                "active",
+                                "closed",
+                                "voided"
+                              ]
+                            },
+                            "createdBy": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "createdAt": {},
+                            "updatedAt": {}
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "operationId",
+                            "activityId",
+                            "kind",
+                            "occurredAt",
+                            "summary",
+                            "status",
+                            "createdBy",
+                            "createdAt",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "link": {
+                          "type": "object",
+                          "properties": {
+                            "incidentId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "activityId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "operationId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "retiredOperationId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "operationVersion": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "retainedUsageIds": {
+                              "maxItems": 100,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "incidentId",
+                            "activityId",
+                            "operationId",
+                            "retiredOperationId",
+                            "operationVersion",
+                            "retainedUsageIds"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "incident",
+                        "link"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -17449,7 +17569,7 @@
                   "reason": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 20000
+                    "maxLength": 2000
                   }
                 },
                 "required": [
