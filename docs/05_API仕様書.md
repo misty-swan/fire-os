@@ -72,7 +72,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-18 | GET /vehicles | PER-01 | q/status/limit/cursor | Page<Vehicle> |
 | API-19 | GET /equipment | PER-01 | q/status/storage/limit/cursor | Page<Equipment> |
 | API-20 | POST /asset-inspections | PER-04 | Target(vehicle/equipment)＋InspectionInput | Inspection |
-| API-21 | GET /incidents | PER-01 | kind/from/to/status/limit/cursor;機微scope | Page<Incident> |
+| API-21 | GET /incidents | PER-01 | kind/from/to/status/limit/cursor;機微scope（**scope絞り込みは未実装で現状PER-01＝同unit全体。T040の設計判断。出動自体に機微項目はなく、参集氏名の可視行制御と通知設計（PH4）で見直す**） | Page<Incident> |
 | API-22 | POST /incidents | PER-04 | kind,occurredAt,summary,activityId?,resourceUsages?;operation生成/共用;activityIdは同unitの既存活動と未リンクのみ（リンク済み409）。**activityId指定時は活動側operationへ一致させ（docs/04:94「リンク時operation一致」T043）、別operationを作らず生存operationの版を比較更新で増分する**。resourceUsagesは同一batchで作成（T042で共通関数buildResourceUsageMutation経由に接続。対象/数量/時間/資産の検査とresource_usage_events初行も同batch。一mutation一event） | Incident |
 | API-23 | PUT /incidents/:id/participants/:memberId | PER-04 | version(未作成0),attendanceStatus,times?,reason?;本人/代理/時刻。times省略は既存維持（未知NULLを保持）、既知時刻の順序は両方既知のみ検査（400）。代理はmember×PER-04のscope（D08。理由は任意）。同一状態への再送は時刻の訂正、変更点なしは400。unconfirmedは行なしで表現 | Participant |
 | API-24 | GET /announcements | PER-01 | status/limit/cursor;可視公開対象のみ。**Announcementには作成者createdByMemberId（users→membersを解決。T046）・readAt（この要求の本人による現行版の既読日時。未読null。旧版の既読は含めない＝改版で未読に戻る）・attachments（リンク中の添付id/linkId/linkVersion/status/contentType。API-101の解除と表示に画面が使う）を含む。単一件のGET契約は無く、画面は一覧のページ送りで対象を探す（T046）** | Page<Announcement> |
