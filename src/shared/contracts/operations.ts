@@ -114,6 +114,97 @@ export const Dashboard = obj({
 export type DashboardDto = z.infer<typeof Dashboard>;
 
 /**
+ * 集計応答の元データ1行（活動側。docs/05 API-52「Analytics＋sourceFilters」）。
+ * id集合は同じ条件で開いた活動一覧（API-05。actual=trueを含む同じクエリ）と一致させ、
+ * 画面はoperationIdごとに活動→出動（API-07/70）へ辿れる（docs/03 SCR-26「元活動/出動/operation参照」）
+ */
+export const AnalyticsSourceActivity = obj({
+  id: Id,
+  operationId: Id,
+  title: Title,
+  kind: ShortText,
+  plannedStartsAt: Instant,
+});
+export type AnalyticsSourceActivityDto = z.infer<typeof AnalyticsSourceActivity>;
+
+/** 集計応答の元データ1行（出動側。id集合は出動一覧（API-21）の同じ条件から無効(voided)を除いた集合と一致） */
+export const AnalyticsSourceIncident = obj({
+  id: Id,
+  operationId: Id,
+  summary: Body,
+  kind: z.enum(incidentKinds),
+  occurredAt: Instant,
+});
+export type AnalyticsSourceIncidentDto = z.infer<typeof AnalyticsSourceIncident>;
+
+/**
+ * 月次・年度・団員別集計（T060、docs/05 API-52/§5集計契約、docs/04 §3.2末尾、docs/03 SCR-26、docs/10 PER-01）。
+ * **単位の明示（SCR-26「二重計上なし、条件/単位/未入力を明示」）:**
+ * - totals.operationCount＝出来事（operations単位）。同operationの活動＋出動は1。取消（cancelled）・無効（voided）
+ *   と非countable operationは集計外（docs/04「集計は無効なoperationを除く」）。活動側は実績が記録された有効な
+ *   活動（API-05 actual=trueと同じ条件）、出動側はoccurred_atが期間内の有効な出動
+ * - totals.memberCount＝延べ参加（operation×member単位で重複除去）。実参加は活動の現行実績のparticipated行と
+ *   出動の参集中/参集済/帰還記録（mobilizing/arrived/returned）の和集合
+ * - 時間はdocs/14 D05案（実活動全体時間と実参加を基準。個人時間は別欄で合算しない）。
+ *   **不明は0と合算せずunknownOperationIdsで示す（0時間と表示しない）**。出動には全体時間の記録が無いため未入力
+ * - fiscalYearはdocs/14 D05案の**検証設定**（開始月4月・JST業務日）。approved=falseで承認済みとは扱わない
+ */
+export const Analytics = obj({
+  /** 実際に適用した半開区間（from包含/to排他。fiscalYear指定時はその年度の起終） */
+  period: obj({ from: Instant.nullable(), to: Instant.nullable() }),
+  fiscalYear: z.number().int().nullable(),
+  /** 活動の種別（activities.kind。指定時は出動を含めない＝kindの語彙が別のため。docs/05 API-52） */
+  kind: ShortText.nullable(),
+  memberId: Id.nullable(),
+  /** 集計の認可範囲（PER-01＝この要求の本人の所属unit。他unitの件数は混ざらない） */
+  unitId: Id,
+  /** 検証設定（docs/14 D05案・未承認）。承認された運用設定とは表示しない（docs/05 §9） */
+  settings: obj({ fiscalYearStartMonth: z.literal(4), approved: z.literal(false) }),
+  totals: obj({
+    /** 出来事の数（distinct operation。二重計上なし） */
+    operationCount: z.number().int().min(0),
+    /** 延べ参加（operation×member。同じ団員が同operationの活動と出動の両方に現れても1） */
+    memberCount: z.number().int().min(0),
+    /** 既知の実活動全体時間の合計（分）。不明は合算しない */
+    knownDurationMinutes: z.number().int().min(0),
+  }),
+  /** 時間が未入力の出来事（活動は実績に全体時間が無い、出動は全体時間の記録が無い）。0時間ではなく「未入力」と表示する */
+  unknownOperationIds: z.array(Id).max(LIMITS.analyticsArrayMax),
+  /** 月次（JST暦月。記録のある月だけ。月内の出来事はその月の錨時刻〔活動=planned_starts_at／出動=occurred_at〕で分類） */
+  monthly: z.array(
+    obj({
+      month: z.string().regex(/^\d{4}-\d{2}$/),
+      operationCount: z.number().int().min(0),
+      memberCount: z.number().int().min(0),
+      /** この月のうち時間が未入力の出来事件数 */
+      unknownOperationCount: z.number().int().min(0),
+    }),
+  ).max(LIMITS.analyticsArrayMax),
+  /** 団員別（実参加のあった団員。PER-01の範囲＝同unitだけ）。未入力を含む行は画面で「未入力」と出す */
+  members: z.array(
+    obj({
+      memberId: Id,
+      displayName: ShortText,
+      operationCount: z.number().int().min(0),
+      knownDurationMinutes: z.number().int().min(0),
+      /** 時間が未入力の出来事件数。>0のとき画面は合計に「未入力」を併記し、既知0のときは「未入力」だけを出す */
+      unknownOperationCount: z.number().int().min(0),
+    }),
+  ).max(LIMITS.analyticsArrayMax),
+  /** 元データ（sourceFilters）。数値から元活動/出動を辿れることの根拠（drilldownIdsと一致する） */
+  sources: obj({
+    /** 集計対象の出来事（distinct operation。錨時刻順） */
+    distinctOperationIds: z.array(Id).max(LIMITS.analyticsArrayMax),
+    activities: z.array(AnalyticsSourceActivity).max(LIMITS.analyticsArrayMax),
+    incidents: z.array(AnalyticsSourceIncident).max(LIMITS.analyticsArrayMax),
+    /** 同じ条件で開く一覧（API-05/API-21）のURL。activitiesはactual=trueを含み、id集合がsources.activitiesと一致する。
+     *  incidentsはvoidedも閲覧可能（docs/05 API-21）のため、一覧側は無効行を除して数値と比較する */
+    filters: obj({ activitiesHref: z.string(), incidentsHref: z.string() }),
+  }),
+});
+export type AnalyticsDto = z.infer<typeof Analytics>;
+
+/**
  * 実参加の1行（docs/04:93 activity_actual_participants）。
  * 出欠(Attendance)とは別物で、回答を実参加へコピーしない（docs/11 実参加行）。
  * 個人時間は全体時間と別列。不明はNULL（docs/05 §3「未知時刻は欠落表示」）
@@ -573,7 +664,10 @@ export const operationsApis = {
         memberId: Id.optional(), kind: ShortText.optional(),
       }),
     }),
-    response: z.looseObject({}), provisional: true,
+    // T060でprovisionalから厳格化（docs/05 API-52行どおりAnalytics＋sourceFilters）。
+    // 集計はoperations単位（同operationの活動＋出動は1）で、取消/無効と非countableは集計外。
+    // fiscalYearはdocs/14 D05案の検証設定（開始月4月・JST。approved=falseで承認済みとは扱わない）
+    response: Analytics,
   }),
   "API-68": defineApi({
     method: "POST", path: "/tasks", permission: "PER-04/10", kind: "mutation", success: [201],

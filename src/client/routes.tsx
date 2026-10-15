@@ -22,6 +22,7 @@ import { NotificationsPage } from "./features/notifications/NotificationsPage";
 import { AiReviewsPage } from "./features/ai/AiReviewsPage";
 import { ReportDraftPage } from "./features/reports/ReportDraftPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { AnalyticsPage } from "./features/analytics/AnalyticsPage";
 import { ImportPage } from "./features/facilities/ImportPage";
 import { InspectionTemplatesPanel } from "./features/admin/InspectionTemplatesPanel";
 import { MeGate, type MeData } from "./me";
@@ -79,6 +80,7 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-21": <NotificationsPage />,
   "SCR-18": <AiReviewsPage />,
   "SCR-19": <ReportDraftPage />,
+  "SCR-26": <AnalyticsPage />,
 };
 
 function toRoutes(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject[] {

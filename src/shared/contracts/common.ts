@@ -10,6 +10,8 @@ export const LIMITS = {
   listLimitDefault: 50,
   listLimitMax: 200,
   arrayMax: 100,
+  /** 集計（API-52）の応答配列。1団の年間活動/出動・団員数より十分大きい上限（docs/05 API-52行） */
+  analyticsArrayMax: 2000,
   idempotencyKeyMax: 128,
 } as const;
 

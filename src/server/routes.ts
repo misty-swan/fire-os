@@ -39,6 +39,7 @@ import { registerReportContentRoutes } from "./routes/report-content";
 import { registerClassificationRoutes } from "./routes/ai-classification";
 import { registerAiDecisionRoutes } from "./routes/ai-decisions";
 import { registerDashboardRoutes } from "./routes/dashboard";
+import { registerAnalyticsRoutes } from "./routes/analytics";
 
 // APIルートの登録点。各ドメインのroute登録関数を後続タスクがここへ追加する。
 export function registerRoutes(app: ApiApp): void {
@@ -89,4 +90,5 @@ export function registerRoutes(app: ApiApp): void {
   registerClassificationRoutes(app);
   registerAiDecisionRoutes(app);
   registerDashboardRoutes(app);
+  registerAnalyticsRoutes(app);
 }
