@@ -67,6 +67,84 @@ export const ReviewInput = obj({
   reviewNote: Body.optional(),
 });
 
+/**
+ * AI評価の実行履歴（T061、docs/04 §3.4 155行 ai_evaluation_runs、API-88/89）。
+ * labels/outputsは統計のみで**個人本文を複製しない**（失敗例はdataset行id参照＝failedCaseSamples.caseRef）。
+ * metrics/gatePassed/statusで未実施・失敗を合格と表示しない（docs/06 §6、docs/14 D12）。
+ */
+export const evaluationKinds = ["classification", "report"] as const;
+export type EvaluationKind = (typeof evaluationKinds)[number];
+
+export const EvaluationFailureCase = obj({
+  caseRef: ShortText,
+  expected: ShortText,
+  predicted: ShortText.nullable(),
+  note: ShortText.nullable(),
+});
+
+/** 品質ゲートの判定（閾値はsrc/server/ai/evaluation.tsに事前固定。docs/06 §6のB案・docs/14 D12） */
+export const EvaluationGate = obj({
+  passed: z.boolean(),
+  reasons: z.array(ShortText),
+  thresholdVersion: ShortText,
+});
+
+/**
+ * 評価指標（docs/16 T061「MetricsはmacroF1/needsReviewRecall/falseSafe/abstention/latencyP95/token/cost/failedCases」）。
+ * nullは「この種別では測らない」（例: reportのmacroF1）か「測れなかった」（usage未知での費用等）。
+ */
+export const EvaluationMetrics = obj({
+  macroF1: z.number().min(0).max(1).nullable(),
+  needsReviewRecall: z.number().min(0).max(1).nullable(),
+  /** 異常→no_issueの見逃し件数（docs/06 §6「見逃し0」。1件でもゲート不合格） */
+  falseSafe: z.number().int().min(0),
+  /** 保留率（要確認予測の割合。docs/06 §6「保留率」） */
+  abstention: z.number().min(0).max(1).nullable(),
+  latencyP95Ms: z.number().int().min(0),
+  promptTokens: z.number().int().min(0),
+  completionTokens: z.number().int().min(0),
+  usageKnownCases: z.number().int().min(0),
+  usageUnknownCases: z.number().int().min(0),
+  /** 記録済みusageからの費用（USD）。単価が未固定（report）やusage未知ではnull（勝手に推計しない） */
+  costUsd: z.number().min(0).nullable(),
+  costSource: ShortText,
+  /** 生成の捏造（数値不一致＋未知の事実。docs/06 §6「数値不一致0」） */
+  fabricatedFacts: z.number().int().min(0),
+  /** 未記載欄の補完（docs/06 §6「未記載事実補完0」） */
+  completionOfMissing: z.number().int().min(0),
+  /** 記録されたmissingFieldsがサーバー値の欠落と一致しない件数 */
+  missingFieldsMismatches: z.number().int().min(0),
+  failedCases: z.number().int().min(0),
+  /** 失敗例（上限20件のサンプル。全件はai_evaluation_cases） */
+  failedCaseSamples: z.array(EvaluationFailureCase),
+  gate: EvaluationGate,
+});
+export type EvaluationMetricsDto = z.infer<typeof EvaluationMetrics>;
+
+export const EvaluationRun = obj({
+  id: Id,
+  jobId: Id,
+  kind: z.enum(evaluationKinds),
+  datasetVersion: ShortText,
+  questionVersion: ShortText,
+  modelId: ShortText,
+  datasetRef: ShortText,
+  datasetSha256: Sha256,
+  /** 失敗した実行は0（case数を数えられなかった）。成功した実行は1以上 */
+  caseCount: z.number().int().min(0),
+  labels: z.record(z.string(), z.unknown()),
+  outputs: z.record(z.string(), z.unknown()),
+  /** status=failedの実行はmetricsを持たない（未判定を合格と見せない） */
+  metrics: EvaluationMetrics.nullable(),
+  gatePassed: z.boolean().nullable(),
+  status: z.enum(["succeeded", "failed"]),
+  errorCode: ShortText.nullable(),
+  runByUserId: Id,
+  executedAt: Instant,
+  createdAt: Instant,
+});
+export type EvaluationRunDto = z.infer<typeof EvaluationRun>;
+
 export const Citation = obj({
   documentId: Id,
   documentVersionId: Id,
@@ -143,7 +221,7 @@ export const aiApis = {
   "API-88": defineApi({
     method: "GET", path: "/ai/evaluation-runs", permission: "PER-08", kind: "list", success: [200],
     request: obj({ query: listQuery({ modelId: ShortText.optional(), datasetVersion: ShortText.optional() }) }),
-    response: Page(provisionalDto()), provisional: true,
+    response: Page(EvaluationRun),
   }),
   "API-89": defineApi({
     method: "POST", path: "/ai/evaluation-runs", permission: "PER-08運用", kind: "job", success: [202],

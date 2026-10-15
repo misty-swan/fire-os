@@ -23885,7 +23885,7 @@
         "summary": "API-88 GET /ai/evaluation-runs",
         "x-permission": "PER-08",
         "x-kind": "list",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "modelId",
@@ -23951,17 +23951,323 @@
                             "type": "string",
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                           },
-                          "version": {
+                          "jobId": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "classification",
+                              "report"
+                            ]
+                          },
+                          "datasetVersion": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "questionVersion": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "modelId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "datasetRef": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "datasetSha256": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                          },
+                          "caseCount": {
                             "type": "integer",
-                            "minimum": 1,
+                            "minimum": 0,
                             "maximum": 9007199254740991
-                          }
+                          },
+                          "labels": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "outputs": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "metrics": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "macroF1": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 1
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "needsReviewRecall": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 1
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "falseSafe": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "abstention": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 1
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "latencyP95Ms": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "promptTokens": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "completionTokens": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "usageKnownCases": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "usageUnknownCases": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "costUsd": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number",
+                                        "minimum": 0
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "costSource": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "fabricatedFacts": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "completionOfMissing": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "missingFieldsMismatches": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "failedCases": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "failedCaseSamples": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "caseRef": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 200
+                                        },
+                                        "expected": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 200
+                                        },
+                                        "predicted": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 200
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "note": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 200
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "caseRef",
+                                        "expected",
+                                        "predicted",
+                                        "note"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "gate": {
+                                    "type": "object",
+                                    "properties": {
+                                      "passed": {
+                                        "type": "boolean"
+                                      },
+                                      "reasons": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 200
+                                        }
+                                      },
+                                      "thresholdVersion": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      }
+                                    },
+                                    "required": [
+                                      "passed",
+                                      "reasons",
+                                      "thresholdVersion"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "macroF1",
+                                  "needsReviewRecall",
+                                  "falseSafe",
+                                  "abstention",
+                                  "latencyP95Ms",
+                                  "promptTokens",
+                                  "completionTokens",
+                                  "usageKnownCases",
+                                  "usageUnknownCases",
+                                  "costUsd",
+                                  "costSource",
+                                  "fabricatedFacts",
+                                  "completionOfMissing",
+                                  "missingFieldsMismatches",
+                                  "failedCases",
+                                  "failedCaseSamples",
+                                  "gate"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "gatePassed": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "succeeded",
+                              "failed"
+                            ]
+                          },
+                          "errorCode": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "runByUserId": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "executedAt": {},
+                          "createdAt": {}
                         },
                         "required": [
                           "id",
-                          "version"
+                          "jobId",
+                          "kind",
+                          "datasetVersion",
+                          "questionVersion",
+                          "modelId",
+                          "datasetRef",
+                          "datasetSha256",
+                          "caseCount",
+                          "labels",
+                          "outputs",
+                          "metrics",
+                          "gatePassed",
+                          "status",
+                          "errorCode",
+                          "runByUserId",
+                          "executedAt",
+                          "createdAt"
                         ],
-                        "additionalProperties": {}
+                        "additionalProperties": false
                       }
                     },
                     "meta": {

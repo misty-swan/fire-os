@@ -8,6 +8,9 @@
   "main": "src/server/index.ts",
   "compatibility_date": "2026-08-15",
   "compatibility_flags": ["nodejs_compat"],
+  // 評価datasetの正本（tests/fixtures/ai/*.jsonl）を試験がテキストモジュールとして読むための設定（T061）。
+  // サーバー本体はsrc/server/ai/dataset/（生成スクリプトが書いた同一内容のTSモジュール）を使う。
+  "rules": [{ "type": "Text", "globs": ["**/*.jsonl"] }],
   "assets": {
     "directory": "./dist/client",
     "binding": "ASSETS",

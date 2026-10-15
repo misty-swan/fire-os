@@ -67,7 +67,7 @@ V04で確定すべき項目と現状:
 3. 架空データの活動＋実績（人数・時刻に欠落と注入文を含む）を作り、API-32で生成を依頼→API-86でjob確認→report_versionsの下書き版と実測usageを確認する（手順の詳細は tests/live/report-generation.test.ts のコメント。`LIVE_BASE_URL`/`LIVE_BOOTSTRAP_EMAIL`/`LIVE_BOOTSTRAP_TOKEN`を設定して `npm run test:live -- tests/live/report-generation.test.ts`）。
 4. 構造不正・捏造・応答なしの実応答がmanual_review/retryableになることを確認し、実測をこの文書へ追記する。
 5. 「モデル比較の観点一覧」で固定モデルを確定し、LLM_MODEL（`src/server/ai/llm.ts`）とdocs/14 D16・docs/06 §4を一緒に更新する。
-6. docs/06 §6の評価集合（50実績相当）で品質を測り、D12の閾値決定の材料として記録する（ai_evaluation_runs＝API-88/89。未実装。実装後に記録）。
+6. docs/06 §6の評価集合（50実績相当）で品質を測り、D12の閾値決定の材料として記録する（ai_evaluation_runs＝API-88/89。**T061で機構実装済み**。記録手順はdocs/evidence/ai-evaluation.md）。
 
 この手順を実行するまで、V04（LLM部分）は **局所のみ検証済み・実モデルは未検証**。AI-03を「完成」とは扱わず、採用判定は品質ゲート（docs/06 §6）の合格後とする。LLM障害時は手動下書き（API-62）で業務記録を継続できるが、品質未達の免除にはならない。
 

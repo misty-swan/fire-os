@@ -50,6 +50,6 @@ V04で確定すべき項目と現状:
 2. `npx wrangler login` のうえ、AI binding付き環境（demo/staging。wrangler.jsoncの`ai: { binding: "AI" }`）へ配置する。
 3. 架空データの点検/異常を作り、API-29で分類を依頼→API-86でjob確認→ai_evaluationsの候補と実測usageを確認する（手順の詳細は tests/live/jev.test.ts のコメント。`LIVE_BASE_URL`/`LIVE_BOOTSTRAP_EMAIL`/`LIVE_BOOTSTRAP_TOKEN`を設定して `npm run test:live -- tests/live/jev.test.ts`）。
 4. 壊れ出力・曖昧（noul高位）・範囲外の実応答がmanual_reviewになることを確認し、実測をこの文書へ追記する。
-5. docs/06 §6の評価集合（smoke例6件→最低200例）で品質を測り、D12の閾値決定の材料としてai_evaluation_runs（API-88/89。T056以降）へ記録する。
+5. docs/06 §6の評価集合（smoke例6件→最低200例）で品質を測り、D12の閾値決定の材料としてai_evaluation_runs（API-88/89。**T061で機構実装済み**。記録手順はdocs/evidence/ai-evaluation.md）へ記録する。
 
 この手順を実行するまで、V04は **局所のみ検証済み・実AIは未検証**。RG-06/10は引き続き阻止される。AI-01/02（SCR-18の分類候補）を「完成」とは扱わず、採用判定は品質ゲート（docs/06 §6）の合格後とする。

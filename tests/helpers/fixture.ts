@@ -68,6 +68,8 @@ const TABLES = new Set([
   "tasks", "task_events",
   // PH4: AI評価と人の決定（T053）
   "ai_evaluations", "review_decisions",
+  // PH4: AI評価の実行履歴（T061）
+  "ai_evaluation_runs", "ai_evaluation_cases",
   // PH0: 永続ジョブ（T002/T006）
   "jobs",
   // PH4: 通知（T050）
