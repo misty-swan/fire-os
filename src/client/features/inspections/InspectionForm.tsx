@@ -13,7 +13,7 @@ import { useMe } from "../../me";
 /**
  * 点検登録（T033、SCR-06。prototype 点検登録の3ステップ: チェック→写真・メモ→確認）。
  * 承認済み様式の項目ごとに結果を選び、写真の検査が済んだものだけをいっしょに保存する。
- * AI分類の候補枠は紫で示す（確定は人の操作。AI依頼の接続はPH4）。
+ * AI分類の候補枠は紫で示す（確定は人の操作。依頼と承認はAIレビュー（SCR-18）で行う＝T055）。
  */
 
 interface TemplateVersion {
@@ -208,11 +208,19 @@ export function InspectionFormPage() {
               onChange={setBusyAttachments}
             />
           </div>
-          {/* AI分類の候補枠（紫。異常ありの項目があるときだけ・ステップ2に出す。prototypeの配置） */}
+          {/* AI分類の候補枠（紫。異常ありの項目があるときだけ・ステップ2に出す。prototypeの配置と語彙。
+              保存前の点検は源がまだ無いため依頼はできない＝保存後にAIレビュー（SCR-18）へ導線する。T055） */}
           {Object.values(results).some((r) => r === "needs_review") && (
-            <Notice tone="ai" icon="auto_awesome" role="status">
-              AI分類の候補はこの画面に表示されます（未実装。確定は人の操作です）。
-            </Notice>
+            <div className="flex flex-col gap-1.5 rounded-[18px] bg-ai/[.07] p-3.5 shadow-[inset_0_0_0_1px_rgba(185,169,255,.26)]" role="status">
+              <div className="flex items-center gap-2">
+                <Icon name="auto_awesome" className="text-[19px] text-ai" />
+                <span className="text-[14px] font-bold">AIによる分類候補</span>
+                <span className="ml-auto rounded-[5px] bg-ai/[.14] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ai">JEV</span>
+              </div>
+              <p className="text-[12px] leading-[1.7] text-ink-sub">
+                保存が済んだら、作られた異常の記録からAI分類を依頼できます（AIレビュー画面）。AIは候補を出すだけで、最終判断は人です。
+              </p>
+            </div>
           )}
           {/* 班長への確認タスク（prototype ステップ2のトグル。タスク機能の接続は後のフェーズなので押せない状態で置く） */}
           <div className="flex items-center gap-3 rounded-[18px] bg-white/[.04] p-3.5" aria-disabled="true">

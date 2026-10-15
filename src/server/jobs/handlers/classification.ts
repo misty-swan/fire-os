@@ -1,4 +1,5 @@
 import type { ClassificationSourceType } from "../../../shared/contracts/ai";
+import { localTestAi } from "../../ai/local-fake";
 import { isKnownQuestionVersion } from "../../ai/questions";
 import {
   JEV_MODEL, JevOutputError, AiRunError, buildStoredCandidate, runJev,
@@ -22,6 +23,8 @@ import type { JobOutcome, LeasedJob } from "../store";
  * 出力は最終事実ではない: 候補（ClassificationCandidate）をai_evaluationsへ保存するだけで、
  * 設備・異常・点検の状態は一切変更しない（automaticFacilityStateChanges=0。docs/06 §1）。
  * env.AIが無い（local）場合はmanual_review ai_unavailable（存在確認して使う＝src/server/env.ts）。
+ * ただし試験専用のfake（local かつ TEST_AI_FAKE=1。e2eのwrangler devだけが付ける＝src/server/ai/local-fake.ts）
+ * があるときは実AIの代わりにその決定的な応答で候補を作る（実AI bindingがあれば常に優先）。
  * 同じjobの再実行では既存の評価を返す（外部推論の再課金完全一回性は保証しない＝docs/06 §3の上限/計測管理）。
  */
 
@@ -108,13 +111,16 @@ export async function classifyJob(job: LeasedJob, env: AppEnv): Promise<JobOutco
   // ③最小化inputのhash（docs/06 §3「最小化inputのhashと参照版を記録」）
   const inputHash = await sha256Hex(canonicalJson(source.state));
 
-  // env.AIの存在確認（localには無い。src/server/env.tsの契約どおり、無い環境では保留にして偽の候補を作らない）
-  if (!env.AI) return { kind: "manual_review", errorCode: "ai_unavailable" };
+  // env.AIの存在確認（localには無い。src/server/env.tsの契約どおり、無い環境では保留にして偽の候補を作らない）。
+  // ただし試験専用のfake（local かつ TEST_AI_FAKE=1。e2eのwrangler devだけが付ける。src/server/ai/local-fake.ts）
+  // があるときだけ、実AIの代わりに決定的なfakeで候補を作る（実AI bindingがあれば常にそちらを優先）
+  const ai = env.AI ?? localTestAi(env);
+  if (!ai) return { kind: "manual_review", errorCode: "ai_unavailable" };
 
   let candidate: Awaited<ReturnType<typeof runJev>>["candidate"];
   let validated: Awaited<ReturnType<typeof runJev>>["validated"];
   try {
-    const result = await runJev(env, { state: source.state, sourceVersion: job.sourceVersion });
+    const result = await runJev({ ...env, AI: ai }, { state: source.state, sourceVersion: job.sourceVersion });
     candidate = result.candidate;
     validated = result.validated;
   } catch (err) {

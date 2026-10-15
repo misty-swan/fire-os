@@ -55,7 +55,9 @@ export const screens: ScreenDef[] = [
   s({ id: "SCR-24", path: "/app/documents", title: "文書・規程", summary: "許諾原本の登録/版/承認/撤回/ACL/閲覧", ownerTask: "T069", phase: "PH5", tab: "menu" }),
   s({ id: "SCR-25", path: "/app/patrol-plans", title: "巡回計画", summary: "対象施設/日/順序/計画案/人の確定", ownerTask: "T071", phase: "PH5", tab: "menu" }),
   s({ id: "SCR-26", path: "/app/analytics", title: "活動分析", summary: "月次/年度/団員別、元活動/出動/operation参照", ownerTask: "T060", phase: "PH4", tab: "menu" }),
-  s({ id: "SCR-18", path: "/app/ai/reviews", title: "AIレビュー", summary: "原文/AI候補/質問版/モデル版、差分、承認/編集/却下/タスク", ownerTask: "T055", phase: "PH4", tab: "ai" }),
+  // AIレビュー（T055）。候補の詳細はSCR-18と同じ画面の別入口（お知らせSCR-16と同じ方式。単一件の
+  // GET契約が無いため詳細は一覧から探す。docs/03 §2のSCR-18は一覧と詳細を含む1画面）
+  s({ id: "SCR-18", path: "/app/ai/reviews", aliases: ["/app/ai/reviews/:id"], title: "AIレビュー", summary: "原文/AI候補/質問版/モデル版、差分、承認/編集/却下/タスク", ownerTask: "T055", phase: "PH4", tab: "ai" }),
   s({ id: "SCR-28", path: "/app/assistant", title: "AIアシスタント", summary: "権限付き横断検索/RAG、引用原文、書込/通知提案の確認", ownerTask: "T070", phase: "PH5", tab: "ai" }),
   s({ id: "SCR-27", path: "/app/sync", title: "同期の状況", summary: "端末下書き/未同期/応答不明/拒否/競合、手動再送/削除", ownerTask: "T077", phase: "PH6", tab: "menu" }),
   s({ id: "SCR-17", path: "/app/admin", title: "管理", summary: "招待/取消、roles/scopes、監査、費用/評価、点検様式版/承認、運用設定", ownerTask: "T013", phase: "PH1", tab: "menu" }),

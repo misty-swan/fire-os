@@ -11,7 +11,9 @@ export default defineConfig({
   workers: 1,
   use: { baseURL: "http://localhost:8787" },
   webServer: {
-    command: "tsx scripts/e2e-prepare.ts && npm run build && npx wrangler dev --port 8787 --persist-to .wrangler/e2e",
+    // TEST_AI_FAKE=1 は試験専用のfake AI（src/server/ai/local-fake.ts）。localにはAI bindingが無いため、
+    // e2eの間だけ分類jobが決定的な候補を作れるようにする（--varはこの webServer にしか付かない。実AIがあれば常に優先）
+    command: "tsx scripts/e2e-prepare.ts && npm run build && npx wrangler dev --port 8787 --persist-to .wrangler/e2e --var TEST_AI_FAKE:1",
     url: "http://localhost:8787/app",
     reuseExistingServer: false,
     timeout: 180_000,

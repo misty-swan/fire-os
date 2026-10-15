@@ -191,6 +191,11 @@ export function FacilityPage() {
             <span className="flex flex-wrap items-center gap-2 text-[12px] text-[#e7c9c4]">
               <Chip tone={latestIssue.status === "resolved" ? "ok" : "alert"}>{ISSUE_STATUS_LABELS[latestIssue.status] ?? "状態を確認中"}</Chip>
               <Link to="/app/issues" className="inline-flex min-h-11 items-center underline lg:min-h-9">異常一覧へ</Link>
+              {/* AI分類の依頼・承認はAIレビュー（SCR-18）で行う（T055。点検→異常→AIレビューの導線。docs/03 §3） */}
+              <Link to={`/app/ai/reviews?source=issue%3A${latestIssue.id}`} className="inline-flex min-h-11 items-center gap-1 underline lg:min-h-9">
+                <Icon name="auto_awesome" className="text-[16px]" />
+                AI分類をレビュー
+              </Link>
             </span>
           </div>
         </div>
