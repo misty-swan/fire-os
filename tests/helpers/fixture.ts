@@ -58,6 +58,8 @@ const TABLES = new Set([
   "activity_actual_participants",
   // PH3: 出動（模擬・訓練・実出動記録）
   "incidents", "incident_events", "incident_participants", "incident_participant_events",
+  // PH3: 車両/機材の使用履歴（T042）
+  "resource_usages", "resource_usage_events",
 ]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 

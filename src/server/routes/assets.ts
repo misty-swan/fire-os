@@ -1,10 +1,11 @@
-import { Equipment, Vehicle } from "../../shared/contracts/assets";
+import { Equipment, Vehicle, type AssetDetailDto } from "../../shared/contracts/assets";
 import { resolvePrincipal } from "../auth/principal";
-import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../http";
+import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { bumpDatasetRevision } from "./facility-writes";
 import { requirePermission } from "./invitations";
+import { toResourceUsageDto } from "./resource-usages";
 
 /**
  * 車両・資機材の台帳（T025、docs/04 §3.2、docs/05 API-18/19/47〜51、D15）。
@@ -265,28 +266,67 @@ export function registerAssetRoutes(app: ApiApp): void {
   listRoute("API-18", "vehicles", "vehicle");
   listRoute("API-19", "equipment", "equipment");
 
-  // --- API-51: 詳細（点検/異常/使用履歴のcursorはT029〜T032で接続） ---
+  // --- API-51: 詳細（docs/05 API-51行どおりAssetDetail。使用履歴のcursor子PageはT042で接続。
+  // 点検/異常/点検期限の子Pageは未接続＝残作業（T030/T032/T048）。続きはmeta.nextCursor） ---
   defineRoute(app, "API-51", async (c) => {
     const p = await resolvePrincipal(c);
-    const { params } = await parseApiRequest(c, "API-51");
+    const { params, query } = await parseApiRequest(c, "API-51");
     requirePermission(p, "PER-01", { unitId: p.unitId, type: params.type, id: params.id });
     if (params.type === "vehicle") {
       const row = await c.env.DB.prepare("SELECT * FROM vehicles WHERE id = ?").bind(params.id)
         .first<VehicleRow>().then((r) => (r && r.unit_id === p.unitId ? r : null));
       if (!row) throw new HttpError("NOT_FOUND");
-      return ok(c, Vehicle.parse({
+      const asset = Vehicle.parse({
         id: row.id, version: row.version, assetCode: row.asset_code, name: row.name, status: row.status,
         storageFacilityId: row.storage_facility_id, archivedAt: row.archived_at,
-      }));
+      });
+      const usages = await usageChildPage(c, p.unitId, params.type, params.id, query.cursor, query.limit);
+      return ok(c, { asset, usages: usages.page }, { nextCursor: usages.nextCursor });
     }
     const row = await c.env.DB.prepare("SELECT * FROM equipment WHERE id = ?").bind(params.id)
       .first<EquipmentRow>().then((r) => (r && r.unit_id === p.unitId ? r : null));
     if (!row) throw new HttpError("NOT_FOUND");
-    return ok(c, Equipment.parse({
+    const asset = Equipment.parse({
       id: row.id, version: row.version, assetCode: row.asset_code, name: row.name, quantity: row.quantity,
       quantityUnit: row.quantity_unit, status: row.status,
       storage: { facilityId: row.storage_facility_id, vehicleId: row.storage_vehicle_id, note: row.storage_note },
       archivedAt: row.archived_at,
-    }));
+    });
+    const usages = await usageChildPage(c, p.unitId, params.type, params.id, query.cursor, query.limit);
+    return ok(c, { asset, usages: usages.page }, { nextCursor: usages.nextCursor });
   });
+}
+
+/**
+ * 資産の使用履歴の子Page（docs/05 API-51「使用履歴のcursor子Page」。docs/04:100。
+ * cancelledも行として残る。作成順＝(created_at, id)の安定keyset。facility-detailの位置履歴と同じ流儀）。
+ * limit+1件だけ読み、続きの有無をnextCursorの有無で返す（件数を黙って切り捨てない。docs/05 §1）
+ */
+interface UsageQueryRow {
+  id: string; unit_id: string; operation_id: string; vehicle_id: string | null; equipment_id: string | null;
+  quantity: number; used_from: string | null; used_to: string | null;
+  recorded_by_member_id: string; status: string; version: number; created_at: string;
+}
+
+async function usageChildPage(
+  c: ApiContext, unitId: string, type: "vehicle" | "equipment", id: string, cursor: string | undefined, limit: number,
+): Promise<{ page: AssetDetailDto["usages"]; nextCursor: string | undefined }> {
+  const where = ["unit_id = ?", `${type}_id = ?`];
+  const binds: unknown[] = [id];
+  if (cursor) {
+    const [at, lastId] = decodeCursor(cursor);
+    where.push("(created_at > ? OR (created_at = ? AND id > ?))");
+    binds.push(at, at, lastId);
+  }
+  const rows = (
+    await c.env.DB.prepare(
+      `SELECT id, unit_id, operation_id, vehicle_id, equipment_id, quantity, used_from, used_to, recorded_by_member_id, status, version, created_at ` +
+        `FROM resource_usages WHERE ${where.join(" AND ")} ORDER BY created_at, id LIMIT ?`,
+    ).bind(unitId, ...binds, limit + 1).all<UsageQueryRow>()
+  ).results;
+  const page = rows.slice(0, limit);
+  const nextCursor = rows.length > limit
+    ? encodeCursor(page[page.length - 1]!.created_at, page[page.length - 1]!.id)
+    : undefined;
+  return { page: page.map(toResourceUsageDto), nextCursor };
 }

@@ -6,18 +6,19 @@ import { MutationStatus } from "../../components/MutationStatus";
 import { PageTitle } from "../../components/Page";
 import { Banner, Button, Card, Chip, Icon, TextField } from "../../components/ui";
 import { useMutation } from "../../useMutation";
-import type { EquipmentDto, VehicleDto } from "../../../shared/contracts/assets";
+import type { AssetDetailDto, EquipmentDto, VehicleDto } from "../../../shared/contracts/assets";
 
 /**
  * 車両・資機材の詳細（T026、SCR-14）。台帳種別・番号・数量単位・保管先・状態を明示し、
  * 点検/異常/使用履歴への導線を作る（docs/16 T026: 未入力と0を分ける。物理削除しない）。
  * 編集・廃止はAPI-48（車両）/API-50（資機材）。廃止は状態を「廃止」にする変更（docs/04）。
+ * 使用履歴はAPI-51の子Page（T042で接続。cancelledも履歴として残る。docs/04:100）。書込は出動/活動側。
  */
 export function AssetPage() {
   const params = useParams<{ type: "vehicle" | "equipment"; id: string }>();
   const type = params.type!;
   const id = params.id!;
-  const [asset, setAsset] = useState<VehicleDto | EquipmentDto | "loading" | "notfound">("loading");
+  const [detail, setDetail] = useState<AssetDetailDto | "loading" | "notfound">("loading");
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState(false);
 
@@ -25,10 +26,10 @@ export function AssetPage() {
     let alive = true;
     void (async () => {
       try {
-        const data = (await api("API-51", { params: { type, id } })) as unknown as VehicleDto | EquipmentDto;
-        if (alive) setAsset(data);
+        const data = await api("API-51", { params: { type, id }, query: {} });
+        if (alive) setDetail(data);
       } catch {
-        if (alive) setAsset("notfound");
+        if (alive) setDetail("notfound");
       }
     })();
     return () => {
@@ -36,10 +37,10 @@ export function AssetPage() {
     };
   }, [type, id, reloadKey]);
 
-  if (asset === "loading") {
+  if (detail === "loading") {
     return <div className="h-40 animate-pulse rounded-card bg-white/[.05]" />;
   }
-  if (asset === "notfound") {
+  if (detail === "notfound") {
     return (
       <div className="flex max-w-[720px] flex-col gap-4">
         <Banner tone="info" eyebrow="NOT FOUND" title="この資産は存在しないか、閲覧できません">
@@ -48,6 +49,7 @@ export function AssetPage() {
       </div>
     );
   }
+  const asset = detail.asset;
 
   const isEquipment = "quantity" in asset;
   const storage = isEquipment
@@ -93,7 +95,7 @@ export function AssetPage() {
         <InfoCell label="状態" value={status} />
       </Card>
 
-      {/* 導線: 点検履歴（T033の点検から作られる）。使用履歴はPH3（出動・使用記録）で接続 */}
+      {/* 導線: 点検履歴（T033の点検から作られる）。使用履歴は下のカード（T042でAPI-51の子Pageに接続） */}
       <Card className="flex flex-col gap-2" aria-label="履歴">
         <span className="text-[14px] font-bold">点検履歴</span>
         <p className="text-[13px] text-ink-sub">
@@ -106,6 +108,27 @@ export function AssetPage() {
           点検を記録する
         </Link>
         <p className="text-[12px] text-ink-muted">異常の状況は<Link to="/app/issues" className="underline">点検管理</Link>で確認できます。</p>
+      </Card>
+
+      {/* 使用履歴（T042。docs/04:100。出動・活動の記録で車両/機材を登録するとここに出る。
+          取消された行も履歴として残る（docs/05 §1「抜けた既存行はcancelled」）。在庫は使用で動かさない=D15） */}
+      <Card className="flex flex-col gap-2" aria-label="使用履歴">
+        <span className="text-[14px] font-bold">使用履歴</span>
+        {detail.usages.length === 0 ? (
+          <p className="text-[13px] text-ink-sub">
+            この{type === "vehicle" ? "車両" : "資機材"}の使用記録は、出動・活動の記録に登録するとここに表示されます。
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-1.5">
+            {detail.usages.map((u) => (
+              <li key={u.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-field bg-white/[.04] px-3 py-2 text-[13px]">
+                <span className="font-mono text-[12px] text-ink-muted">{u.usedFrom ? u.usedFrom.slice(0, 10) : "日時未記録"}</span>
+                <span>数量 {u.quantity}</span>
+                {u.status === "cancelled" ? <Chip tone="neutral">取消</Chip> : <Chip tone="ok">使用中</Chip>}
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
     </div>
   );

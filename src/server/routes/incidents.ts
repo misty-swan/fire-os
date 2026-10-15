@@ -5,6 +5,7 @@ import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiConte
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { requirePermission } from "./invitations";
+import { buildResourceUsageMutation, toResourceUsageDto, type ResourceUsageRowShape } from "./resource-usages";
 
 /**
  * 出動（模擬・訓練・実出動記録）の登録・状態変更・一覧・詳細
@@ -14,7 +15,8 @@ import { requirePermission } from "./invitations";
  * （recording→active/closed/voided、active→closed、closed→recording（訂正）。voidedは終端で閲覧のみ）。
  * 出来事root（operations）と出動rootを同じbatchで確定し、voidedでcountable=0にする（docs/04「無効時countable=0」）。
  * 出動命令は自動発行しない（docs/11「正式指令を発行しない」）。登録・状態変更は監査/outboxまで一つのbatch。
- * 参集（API-23）はincident-participants.ts（T041）、使用履歴（API-57）はT042、活動operationの統合（API-71）はT043。
+ * 参集（API-23）はincident-participants.ts（T041）、使用履歴（API-57/22のresourceUsages）は
+ * resource-usages.ts（T042で接続）、活動operationの統合（API-71）はT043。
  */
 
 const INCIDENT_JSON =
@@ -81,13 +83,32 @@ export function registerIncidentRoutes(app: ApiApp): void {
 
     const operationId = crypto.randomUUID();
     const id = crypto.randomUUID();
+    // 使用履歴の作成（T042。docs/05 API-22行「resourceUsagesの保存はT042で共通関数経由」）。
+    // buildResourceUsageMutationが検査（対象ちょうど一つ/quantity>0/時間/同unit・存在）と
+    // INSERT文＋履歴文＋資産の存在条件を組み立て、下のexecuteMutationと同じbatchに取り込む
+    // （出来事root/出動/使用履歴/監査/outboxを1つのbatchで確定。docs/02 §4。一mutation一event）。
+    // 作成経路ではoperationを行と同じbatchで作るため、operation版のガードも増分もしない
+    const usages = body.resourceUsages?.length
+      ? await buildResourceUsageMutation(c, {
+          principal: p, operationId, operationVersion: 0, operationCreatedInBatch: true,
+          usages: body.resourceUsages, reason: null,
+          idempotencyKey: headers["idempotency-key"], requestPath: "/incidents",
+          requestBody: { resourceUsages: body.resourceUsages },
+        })
+      : null;
+
     const result = await executeMutation(c.env, p, {
       operationCode: "incident.create",
       key: headers["idempotency-key"],
       requestHash: await canonicalRequestHash({ method: "POST", path: "/incidents", body }),
       expectedAuthzVersion: p.authzVersion,
       roots: [],
-      created: [{ table: "operations", id: operationId }, { table: "incidents", id }],
+      created: [
+        { table: "operations", id: operationId }, { table: "incidents", id },
+        ...(usages?.created ?? []),
+      ],
+      // 使用履歴の対象資産の存在はbatch内でも再検査する（読み取り後の廃止は404。docs/05 §1）
+      conditions: usages?.conditions ?? [],
       statements: (ctx) => [
         // 出来事root（docs/04「共通出来事」）。種別は出動。状態は子rootに合わせ、集計対象として作る
         c.env.DB.prepare(
@@ -103,6 +124,8 @@ export function registerIncidentRoutes(app: ApiApp): void {
           "INSERT INTO incident_events (id, unit_id, incident_id, action, before_json, after_json, reason, actor_user_id, actor_kind, created_at) " +
             "VALUES (?, ?, ?, 'create', '{}', ?, NULL, ?, 'human', ?)",
         ).bind(crypto.randomUUID(), p.unitId, id, JSON.stringify({ status: "recording", kind: body.kind }), p.userId, ctx.now),
+        // 使用履歴（docs/04:100。operations/incidentsのINSERTより後なので、同一batch内のFKも成立する）
+        ...(usages ? usages.statements(ctx) : []),
       ],
       audit: {
         action: "incident.create", entityType: "incident", entityId: id,
@@ -262,8 +285,13 @@ export function registerIncidentRoutes(app: ApiApp): void {
       }),
     );
 
-    // 使用履歴（resource_usages）は表ごとT042で作る。T040時点では常に空
-    const resourceUsages: never[] = [];
+    // 使用履歴（resource_usages。T042で接続。docs/04:100。cancelledも行として残る。operationIdで元出来事へ辿れる）
+    const resourceUsages = (
+      await c.env.DB.prepare(
+        "SELECT id, unit_id, operation_id, vehicle_id, equipment_id, quantity, used_from, used_to, recorded_by_member_id, status, version " +
+          "FROM resource_usages WHERE unit_id = ? AND operation_id = ? ORDER BY rowid",
+      ).bind(p.unitId, current.operation_id).all<ResourceUsageRowShape>()
+    ).results.map(toResourceUsageDto);
 
     // 履歴（incident_events。追記順＝rowid。失敗した変更は残らない）
     const events = (

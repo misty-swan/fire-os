@@ -4,6 +4,7 @@ import {
   Title, Version, VersionOrZero, BusinessDate, Body, Job, defineApi, listQuery, noContent, obj, provisionalDto,
 } from "./common";
 import { inspectionShape } from "./gis";
+import { ResourceUsageRow } from "./operations";
 import { attachmentStates, issueStates } from "../states";
 
 export const attachmentTargetTypes = [
@@ -32,6 +33,18 @@ export const Equipment = obj({
   archivedAt: z.iso.datetime().nullable(),
 });
 export type EquipmentDto = z.infer<typeof Equipment>;
+
+/**
+ * 資産の詳細（docs/05 API-51行どおりAssetDetail。T042で使用履歴のcursor子Pageを接続）。
+ * 点検/異常/点検期限の子Pageは未接続＝残作業（T030/T032/T048）。続きはmeta.nextCursor
+ */
+export const AssetDetail = obj({
+  asset: z.union([Vehicle, Equipment]),
+  /** この資産の使用履歴（docs/04:100。cancelledも行として残る。operationIdで元の活動/出動を辿れる） */
+  usages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
+});
+export type AssetDetailDto = z.infer<typeof AssetDetail>;
+
 /** 応答へ出す添付。R2鍵(staging/ready)・tokenのhashは内部値なので含めない */
 export const Attachment = obj({
   id: Id, version: Version, status: z.enum(attachmentStates), contentType: z.string(), byteSize: z.number().int().min(1),
@@ -158,8 +171,10 @@ export const assetsApis = {
   }),
   "API-51": defineApi({
     method: "GET", path: "/assets/:type/:id", permission: "PER-01", kind: "get", success: [200],
-    request: obj({ params: obj({ type: z.enum(["vehicle", "equipment"]), id: Id }) }),
-    response: z.looseObject({}), provisional: true,
+    request: obj({ params: obj({ type: z.enum(["vehicle", "equipment"]), id: Id }), query: listQuery({}) }),
+    // docs/05 API-51行どおりAssetDetail（T042でprovisionalから厳格化。使用履歴の子Pageを接続。
+    // 点検/異常/点検期限の子Pageは未接続＝残作業（T030/T032/T048））
+    response: AssetDetail,
   }),
   "API-56": defineApi({
     method: "PUT", path: "/assets/:type/:id/inspection-schedule", permission: "PER-03", kind: "mutation", success: [200, 201],

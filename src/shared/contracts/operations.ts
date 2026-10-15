@@ -1,11 +1,11 @@
 import { z } from "zod";
 import {
-  Body, BusinessDate, Id, IdList, IdListMaybeEmpty, IDEM, Instant, LIMITS, NonNegative, P_ID, Page, Reason, Reason2000,
+  Body, BusinessDate, Id, IdList, IdListMaybeEmpty, IDEM, Instant, LIMITS, P_ID, Page, Reason, Reason2000,
   ShortText, Target, Title, Version, VersionOrZero, defineApi, listQuery, obj, provisionalDto,
 } from "./common";
 import {
   activityStates, actualParticipationStates, attendanceResponses, incidentKinds, incidentStates, mobilizationStates,
-  taskStates,
+  resourceUsageStates, taskStates,
 } from "../states";
 
 const activityShape = {
@@ -173,16 +173,51 @@ export const IncidentEvent = obj({
 export type IncidentEventDto = z.infer<typeof IncidentEvent>;
 
 /**
+ * 使用履歴1行の入力（docs/04:100、docs/05 API-22/57。docs/11 §3「在庫を自動減算しない」）。
+ * idがあればその既存行の更新、無ければ新規作成。対象はvehicle/equipmentのちょうど一つ（Target契約）、
+ * quantity>0、from/toは両方あるときだけ順序を検査する（片方未知は保留。docs/04「時間順序」）
+ */
+export const ResourceUsageInput = obj({
+  id: Id.optional(),
+  target: Target,
+  quantity: z.number().positive(),
+  from: Instant.optional(),
+  to: Instant.optional(),
+}).refine((v) => !v.from || !v.to || v.to >= v.from, { message: "to は from 以降にしてください" });
+
+/** 使用履歴の1行（docs/04:100 resource_usages）。cancelledも行として残り、集計から除外される（docs/11 §3） */
+export const ResourceUsageRow = obj({
+  id: Id,
+  version: Version,
+  /** 出来事root（activities/incidentsが共用）。このIDで元の活動/出動を辿れる */
+  operationId: Id,
+  target: obj({ type: z.enum(["vehicle", "equipment"]), id: Id }),
+  quantity: z.number(),
+  usedFrom: Instant.nullable(),
+  usedTo: Instant.nullable(),
+  recordedByMemberId: Id,
+  status: z.enum(resourceUsageStates),
+});
+export type ResourceUsageRowDto = z.infer<typeof ResourceUsageRow>;
+
+/** docs/05 API-57応答「ResourceUsageList＋operationVersion」。全有効集合PUTの結果（cancelled行も保持） */
+export const ResourceUsageList = obj({
+  usages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
+  operationVersion: Version,
+});
+export type ResourceUsageListDto = z.infer<typeof ResourceUsageList>;
+
+/**
  * 出動の詳細（API-70「参集/活動/使用履歴/イベント」docs/05:124）。
- * 参集の書込はAPI-23（T041で接続済み）。使用履歴はT042（API-57）が書込経路を作る（T040時点では常に空）
+ * 参集の書込はAPI-23（T041で接続済み）。使用履歴の書込はAPI-57（T042で接続済み）
  */
 export const IncidentDetail = obj({
   ...Incident.shape,
   /** 関連付けた活動（activityIdの内容。未リンクはnull） */
   activity: Activity.nullable(),
   participants: z.array(IncidentParticipant).max(LIMITS.arrayMax),
-  /** 車両/機材の使用履歴（resource_usages）。表ごとT042で作り、応答要素もT042で確定する */
-  resourceUsages: z.array(z.never()).max(LIMITS.arrayMax),
+  /** 車両/機材の使用履歴（resource_usages。docs/04:100。書込はAPI-57＝T042で接続済み。cancelled行も残る） */
+  resourceUsages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
   events: z.array(IncidentEvent).max(LIMITS.arrayMax),
 });
 export type IncidentDetailDto = z.infer<typeof IncidentDetail>;
@@ -204,14 +239,6 @@ const actualShape = {
   attachmentIds: IdListMaybeEmpty,
 };
 export const ActualInput = obj(actualShape);
-
-const ResourceUsage = obj({
-  id: Id.optional(),
-  target: Target,
-  quantity: NonNegative,
-  from: Instant.optional(),
-  to: Instant.optional(),
-});
 
 export const operationsApis = {
   "API-05": defineApi({
@@ -304,9 +331,8 @@ export const operationsApis = {
     request: obj({
       body: obj({
         kind: z.enum(incidentKinds), occurredAt: Instant, summary: Body, activityId: Id.optional(),
-        // resourceUsagesの保存はT042で共通関数経由（buildResourceUsageMutation）。T040時点では未接続＝残作業
-        // （docs/05 API-22行）。入力としては受け付けるが保存しない
-        resourceUsages: z.array(ResourceUsage).max(LIMITS.arrayMax).optional(),
+        // 使用履歴はbuildResourceUsageMutation経由で出動/出来事rootと同一batchで作る（docs/05 API-22行。T042で接続）
+        resourceUsages: z.array(ResourceUsageInput).max(LIMITS.arrayMax).optional(),
       }),
       ...IDEM,
     }),
@@ -363,10 +389,12 @@ export const operationsApis = {
     method: "PUT", path: "/operations/:id/resource-usages", permission: "PER-04", kind: "mutation", success: [200],
     request: obj({
       params: P_ID,
-      body: obj({ version: Version, usages: z.array(ResourceUsage).max(LIMITS.arrayMax), reason: Reason }),
+      body: obj({ version: Version, usages: z.array(ResourceUsageInput).max(LIMITS.arrayMax), reason: Reason2000 }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    // docs/05 API-57行どおりResourceUsageList＋operationVersion（T042でprovisionalから厳格化）。
+    // 理由はresource_usage_events.reasonのCHECK（≤2000）に揃える（API-69/39/40と同じ扱い）
+    response: ResourceUsageList,
   }),
   "API-28": defineApi({
     method: "GET", path: "/dashboard", permission: "PER-01", kind: "get", success: [200],

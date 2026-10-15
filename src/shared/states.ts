@@ -10,6 +10,8 @@ export const actualParticipationStates = ["unconfirmed", "participated", "absent
 export const incidentStates = ["recording", "active", "closed", "voided"] as const;
 export const incidentKinds = ["simulation", "training", "actual_record"] as const;
 export const mobilizationStates = ["unconfirmed", "unavailable", "mobilizing", "arrived", "returned"] as const;
+/** docs/04:100 resource_usages。cancelledは終端（行は残り、集計から外れる。docs/11 §3） */
+export const resourceUsageStates = ["active", "cancelled"] as const;
 /** docs/11 のAI処理ジョブ状態に、汎用ジョブ(T006)として stale(元版が変わり結果が使えない)を追加。 */
 export const jobStates = ["queued", "running", "succeeded", "retry_wait", "manual_review", "cancelled", "stale"] as const;
 export const aiProposalStates = ["pending", "approved", "approved_with_edit", "rejected", "stale"] as const;
