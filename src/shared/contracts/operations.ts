@@ -158,7 +158,8 @@ export const operationsApis = {
         status: z.enum(activityStates).optional(), actual: z.stringbool().optional(),
       }),
     }),
-    response: Page(provisionalDto()), provisional: true,
+    // 応答はdocs/05 API-05行どおりPage<Activity>（T038でprovisionalから厳格化。T035のActivity DTOを流用）
+    response: Page(Activity),
   }),
   "API-06": defineApi({
     method: "POST", path: "/activities", permission: "PER-03", kind: "mutation", success: [201],

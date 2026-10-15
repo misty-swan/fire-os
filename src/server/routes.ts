@@ -23,6 +23,7 @@ import { registerIssueRoutes } from "./routes/issues";
 import { registerAttendanceRoutes } from "./routes/attendance";
 import { registerActivityRoutes } from "./routes/activities";
 import { registerActivityResultRoutes } from "./routes/activity-results";
+import { registerActivityListRoutes } from "./routes/activity-list";
 
 // APIルートの登録点。各ドメインのroute登録関数を後続タスクがここへ追加する。
 export function registerRoutes(app: ApiApp): void {
@@ -53,4 +54,5 @@ export function registerRoutes(app: ApiApp): void {
   registerAttendanceRoutes(app);
   registerActivityRoutes(app);
   registerActivityResultRoutes(app);
+  registerActivityListRoutes(app);
 }

@@ -1452,7 +1452,7 @@
         "summary": "API-05 GET /activities",
         "x-permission": "PER-01",
         "x-kind": "list",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "from",
@@ -1564,13 +1564,76 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 9007199254740991
-                          }
+                          },
+                          "operationId": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "kind": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "plannedStartsAt": {},
+                          "plannedEndsAt": {
+                            "anyOf": [
+                              {},
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "locationText": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "ownerMemberId": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "draft",
+                              "scheduled",
+                              "in_progress",
+                              "completed",
+                              "cancelled"
+                            ]
+                          },
+                          "responseDueAt": {
+                            "anyOf": [
+                              {},
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {},
+                          "updatedAt": {}
                         },
                         "required": [
                           "id",
-                          "version"
+                          "version",
+                          "operationId",
+                          "title",
+                          "kind",
+                          "plannedStartsAt",
+                          "plannedEndsAt",
+                          "locationText",
+                          "ownerMemberId",
+                          "status",
+                          "responseDueAt",
+                          "createdAt",
+                          "updatedAt"
                         ],
-                        "additionalProperties": {}
+                        "additionalProperties": false
                       }
                     },
                     "meta": {
