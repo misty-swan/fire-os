@@ -66,6 +66,10 @@ const TABLES = new Set([
   "inspection_schedules", "inspection_due_detections",
   // PH4: 業務タスク（T049）
   "tasks", "task_events",
+  // PH0: 永続ジョブ（T002/T006）
+  "jobs",
+  // PH4: 通知（T050）
+  "notifications", "notification_recipients", "notification_deliveries", "notification_events",
 ]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 

@@ -3,7 +3,9 @@ import {
   Body, Id, IdList, IDEM, Instant, LIMITS, P_ID, Page, Reason, Sha256, ShortText, Title, Version, defineApi, listQuery, noContent,
   obj, provisionalDto,
 } from "./common";
-import { announcementStates, attachmentStates } from "../states";
+import {
+  announcementStates, attachmentStates, deliveryStates, jobStates, notificationApprovalStates, notificationChannels,
+} from "../states";
 
 export const ReadReceipt = obj({ readAt: z.iso.datetime(), revisionNo: z.number().int().min(1).optional(), notificationVersion: z.number().int().min(1).optional() });
 
@@ -41,6 +43,69 @@ export const Announcement = obj({
   updatedAt: Instant,
 });
 export type AnnouncementDto = z.infer<typeof Announcement>;
+
+// --- 通知（T050。docs/04 §3.4 139-142行、docs/05 API-63〜65/67/100、docs/11 通知承認・配送） ---
+
+/** 通知の源（docs/05 API-63「source」。未回答者抽出=activity／お知らせ=announcement／点検期限検出=inspection_due） */
+export const notificationSourceTypes = ["activity", "announcement", "inspection_due"] as const;
+export type NotificationSourceType = (typeof notificationSourceTypes)[number];
+
+/** 対象者1行（docs/04:140）。addressRefは連絡先の「参照」（例: member:<memberId>#inbox）。生値は載せない */
+export const NotificationRecipient = obj({
+  memberId: Id,
+  channel: z.enum(notificationChannels),
+  addressRef: ShortText,
+  readAt: Instant.nullable(),
+});
+
+/** 配送jobの状態（API-64/65の送信者投影。jobの実行（deliveries生成）はT051の配送handler） */
+export const NotificationDeliveryJob = obj({ jobId: Id, status: z.enum(jobStates) });
+
+/**
+ * 通知（docs/04:139）。bodyHash/audienceHashはAPI-64の承認固定に使う値
+ * （bodyHash=body本文のSHA-256、audienceHash=対象memberId整列配列の正規化JSONのSHA-256）。
+ * audienceMemberIds/recipients/deliveryJobは送信者（PER-12）の要求にだけ載る（API-65の投影。
+ * 対象者には他者の宛先と承認hashを見せない）。対象者本人向けの投影はMyNotification。
+ */
+export const Notification = obj({
+  id: Id,
+  version: Version,
+  status: z.enum(notificationApprovalStates),
+  sourceType: z.enum(notificationSourceTypes),
+  sourceId: Id,
+  body: Body,
+  bodyHash: Sha256,
+  audienceHash: Sha256,
+  channels: z.array(z.enum(notificationChannels)).min(1),
+  expiresAt: Instant.nullable(),
+  approvedAt: Instant.nullable(),
+  audienceMemberIds: z.array(Id).optional(),
+  recipients: z.array(NotificationRecipient).optional(),
+  deliveryJob: NotificationDeliveryJob.nullable().optional(),
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type NotificationDto = z.infer<typeof Notification>;
+
+/**
+ * 対象者本人の通知（API-65の対象者投影・API-67の一覧）。他者の宛先・配送・承認hashは載せない。
+ * myDeliveryは自分の配送の現在状態（docs/11 配送）。T050では配送行が無いためnull
+ * （承認だけで到達したとは表示しない。docs/07 §5「端末到達・既読…の保証をしない」）
+ */
+export const MyNotification = obj({
+  id: Id,
+  version: Version,
+  status: z.enum(notificationApprovalStates),
+  sourceType: z.enum(notificationSourceTypes),
+  sourceId: Id,
+  body: Body,
+  channels: z.array(z.enum(notificationChannels)).min(1),
+  myReadAt: Instant.nullable(),
+  myDelivery: obj({ status: z.enum(deliveryStates), attemptCount: z.number().int().min(0) }).nullable(),
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type MyNotificationDto = z.infer<typeof MyNotification>;
 
 /** 版判定の共通3値。docs/05 API-60/75/97 */
 const ReviewVerb = z.enum(["request_review", "approve", "changes_requested"]);
@@ -108,30 +173,34 @@ export const contentApis = {
     method: "POST", path: "/notifications/drafts", permission: "PER-12", kind: "mutation", success: [201],
     request: obj({
       body: obj({
-        source: obj({ type: ShortText, id: Id }), body: Body, audienceMemberIds: IdList,
-        channels: z.array(ShortText).min(1).max(10), expiresAt: Instant.optional(),
+        source: obj({ type: z.enum(notificationSourceTypes), id: Id }),
+        // 本文/対象は入力でも、源からの既定値提案（省略）でもよい（docs/16 T050）。
+        // inspection_due源は対象を源から決められないためaudienceMemberIds必須（省略はサーバー400）
+        body: Body.optional(), audienceMemberIds: IdList.optional(),
+        channels: z.array(z.enum(notificationChannels)).min(1).max(10), expiresAt: Instant.optional(),
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Notification,
   }),
   "API-64": defineApi({
-    method: "POST", path: "/notifications/:id/approval", permission: "PER-12", kind: "job", success: [202],
+    // approveは配送jobの受付（202=業務完了でない。docs/05 §1）。cancelはjobを作らないため200
+    method: "POST", path: "/notifications/:id/approval", permission: "PER-12", kind: "job", success: [200, 202],
     request: obj({
       params: P_ID,
       body: obj({ version: Version, bodyHash: Sha256, audienceHash: Sha256, decision: z.enum(["approve", "cancel"]) }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    response: Notification,
   }),
   "API-65": defineApi({
     method: "GET", path: "/notifications/:id", permission: "PER-12/対象者", kind: "get", success: [200],
-    request: obj({ params: P_ID }), response: z.looseObject({}), provisional: true,
+    request: obj({ params: P_ID }), response: Notification,
   }),
   "API-67": defineApi({
     method: "GET", path: "/notifications/me", permission: "PER-01", kind: "list", success: [200],
-    request: obj({ query: listQuery({ status: ShortText.optional() }) }),
-    response: Page(provisionalDto()), provisional: true,
+    request: obj({ query: listQuery({ status: z.enum(notificationApprovalStates).optional() }) }),
+    response: Page(MyNotification),
   }),
   "API-100": defineApi({
     method: "PUT", path: "/notifications/:id/read", permission: "本人recipient", kind: "mutation", success: [200],

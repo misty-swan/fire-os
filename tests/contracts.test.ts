@@ -149,9 +149,11 @@ describe("contracts (T002)", () => {
     // API-83 は uploadToken をヘッダーで受け、Idempotency-Key は要求しない
     expect(safeParseRequest("API-83", { params: { id: ID }, headers: { "x-upload-token": "t" } }).success).toBe(true);
     // 202は永続job
-    for (const id of ["API-29", "API-32", "API-53", "API-64", "API-84", "API-89"] as const) {
+    for (const id of ["API-29", "API-32", "API-53", "API-84", "API-89"] as const) {
       expect(registry[id].success).toEqual([202]);
     }
+    // API-64はapprove=配送jobの受付（202）とcancel=承認の取消（jobを作らないため200）を同じ操作で受ける（T050）
+    expect(registry["API-64"].success).toEqual([200, 202]);
   });
 
   it("state_dictionary_matches_docs_11", () => {

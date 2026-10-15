@@ -30,6 +30,12 @@ export const attachmentStates = [
 export const announcementStates = ["draft", "published", "archived"] as const;
 export const notificationApprovalStates = ["draft", "approved", "cancelled", "dispatching", "finished", "failed"] as const;
 export const deliveryStates = ["pending", "sending", "provider_accepted", "failed", "unknown", "retry_wait"] as const;
+/**
+ * 通知チャネル（docs/14 D13「チャネル未承認」）。推奨案の「アプリ内」一経路（inapp）だけを
+ * 検証設定として実装し（docs/07 §5「アプリ内通知＋Web Pushまたはemailの一経路」）、Web Push/emailの
+ * 追加はD13の了承後にchannelの列挙・DBのCHECK・契約を一緒に拡げる（T050）。
+ */
+export const notificationChannels = ["inapp"] as const;
 export const syncOperationStates = ["local_draft", "pending", "sending", "applied", "conflict", "rejected"] as const;
 export const patrolPlanStates = ["draft", "confirmed", "cancelled"] as const;
 /** docs/04 §3.1: 名簿の状態 */
