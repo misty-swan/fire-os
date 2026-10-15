@@ -123,6 +123,69 @@ export const ActivityDetail = obj({
 });
 export type ActivityDetailDto = z.infer<typeof ActivityDetail>;
 
+/**
+ * 出動（docs/04:94 incidents、docs/11 出動イベントrecording行、docs/14 D08）。
+ * 種別（kind=模擬/訓練/実出動記録の区分）と状態（status=recording→active/closed/voided。incidentTransitions。
+ * closed→recordingは訂正、voidedは終端）は別契約。正式な指令系とは接続せず出動命令も自動発行しない
+ * （docs/11「正式指令を発行しない」）。登録者・発生日時・概要を記録する
+ */
+export const Incident = obj({
+  id: Id,
+  version: Version,
+  /** 出来事root（operations。kind='incident'）。活動と共用し、出動別/合算集計はdistinct operationId */
+  operationId: Id,
+  /** 関連付けた既存活動（docs/04 activity_id UNIQUE。1活動に1出動。未リンクはnull） */
+  activityId: Id.nullable(),
+  kind: z.enum(incidentKinds),
+  occurredAt: Instant,
+  summary: Body,
+  status: z.enum(incidentStates),
+  /** 登録者（作成した操作の利用者ID。issuesのreportedByと同じ扱い） */
+  createdBy: Id,
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type IncidentDto = z.infer<typeof Incident>;
+
+/** 参集の1行（docs/04:96 incident_participants）。書込はAPI-23（T041）。API-70の詳細に載る */
+export const IncidentParticipant = obj({
+  id: Id,
+  version: Version,
+  memberId: Id,
+  attendanceStatus: z.enum(mobilizationStates),
+  /** 個人の時刻。不明はNULL（docs/05 §3「未知時刻は欠落表示」） */
+  mobilizedAt: Instant.nullable(),
+  arrivedAt: Instant.nullable(),
+  returnedAt: Instant.nullable(),
+});
+export type IncidentParticipantDto = z.infer<typeof IncidentParticipant>;
+
+/** 出動の履歴1行（docs/04:95 incident_events「種別訂正/操作元を保持」。before/afterは状態・種別など小さな値） */
+export const IncidentEvent = obj({
+  id: Id,
+  action: ShortText,
+  before: z.record(z.string(), z.unknown()),
+  after: z.record(z.string(), z.unknown()),
+  reason: Reason2000.nullable(),
+  createdAt: Instant,
+});
+export type IncidentEventDto = z.infer<typeof IncidentEvent>;
+
+/**
+ * 出動の詳細（API-70「参集/活動/使用履歴/イベント」docs/05:124）。
+ * 参集はT041（API-23）、使用履歴はT042（API-57）が書込経路を作る。T040時点では両方とも常に空
+ */
+export const IncidentDetail = obj({
+  ...Incident.shape,
+  /** 関連付けた活動（activityIdの内容。未リンクはnull） */
+  activity: Activity.nullable(),
+  participants: z.array(IncidentParticipant).max(LIMITS.arrayMax),
+  /** 車両/機材の使用履歴（resource_usages）。表ごとT042で作り、応答要素もT042で確定する */
+  resourceUsages: z.array(z.never()).max(LIMITS.arrayMax),
+  events: z.array(IncidentEvent).max(LIMITS.arrayMax),
+});
+export type IncidentDetailDto = z.infer<typeof IncidentDetail>;
+
 const actualShape = {
   content: Body,
   actualStartsAt: Instant.optional(),
@@ -232,18 +295,21 @@ export const operationsApis = {
         status: z.enum(incidentStates).optional(),
       }),
     }),
-    response: Page(provisionalDto()), provisional: true,
+    // 応答はdocs/05 API-21行どおりPage<Incident>（T040でprovisionalから厳格化）
+    response: Page(Incident),
   }),
   "API-22": defineApi({
     method: "POST", path: "/incidents", permission: "PER-04", kind: "mutation", success: [201],
     request: obj({
       body: obj({
         kind: z.enum(incidentKinds), occurredAt: Instant, summary: Body, activityId: Id.optional(),
+        // resourceUsagesの保存はT042で共通関数経由（buildResourceUsageMutation）。T040時点では未接続＝残作業
+        // （docs/05 API-22行）。入力としては受け付けるが保存しない
         resourceUsages: z.array(ResourceUsage).max(LIMITS.arrayMax).optional(),
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Incident,
   }),
   "API-23": defineApi({
     method: "PUT", path: "/incidents/:id/participants/:memberId", permission: "PER-04", kind: "mutation", success: [200, 201],
@@ -265,15 +331,19 @@ export const operationsApis = {
       params: P_ID,
       body: obj({
         version: Version, status: z.enum(incidentStates).optional(), kind: z.enum(incidentKinds).optional(),
-        summary: Body.optional(), reason: Reason,
+        summary: Body.optional(),
+        // 理由はincident_events.reasonのCHECK（≤2000）に揃える（docs/11「訂正/無効化理由」。API-39/40と同じ扱い）
+        reason: Reason2000,
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Incident,
   }),
   "API-70": defineApi({
     method: "GET", path: "/incidents/:id", permission: "PER-01限定", kind: "get", success: [200],
-    request: obj({ params: P_ID }), response: z.looseObject({}), provisional: true,
+    request: obj({ params: P_ID }),
+    // docs/05 API-70行どおりIncidentDetail（T040でprovisionalから厳格化。参集/使用履歴はT041/T042で埋める）
+    response: IncidentDetail,
   }),
   "API-71": defineApi({
     method: "PUT", path: "/incidents/:id/activity", permission: "PER-04", kind: "mutation", success: [200],

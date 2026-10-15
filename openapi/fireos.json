@@ -7154,7 +7154,7 @@
         "summary": "API-21 GET /incidents",
         "x-permission": "PER-01",
         "x-kind": "list",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "kind",
@@ -7251,13 +7251,66 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 9007199254740991
-                          }
+                          },
+                          "operationId": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "activityId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "simulation",
+                              "training",
+                              "actual_record"
+                            ]
+                          },
+                          "occurredAt": {},
+                          "summary": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 20000
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "recording",
+                              "active",
+                              "closed",
+                              "voided"
+                            ]
+                          },
+                          "createdBy": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "createdAt": {},
+                          "updatedAt": {}
                         },
                         "required": [
                           "id",
-                          "version"
+                          "version",
+                          "operationId",
+                          "activityId",
+                          "kind",
+                          "occurredAt",
+                          "summary",
+                          "status",
+                          "createdBy",
+                          "createdAt",
+                          "updatedAt"
                         ],
-                        "additionalProperties": {}
+                        "additionalProperties": false
                       }
                     },
                     "meta": {
@@ -7345,7 +7398,7 @@
         "summary": "API-22 POST /incidents",
         "x-permission": "PER-04",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "idempotency-key",
@@ -7382,13 +7435,66 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
-                        }
+                        },
+                        "operationId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "activityId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "simulation",
+                            "training",
+                            "actual_record"
+                          ]
+                        },
+                        "occurredAt": {},
+                        "summary": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "recording",
+                            "active",
+                            "closed",
+                            "voided"
+                          ]
+                        },
+                        "createdBy": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "createdAt": {},
+                        "updatedAt": {}
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "operationId",
+                        "activityId",
+                        "kind",
+                        "occurredAt",
+                        "summary",
+                        "status",
+                        "createdBy",
+                        "createdAt",
+                        "updatedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -15947,7 +16053,7 @@
         "summary": "API-69 PATCH /incidents/:id",
         "x-permission": "PER-04",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -15993,13 +16099,66 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
-                        }
+                        },
+                        "operationId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "activityId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "simulation",
+                            "training",
+                            "actual_record"
+                          ]
+                        },
+                        "occurredAt": {},
+                        "summary": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "recording",
+                            "active",
+                            "closed",
+                            "voided"
+                          ]
+                        },
+                        "createdBy": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "createdAt": {},
+                        "updatedAt": {}
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "operationId",
+                        "activityId",
+                        "kind",
+                        "occurredAt",
+                        "summary",
+                        "status",
+                        "createdBy",
+                        "createdAt",
+                        "updatedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -16137,7 +16296,7 @@
                   "reason": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 20000
+                    "maxLength": 2000
                   }
                 },
                 "required": [
@@ -16155,7 +16314,7 @@
         "summary": "API-70 GET /incidents/:id",
         "x-permission": "PER-01限定",
         "x-kind": "get",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -16182,8 +16341,295 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "operationId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "activityId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "simulation",
+                            "training",
+                            "actual_record"
+                          ]
+                        },
+                        "occurredAt": {},
+                        "summary": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "recording",
+                            "active",
+                            "closed",
+                            "voided"
+                          ]
+                        },
+                        "createdBy": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "createdAt": {},
+                        "updatedAt": {},
+                        "activity": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                "version": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "operationId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                "title": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "plannedStartsAt": {},
+                                "plannedEndsAt": {
+                                  "anyOf": [
+                                    {},
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "locationText": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "ownerMemberId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "draft",
+                                    "scheduled",
+                                    "in_progress",
+                                    "completed",
+                                    "cancelled"
+                                  ]
+                                },
+                                "responseDueAt": {
+                                  "anyOf": [
+                                    {},
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "createdAt": {},
+                                "updatedAt": {}
+                              },
+                              "required": [
+                                "id",
+                                "version",
+                                "operationId",
+                                "title",
+                                "kind",
+                                "plannedStartsAt",
+                                "plannedEndsAt",
+                                "locationText",
+                                "ownerMemberId",
+                                "status",
+                                "responseDueAt",
+                                "createdAt",
+                                "updatedAt"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "participants": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "version": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "memberId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "attendanceStatus": {
+                                "type": "string",
+                                "enum": [
+                                  "unconfirmed",
+                                  "unavailable",
+                                  "mobilizing",
+                                  "arrived",
+                                  "returned"
+                                ]
+                              },
+                              "mobilizedAt": {
+                                "anyOf": [
+                                  {},
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "arrivedAt": {
+                                "anyOf": [
+                                  {},
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "returnedAt": {
+                                "anyOf": [
+                                  {},
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version",
+                              "memberId",
+                              "attendanceStatus",
+                              "mobilizedAt",
+                              "arrivedAt",
+                              "returnedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "resourceUsages": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "not": {}
+                          }
+                        },
+                        "events": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "action": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "before": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              },
+                              "after": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              },
+                              "reason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "createdAt": {}
+                            },
+                            "required": [
+                              "id",
+                              "action",
+                              "before",
+                              "after",
+                              "reason",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version",
+                        "operationId",
+                        "activityId",
+                        "kind",
+                        "occurredAt",
+                        "summary",
+                        "status",
+                        "createdBy",
+                        "createdAt",
+                        "updatedAt",
+                        "activity",
+                        "participants",
+                        "resourceUsages",
+                        "events"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

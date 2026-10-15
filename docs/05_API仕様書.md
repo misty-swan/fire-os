@@ -6,7 +6,7 @@
 
 業務ベース`/api/v1`、同一originのHTTPS/JSON。API-36のみ認証base path。クライアントのunit/actor/roleを信用しない。成功`{data:DTO,meta:{requestId,nextCursor?,snapshotRevision?}}`、失敗`{error:{code,message,details:[{field,reason}]},meta:{requestId}}`。binary/CSV/stream/204はJSON envelope外。Inspection DTOは原本＋seriesId/seriesVersion＋明細/添付ID、Template DTOは項目schemaと承認版。その他DTOは04の同名モデルのcamelCase＋version＋10の許可列、Secret/内部token/R2キーを返さない。ResourceUsageListのPUTはoperation版をガードし全有効集合を更新、抜けた既存行はcancelled＋イベントで保持。全件編集権がなければ拒否する。Detailは親＋認可された子PageとnextCursorを返し、子一覧の件数を黙って切り捨てない。
 
-IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-MM-DD業務日を区別。未知JSON列・列挙外を拒否。文字上限案：件名200、note/body20,000、AI/RAG質問4,000文字、JSON要求256 KiB（binary別）、limit既定50/最大200、配列最大100。大きいCSV/多数対象はimport/job分割、D1 bound parameter上限100を越えない。値は負荷検証で固定するB案で機能上限の無断削減を意味しない。**列ごとにDBのCHECKより広い共通上限を使う場合、その列の入力だけDBに揃えて引き締める（PH2〜: 管理番号・識別名・出典・資産コード・状態100、数量単位50、位置確認/訂正/対応の理由2,000、点検明細の項目コード100、開催の変更・中止の理由2,000（activity_events.reason。T035）。docs/04の各DDLと一致）。超過は400で拒否し、通ってからDBのCHECKで500にならないようにする。**
+IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-MM-DD業務日を区別。未知JSON列・列挙外を拒否。文字上限案：件名200、note/body20,000、AI/RAG質問4,000文字、JSON要求256 KiB（binary別）、limit既定50/最大200、配列最大100。大きいCSV/多数対象はimport/job分割、D1 bound parameter上限100を越えない。値は負荷検証で固定するB案で機能上限の無断削減を意味しない。**列ごとにDBのCHECKより広い共通上限を使う場合、その列の入力だけDBに揃えて引き締める（PH2〜: 管理番号・識別名・出典・資産コード・状態100、数量単位50、位置確認/訂正/対応の理由2,000、点検明細の項目コード100、開催の変更・中止の理由2,000（activity_events.reason。T035）、出動の訂正・無効化の理由2,000（incident_events.reason。T040）。docs/04の各DDLと一致）。超過は400で拒否し、通ってからDBのCHECKで500にならないようにする。**
 
 | HTTP / code | 意味 |
 |---|---|
@@ -72,7 +72,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-19 | GET /equipment | PER-01 | q/status/storage/limit/cursor | Page<Equipment> |
 | API-20 | POST /asset-inspections | PER-04 | Target(vehicle/equipment)＋InspectionInput | Inspection |
 | API-21 | GET /incidents | PER-01 | kind/from/to/status/limit/cursor;機微scope | Page<Incident> |
-| API-22 | POST /incidents | PER-04 | kind,occurredAt,summary,activityId?,resourceUsages?;operation生成/共用 | Incident |
+| API-22 | POST /incidents | PER-04 | kind,occurredAt,summary,activityId?,resourceUsages?;operation生成/共用;activityIdは同unitの既存活動と未リンクのみ（リンク済み409）。resourceUsagesの保存はT042で共通関数経由（buildResourceUsageMutation）。T040時点では未接続＝残作業 | Incident |
 | API-23 | PUT /incidents/:id/participants/:memberId | PER-04 | version(未作成0),attendanceStatus,times?,reason?;本人/代理/時刻 | Participant |
 | API-24 | GET /announcements | PER-01 | status/limit/cursor;可視公開対象のみ | Page<Announcement> |
 | API-25 | POST /announcements | PER-03 | title,body,audienceMemberIds,publishAt?;最初draft | Announcement |
@@ -119,7 +119,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-66 | PUT /announcements/:id/read | 本人 | revisionNo;対象・公開版 | ReadReceipt |
 | API-67 | GET /notifications/me | PER-01 | status/limit/cursor;本人のみ | Page<Notification> |
 | API-68 | POST /tasks | PER-04/10 | title,assigneeMemberId?,dueDate?,sourceDecisionId?;AI効果は承認済 | Task |
-| API-69 | PATCH /incidents/:id | PER-04 | version,status?,kind?,summary?,reason;許可遷移 | Incident |
+| API-69 | PATCH /incidents/:id | PER-04 | version,status?,kind?,summary?,reason（必須。訂正/無効化理由）;許可遷移。voidedは終端（変更は422） | Incident |
 | API-70 | GET /incidents/:id | PER-01限定 | なし;参集/活動/使用履歴/イベント | IncidentDetail |
 | API-71 | PUT /incidents/:id/activity | PER-04 | version,activityId,activityVersion,operationVersions,reason;両rootロック | Incident＋OperationLink |
 | API-72 | PATCH /announcements/:id | PER-03 | version,title?,body?,status?,audienceMemberIds?;新revision | Announcement |
