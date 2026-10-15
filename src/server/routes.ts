@@ -34,6 +34,8 @@ import { registerAnnouncementRoutes } from "./routes/announcements";
 import { registerNotificationRoutes } from "./routes/notifications";
 import { registerReportRoutes } from "./routes/reports";
 import { registerReportGenerationRoutes } from "./routes/report-generation";
+import { registerReportDecisionRoutes } from "./routes/report-decisions";
+import { registerReportContentRoutes } from "./routes/report-content";
 import { registerClassificationRoutes } from "./routes/ai-classification";
 import { registerAiDecisionRoutes } from "./routes/ai-decisions";
 import { registerDashboardRoutes } from "./routes/dashboard";
@@ -82,6 +84,8 @@ export function registerRoutes(app: ApiApp): void {
   // 固定パス（/reports/manual、/reports/drafts）は /reports/:id 系より先に照合する（docs/05 §1、Honoは登録順）
   registerReportGenerationRoutes(app);
   registerReportRoutes(app);
+  registerReportDecisionRoutes(app);
+  registerReportContentRoutes(app);
   registerClassificationRoutes(app);
   registerAiDecisionRoutes(app);
   registerDashboardRoutes(app);
