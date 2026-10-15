@@ -1,9 +1,63 @@
 import { z } from "zod";
 import {
-  Body, BusinessDate, Id, IdList, IDEM, Job, LIMITS, P_ID, Page, Question, ShortText, Version, defineApi, listQuery, obj,
-  provisionalDto, Reason,
+  Body, BusinessDate, Id, IdList, IDEM, Instant, Job, LIMITS, P_ID, Page, Question, Sha256, ShortText, Version,
+  defineApi, listQuery, obj, provisionalDto, Reason,
 } from "./common";
 import { aiProposalStates, reviewDecisions } from "../states";
+
+/**
+ * AI分類（T053、docs/06 §2/§3）。分類の源（API-29の入力元）とJevの許可カテゴリ
+ * （docs/06 §2のcriteriaどおり。states.tsではない＝状態でなく分類語彙）。
+ */
+export const classificationSourceTypes = ["facility_inspection", "asset_inspection", "issue"] as const;
+export type ClassificationSourceType = (typeof classificationSourceTypes)[number];
+export const classificationCategories = ["equipment_issue", "access_obstruction", "missing_equipment", "no_issue", "other"] as const;
+export type ClassificationCategory = (typeof classificationCategories)[number];
+
+/** Jevのusage（docs/06 §2「戻り値はmodel/answers/usage」。token数はモデル応答の実測をそのまま保存する） */
+export const ClassificationUsage = obj({ promptTokens: z.number().int().min(0), completionTokens: z.number().int().min(0) });
+
+/**
+ * 分類候補の本体（ai_evaluations.output_json＝候補本体。最終事実ではない）。
+ * needsReviewはJevのnoul（0〜1の保留度）そのもので、choiceのconfidenceを流用しない
+ * （docs/06「confidenceを現実の異常確率/正答保証と表示しない」）。answersは生出力の監査用。
+ * 人の確定分類はreview_decisions（T054）へ別保存する。
+ */
+export const ClassificationCandidateOutput = obj({
+  categories: obj({
+    representative: z.enum(classificationCategories),
+    probabilities: z.partialRecord(z.enum(classificationCategories), z.number().min(0).max(1)).nullable(),
+    multipleIssues: z.boolean(),
+  }),
+  needsReview: z.number().min(0).max(1),
+  model: ShortText,
+  questionVersion: ShortText,
+  sourceVersion: Version,
+  usage: ClassificationUsage.nullable(),
+  answers: z.record(z.string(), z.unknown()),
+});
+
+/**
+ * AI評価（docs/04:143 ai_evaluations。API-30の一覧要素）。outputJsonは候補本体、
+ * usageJsonはtoken使用量。statusはdocs/11 AI提案の語彙（作成時は常にpending＝人未承認）。
+ */
+export const AiEvaluation = obj({
+  id: Id,
+  jobId: Id,
+  sourceType: z.enum(classificationSourceTypes),
+  sourceId: Id,
+  sourceVersion: Version,
+  inputHash: Sha256,
+  inputSnapshotRef: ShortText.nullable(),
+  questionVersion: ShortText,
+  modelId: ShortText,
+  actualModelVersion: ShortText.nullable(),
+  outputJson: ClassificationCandidateOutput,
+  status: z.enum(aiProposalStates),
+  usageJson: ClassificationUsage.nullable(),
+  createdAt: Instant,
+});
+export type AiEvaluationDto = z.infer<typeof AiEvaluation>;
 
 export const ReviewInput = obj({
   version: Version,
@@ -23,19 +77,21 @@ export const Citation = obj({
 });
 export const RagAnswer = obj({ answer: z.string(), citations: z.array(Citation), abstained: z.boolean() });
 
-const jobRequest = (body: z.ZodObject) => obj({ body, ...IDEM });
+// bodyの形を保つ（T002時点の z.ZodObject 単独指定はoutputをunknownへ潰すため、
+// API-29の実装（T053）でジェネリック化した。API-32/89も同じヘルパーを使う）
+const jobRequest = <T extends z.ZodRawShape>(body: z.ZodObject<T>) => obj({ body, ...IDEM });
 const jobResponse = Job;
 
 export const aiApis = {
   "API-29": defineApi({
     method: "POST", path: "/ai/classifications", permission: "PER-09", kind: "job", success: [202],
-    request: jobRequest(obj({ sourceType: ShortText, sourceId: Id, sourceVersion: Version, questionVersion: ShortText })),
+    request: jobRequest(obj({ sourceType: z.enum(classificationSourceTypes), sourceId: Id, sourceVersion: Version, questionVersion: ShortText })),
     response: jobResponse,
   }),
   "API-30": defineApi({
     method: "GET", path: "/ai/reviews", permission: "PER-10", kind: "list", success: [200],
-    request: obj({ query: listQuery({ status: z.enum(aiProposalStates).optional(), sourceType: ShortText.optional() }) }),
-    response: Page(provisionalDto()), provisional: true,
+    request: obj({ query: listQuery({ status: z.enum(aiProposalStates).optional(), sourceType: z.enum(classificationSourceTypes).optional() }) }),
+    response: Page(AiEvaluation),
   }),
   "API-31": defineApi({
     method: "POST", path: "/ai/reviews/:id/decision", permission: "PER-10", kind: "mutation", success: [200],

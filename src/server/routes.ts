@@ -32,6 +32,7 @@ import { registerResourceUsageRoutes } from "./routes/resource-usages";
 import { registerOperationLinkRoutes } from "./routes/incident-activity";
 import { registerAnnouncementRoutes } from "./routes/announcements";
 import { registerNotificationRoutes } from "./routes/notifications";
+import { registerClassificationRoutes } from "./routes/ai-classification";
 import { registerDashboardRoutes } from "./routes/dashboard";
 
 // APIルートの登録点。各ドメインのroute登録関数を後続タスクがここへ追加する。
@@ -75,5 +76,6 @@ export function registerRoutes(app: ApiApp): void {
   registerAnnouncementRoutes(app);
   // GET /notifications/me（API-67）は /notifications/:id（API-65）とpathが重なるため先に登録する（docs/05 §1、Honoは登録順）
   registerNotificationRoutes(app);
+  registerClassificationRoutes(app);
   registerDashboardRoutes(app);
 }

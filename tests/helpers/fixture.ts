@@ -66,6 +66,8 @@ const TABLES = new Set([
   "inspection_schedules", "inspection_due_detections",
   // PH4: 業務タスク（T049）
   "tasks", "task_events",
+  // PH4: AI評価と人の決定（T053）
+  "ai_evaluations", "review_decisions",
   // PH0: 永続ジョブ（T002/T006）
   "jobs",
   // PH4: 通知（T050）
