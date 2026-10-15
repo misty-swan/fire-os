@@ -9,6 +9,9 @@ import { FacilityPage } from "./features/facilities/FacilityPage";
 import { FacilityEditorPage } from "./features/facilities/FacilityEditorPage";
 import { InspectionFormPage } from "./features/inspections/InspectionForm";
 import { IssuesPage } from "./features/issues/IssuesPage";
+import { ActivitiesPage } from "./features/activities/ActivitiesPage";
+import { ActivityPage } from "./features/activities/ActivityPage";
+import { ActivityEditorPage } from "./features/activities/ActivityEditorPage";
 import { AssetsPage } from "./features/assets/AssetsPage";
 import { AssetPage } from "./features/assets/AssetPage";
 import { ImportPage } from "./features/facilities/ImportPage";
@@ -57,6 +60,9 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-05": <FacilityEditorPage />,
   "SCR-06": <InspectionFormPage />,
   "SCR-07": <IssuesPage />,
+  "SCR-08": <ActivitiesPage />,
+  "SCR-10": <ActivityEditorPage />,
+  "SCR-09": <ActivityPage />,
   "SCR-13": <AssetsPage />,
   "SCR-14": <AssetPage />,
   "SCR-20": <ImportPage />,
