@@ -11,6 +11,13 @@ import type { ActivityDetailDto, ActivityResultDto, ActivityResultRevisionDto } 
 import { ACTIVITY_STATUS, kindColor } from "./ActivitiesPage";
 import { ActualResultForm, type ActualFormInitial } from "./ActualResultForm";
 import { fmtDay, fmtHM, fmtInstant } from "./time";
+import { ResourceUsageEditor, useAssetName } from "../operations/ResourceUsageEditor";
+
+/** 使用履歴の行の資産名（useAssetName。読み込み中は「読み込み中…」。IDをそのまま出さない） */
+function AssetName({ target, targetId }: { target: "vehicle" | "equipment"; targetId: string }) {
+  const name = useAssetName(target, targetId);
+  return <>{name ?? "読み込み中…"}</>;
+}
 
 /**
  * 予定・活動の詳細（T039、SCR-09。prototype の活動詳細）。
@@ -59,6 +66,7 @@ export function ActivityPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [revisionNo, setRevisionNo] = useState<number | null>(null); // null=現行版
   const [formMode, setFormMode] = useState<"closed" | "create" | "correct">("closed");
+  const [editingUsages, setEditingUsages] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<"in_progress" | "completed" | null>(null);
   const [statusReason, setStatusReason] = useState("");
@@ -134,6 +142,7 @@ export function ActivityPage() {
   const nowIso = new Date().toISOString();
   const receptionOpen = detail.status === "scheduled" || detail.status === "in_progress";
   const duePassed = detail.responseDueAt !== null && detail.responseDueAt < nowIso;
+  const usages = detail.resourceUsages;
 
   // 対象snapshot（activity_audience）と出欠の行。未回答=対象snapshot−(response≠unansweredの行)（docs/04、T036の方式）
   const rowByMember = new Map(detail.attendance.map((r) => [r.memberId, r]));
@@ -358,6 +367,60 @@ export function ActivityPage() {
         )}
         {history && selectedRevision && (
           <RevisionView revision={selectedRevision} isCurrent={selectedRevision.id === history.result.currentRevisionId} nameOf={nameOf} />
+        )}
+      </section>
+
+      {/* 使用資産（T044。出動と活動で共用のResourceUsageEditor。API-57。 cancelled行も履歴として残る）。
+          cancelledの出動（voided）と違い、活動に取消状態は無いため終了後も編集できる（docs/11 開催） */}
+      <section className="flex flex-col gap-2" aria-label="使用資産">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-[14px] font-bold">車両・機材の使用</h3>
+          {!editingUsages && (
+            <Button variant="secondary" className="!h-[46px] !w-auto px-4 !text-[13px] max-lg:min-h-11" onClick={() => setEditingUsages((v) => !v)}>
+              {editingUsages ? "閉じる" : "使用履歴を編集"}
+            </Button>
+          )}
+        </div>
+        {editingUsages ? (
+          <ResourceUsageEditor
+            mode="edit"
+            operationId={detail.operationId}
+            initialRows={usages}
+            operationVersion={detail.operationVersion}
+            onSaved={() => setReloadKey((k) => k + 1)}
+            onDone={() => setEditingUsages(false)}
+            onCancel={() => setEditingUsages(false)}
+          />
+        ) : (
+          <Card className="flex flex-col gap-2">
+            {usages.length === 0 ? (
+              <p className="text-[13px] text-ink-sub">使用した車両・機材の記録はまだありません。「使用履歴を編集」から登録できます。</p>
+            ) : (
+              <ul className="flex flex-col gap-1.5">
+                {usages.map((u) => (
+                  <li key={u.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-field bg-white/[.04] px-3 py-2 text-[13px]">
+                    <span aria-hidden="true" className="ms text-[18px] text-ink-muted">
+                      {u.target.type === "vehicle" ? "local_shipping" : "inventory_2"}
+                    </span>
+                    <Link
+                      to={`/app/assets/${u.target.type}/${u.target.id}?from=${encodeURIComponent(`/app/activities/${id}`)}`}
+                      className="min-w-0 flex-1 truncate font-bold underline"
+                    >
+                      <AssetName target={u.target.type} targetId={u.target.id} />
+                    </Link>
+                    <span>数量 {u.quantity}</span>
+                    <span className="font-mono text-[11px] text-ink-muted">
+                      {u.usedFrom ? `${fmtHM(u.usedFrom)}${u.usedTo ? `–${fmtHM(u.usedTo)}` : ""}` : "時刻 未記載"}
+                    </span>
+                    {u.status === "cancelled" ? <Chip tone="neutral">取消</Chip> : <Chip tone="ok">使用中</Chip>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-[12px] text-ink-muted">
+              この活動に関連する出動は<Link to={`/app/incidents?activity=${id}`} className="underline">関連する出動記録</Link>の一覧で確認できます。
+            </p>
+          </Card>
         )}
       </section>
 

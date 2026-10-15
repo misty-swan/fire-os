@@ -341,6 +341,8 @@ export function registerIncidentRoutes(app: ApiApp): void {
       participants,
       resourceUsages,
       events,
+      // 出来事rootの現行版（API-57/71の版ガードに画面が使う。T044で追加）
+      operationVersion: current.operation_version,
     });
     return ok(c, detail);
   });

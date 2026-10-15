@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { api } from "../../api";
 import { ConfirmDialog } from "../../components/Overlay";
 import { MutationStatus } from "../../components/MutationStatus";
@@ -13,11 +13,17 @@ import type { AssetDetailDto, EquipmentDto, VehicleDto } from "../../../shared/c
  * 点検/異常/使用履歴への導線を作る（docs/16 T026: 未入力と0を分ける。物理削除しない）。
  * 編集・廃止はAPI-48（車両）/API-50（資機材）。廃止は状態を「廃止」にする変更（docs/04）。
  * 使用履歴はAPI-51の子Page（T042で接続。cancelledも履歴として残る。docs/04:100）。書込は出動/活動側。
+ * ?from= があれば「元の記録に戻る」を出す（T044。出動/活動の使用履歴から来たときの相互導線。
+ * operationIdだけでは元の記録を引けないため、遷移元をURLで受け取る。/app 配下だけを許す）。
  */
 export function AssetPage() {
   const params = useParams<{ type: "vehicle" | "equipment"; id: string }>();
   const type = params.type!;
   const id = params.id!;
+  const [searchParams] = useSearchParams();
+  // 遷移元（出動/活動の詳細）。/app 配下の経路だけを受け入れる（オープンリダイレクトにしない）
+  const fromParam = searchParams.get("from") ?? "";
+  const fromPath = fromParam.startsWith("/app/") && !fromParam.includes("//") ? fromParam : null;
   const [detail, setDetail] = useState<AssetDetailDto | "loading" | "notfound">("loading");
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState(false);
@@ -114,6 +120,15 @@ export function AssetPage() {
           取消された行も履歴として残る（docs/05 §1「抜けた既存行はcancelled」）。在庫は使用で動かさない=D15） */}
       <Card className="flex flex-col gap-2" aria-label="使用履歴">
         <span className="text-[14px] font-bold">使用履歴</span>
+        {fromPath && (
+          <Link
+            to={fromPath}
+            className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-pill bg-white/[.08] px-3.5 text-[13px] font-bold text-ink lg:min-h-9"
+          >
+            <Icon name="undo" className="text-[16px]" />
+            {fromPath.startsWith("/app/incidents/") ? "元の出動記録に戻る" : fromPath.startsWith("/app/activities/") ? "元の活動に戻る" : "元の記録に戻る"}
+          </Link>
+        )}
         {detail.usages.length === 0 ? (
           <p className="text-[13px] text-ink-sub">
             この{type === "vehicle" ? "車両" : "資機材"}の使用記録は、出動・活動の記録に登録するとここに表示されます。

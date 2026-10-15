@@ -108,12 +108,14 @@ export function Modal({ title, sub, onClose, children, wide, initialFocus }: { t
  * 「実行する」は押した後も、保存結果が確定するまで二重に押せない（busy）。
  */
 export function ConfirmDialog({
-  title, confirmLabel, busy, onConfirm, onCancel, children, danger,
+  title, confirmLabel, busy, onConfirm, onCancel, children, danger, confirmDisabled,
 }: {
   title: string;
   confirmLabel: string;
   busy?: boolean;
   danger?: boolean;
+  /** 実行の前提が揃っていない間（版の確認中など）は押せない。押しても何も起きない状態を作らない */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   children: ReactNode;
@@ -127,6 +129,7 @@ export function ConfirmDialog({
         </button>
         <Button
           busy={busy}
+          disabled={confirmDisabled}
           onClick={onConfirm}
           className={clsx("!h-[46px] !w-auto px-[22px] !text-[13px]", danger && "!bg-danger hover:!bg-danger-hover")}
         >

@@ -7,6 +7,7 @@ import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiConte
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { requirePermission } from "./invitations";
+import { toResourceUsageDto, type ResourceUsageRowShape } from "./resource-usages";
 
 /**
  * 活動（予定）の作成・公開・変更・中止（T035、docs/05 API-06/07/39/40、docs/11 開催、docs/04 §3.2）。
@@ -298,6 +299,20 @@ export function registerActivityRoutes(app: ApiApp): void {
     // 現在実績（activity_results。未作成はnull。docs/05 API-07「可視出欠と現在実績を含む」）
     const result = await loadActivityResult(c.env, p.unitId, params.id);
 
+    // 出来事rootの現行版（使用履歴API-57/リンクAPI-71の版ガードに画面が使う。T044で追加）。
+    // operations行は活動と同時に作るため無いのは整合性の故障（黙って別の値を返さない）
+    const operation = await c.env.DB.prepare("SELECT version FROM operations WHERE id = ? AND unit_id = ?")
+      .bind(current.operation_id, p.unitId).first<{ version: number }>();
+    if (!operation) throw new HttpError("NOT_FOUND");
+
+    // 車両/機材の使用履歴（docs/04:100。T044で追加。API-57はPUTのみのため詳細に載せる。cancelledも残る）
+    const usages = (
+      await c.env.DB.prepare(
+        "SELECT id, unit_id, operation_id, vehicle_id, equipment_id, quantity, used_from, used_to, recorded_by_member_id, status, version " +
+          "FROM resource_usages WHERE unit_id = ? AND operation_id = ? ORDER BY rowid",
+      ).bind(p.unitId, current.operation_id).all<ResourceUsageRowShape>()
+    ).results.map(toResourceUsageDto);
+
     const detail = ActivityDetail.parse({
       ...Activity.parse({
         id: current.id, version: current.version, operationId: current.operation_id, title: current.title, kind: current.kind,
@@ -308,6 +323,8 @@ export function registerActivityRoutes(app: ApiApp): void {
       audience,
       attendance,
       result,
+      operationVersion: operation.version,
+      resourceUsages: usages,
     });
     return ok(c, detail);
   });

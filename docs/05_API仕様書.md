@@ -58,7 +58,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-04 | PATCH /members/:id | PER-06/07 | version,変更列（基本項目=管理者、privateFields=本人または担当、status=管理者）,reason（status変更時は必須）;旧版409、未知列400、アカウントのある団員の休団・退団は利用停止（団員の状態＋利用者の停止＋認可版の増分＋失効job＋監査を一つのcommit、他の列との同時変更は400、再開は未提供422、最後の管理者は422 last_admin） | Member |
 | API-05 | GET /activities | PER-01 | from/to/kind/memberId/status/limit/cursor;実参加検索はactual=true | Page<Activity> |
 | API-06 | POST /activities | PER-03 | ActivityInput＋audienceMemberIds;同unit/日時順序 | Activity |
-| API-07 | GET /activities/:id | PER-01 | なし;可視出欠と現在実績を含む | ActivityDetail |
+| API-07 | GET /activities/:id | PER-01 | なし;可視出欠と現在実績を含む。operationVersion（出来事rootの現行版。API-57/71の版ガードに画面が使う）とresourceUsages（使用履歴。API-57はPUTのみで読み取り経路が無いため詳細に載せる。T044） | ActivityDetail |
 | API-08 | PUT /activities/:id/attendance/me | PER-02 | version(未作成0),response;締切/対象検査 | Attendance |
 | API-09 | POST /activities/:id/actual-results | PER-04 | activityVersion,ActualInput;未作成のみ | ActivityResult |
 | API-10 | GET /facilities | PER-01 | FacilityQuery;範囲/型/状態を別検証 | SnapshotPage<Facility> |
@@ -121,7 +121,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-67 | GET /notifications/me | PER-01 | status/limit/cursor;本人のみ | Page<Notification> |
 | API-68 | POST /tasks | PER-04/10 | title,assigneeMemberId?,dueDate?,sourceDecisionId?;AI効果は承認済 | Task |
 | API-69 | PATCH /incidents/:id | PER-04 | version,status?,kind?,summary?,reason（必須。訂正/無効化理由）;許可遷移。voidedは終端（変更は422） | Incident |
-| API-70 | GET /incidents/:id | PER-01限定 | なし;参集/活動/使用履歴/イベント | IncidentDetail |
+| API-70 | GET /incidents/:id | PER-01限定 | なし;参集/活動/使用履歴/イベント。operationVersion（出来事rootの現行版。API-57/71の版ガードに画面が使う。T044） | IncidentDetail |
 | API-71 | PUT /incidents/:id/activity | PER-04 | version,activityId,activityVersion,operationVersions,reason（2,000）;両root＋双方のoperation版を同一batchの比較更新でロック（不一致は409で全体不変。キー不足400）。競合リンク（既存の別出動あり）409、リンク済み出動の付け替えとvoided出動は422。出動と使用履歴を活動側operationへ付替し旧operationはcountable=0で履歴/監査参照可、旧ID/理由はincident_eventsへ | Incident＋OperationLink |
 | API-72 | PATCH /announcements/:id | PER-03 | version,title?,body?,status?,audienceMemberIds?;新revision | Announcement |
 | API-73 | POST /documents | PER-11管理 | title,classification,acl;D20許諾 | Document |

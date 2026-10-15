@@ -112,6 +112,41 @@ export const ActivityResultHistory = obj({
 });
 export type ActivityResultHistoryDto = z.infer<typeof ActivityResultHistory>;
 
+/**
+ * 使用履歴1行の入力（docs/04:100、docs/05 API-22/57。docs/11 §3「在庫を自動減算しない」）。
+ * idがあればその既存行の更新、無ければ新規作成。対象はvehicle/equipmentのちょうど一つ（Target契約）、
+ * quantity>0、from/toは両方あるときだけ順序を検査する（片方未知は保留。docs/04「時間順序」）
+ */
+export const ResourceUsageInput = obj({
+  id: Id.optional(),
+  target: Target,
+  quantity: z.number().positive(),
+  from: Instant.optional(),
+  to: Instant.optional(),
+}).refine((v) => !v.from || !v.to || v.to >= v.from, { message: "to は from 以降にしてください" });
+
+/** 使用履歴の1行（docs/04:100 resource_usages）。cancelledも行として残り、集計から除外される（docs/11 §3） */
+export const ResourceUsageRow = obj({
+  id: Id,
+  version: Version,
+  /** 出来事root（activities/incidentsが共用）。このIDで元の活動/出動を辿れる */
+  operationId: Id,
+  target: obj({ type: z.enum(["vehicle", "equipment"]), id: Id }),
+  quantity: z.number(),
+  usedFrom: Instant.nullable(),
+  usedTo: Instant.nullable(),
+  recordedByMemberId: Id,
+  status: z.enum(resourceUsageStates),
+});
+export type ResourceUsageRowDto = z.infer<typeof ResourceUsageRow>;
+
+/** docs/05 API-57応答「ResourceUsageList＋operationVersion」。全有効集合PUTの結果（cancelled行も保持） */
+export const ResourceUsageList = obj({
+  usages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
+  operationVersion: Version,
+});
+export type ResourceUsageListDto = z.infer<typeof ResourceUsageList>;
+
 /** 予定の詳細（API-07「可視出欠と現在実績を含む」）。実績未作成の活動はresult=null（docs/05 §1） */
 export const ActivityDetail = obj({
   ...Activity.shape,
@@ -120,6 +155,14 @@ export const ActivityDetail = obj({
   attendance: z.array(Attendance).max(LIMITS.arrayMax),
   /** 現在実績（activity_results。未作成はnull） */
   result: ActivityResult.nullable(),
+  /**
+   * 出来事rootの現行版（T044で追加）。使用履歴の全集合PUT（API-57）と既存活動とのリンク（API-71）が
+   * operation版でガードするため、画面は詳細の読み込み時に現行版を取得できる必要がある
+   * （他のGETにoperation版を載せる経路が無い。docs/05 API-07行に追記）
+   */
+  operationVersion: Version,
+  /** 車両/機材の使用履歴（docs/04:100。T044で追加。API-57はPUTのみで読み取り経路が無いため詳細に載せる） */
+  resourceUsages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
 });
 export type ActivityDetailDto = z.infer<typeof ActivityDetail>;
 
@@ -173,41 +216,6 @@ export const IncidentEvent = obj({
 export type IncidentEventDto = z.infer<typeof IncidentEvent>;
 
 /**
- * 使用履歴1行の入力（docs/04:100、docs/05 API-22/57。docs/11 §3「在庫を自動減算しない」）。
- * idがあればその既存行の更新、無ければ新規作成。対象はvehicle/equipmentのちょうど一つ（Target契約）、
- * quantity>0、from/toは両方あるときだけ順序を検査する（片方未知は保留。docs/04「時間順序」）
- */
-export const ResourceUsageInput = obj({
-  id: Id.optional(),
-  target: Target,
-  quantity: z.number().positive(),
-  from: Instant.optional(),
-  to: Instant.optional(),
-}).refine((v) => !v.from || !v.to || v.to >= v.from, { message: "to は from 以降にしてください" });
-
-/** 使用履歴の1行（docs/04:100 resource_usages）。cancelledも行として残り、集計から除外される（docs/11 §3） */
-export const ResourceUsageRow = obj({
-  id: Id,
-  version: Version,
-  /** 出来事root（activities/incidentsが共用）。このIDで元の活動/出動を辿れる */
-  operationId: Id,
-  target: obj({ type: z.enum(["vehicle", "equipment"]), id: Id }),
-  quantity: z.number(),
-  usedFrom: Instant.nullable(),
-  usedTo: Instant.nullable(),
-  recordedByMemberId: Id,
-  status: z.enum(resourceUsageStates),
-});
-export type ResourceUsageRowDto = z.infer<typeof ResourceUsageRow>;
-
-/** docs/05 API-57応答「ResourceUsageList＋operationVersion」。全有効集合PUTの結果（cancelled行も保持） */
-export const ResourceUsageList = obj({
-  usages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
-  operationVersion: Version,
-});
-export type ResourceUsageListDto = z.infer<typeof ResourceUsageList>;
-
-/**
  * 出動の詳細（API-70「参集/活動/使用履歴/イベント」docs/05:124）。
  * 参集の書込はAPI-23（T041で接続済み）。使用履歴の書込はAPI-57（T042で接続済み）
  */
@@ -219,6 +227,12 @@ export const IncidentDetail = obj({
   /** 車両/機材の使用履歴（resource_usages。docs/04:100。書込はAPI-57＝T042で接続済み。cancelled行も残る） */
   resourceUsages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
   events: z.array(IncidentEvent).max(LIMITS.arrayMax),
+  /**
+   * 出来事rootの現行版（T044で追加）。使用履歴の全集合PUT（API-57）と既存活動とのリンク（API-71）が
+   * operation版でガードするため、画面は詳細の読み込み時に現行版を取得できる必要がある
+   * （API-57/71の応答にしか載っておらず、読み取り直後に版が取れない。docs/05 API-70行に追記）
+   */
+  operationVersion: Version,
 });
 export type IncidentDetailDto = z.infer<typeof IncidentDetail>;
 
