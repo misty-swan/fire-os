@@ -56,7 +56,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-02 | GET /members | PER-01(一覧)/PER-06(許可列) | q/status/squad/limit/cursor（名前→IDのkeyset。絞り込み・ページングはSQL）;基本項目は全員、roleCodes/invitationはPER-07、privateFieldsは本人または担当(scope)の分だけ（他人分を返したら`member.private.view`を監査） | Page<Member>（privateFieldsは許可された行にだけ現れる） |
 | API-03 | POST /members | PER-06 | displayName,status,rank?,squad?,qualifications?,joinedOn?,privateFields?(phone/emergencyContactのみ。未知列400);管理者のみ。登録時の許可列入力は可（読み返しは別権限） | Member（応答・冪等保存にprivateFieldsを含めない） |
 | API-04 | PATCH /members/:id | PER-06/07 | version,変更列（基本項目=管理者、privateFields=本人または担当、status=管理者）,reason（status変更時は必須）;旧版409、未知列400、アカウントのある団員の休団・退団は利用停止（団員の状態＋利用者の停止＋認可版の増分＋失効job＋監査を一つのcommit、他の列との同時変更は400、再開は未提供422、最後の管理者は422 last_admin） | Member |
-| API-05 | GET /activities | PER-01 | from/to/kind/memberId/status/limit/cursor;実参加検索はactual=true | Page<Activity> |
+| API-05 | GET /activities | PER-01 | from/to/kind/memberId/status/limit/cursor;実参加検索はactual=true。**unanswered=true（T047）は自分（この要求の主体）が対象snapshotに含まれ、出欠の回答（unanswered以外の行）が無い活動だけ。from/statusと組み合わせてホームの「本人未回答」の一覧に使う（href例 `?status=scheduled&from=<現在>&unanswered=true&memberId=<自分>`）** | Page<Activity> |
 | API-06 | POST /activities | PER-03 | ActivityInput＋audienceMemberIds;同unit/日時順序 | Activity |
 | API-07 | GET /activities/:id | PER-01 | なし;可視出欠と現在実績を含む。operationVersion（出来事rootの現行版。API-57/71の版ガードに画面が使う）とresourceUsages（使用履歴。API-57はPUTのみで読み取り経路が無いため詳細に載せる。T044） | ActivityDetail |
 | API-08 | PUT /activities/:id/attendance/me | PER-02 | version(未作成0),response;締切/対象検査 | Attendance |
@@ -79,7 +79,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-25 | POST /announcements | PER-03 | title,body,audienceMemberIds,publishAt?;最初draft | Announcement |
 | API-26 | POST /attachments/upload-intents | PER-04 | AttachmentTarget,contentType,byteSize,sha256?;対象/上限。**対象は存在確認できる業務表に限る（facility/vehicle/equipment/activity/announcement。T046でannouncementを追加。他は422 unsupported_entity_type）** | UploadIntent(id,uploadPath,uploadToken,expiresAt,version) |
 | API-27 | GET /attachments/:id/content | 元対象ACL | なし;ready/最新認可;署名GETへredirectしない | binary(stream,Content-Type,Content-Disposition) |
-| API-28 | GET /dashboard | PER-01 | period?;全指標に同scope、元一覧filter返却 | Dashboard |
+| API-28 | GET /dashboard | PER-01 | period?;全指標に同scope、元一覧filter返却。**Dashboard（T047で確定）: `{nextActivity, myUnanswered, openIssues, inspectionDue, notifications, myTasks}`。指標は`{count, href, connected}`（hrefは同じ条件・同じscope（この要求の本人の所属unit＝PER-01）で開いた一覧のURLで、countはその一覧の件数と必ず一致させる。connected=falseは後続タスクで接続（点検期限=T048、通知・自分のタスク=PH4）で0件と区別する）。nextActivityは「これからの予定」（status=scheduled、開始>=現在。API-05のfrom包含）の件数＋最接近の1件（id/title/kind/plannedStartsAt/responseDueAt＋回答内訳attending/undecided/absent/unanswered（対象snapshot基準。docs/11出欠行）＋myResponse（本人の回答。未回答・対象外はnull）＋inAudience）。myUnansweredは自分が対象で出欠の回答が無いこれからの予定（API-05 `?unanswered=true&from=<現在>&status=scheduled`と同じ条件。T036の方式）、openIssuesは`issues.status='reported'`（docs/03 SCR-07「未確認（確認待ち）」。API-15と同じunit＋status条件）。periodはDASH-02（PH4）の期間集計用の予約で、T047では値を受けない（指定すると400 VALIDATION_ERROR unsupported_period。黙って無視しない）** | Dashboard |
 | API-29 | POST /ai/classifications | PER-09 | sourceType,sourceId,sourceVersion,questionVersion;送信許可 | Job(202) |
 | API-30 | GET /ai/reviews | PER-10 | status/sourceType/limit/cursor | Page<AiEvaluation> |
 | API-31 | POST /ai/reviews/:id/decision | PER-10 | ReviewInput;元版/提案版/反映先権限 | ReviewDecision＋effectIds |

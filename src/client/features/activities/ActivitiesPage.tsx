@@ -41,6 +41,8 @@ export function ActivitiesPage() {
   const memberId = searchParams.get("memberId") ?? "";
   const status = searchParams.get("status") ?? "";
   const actual = searchParams.get("actual") === "true";
+  // 自分が対象で未回答の活動だけ（T047ホームの「本人未回答」からのドリルダウン。API-05 unanswered=true）
+  const unanswered = searchParams.get("unanswered") === "true";
 
   const [items, setItems] = useState<ActivityDto[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export function ActivitiesPage() {
     ...(memberId ? { memberId } : {}),
     ...(status ? { status: status as (typeof activityStates)[number] } : {}),
     ...(actual ? { actual: "true" } : {}),
+    ...(unanswered ? { unanswered: "true" } : {}),
   });
 
   useEffect(() => {
@@ -222,6 +225,10 @@ export function ActivitiesPage() {
         <label className="flex min-h-[54px] items-center gap-2.5 rounded-field bg-white/[.06] px-4">
           <input type="checkbox" checked={actual} onChange={(e) => setParam({ actual: e.target.checked ? "true" : null })} className="size-5" />
           <span className="text-[13px] font-medium text-ink">実参加の記録がある</span>
+        </label>
+        <label className="flex min-h-[54px] items-center gap-2.5 rounded-field bg-white/[.06] px-4">
+          <input type="checkbox" checked={unanswered} onChange={(e) => setParam({ unanswered: e.target.checked ? "true" : null })} className="size-5" />
+          <span className="text-[13px] font-medium text-ink">自分が未回答（対象の予定のみ）</span>
         </label>
       </Card>
 

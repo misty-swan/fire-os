@@ -1517,6 +1517,14 @@
             }
           },
           {
+            "name": "unanswered",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -9049,7 +9057,7 @@
         "summary": "API-28 GET /dashboard",
         "x-permission": "PER-01",
         "x-kind": "get",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "period",
@@ -9077,8 +9085,256 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "nextActivity": {
+                          "type": "object",
+                          "properties": {
+                            "count": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "href": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "connected": {
+                              "type": "boolean"
+                            },
+                            "id": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "title": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "kind": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "plannedStartsAt": {
+                              "anyOf": [
+                                {},
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "responseDueAt": {
+                              "anyOf": [
+                                {},
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "attending": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "undecided": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "absent": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "unanswered": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "myResponse": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "unanswered",
+                                    "attending",
+                                    "absent",
+                                    "undecided"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "inAudience": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "count",
+                            "href",
+                            "connected",
+                            "id",
+                            "title",
+                            "kind",
+                            "plannedStartsAt",
+                            "responseDueAt",
+                            "attending",
+                            "undecided",
+                            "absent",
+                            "unanswered",
+                            "myResponse",
+                            "inAudience"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "myUnanswered": {
+                          "type": "object",
+                          "properties": {
+                            "count": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "href": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "connected": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "count",
+                            "href",
+                            "connected"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "openIssues": {
+                          "type": "object",
+                          "properties": {
+                            "count": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "href": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "connected": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "count",
+                            "href",
+                            "connected"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "inspectionDue": {
+                          "type": "object",
+                          "properties": {
+                            "count": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "href": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "connected": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "count",
+                            "href",
+                            "connected"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "notifications": {
+                          "type": "object",
+                          "properties": {
+                            "count": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "href": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "connected": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "count",
+                            "href",
+                            "connected"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "myTasks": {
+                          "type": "object",
+                          "properties": {
+                            "count": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "href": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "connected": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "count",
+                            "href",
+                            "connected"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "nextActivity",
+                        "myUnanswered",
+                        "openIssues",
+                        "inspectionDue",
+                        "notifications",
+                        "myTasks"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

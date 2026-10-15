@@ -1,5 +1,5 @@
 import { Activity } from "../../shared/contracts/operations";
-import type { ApiRequest, ApiResponse } from "../../shared/contracts/registry";
+import type { ApiRequest, ApiResponse, ParsedRequest } from "../../shared/contracts/registry";
 import { parseRequest } from "../../shared/contracts/registry";
 import { resolvePrincipal } from "../auth/principal";
 import { HttpError, type ApiContext } from "../http";
@@ -17,6 +17,8 @@ import { requirePermission } from "../routes/invitations";
  * - actual無しのmemberIdは予定（対象snapshot＝activity_audience）基準。出欠の回答は検索に出さない
  *   （回答を実参加へコピーしないのと同じく、実参加を予定出欠から求めない。docs/11 実参加行）
  * - kind/status（activityStates列挙。cancelledも検索可能）はactivitiesの列をそのまま絞る
+ * - unanswered=trueは「自分（この要求の主体）が対象snapshotに含まれ、出欠の回答（unanswered以外）が無い活動」
+ *   （T047。ホームの本人未回答と同じ条件。from/statusの検索と組み合わせて使う。docs/05 API-05行）
  * - keysetは安定順（planned_starts_at, id）。cursorはfilterHashごと署名付きのopaque値で
  *   （gis/cursor.tsと同じ流儀）、条件を変えた続き取得・改変cursorは409 SNAPSHOT_CHANGED。
  *   metaのnextCursorが「続きがあるか」の件数根拠（limit+1で取得し、切り捨てない）になる
@@ -70,6 +72,52 @@ interface ActivityRow {
 }
 
 /**
+ * API-05の検索条件を、unit_idとcursorを除いたWHERE（AND結合用）に組み立てる。
+ * ホームの集計（T047、src/server/routes/dashboard.ts）が**同じ関数**で件数を数えることで、
+ * 指標の数値とドリルダウン先一覧（API-05）の条件の食い違いを作らない。bindsはwhereの順序と一致する。
+ * viewerMemberIdは本人未回答（unanswered）の「自分」。呼び出し側の主体（principal）から渡す。
+ */
+export function activityConditions(
+  query: Omit<ParsedRequest<"API-05">["query"], "cursor" | "limit">,
+  viewerMemberId: string | null,
+): { where: string[]; binds: unknown[] } {
+  const where: string[] = [];
+  const binds: unknown[] = [];
+  // from包含／to排他（半開区間）。時刻はInstantで正規化済みのため文字列比較でよい（docs/05 §1）
+  if (query.from) { where.push("a.planned_starts_at >= ?"); binds.push(query.from); }
+  if (query.to) { where.push("a.planned_starts_at < ?"); binds.push(query.to); }
+  if (query.kind) { where.push("a.kind = ?"); binds.push(query.kind); }
+  if (query.status) { where.push("a.status = ?"); binds.push(query.status); }
+  if (query.memberId && !query.actual) {
+    // 予定基準の参加者検索は対象snapshot（activity_audience）で判定する（未回答母数と同じ単位。docs/04）
+    where.push("EXISTS (SELECT 1 FROM activity_audience au WHERE au.activity_id = a.id AND au.member_id = ?)");
+    binds.push(query.memberId);
+  }
+  if (query.unanswered) {
+    // 本人未回答（T047。docs/11 出欠「未回答は対象snapshot−回答あり」をT036と同じ方式で）。
+    // 自分が対象snapshotに含まれ、回答の行（response != 'unanswered'。取り下げ行は未回答扱い）が無い活動
+    where.push("EXISTS (SELECT 1 FROM activity_audience au2 WHERE au2.activity_id = a.id AND au2.member_id = ?)");
+    binds.push(viewerMemberId ?? "");
+    where.push("NOT EXISTS (SELECT 1 FROM activity_attendance aa WHERE aa.activity_id = a.id AND aa.member_id = ? AND aa.response != 'unanswered')");
+    binds.push(viewerMemberId ?? "");
+  }
+  if (query.actual) {
+    // 現有効実績（docs/16 T035状態欄）: 取消でcountable=0のoperationは除外し、
+    // 現行revision（current_revision_id）のparticipated行だけを見る。旧revision・出欠の回答は見ない
+    where.push("EXISTS (SELECT 1 FROM operations o WHERE o.unit_id = a.unit_id AND o.id = a.operation_id AND o.countable = 1)");
+    where.push(
+      "EXISTS (SELECT 1 FROM activity_results r " +
+        "JOIN activity_result_revisions v ON v.unit_id = r.unit_id AND v.result_id = r.id AND v.id = r.current_revision_id " +
+        "JOIN activity_actual_participants ap ON ap.result_revision_id = v.id AND ap.actual_status = 'participated'" +
+        `${query.memberId ? " AND ap.member_id = ?" : ""} ` +
+        "WHERE r.unit_id = a.unit_id AND r.activity_id = a.id)",
+    );
+    if (query.memberId) binds.push(query.memberId);
+  }
+  return { where, binds };
+}
+
+/**
  * 活動履歴の1ページ（docs/05 API-05）。入力は検証前の契約形（ApiRequest）で受け、
  * ここで契約検証（未知のquery・範囲外limitは400）と認可前置（PER-01）を行う。
  * 画面（T039）やホームのドリルダウン（T047）からも同じ関数で検索できるよう、route非依存の単位に分離している。
@@ -93,31 +141,9 @@ export async function queryActivities(ctx: ApiContext, input: ApiRequest<"API-05
     }
   }
 
-  const where = ["a.unit_id = ?"];
-  const binds: unknown[] = [p.unitId];
-  // from包含／to排他（半開区間）。時刻はInstantで正規化済みのため文字列比較でよい（docs/05 §1）
-  if (query.from) { where.push("a.planned_starts_at >= ?"); binds.push(query.from); }
-  if (query.to) { where.push("a.planned_starts_at < ?"); binds.push(query.to); }
-  if (query.kind) { where.push("a.kind = ?"); binds.push(query.kind); }
-  if (query.status) { where.push("a.status = ?"); binds.push(query.status); }
-  if (query.memberId && !query.actual) {
-    // 予定基準の参加者検索は対象snapshot（activity_audience）で判定する（未回答母数と同じ単位。docs/04）
-    where.push("EXISTS (SELECT 1 FROM activity_audience au WHERE au.activity_id = a.id AND au.member_id = ?)");
-    binds.push(query.memberId);
-  }
-  if (query.actual) {
-    // 現有効実績（docs/16 T035状態欄）: 取消でcountable=0のoperationは除外し、
-    // 現行revision（current_revision_id）のparticipated行だけを見る。旧revision・出欠の回答は見ない
-    where.push("EXISTS (SELECT 1 FROM operations o WHERE o.unit_id = a.unit_id AND o.id = a.operation_id AND o.countable = 1)");
-    where.push(
-      "EXISTS (SELECT 1 FROM activity_results r " +
-        "JOIN activity_result_revisions v ON v.unit_id = r.unit_id AND v.result_id = r.id AND v.id = r.current_revision_id " +
-        "JOIN activity_actual_participants ap ON ap.result_revision_id = v.id AND ap.actual_status = 'participated'" +
-        `${query.memberId ? " AND ap.member_id = ?" : ""} ` +
-        "WHERE r.unit_id = a.unit_id AND r.activity_id = a.id)",
-    );
-    if (query.memberId) binds.push(query.memberId);
-  }
+  const { where: filterWhere, binds: filterBinds } = activityConditions(query, p.memberId);
+  const where = ["a.unit_id = ?", ...filterWhere];
+  const binds: unknown[] = [p.unitId, ...filterBinds];
   if (cursorValue) {
     // 安定ソート（planned_starts_at, id）の続き。同時刻の活動はid順で並べ、取りこぼしも重複も作らない
     const cursor = (await decodeCursor(key, cursorValue))!;

@@ -60,6 +60,60 @@ export const Attendance = obj({
 export type AttendanceDto = z.infer<typeof Attendance>;
 
 /**
+ * ホームの指標1つ（docs/05 API-28。DASH-01「各数値から該当一覧に遷移できる」）。
+ * countはhrefの一覧を同じ条件・同じscope（この要求の本人の所属unit＝PER-01）で開いたときの件数と必ず一致させる。
+ * connected=falseは後続タスクで接続する指標（点検期限=T048、通知・自分のタスク=PH4）。0件と未実装を混同しない
+ */
+export const DashboardMetric = obj({
+  count: z.number().int().min(0),
+  /** 同じ条件で絞った一覧画面のURL（/app配下。未接続はnull） */
+  href: z.string().nullable(),
+  /** データ接続済みか。falseの指標は画面で0件と区別して示す */
+  connected: z.boolean(),
+});
+export type DashboardMetricDto = z.infer<typeof DashboardMetric>;
+
+/**
+ * 次回予定（docs/03 SCR-02「次回予定/本人未回答」）。countとhrefは「これからの予定」
+ * （status=scheduled、開始>=現在。from包含の半開区間）の一覧と一致し、id以降は最接近の1件（無ければnull）。
+ * 回答内訳は対象snapshot基準（未回答＝対象−回答あり行。docs/11 出欠行。prototypeホームのダイヤル）
+ */
+export const DashboardNextActivity = obj({
+  ...DashboardMetric.shape,
+  id: Id.nullable(),
+  title: z.string().nullable(),
+  kind: z.string().nullable(),
+  plannedStartsAt: Instant.nullable(),
+  responseDueAt: Instant.nullable(),
+  attending: z.number().int().min(0),
+  undecided: z.number().int().min(0),
+  absent: z.number().int().min(0),
+  unanswered: z.number().int().min(0),
+  /** この要求の本人の回答（未回答・対象外はnull。「unanswered」行＝取り下げ済みはそのまま返す。docs/05 §1） */
+  myResponse: z.enum(attendanceResponses).nullable(),
+  /** 本人が対象snapshotに含まれるか（含まれない場合は出欠の案内を出さない） */
+  inAudience: z.boolean(),
+});
+export type DashboardNextActivityDto = z.infer<typeof DashboardNextActivity>;
+
+/** ホーム（docs/05 API-28「Dashboard」。全指標がこの要求の本人の所属unit（PER-01）で集計される） */
+export const Dashboard = obj({
+  /** これからの予定の件数＋最接近の1件 */
+  nextActivity: DashboardNextActivity,
+  /** 本人未回答（自分が対象で出欠の回答が無い、これからの予定。hrefは?unanswered=trueの一覧） */
+  myUnanswered: DashboardMetric,
+  /** 確認待ちの異常（issues.status=reported。docs/03 SCR-07「未確認（確認待ち）」の語彙） */
+  openIssues: DashboardMetric,
+  /** 点検期限（inspection_schedulesはT048で作成。未接続） */
+  inspectionDue: DashboardMetric,
+  /** 通知（API-67はPH4。未接続） */
+  notifications: DashboardMetric,
+  /** 自分のタスク（API-68はPH4。未接続） */
+  myTasks: DashboardMetric,
+});
+export type DashboardDto = z.infer<typeof Dashboard>;
+
+/**
  * 実参加の1行（docs/04:93 activity_actual_participants）。
  * 出欠(Attendance)とは別物で、回答を実参加へコピーしない（docs/11 実参加行）。
  * 個人時間は全体時間と別列。不明はNULL（docs/05 §3「未知時刻は欠落表示」）
@@ -284,6 +338,8 @@ export const operationsApis = {
       query: listQuery({
         from: Instant.optional(), to: Instant.optional(), kind: ShortText.optional(), memberId: Id.optional(),
         status: z.enum(activityStates).optional(), actual: z.stringbool().optional(),
+        // unanswered=true（T047）: 自分（この要求の主体）が対象で出欠の回答（unanswered以外）が無い活動だけ。docs/05 API-05行
+        unanswered: z.stringbool().optional(),
       }),
     }),
     // 応答はdocs/05 API-05行どおりPage<Activity>（T038でprovisionalから厳格化。T035のActivity DTOを流用）
@@ -437,7 +493,8 @@ export const operationsApis = {
   }),
   "API-28": defineApi({
     method: "GET", path: "/dashboard", permission: "PER-01", kind: "get", success: [200],
-    request: obj({ query: obj({ period: ShortText.optional() }) }), response: z.looseObject({}), provisional: true,
+    // periodはDASH-02（PH4）の期間集計用の予約で、T047の指標は「現在時点」のため値を受けない（指定は400。docs/05 API-28行）
+    request: obj({ query: obj({ period: ShortText.optional() }) }), response: Dashboard,
   }),
   "API-52": defineApi({
     method: "GET", path: "/analytics", permission: "PER-01", kind: "get", success: [200],

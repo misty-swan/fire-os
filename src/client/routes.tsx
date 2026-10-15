@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, createBrowserRouter, createMemoryRouter, type RouteObject } from "react-router";
-import { AppShell, useOnline } from "./components/AppShell";
+import { AppShell } from "./components/AppShell";
 import { AccessPanel } from "./features/admin/AccessPanel";
 import { LoginPage } from "./features/auth/LoginPage";
 import { MembersPage } from "./features/members/MembersPage";
@@ -18,6 +18,7 @@ import { IncidentsPage } from "./features/incidents/IncidentsPage";
 import { IncidentPage } from "./features/incidents/IncidentPage";
 import { IncidentEditorPage } from "./features/incidents/IncidentEditorPage";
 import { AnnouncementsPage } from "./features/announcements/AnnouncementsPage";
+import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { ImportPage } from "./features/facilities/ImportPage";
 import { InspectionTemplatesPanel } from "./features/admin/InspectionTemplatesPanel";
 import { MeGate, type MeData } from "./me";
@@ -28,11 +29,8 @@ import { screens, shellScreens, type ScreenDef } from "./screens";
 
 /** 未実装画面の仮表示。どのタスクで作るかを示し、成功したように見せない。 */
 export function ScreenPlaceholder({ screen }: { screen: ScreenDef }) {
-  const online = useOnline();
   return (
     <div className="flex max-w-[720px] flex-col gap-4">
-      {/* ホームだけ最上段に通信状態/DEMO/通知（prototype ホーム） */}
-      {screen.id === "SCR-02" && <MobileTopRow online={online} />}
       {/* PCは見出しがヘッダーに出るので、本文の大見出しはスマホのみ */}
       <PageTitle eyebrow={`${screen.id} · ${screen.phase}`} className="lg:[&_h2]:hidden">
         {screen.title}
@@ -57,6 +55,7 @@ export function ScreenPlaceholder({ screen }: { screen: ScreenDef }) {
  */
 export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-01": <LoginPage />,
+  "SCR-02": <DashboardPage />,
   "SCR-15": <MembersPage />,
   "SCR-17": <AccessPanel />,
   "SCR-03": <MapPage />,

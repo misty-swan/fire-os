@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { api } from "../../api";
 import { ConfirmDialog } from "../../components/Overlay";
 import { MutationStatus } from "../../components/MutationStatus";
@@ -36,11 +36,26 @@ const STATUS_LABELS: Record<IssueRow["status"], { label: string; tone: "alert" |
 
 const FILTERS = ["all", "reported", "under_review", "in_progress", "resolved", "closed"] as const;
 
+/** URLの?status=（ホームの指標からのドリルダウン。T047）を状態チップの初期値にする。不正値は「すべて」 */
+function filterFromUrl(value: string | null): (typeof FILTERS)[number] {
+  return (FILTERS as readonly string[]).includes(value ?? "") ? (value as (typeof FILTERS)[number]) : "all";
+}
+
 export function IssuesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [issues, setIssues] = useState<IssueRow[] | "loading" | "error">("loading");
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]>(() => filterFromUrl(searchParams.get("status")));
   const [reloadKey, setReloadKey] = useState(0);
   const [openId, setOpenId] = useState<string | null>(null);
+
+  /** チップの選択をURLにも反映する（ドリルダウンで開いたURLと同じ条件を保つ） */
+  const applyFilter = (f: (typeof FILTERS)[number]) => {
+    setFilter(f);
+    const next = new URLSearchParams(searchParams);
+    if (f === "all") next.delete("status");
+    else next.set("status", f);
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -80,7 +95,7 @@ export function IssuesPage() {
             key={f}
             type="button"
             aria-pressed={filter === f}
-            onClick={() => setFilter(f)}
+            onClick={() => applyFilter(f)}
             className={`flex h-9 flex-none items-center gap-1.5 rounded-pill px-3 text-[12px] font-bold max-lg:min-h-11 ${
               filter === f ? "bg-[rgba(20,30,50,.92)] text-ink shadow-[inset_0_0_0_1px_var(--color-ember)]" : "bg-[rgba(20,30,50,.6)] text-ink-sub"
             }`}
