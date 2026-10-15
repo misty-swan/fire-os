@@ -73,7 +73,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-20 | POST /asset-inspections | PER-04 | Target(vehicle/equipment)＋InspectionInput | Inspection |
 | API-21 | GET /incidents | PER-01 | kind/from/to/status/limit/cursor;機微scope | Page<Incident> |
 | API-22 | POST /incidents | PER-04 | kind,occurredAt,summary,activityId?,resourceUsages?;operation生成/共用;activityIdは同unitの既存活動と未リンクのみ（リンク済み409）。resourceUsagesの保存はT042で共通関数経由（buildResourceUsageMutation）。T040時点では未接続＝残作業 | Incident |
-| API-23 | PUT /incidents/:id/participants/:memberId | PER-04 | version(未作成0),attendanceStatus,times?,reason?;本人/代理/時刻 | Participant |
+| API-23 | PUT /incidents/:id/participants/:memberId | PER-04 | version(未作成0),attendanceStatus,times?,reason?;本人/代理/時刻。times省略は既存維持（未知NULLを保持）、既知時刻の順序は両方既知のみ検査（400）。代理はmember×PER-04のscope（D08。理由は任意）。同一状態への再送は時刻の訂正、変更点なしは400。unconfirmedは行なしで表現 | Participant |
 | API-24 | GET /announcements | PER-01 | status/limit/cursor;可視公開対象のみ | Page<Announcement> |
 | API-25 | POST /announcements | PER-03 | title,body,audienceMemberIds,publishAt?;最初draft | Announcement |
 | API-26 | POST /attachments/upload-intents | PER-04 | AttachmentTarget,contentType,byteSize,sha256?;対象/上限 | UploadIntent(id,uploadPath,uploadToken,expiresAt,version) |

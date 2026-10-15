@@ -147,7 +147,8 @@ export const Incident = obj({
 });
 export type IncidentDto = z.infer<typeof Incident>;
 
-/** 参集の1行（docs/04:96 incident_participants）。書込はAPI-23（T041）。API-70の詳細に載る */
+/** 参集の1行（docs/04:96 incident_participants）。書込はAPI-23（T041）。API-70の詳細に載る。
+ * 行の無い状態がunconfirmed（未確認）で、returnedは帰還記録（docs/11。出欠のabsentとは別） */
 export const IncidentParticipant = obj({
   id: Id,
   version: Version,
@@ -173,7 +174,7 @@ export type IncidentEventDto = z.infer<typeof IncidentEvent>;
 
 /**
  * 出動の詳細（API-70「参集/活動/使用履歴/イベント」docs/05:124）。
- * 参集はT041（API-23）、使用履歴はT042（API-57）が書込経路を作る。T040時点では両方とも常に空
+ * 参集の書込はAPI-23（T041で接続済み）。使用履歴はT042（API-57）が書込経路を作る（T040時点では常に空）
  */
 export const IncidentDetail = obj({
   ...Incident.shape,
@@ -323,7 +324,8 @@ export const operationsApis = {
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    // 応答はdocs/05 API-23行どおりParticipant（T041でprovisionalから厳格化）
+    response: IncidentParticipant,
   }),
   "API-69": defineApi({
     method: "PATCH", path: "/incidents/:id", permission: "PER-04", kind: "mutation", success: [200],

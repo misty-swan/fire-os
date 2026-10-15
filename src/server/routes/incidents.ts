@@ -14,7 +14,7 @@ import { requirePermission } from "./invitations";
  * （recording→active/closed/voided、active→closed、closed→recording（訂正）。voidedは終端で閲覧のみ）。
  * 出来事root（operations）と出動rootを同じbatchで確定し、voidedでcountable=0にする（docs/04「無効時countable=0」）。
  * 出動命令は自動発行しない（docs/11「正式指令を発行しない」）。登録・状態変更は監査/outboxまで一つのbatch。
- * 参集（API-23）はT041、使用履歴（API-57）はT042、活動operationの統合（API-71）はT043。
+ * 参集（API-23）はincident-participants.ts（T041）、使用履歴（API-57）はT042、活動operationの統合（API-71）はT043。
  */
 
 const INCIDENT_JSON =
@@ -248,7 +248,7 @@ export function registerIncidentRoutes(app: ApiApp): void {
           )
       : null;
 
-    // 参集（incident_participants）。書込はAPI-23（T041）。T040時点で作成経路が無いため常に空
+    // 参集（incident_participants）。書込はAPI-23（incident-participants.ts、T041で接続）
     const participants = (
       await c.env.DB.prepare(
         "SELECT id, version, member_id, attendance_status, mobilized_at, arrived_at, returned_at " +

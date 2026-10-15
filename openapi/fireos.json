@@ -7697,7 +7697,7 @@
         "summary": "API-23 PUT /incidents/:id/participants/:memberId",
         "x-permission": "PER-04",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -7752,13 +7752,56 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "memberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "attendanceStatus": {
+                          "type": "string",
+                          "enum": [
+                            "unconfirmed",
+                            "unavailable",
+                            "mobilizing",
+                            "arrived",
+                            "returned"
+                          ]
+                        },
+                        "mobilizedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "arrivedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "returnedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "memberId",
+                        "attendanceStatus",
+                        "mobilizedAt",
+                        "arrivedAt",
+                        "returnedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -7791,13 +7834,56 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "memberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "attendanceStatus": {
+                          "type": "string",
+                          "enum": [
+                            "unconfirmed",
+                            "unavailable",
+                            "mobilizing",
+                            "arrived",
+                            "returned"
+                          ]
+                        },
+                        "mobilizedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "arrivedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "returnedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "memberId",
+                        "attendanceStatus",
+                        "mobilizedAt",
+                        "arrivedAt",
+                        "returnedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
