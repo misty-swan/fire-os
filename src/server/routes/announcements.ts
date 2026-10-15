@@ -19,12 +19,22 @@ import { requirePermission } from "./invitations";
  *   （docs/11「対象変更は新通知承認」は承認フローごとPH4。docs/16 T045「編集/対象変更で通知を自動承認/再送しない」）
  */
 
-/** 応答の組立（対象snapshotをそのまま応答へ写す。json()でテキストをJSON配列として埋め込む） */
+/** 応答の組立（対象snapshotをそのまま応答へ写す。json()でテキストをJSON配列として埋め込む）。
+ *  createdByMemberId（作成者。users→members）、readAt（この要求の本人の現行版既読。未読はNULL）、
+ *  attachments（リンク中の添付。API-101のunlinkにlinkId/linkVersionを渡す）も同じ形で返す（T046） */
 const ANNOUNCEMENT_JSON =
   "SELECT json_object('id', id, 'version', version, 'title', title, 'body', body, 'revisionNo', revision_no, " +
     "'status', status, 'publishedAt', published_at, 'audienceMemberIds', " +
     "json((SELECT v.audience_snapshot FROM announcement_revisions v WHERE v.unit_id = announcements.unit_id " +
       "AND v.announcement_id = announcements.id AND v.revision_no = announcements.revision_no)), " +
+    "'createdByMemberId', (SELECT m.id FROM members m WHERE m.user_id = announcements.created_by), " +
+    "'readAt', (SELECT r.read_at FROM announcement_reads r WHERE r.announcement_id = announcements.id " +
+      "AND r.revision_no = announcements.revision_no AND r.member_id = ?), " +
+    "'attachments', json((SELECT json_group_array(json_object('id', t.id, 'linkId', l.id, 'linkVersion', l.version, " +
+        "'status', t.status, 'contentType', t.content_type)) FROM attachment_links l " +
+      "JOIN attachments t ON t.id = l.attachment_id AND t.unit_id = l.unit_id " +
+      "WHERE l.entity_type = 'announcement' AND l.entity_id = announcements.id " +
+      "AND l.unit_id = announcements.unit_id AND l.unlinked_at IS NULL)), " +
     "'createdAt', created_at, 'updatedAt', updated_at) " +
   "FROM announcements WHERE id = ?";
 
@@ -35,12 +45,16 @@ interface AnnouncementRow {
   id: string; unit_id: string; version: number; title: string; body: string;
   revision_no: number; status: string; published_at: string | null;
   created_at: string; updated_at: string;
+  /** 一覧のSELECTで足す派生列（単一行の応答はANNOUNCEMENT_JSONが直接json_objectを組む） */
+  audience_json: string; created_by_member_id?: string | null; my_read_at?: string | null; attachments_json?: string;
 }
 
 const toAnnouncementDto = (r: AnnouncementRow, audience: string[]) =>
   Announcement.parse({
     id: r.id, version: r.version, title: r.title, body: r.body, revisionNo: r.revision_no, status: r.status,
-    publishedAt: r.published_at, audienceMemberIds: audience, createdAt: r.created_at, updatedAt: r.updated_at,
+    publishedAt: r.published_at, audienceMemberIds: audience, createdByMemberId: r.created_by_member_id ?? null,
+    readAt: r.my_read_at ?? null, attachments: r.attachments_json ? (JSON.parse(r.attachments_json) as unknown) : [],
+    createdAt: r.created_at, updatedAt: r.updated_at,
   });
 
 /** 存在しない/別unitのお知らせは同じ404（存在を明かさない。activities.tsと同じ流儀） */
@@ -173,14 +187,23 @@ async function queryAnnouncements(c: ApiContext): Promise<{ items: AnnouncementD
     binds.push(cursor.createdAt, cursor.createdAt, cursor.id);
   }
 
-  // limit+1件だけ読み、続きの有無をnextCursorの有無で返す（件数を黙って切り捨てない。docs/05 §1）
+  // limit+1件だけ読み、続きの有無をnextCursorの有無で返す（件数を黙って切り捨てない。docs/05 §1）。
+  // SELECT派生列の本人既読（readAt）のbindが最も先（SQLの並び順）。WHERE句のbindはそのあと
   const rows = (
     await c.env.DB.prepare(
       "SELECT a.id, a.version, a.title, a.body, a.revision_no, a.status, a.published_at, a.created_at, a.updated_at, " +
         "json((SELECT v.audience_snapshot FROM announcement_revisions v WHERE v.unit_id = a.unit_id " +
-          "AND v.announcement_id = a.id AND v.revision_no = a.revision_no)) AS audience_json " +
+          "AND v.announcement_id = a.id AND v.revision_no = a.revision_no)) AS audience_json, " +
+        "(SELECT m.id FROM members m WHERE m.user_id = a.created_by) AS created_by_member_id, " +
+        "(SELECT r.read_at FROM announcement_reads r WHERE r.announcement_id = a.id " +
+          "AND r.revision_no = a.revision_no AND r.member_id = ?) AS my_read_at, " +
+        "json((SELECT json_group_array(json_object('id', t.id, 'linkId', l.id, 'linkVersion', l.version, " +
+            "'status', t.status, 'contentType', t.content_type)) FROM attachment_links l " +
+          "JOIN attachments t ON t.id = l.attachment_id AND t.unit_id = l.unit_id " +
+          "WHERE l.entity_type = 'announcement' AND l.entity_id = a.id " +
+          "AND l.unit_id = a.unit_id AND l.unlinked_at IS NULL)) AS attachments_json " +
         `FROM announcements a WHERE ${where.join(" AND ")} ORDER BY a.created_at DESC, a.id DESC LIMIT ?`,
-    ).bind(...binds, query.limit + 1).all<AnnouncementRow & { audience_json: string }>()
+    ).bind(p.memberId, ...binds, query.limit + 1).all<AnnouncementRow>()
   ).results;
 
   const page = rows.slice(0, query.limit);
@@ -236,7 +259,7 @@ export function registerAnnouncementRoutes(app: ApiApp): void {
       ],
       audit: { action: "announcement.create", entityType: "announcement", entityId: id, metadata: { audienceCount: audience.length, revisionNo: 1 } },
       event: { entityType: "announcement", entityId: id, entityVersion: 1, eventType: "announcement.created" },
-      response: { status: 201, sql: ANNOUNCEMENT_JSON, binds: [id], decode: (j) => Announcement.parse(j) },
+      response: { status: 201, sql: ANNOUNCEMENT_JSON, binds: [p.memberId, id], decode: (j) => Announcement.parse(j) },
     });
     return ok(c, result.data, {}, 201);
   });
@@ -335,7 +358,7 @@ export function registerAnnouncementRoutes(app: ApiApp): void {
         entityType: "announcement", entityId: params.id, entityVersion: body.version + 1,
         eventType: "announcement.updated", payload: { changed },
       },
-      response: { status: 200, sql: ANNOUNCEMENT_JSON, binds: [params.id], decode: (j) => Announcement.parse(j) },
+      response: { status: 200, sql: ANNOUNCEMENT_JSON, binds: [p.memberId, params.id], decode: (j) => Announcement.parse(j) },
     });
     return ok(c, result.data);
   });

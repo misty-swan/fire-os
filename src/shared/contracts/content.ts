@@ -3,15 +3,26 @@ import {
   Body, Id, IdList, IDEM, Instant, LIMITS, P_ID, Page, Reason, Sha256, ShortText, Title, Version, defineApi, listQuery, noContent,
   obj, provisionalDto,
 } from "./common";
-import { announcementStates } from "../states";
+import { announcementStates, attachmentStates } from "../states";
 
 export const ReadReceipt = obj({ readAt: z.iso.datetime(), revisionNo: z.number().int().min(1).optional(), notificationVersion: z.number().int().min(1).optional() });
+
+/** お知らせへリンク中の添付（id/linkId/linkVersionはAPI-101のunlinkが、status/contentTypeは表示が使う。T046） */
+export const AnnouncementAttachment = obj({
+  id: Id,
+  linkId: Id,
+  linkVersion: Version,
+  status: z.enum(attachmentStates),
+  contentType: z.string(),
+});
 
 /**
  * お知らせ（docs/04:132 announcements）。audienceMemberIdsは現行版（revisionNo）の対象snapshot
  * （announcement_revisions.audience_snapshot。docs/04:133/134）。title/body/対象の変更は新revisionで
  * 行われ旧版は不変（docs/11「編集で新revision」）。publishedAtは公開操作時刻または作成時に指定した
- * publishAt（公開への遷移はAPI-72の明示操作。自動公開jobは無い。docs/16 T045）
+ * publishAt（公開への遷移はAPI-72の明示操作。自動公開jobは無い。docs/16 T045）。
+ * createdByMemberIdは作成者（users→membersの解決。画面の「作成者」表示。T046）。
+ * readAtは**この要求の本人**による現行版の既読日時（未読はnull。旧版の既読は含めない＝改版で未読に戻る。docs/11「既読は版に束縛」）
  */
 export const Announcement = obj({
   id: Id,
@@ -22,6 +33,9 @@ export const Announcement = obj({
   status: z.enum(announcementStates),
   publishedAt: Instant.nullable(),
   audienceMemberIds: z.array(Id),
+  createdByMemberId: Id.nullable(),
+  readAt: Instant.nullable(),
+  attachments: z.array(AnnouncementAttachment),
   createdAt: Instant,
   updatedAt: Instant,
 });

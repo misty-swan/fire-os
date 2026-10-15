@@ -214,4 +214,57 @@ describe("お知らせの公開対象・版・本人既読 (T045)", () => {
       "announcement.updated", // archived
     ]);
   });
+
+  it("announcement_response_carries_author_my_read_state_and_linked_attachments (T046)", async () => {
+    // 画面（T046）が作成者・本人の現行版既読・リンク中の添付を表示するための応答拡張。
+    // readAtは要求した本人の現行版だけ（旧版の既読は含めない＝改版で未読に戻る。docs/11「既読は版に束縛」）
+    const a = fx.units.a;
+    const admin = a.people.admin; // 作成者（PER-03。対象外）
+    const member = a.people.member; // 対象者
+
+    const createRes = await fx.client(admin).request("POST", "/api/v1/announcements", {
+      title: "資機材の点検当日の持ち物",
+      body: "軍手と筆記用具を持って集合してください。",
+      audienceMemberIds: [member.memberId!, admin.memberId!], // 作成者も対象に含める（公開後に自分でも編集できる経路）
+    }, idem());
+    expect(createRes.status).toBe(201);
+    // 応答（API-25）: 作成者のmemberId。本人既読は未読（null）。添付は空配列（Responseのbodyは一度しか読めない）
+    const created = (await json(createRes)).data! as {
+      id: string; createdByMemberId: string | null; readAt: string | null; attachments: unknown[];
+    };
+    expect(created.createdByMemberId).toBe(admin.memberId!);
+    expect(created.readAt).toBeNull();
+    expect(created.attachments).toEqual([]);
+    const id = created.id;
+
+    // 一覧（API-24）も同じ形。本人ごとに既読は変わる
+    const listFor = async (client: ReturnType<typeof fx.client>) =>
+      ((await json(await client.request("GET", "/api/v1/announcements"))).data! as {
+        id: string; createdByMemberId: string | null; readAt: string | null; attachments: unknown[];
+      }[]).find((row) => row.id === id)!;
+    const adminBefore = await listFor(fx.client(admin));
+    expect(adminBefore.createdByMemberId).toBe(admin.memberId!);
+    expect(adminBefore.readAt).toBeNull();
+
+    // 公開して対象者が既読を取ると、その本人の応答だけreadAtが入る（作成者には入らない）
+    const publishRes = await fx.client(admin).request("PATCH", `/api/v1/announcements/${id}`, {
+      version: 1, status: "published",
+    }, idem());
+    expect(publishRes.status).toBe(200);
+    const memberReadRes = await fx.client(member).request("PUT", `/api/v1/announcements/${id}/read`, { revisionNo: 1 }, idem());
+    expect(memberReadRes.status).toBe(200);
+
+    const memberAfter = await listFor(fx.client(member));
+    expect(memberAfter.readAt).toEqual(((await json(memberReadRes)).data! as { readAt: string }).readAt);
+    const adminAfter = await listFor(fx.client(admin));
+    expect(adminAfter.readAt).toBeNull(); // 他人の既読は応答に現れない
+
+    // 改版（title変更＝新revision）で既読の本人も未読に戻る（現行版の既読だけを出すため）
+    const reviseRes = await fx.client(admin).request("PATCH", `/api/v1/announcements/${id}`, {
+      version: 2, title: "資機材の点検当日の持ち物（訂正）",
+    }, idem());
+    expect(reviseRes.status).toBe(200);
+    const memberRevised = await listFor(fx.client(member));
+    expect(memberRevised.readAt).toBeNull();
+  });
 });

@@ -29,6 +29,8 @@ export const LINK_ENTITY_TABLES: Record<string, string> = {
   equipment: "equipment",
   // 活動実績の写真等（docs/05 AttachmentTargetのactivity。T037）。実績の作成/訂正より先に行があるため存在条件を付ける
   activity: "activities",
+  // お知らせ（docs/05 AttachmentTargetのannouncement。T046）。詳細画面のuploaderからの直リンク（検査jobと同じ存在条件）
+  announcement: "announcements",
 };
 
 /** リンクで機微(sensitive)を基本とする対象（docs/10 §3。点検・異常は現場写真を含み得る） */

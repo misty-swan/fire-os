@@ -46,7 +46,9 @@ export const screens: ScreenDef[] = [
   s({ id: "SCR-23", path: "/app/assets/:type/:id/inspection", title: "資産の点検登録", summary: "資産点検様式/明細/写真/コメント/訂正", ownerTask: "T033", phase: "PH2", tab: "menu", hideNav: true }),
   s({ id: "SCR-14", path: "/app/assets/:type/:id", title: "車両・資機材の詳細", summary: "台帳編集、点検/異常/使用履歴、期限", ownerTask: "T026", phase: "PH2", tab: "menu" }),
   s({ id: "SCR-15", path: "/app/members", title: "団員名簿", desktopTitle: "団員", summary: "名簿/所属/役職・許可項目、登録/変更/停止", ownerTask: "T013", phase: "PH1", tab: "menu" }),
-  s({ id: "SCR-16", path: "/app/announcements", title: "お知らせ", summary: "作成/公開先/公開日時/版/閲覧/本人既読", ownerTask: "T046", phase: "PH3", tab: "menu" }),
+  // お知らせ（T046）。作成・編集・詳細はSCR-16と同じ画面の別入口（docs/03に一覧のパスのみが載るためaliasesで登録。
+  // 固定パスnewを:idより先に照合する並びはdocs/03 §3と同じ）
+  s({ id: "SCR-16", path: "/app/announcements", aliases: ["/app/announcements/new", "/app/announcements/:id/edit", "/app/announcements/:id"], title: "お知らせ", summary: "作成/公開先/公開日時/版/閲覧/本人既読", ownerTask: "T046", phase: "PH3", tab: "menu" }),
   s({ id: "SCR-21", path: "/app/tasks-notifications", title: "設定・通知", desktopTitle: "タスク・通知", summary: "業務タスク、通知draft/本文/対象/承認/配送失敗/既読", ownerTask: "T052", phase: "PH4", tab: "menu" }),
   s({ id: "SCR-24", path: "/app/documents", title: "文書・規程", summary: "許諾原本の登録/版/承認/撤回/ACL/閲覧", ownerTask: "T069", phase: "PH5", tab: "menu" }),
   s({ id: "SCR-25", path: "/app/patrol-plans", title: "巡回計画", summary: "対象施設/日/順序/計画案/人の確定", ownerTask: "T071", phase: "PH5", tab: "menu" }),

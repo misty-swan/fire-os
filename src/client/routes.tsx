@@ -17,6 +17,7 @@ import { AssetPage } from "./features/assets/AssetPage";
 import { IncidentsPage } from "./features/incidents/IncidentsPage";
 import { IncidentPage } from "./features/incidents/IncidentPage";
 import { IncidentEditorPage } from "./features/incidents/IncidentEditorPage";
+import { AnnouncementsPage } from "./features/announcements/AnnouncementsPage";
 import { ImportPage } from "./features/facilities/ImportPage";
 import { InspectionTemplatesPanel } from "./features/admin/InspectionTemplatesPanel";
 import { MeGate, type MeData } from "./me";
@@ -71,6 +72,7 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-11": <IncidentsPage />,
   "SCR-22": <IncidentEditorPage />,
   "SCR-12": <IncidentPage />,
+  "SCR-16": <AnnouncementsPage />,
   "SCR-20": <ImportPage />,
 };
 

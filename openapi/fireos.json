@@ -8244,6 +8244,70 @@
                               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                             }
                           },
+                          "createdByMemberId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "readAt": {
+                            "anyOf": [
+                              {},
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                "linkId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                "linkVersion": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending_upload",
+                                    "uploaded",
+                                    "checking",
+                                    "ready",
+                                    "rejected",
+                                    "expired",
+                                    "deleting",
+                                    "deleted"
+                                  ]
+                                },
+                                "contentType": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "linkId",
+                                "linkVersion",
+                                "status",
+                                "contentType"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "createdAt": {},
                           "updatedAt": {}
                         },
@@ -8256,6 +8320,9 @@
                           "status",
                           "publishedAt",
                           "audienceMemberIds",
+                          "createdByMemberId",
+                          "readAt",
+                          "attachments",
                           "createdAt",
                           "updatedAt"
                         ],
@@ -8423,6 +8490,70 @@
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                           }
                         },
+                        "createdByMemberId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "readAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "attachments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "linkId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "linkVersion": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending_upload",
+                                  "uploaded",
+                                  "checking",
+                                  "ready",
+                                  "rejected",
+                                  "expired",
+                                  "deleting",
+                                  "deleted"
+                                ]
+                              },
+                              "contentType": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "linkId",
+                              "linkVersion",
+                              "status",
+                              "contentType"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "createdAt": {},
                         "updatedAt": {}
                       },
@@ -8435,6 +8566,9 @@
                         "status",
                         "publishedAt",
                         "audienceMemberIds",
+                        "createdByMemberId",
+                        "readAt",
+                        "attachments",
                         "createdAt",
                         "updatedAt"
                       ],
@@ -17871,6 +18005,70 @@
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                           }
                         },
+                        "createdByMemberId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "readAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "attachments": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "linkId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "linkVersion": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending_upload",
+                                  "uploaded",
+                                  "checking",
+                                  "ready",
+                                  "rejected",
+                                  "expired",
+                                  "deleting",
+                                  "deleted"
+                                ]
+                              },
+                              "contentType": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "linkId",
+                              "linkVersion",
+                              "status",
+                              "contentType"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "createdAt": {},
                         "updatedAt": {}
                       },
@@ -17883,6 +18081,9 @@
                         "status",
                         "publishedAt",
                         "audienceMemberIds",
+                        "createdByMemberId",
+                        "readAt",
+                        "attachments",
                         "createdAt",
                         "updatedAt"
                       ],
