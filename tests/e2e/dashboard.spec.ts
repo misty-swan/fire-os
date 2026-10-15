@@ -1,15 +1,39 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { BASE, acceptInvitationViaUi, adminApiData, apiHeaders, inviteNewMember, newUserContext, uniqueEmail } from "./helpers";
 
 /**
  * ホーム（SCR-02）の指標とドリルダウン（T047、DASH-01/AT-DASH-01）。
  * タイルの数値と遷移先一覧の件数が同じ条件で一致することをUIで確認する:
  * 次回予定のダイヤル→これからの予定の一覧、本人未回答→?unanswered=trueの一覧、確認待ちの異常→点検管理?status=reported、
- * 点検期限（T048で接続）→/app/assets?due=overdue（車両＋資機材の件数の和）。
+ * 点検期限（T048で接続）→/app/assets?due=overdue（車両＋資機材の件数の和）、
+ * 通知（T052で接続）→タスク・通知画面の未読絞り、自分のタスク（T052で接続）→タスクタブ。
  * 期待値は直前に本人のセッションでAPI-28を読んで取る（他の試験が同じunitにseedしても成立する形）。
- * 通知・自分のタスクは未接続（PH4）で、0件ではなく未接続の表示になる。seedと検証読みだけAPI。
+ * 通知のseedも実API経由（API-63 draft→API-64承認→ローカルCronトリガで配送。既読にはしない＝未読が残る）。
  */
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** ローカル開発用のCron手動トリガ（本番は毎分自動で走る同じhandleScheduled。notifications.spec.tsと同じ。docs/03 §1.1-14） */
+async function runLocalCron(request: APIRequestContext): Promise<void> {
+  await request.fetch(`${BASE}/cdn-cgi/local/scheduled`);
+}
+
+/** 本人のセッションで一覧API（cursorのkeyset）を最後のページまで読み、行を全部集める（件数を切り捨てない。tests/dashboard.test.tsのwalkと同じ流儀） */
+async function walkAll<T>(session: APIRequestContext, path: string, query: Record<string, string> = {}): Promise<T[]> {
+  const rows: T[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 50; page++) {
+    const params = new URLSearchParams(query);
+    params.set("limit", "200");
+    if (cursor) params.set("cursor", cursor);
+    const res = await session.fetch(`${BASE}${path}?${params.toString()}`, { headers: { origin: BASE } });
+    expect(res.status()).toBe(200);
+    const body = (await res.json()) as { data: T[]; meta?: { nextCursor?: string } };
+    rows.push(...body.data);
+    cursor = body.meta?.nextCursor ?? null;
+    if (!cursor) return rows;
+  }
+  throw new Error("一覧の読み切りが50ページで終わりません");
+}
 
 test("home_metrics_drill_down_to_matching_lists", async ({ browser, request }, testInfo) => {
   test.setTimeout(300_000);
@@ -43,6 +67,9 @@ test("home_metrics_drill_down_to_matching_lists", async ({ browser, request }, t
   );
   const far = upcoming.data.data.find((r) => r.title.startsWith(`遠い方の訓練 ${tag}`));
   expect(far).toBeTruthy();
+  // 近い方は未回答のまま（通知draftの源=未回答者抽出の対象にする。docs/16 T050）
+  const near = upcoming.data.data.find((r) => r.title.startsWith(`近い方の訓練 ${tag}`));
+  expect(near).toBeTruthy();
   const answered = await ctx.request.fetch(`${BASE}/api/v1/activities/${far!.id}/attendance/me`, {
     method: "PUT",
     headers: apiHeaders({ "idempotency-key": crypto.randomUUID() }),
@@ -74,6 +101,31 @@ test("home_metrics_drill_down_to_matching_lists", async ({ browser, request }, t
   expect(notice.status).toBe(201);
   expect((await adminApiData(request, "PATCH", `/api/v1/announcements/${notice.data.data.id}`, { version: 1, status: "published" })).status).toBe(200);
 
+  // --- seed: 自分のタスク（API-68。myTasks指標＝担当の対応中タスクの対象。対応中のまま残す） ---
+  const taskMade = await adminApiData<{ id: string }>(request, "POST", "/api/v1/tasks", {
+    title: `消火栓の表示板確認 ${tag}`, assigneeMemberId: memberId, dueDate: "2026-12-01",
+  });
+  expect(taskMade.status).toBe(201);
+
+  // --- seed: 通知（実API経由。API-63 draft→API-64承認→ローカルCronトリガで配送。既読操作はしない＝未読が残る）。
+  // 源=「近い方の訓練」の未回答者抽出（対象=本人だけ。遠い方は未定回答済みで対象外）。本文はtag入りで一覧の行を特定できる ---
+  const draft = await adminApiData<{ id: string; version: number; bodyHash: string; audienceHash: string }>(
+    request, "POST", "/api/v1/notifications/drafts",
+    { source: { type: "activity", id: near!.id }, channels: ["inapp"], body: `出欠の回答は予定ページからお願いします ${tag}` },
+  );
+  expect(draft.status).toBe(201);
+  const approved = await adminApiData(request, "POST", `/api/v1/notifications/${draft.data.data.id}/approval`, {
+    version: draft.data.data.version, bodyHash: draft.data.data.bodyHash,
+    audienceHash: draft.data.data.audienceHash, decision: "approve",
+  });
+  expect(approved.status).toBe(202);
+  // 配送jobの回収（本番=毎分Cron。docs/03 §1.1-14）をローカルでは開発用トリガで走らせ、本人の未読一覧に載るまで待つ
+  await expect(async () => {
+    await runLocalCron(request);
+    const rows = await walkAll<{ id: string; myReadAt: string | null }>(ctx.request, "/api/v1/notifications/me", { unread: "true" });
+    expect(rows.some((r) => r.id === draft.data.data.id && r.myReadAt === null)).toBe(true);
+  }).toPass({ timeout: 30_000 });
+
   // --- 期待値: 本人のセッションでAPI-28を読む（画面はこの値を写しているはず。全指標が同じunit scope） ---
   const dashRes = await ctx.request.fetch(`${BASE}/api/v1/dashboard`, { headers: { origin: BASE } });
   expect(dashRes.status()).toBe(200);
@@ -83,9 +135,18 @@ test("home_metrics_drill_down_to_matching_lists", async ({ browser, request }, t
       myUnanswered: { count: number };
       openIssues: { count: number };
       inspectionDue: { count: number };
+      notifications: { count: number };
+      myTasks: { count: number };
     };
   }).data;
   expect(dash.nextActivity.title).toBeTruthy();
+  // 通知・自分のタスクも同じunit scope。href先の一覧（API-67 unread／API-102。最後のページまで読む）の件数と一致する
+  const unreadRows = await walkAll<{ id: string; myReadAt: string | null }>(ctx.request, "/api/v1/notifications/me", { unread: "true" });
+  expect(dash.notifications.count).toBe(unreadRows.length);
+  expect(unreadRows.every((r) => r.myReadAt === null)).toBe(true);
+  const myTaskRows = await walkAll<{ id: string; status: string }>(ctx.request, "/api/v1/tasks/me");
+  expect(dash.myTasks.count).toBe(myTaskRows.length);
+  expect(myTaskRows.every((r) => ["open", "assigned", "in_progress"].includes(r.status))).toBe(true);
   /** 一覧ページの活動行（/app/activities/new の登録ボタンは除く） */
   const activityRows = page.locator("main a[href^='/app/activities/']:not([href='/app/activities/new'])");
 
@@ -127,19 +188,37 @@ test("home_metrics_drill_down_to_matching_lists", async ({ browser, request }, t
   await page.getByRole("link", { name: new RegExp(`秋季火災予防運動のお知らせ ${tag}`) }).click();
   await expect(page).toHaveURL(new RegExp(`/app/announcements/${notice.data.data.id}$`));
 
-  // --- 未接続の指標（通知・自分のタスク=PH4）は0件ではなく未接続と分かる表示。
-  // 点検期限（T048で接続）は数値と一覧へのリンク（/app/assets?due=overdue）になる ---
+  // --- 接続済みの指標タイル（点検期限=T048、通知・自分のタスク=T052）は数値と一覧へのリンクになる ---
   await page.goto("/app");
   const dueTile = page.getByTestId("metric-inspectionDue");
   await expect(dueTile).toBeVisible();
   await expect(dueTile).toHaveAttribute("href", "/app/assets?due=overdue");
-  for (const key of ["notifications", "myTasks"]) {
-    const tile = page.getByTestId(`metric-${key}`);
-    await expect(tile.getByText("未接続")).toBeVisible();
-    await expect(tile.getByText("0件")).toHaveCount(0);
-  }
+  const notificationTile = page.getByTestId("metric-notifications");
+  await expect(notificationTile).toBeVisible();
+  await expect(notificationTile).toHaveAttribute("href", "/app/tasks-notifications?tab=notifications&unread=true");
+  await expect(notificationTile.getByText(String(dash.notifications.count), { exact: true })).toBeVisible();
+  const myTasksTile = page.getByTestId("metric-myTasks");
+  await expect(myTasksTile).toBeVisible();
+  await expect(myTasksTile).toHaveAttribute("href", "/app/tasks-notifications?tab=tasks");
+  await expect(myTasksTile.getByText(String(dash.myTasks.count), { exact: true })).toBeVisible();
+
+  // --- 通知タイル: 押すと未読の自分宛通知（API-67 unread=trueと同じ条件）が開き、行数が一致する ---
+  await notificationTile.click();
+  await expect(page).toHaveURL(/\/app\/tasks-notifications\?tab=notifications&unread=true$/);
+  const notificationRows = page.getByRole("list", { name: "自分宛の通知" }).getByRole("listitem");
+  await expect(notificationRows).toHaveCount(dash.notifications.count, { timeout: 15_000 });
+  await expect(page.getByText(new RegExp(escapeRe(`出欠の回答は予定ページからお願いします ${tag}`)))).toBeVisible();
+
+  // --- 自分のタスクタイル: 押すと対応中の担当タスク（API-102のstatus省略と同じ条件）が開き、行数が一致する ---
+  await page.goto("/app");
+  await myTasksTile.click();
+  await expect(page).toHaveURL(/\/app\/tasks-notifications\?tab=tasks$/);
+  const taskRows = page.getByRole("list", { name: "自分のタスク" }).getByRole("listitem");
+  await expect(taskRows).toHaveCount(dash.myTasks.count, { timeout: 15_000 });
+  await expect(page.getByText(new RegExp(escapeRe(`消火栓の表示板確認 ${tag}`)))).toBeVisible();
 
   // --- 点検期限のタイル（T048）: 押すと資産一覧が超過資産の絞り込みで開き、車両＋資機材の件数の和が一致する ---
+  await page.goto("/app");
   await dueTile.click();
   await expect(page).toHaveURL(new RegExp(`/app/assets\\?due=overdue$`));
   await expect(page.getByText("点検期限を超過した資産だけ表示中")).toBeVisible();
