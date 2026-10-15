@@ -325,6 +325,23 @@ export function registerActivityRoutes(app: ApiApp): void {
       ).bind(p.unitId, current.operation_id).all<ResourceUsageRowShape>()
     ).results.map(toResourceUsageDto);
 
+    // この活動の帳票（T059。SCR-09/SCR-19の導線に使う。rootとpointerだけ。versionsはAPI-58で読む）
+    const reports = (
+      await c.env.DB.prepare(
+        "SELECT id, kind, current_draft_version_id, current_approved_version_id, updated_at FROM reports " +
+          "WHERE unit_id = ? AND activity_id = ? ORDER BY rowid",
+      ).bind(p.unitId, params.id).all<{
+        id: string; kind: string; current_draft_version_id: string | null;
+        current_approved_version_id: string | null; updated_at: string;
+      }>()
+    ).results.map((r) => ({
+      id: r.id,
+      kind: r.kind as "manual",
+      currentDraftVersionId: r.current_draft_version_id,
+      currentApprovedVersionId: r.current_approved_version_id,
+      updatedAt: r.updated_at,
+    }));
+
     const detail = ActivityDetail.parse({
       ...Activity.parse({
         id: current.id, version: current.version, operationId: current.operation_id, title: current.title, kind: current.kind,
@@ -337,6 +354,7 @@ export function registerActivityRoutes(app: ApiApp): void {
       result,
       operationVersion: operation.version,
       resourceUsages: usages,
+      reports,
     });
     return ok(c, detail);
   });

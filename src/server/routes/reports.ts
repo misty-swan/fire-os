@@ -41,6 +41,7 @@ interface ReportRow {
 interface ReportVersionRow {
   id: string; unit_id: string; report_id: string; template_version: string; revision_no: number;
   text: string; missing_fields: string; source_versions: string; model_id: string | null;
+  prompt_version: string | null; usage_json: string | null;
   status: ReportVersionDto["status"]; approved_by: string | null; approved_at: string | null; created_at: string;
 }
 
@@ -64,6 +65,8 @@ const toReportVersion = (r: ReportVersionRow): ReportVersionDto => ({
   missingFields: JSON.parse(r.missing_fields) as string[],
   sourceVersions: JSON.parse(r.source_versions) as ReportVersionDto["sourceVersions"],
   modelId: r.model_id,
+  promptVersion: r.prompt_version,
+  usageJson: r.usage_json === null ? null : (JSON.parse(r.usage_json) as ReportVersionDto["usageJson"]),
   status: r.status,
   approvedBy: r.approved_by,
   approvedAt: r.approved_at,
@@ -74,7 +77,8 @@ const toReportVersion = (r: ReportVersionRow): ReportVersionDto => ({
 const REPORT_VERSION_JSON =
   "SELECT json_object('id', t.id, 'reportId', t.report_id, 'templateVersion', t.template_version, " +
   "'revisionNo', t.revision_no, 'text', t.text, 'missingFields', json(t.missing_fields), " +
-  "'sourceVersions', json(t.source_versions), 'modelId', t.model_id, 'status', t.status, " +
+  "'sourceVersions', json(t.source_versions), 'modelId', t.model_id, 'promptVersion', t.prompt_version, " +
+  "'usageJson', json(t.usage_json), 'status', t.status, " +
   "'approvedBy', t.approved_by, 'approvedAt', t.approved_at, 'createdAt', t.created_at) " +
   "FROM report_versions t WHERE t.id = ?";
 
@@ -84,7 +88,8 @@ const REPORT_JSON =
   "'createdAt', r.created_at, 'updatedAt', r.updated_at), " +
   "'versions', (SELECT json_group_array(json_object('id', t.id, 'reportId', t.report_id, 'templateVersion', t.template_version, " +
   "'revisionNo', t.revision_no, 'text', t.text, 'missingFields', json(t.missing_fields), " +
-  "'sourceVersions', json(t.source_versions), 'modelId', t.model_id, 'status', t.status, " +
+  "'sourceVersions', json(t.source_versions), 'modelId', t.model_id, 'promptVersion', t.prompt_version, " +
+  "'usageJson', json(t.usage_json), 'status', t.status, " +
   "'approvedBy', t.approved_by, 'approvedAt', t.approved_at, 'createdAt', t.created_at)) FROM " +
   "(SELECT * FROM report_versions t WHERE t.unit_id = r.unit_id AND t.report_id = r.id ORDER BY t.revision_no) t)) " +
   "FROM reports r WHERE r.id = ?";

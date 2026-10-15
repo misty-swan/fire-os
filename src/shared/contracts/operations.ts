@@ -201,6 +201,21 @@ export const ResourceUsageList = obj({
 });
 export type ResourceUsageListDto = z.infer<typeof ResourceUsageList>;
 
+/**
+ * 活動の帳票サマリ（T059で追加。SCR-09/SCR-19の導線と「この活動の報告書」の一覧に使う。docs/05 API-07行に記載）。
+ * 帳票の版（本文・承認列）はAPI-58（PER-11/担当の可視性。docs/05）で読むため、ここはrootとpointerだけを載せる。
+ * 帳票の一覧API（activityId→reports）は存在しないため、活動詳細が唯一の解決点（docs/03 SCR-19の別入口
+ * /app/reports はAPI-05（実績あり）で活動を選び、このreportsで帳票を解決する）
+ */
+export const ActivityReportRef = obj({
+  id: Id,
+  kind: z.literal("manual"),
+  currentDraftVersionId: Id.nullable(),
+  currentApprovedVersionId: Id.nullable(),
+  updatedAt: Instant,
+});
+export type ActivityReportRefDto = z.infer<typeof ActivityReportRef>;
+
 /** 予定の詳細（API-07「可視出欠と現在実績を含む」）。実績未作成の活動はresult=null（docs/05 §1） */
 export const ActivityDetail = obj({
   ...Activity.shape,
@@ -217,6 +232,8 @@ export const ActivityDetail = obj({
   operationVersion: Version,
   /** 車両/機材の使用履歴（docs/04:100。T044で追加。API-57はPUTのみで読み取り経路が無いため詳細に載せる） */
   resourceUsages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
+  /** この活動の帳票（T059で追加。rootとpointerだけ。versionsはAPI-58。docs/05 API-07行に記載） */
+  reports: z.array(ActivityReportRef).max(LIMITS.arrayMax),
 });
 export type ActivityDetailDto = z.infer<typeof ActivityDetail>;
 

@@ -143,6 +143,10 @@ export const ReportVersion = obj({
   sourceVersions: ReportSourceVersions,
   /** AI生成時のモデル（手動下書きはNULL。T057以降） */
   modelId: z.string().max(200).nullable(),
+  /** AI生成のプロンプト構造の版（report-draft-v1。手動下書きはNULL。T057で追加した列のDTO反映＝T059） */
+  promptVersion: z.string().max(100).nullable(),
+  /** AI生成のtoken使用量（手動下書きはNULL。T057で追加したusage_jsonのDTO反映＝T059） */
+  usageJson: obj({ promptTokens: z.number().int().min(0), completionTokens: z.number().int().min(0) }).nullable(),
   status: z.enum(contentVersionStates),
   approvedBy: Id.nullable(),
   approvedAt: Instant.nullable(),

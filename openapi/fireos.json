@@ -2402,6 +2402,54 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "reports": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "manual"
+                              },
+                              "currentDraftVersionId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "currentApprovedVersionId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "updatedAt": {}
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "currentDraftVersionId",
+                              "currentApprovedVersionId",
+                              "updatedAt"
+                            ],
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -2422,7 +2470,8 @@
                         "attendance",
                         "result",
                         "operationVersion",
-                        "resourceUsages"
+                        "resourceUsages",
+                        "reports"
                       ],
                       "additionalProperties": false
                     },
@@ -15751,6 +15800,44 @@
                                   }
                                 ]
                               },
+                              "promptVersion": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "usageJson": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "promptTokens": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "completionTokens": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "promptTokens",
+                                      "completionTokens"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "status": {
                                 "type": "string",
                                 "enum": [
@@ -15792,6 +15879,8 @@
                               "missingFields",
                               "sourceVersions",
                               "modelId",
+                              "promptVersion",
+                              "usageJson",
                               "status",
                               "approvedBy",
                               "approvedAt",
@@ -16001,6 +16090,44 @@
                             }
                           ]
                         },
+                        "promptVersion": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 100
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "usageJson": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "promptTokens": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "completionTokens": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "promptTokens",
+                                "completionTokens"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "status": {
                           "type": "string",
                           "enum": [
@@ -16042,6 +16169,8 @@
                         "missingFields",
                         "sourceVersions",
                         "modelId",
+                        "promptVersion",
+                        "usageJson",
                         "status",
                         "approvedBy",
                         "approvedAt",
@@ -16679,6 +16808,44 @@
                                   }
                                 ]
                               },
+                              "promptVersion": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "usageJson": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "promptTokens": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "completionTokens": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "promptTokens",
+                                      "completionTokens"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "status": {
                                 "type": "string",
                                 "enum": [
@@ -16720,6 +16887,8 @@
                               "missingFields",
                               "sourceVersions",
                               "modelId",
+                              "promptVersion",
+                              "usageJson",
                               "status",
                               "approvedBy",
                               "approvedAt",

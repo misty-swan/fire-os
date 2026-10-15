@@ -435,6 +435,54 @@ export function ActivityPage() {
         )}
       </section>
 
+      {/* 報告書（T059。docs/03 §1.1-9⑦「報告書の導線のみT059」＝SCR-09→SCR-19の接続。
+          prototype 活動詳細の過去の活動の「AI報告書」（紫）に相当。帳票の解決はAPI-07のreports） */}
+      <section className="flex flex-col gap-2" aria-label="報告書">
+        <h3 className="text-[14px] font-bold">報告書</h3>
+        <Card className="flex flex-col gap-2">
+          {detail.reports.length > 0 ? (
+            <ul className="flex flex-col gap-1.5">
+              {detail.reports.map((r) => (
+                <li key={r.id}>
+                  <Link
+                    to={`/app/reports/${r.id}/draft`}
+                    className="hairline flex min-h-11 items-center gap-3 rounded-[18px] bg-white/[.04] p-3 hover:bg-white/[.07]"
+                  >
+                    <Icon name="description" className="flex-none text-[20px] text-ai" />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="text-[13px] font-bold">AI報告書を開く</span>
+                      <span className="font-mono text-[11px] text-ink-muted">{r.updatedAt.slice(0, 16).replace("T", " ")}</span>
+                    </span>
+                    <Chip tone={r.currentApprovedVersionId !== null ? "ok" : "neutral"}>
+                      {r.currentApprovedVersionId !== null ? "承認済み版あり" : "下書き"}
+                    </Chip>
+                    <Icon name="chevron_right" className="flex-none text-[18px] text-ink-dim" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-ink-sub">まだ報告書はありません。</p>
+          )}
+          {detail.reports.length === 0 &&
+            (detail.result ? (
+              canManage ? (
+                <Link
+                  to={`/app/reports?activity=${id}`}
+                  className="inline-flex min-h-11 items-center gap-1.5 self-start rounded-pill bg-white/[.08] px-4 text-[13px] font-bold text-ink"
+                >
+                  <Icon name="description" className="text-[17px] text-ai" />
+                  報告書を作る
+                </Link>
+              ) : (
+                <p className="text-[12px] text-ink-muted">担当の幹部が作成します。承認済みの版はここから開けます。</p>
+              )
+            ) : (
+              <p className="text-[12px] text-ink-muted">報告書は、実績の記録がある活動から作れます。</p>
+            ))}
+        </Card>
+      </section>
+
       {/* 中止（API-40。出欠・対象・履歴は保持される。docs/11 §3）。
           理由が空のまま実行を送って422にしないよう、空の間は実行を無効化する（AnnouncementEditorと同じ流儀） */}
       {confirmCancel && (

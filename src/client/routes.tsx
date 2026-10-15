@@ -20,6 +20,7 @@ import { IncidentEditorPage } from "./features/incidents/IncidentEditorPage";
 import { AnnouncementsPage } from "./features/announcements/AnnouncementsPage";
 import { NotificationsPage } from "./features/notifications/NotificationsPage";
 import { AiReviewsPage } from "./features/ai/AiReviewsPage";
+import { ReportDraftPage } from "./features/reports/ReportDraftPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { ImportPage } from "./features/facilities/ImportPage";
 import { InspectionTemplatesPanel } from "./features/admin/InspectionTemplatesPanel";
@@ -77,6 +78,7 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-20": <ImportPage />,
   "SCR-21": <NotificationsPage />,
   "SCR-18": <AiReviewsPage />,
+  "SCR-19": <ReportDraftPage />,
 };
 
 function toRoutes(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject[] {
