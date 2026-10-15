@@ -2493,7 +2493,7 @@
         "summary": "API-08 PUT /activities/:id/attendance/me",
         "x-permission": "PER-02",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -2539,13 +2539,37 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "memberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "response": {
+                          "type": "string",
+                          "enum": [
+                            "unanswered",
+                            "attending",
+                            "absent",
+                            "undecided"
+                          ]
+                        },
+                        "respondedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "memberId",
+                        "response",
+                        "respondedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -2578,13 +2602,37 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "memberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "response": {
+                          "type": "string",
+                          "enum": [
+                            "unanswered",
+                            "attending",
+                            "absent",
+                            "undecided"
+                          ]
+                        },
+                        "respondedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "memberId",
+                        "response",
+                        "respondedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -10142,7 +10190,7 @@
         "summary": "API-41 PUT /activities/:id/attendance/:memberId",
         "x-permission": "PER-02代理許可",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -10197,13 +10245,37 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "memberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "response": {
+                          "type": "string",
+                          "enum": [
+                            "unanswered",
+                            "attending",
+                            "absent",
+                            "undecided"
+                          ]
+                        },
+                        "respondedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "memberId",
+                        "response",
+                        "respondedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -10236,13 +10308,37 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "memberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "response": {
+                          "type": "string",
+                          "enum": [
+                            "unanswered",
+                            "attending",
+                            "absent",
+                            "undecided"
+                          ]
+                        },
+                        "respondedAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "memberId",
+                        "response",
+                        "respondedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

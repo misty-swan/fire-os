@@ -45,21 +45,26 @@ export const Activity = obj({
 });
 export type ActivityDto = z.infer<typeof Activity>;
 
-/** 出欠の可視行（docs/04 activity_attendance）。回答の変更履歴（attendance_events）とPUTはT036（API-08/41） */
-export const AttendanceView = obj({
+/**
+ * 出欠（docs/04:89 activity_attendance）。API-08/41の応答とAPI-07の可視行。
+ * 行は(activity_id, member_id)で一意。未回答は行が無いことで表現し（初回回答はversion=0でINSERT）、
+ * 取り下げはresponse=unanswered（docs/11 出欠「未回答は…未定と区別」、docs/05 §1）
+ */
+export const Attendance = obj({
   id: Id,
   version: Version,
   memberId: Id,
   response: z.enum(attendanceResponses),
   respondedAt: Instant.nullable(),
 });
+export type AttendanceDto = z.infer<typeof Attendance>;
 
 /** 予定の詳細（API-07「可視出欠と現在実績を含む」）。実績の子Page（ActivityResult）はT037で接続する */
 export const ActivityDetail = obj({
   ...Activity.shape,
   /** 対象者はsnapshot（activity_audience）。名簿変更で母数を変えない（docs/04） */
   audience: z.array(Id).max(LIMITS.arrayMax),
-  attendance: z.array(AttendanceView).max(LIMITS.arrayMax),
+  attendance: z.array(Attendance).max(LIMITS.arrayMax),
   /** 現在実績。activity_resultsを作るAPI（API-09）はT037のため、接続までは常にnull */
   result: z.null(),
 });
@@ -117,7 +122,7 @@ export const operationsApis = {
       body: obj({ version: VersionOrZero, response: z.enum(attendanceResponses) }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Attendance,
   }),
   "API-09": defineApi({
     method: "POST", path: "/activities/:id/actual-results", permission: "PER-04", kind: "mutation", success: [201],
@@ -152,7 +157,7 @@ export const operationsApis = {
       body: obj({ version: VersionOrZero, response: z.enum(attendanceResponses), reason: Reason }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Attendance,
   }),
   "API-42": defineApi({
     method: "POST", path: "/activities/:id/actual-results/corrections", permission: "PER-04", kind: "mutation", success: [201],
