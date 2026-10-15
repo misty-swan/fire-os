@@ -6,7 +6,7 @@
 
 業務ベース`/api/v1`、同一originのHTTPS/JSON。API-36のみ認証base path。クライアントのunit/actor/roleを信用しない。成功`{data:DTO,meta:{requestId,nextCursor?,snapshotRevision?}}`、失敗`{error:{code,message,details:[{field,reason}]},meta:{requestId}}`。binary/CSV/stream/204はJSON envelope外。Inspection DTOは原本＋seriesId/seriesVersion＋明細/添付ID、Template DTOは項目schemaと承認版。その他DTOは04の同名モデルのcamelCase＋version＋10の許可列、Secret/内部token/R2キーを返さない。ResourceUsageListのPUTはoperation版をガードし全有効集合を更新、抜けた既存行はcancelled＋イベントで保持。全件編集権がなければ拒否する。Detailは親＋認可された子PageとnextCursorを返し、子一覧の件数を黙って切り捨てない。
 
-IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-MM-DD業務日を区別。未知JSON列・列挙外を拒否。文字上限案：件名200、note/body20,000、AI/RAG質問4,000文字、JSON要求256 KiB（binary別）、limit既定50/最大200、配列最大100。大きいCSV/多数対象はimport/job分割、D1 bound parameter上限100を越えない。値は負荷検証で固定するB案で機能上限の無断削減を意味しない。**列ごとにDBのCHECKより広い共通上限を使う場合、その列の入力だけDBに揃えて引き締める（PH2〜: 管理番号・識別名・出典・資産コード・状態100、数量単位50、位置確認/訂正/対応の理由2,000、点検明細の項目コード100、開催の変更・中止の理由2,000（activity_events.reason。T035）、出動の訂正・無効化の理由2,000（incident_events.reason。T040）、使用履歴の訂正・取消の理由2,000（resource_usage_events.reason。T042）、代理回答・参集の理由2,000（attendance_events/incident_participant_events.reason。T036/T041）。docs/04の各DDLと一致）。超過は400で拒否し、通ってからDBのCHECKで500にならないようにする。**
+IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-MM-DD業務日を区別。未知JSON列・列挙外を拒否。文字上限案：件名200、note/body20,000、AI/RAG質問4,000文字、JSON要求256 KiB（binary別）、limit既定50/最大200、配列最大100。大きいCSV/多数対象はimport/job分割、D1 bound parameter上限100を越えない。値は負荷検証で固定するB案で機能上限の無断削減を意味しない。**列ごとにDBのCHECKより広い共通上限を使う場合、その列の入力だけDBに揃えて引き締める（PH2〜: 管理番号・識別名・出典・資産コード・状態100、数量単位50、位置確認/訂正/対応の理由2,000、点検明細の項目コード100、開催の変更・中止の理由2,000（activity_events.reason。T035）、出動の訂正・無効化の理由2,000（incident_events.reason。T040）、使用履歴の訂正・取消の理由2,000（resource_usage_events.reason。T042）、代理回答・参集の理由2,000（attendance_events/incident_participant_events.reason。T036/T041）、タスクの変更・再開の理由2,000（task_events.reason。T049）。docs/04の各DDLと一致）。超過は400で拒否し、通ってからDBのCHECKで500にならないようにする。**
 
 | HTTP / code | 意味 |
 |---|---|
@@ -119,7 +119,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-65 | GET /notifications/:id | PER-12/対象者 | なし;送信者と本人で項目投影 | Notification＋Deliveries |
 | API-66 | PUT /announcements/:id/read | 本人 | revisionNo;対象・公開版 | ReadReceipt |
 | API-67 | GET /notifications/me | PER-01 | status/limit/cursor;本人のみ | Page<Notification> |
-| API-68 | POST /tasks | PER-04/10 | title,assigneeMemberId?,dueDate?,sourceDecisionId?;AI効果は承認済 | Task |
+| API-68 | POST /tasks | PER-04/10 | title,assigneeMemberId?,dueDate?,sourceDecisionId?;AI効果は承認済。**T049で実装**: 手動作成（sourceDecisionId省略）はstatus=open・AI源無しで作成。sourceDecisionId付きは対応するreview_decisionsが同unitに存在しdecisionが承認済み（approved/approved_with_edit）であることを要求し、無ければ422（details.reason=decision_not_approved。docs/11「AI起点は承認effectから作成」=pending提案のdecision偽造は不可。**review_decisions表はT053で作成のためT049時点では常に422**。approved経路の接続はT054が同一batchで行う）。effect_operation_idは部分一意索引で一意（同effectの2回目の作成は409 DUPLICATE＝二重効果0）。担当はactive団員のみ（休団・退団は422 assignee_not_active）。Task（T049でprovisionalから厳格化: id/version/title/assigneeMemberId/status/dueDate/sourceEvaluationId/sourceIssueId/sourceDecisionId/effectOperationId/createdAt/updatedAt。docs/04:136どおり） | Task |
 | API-69 | PATCH /incidents/:id | PER-04 | version,status?,kind?,summary?,reason（必須。訂正/無効化理由）;許可遷移。voidedは終端（変更は422） | Incident |
 | API-70 | GET /incidents/:id | PER-01限定 | なし;参集/活動/使用履歴/イベント。operationVersion（出来事rootの現行版。API-57/71の版ガードに画面が使う。T044） | IncidentDetail |
 | API-71 | PUT /incidents/:id/activity | PER-04 | version,activityId,activityVersion,operationVersions,reason（2,000）;両root＋双方のoperation版を同一batchの比較更新でロック（不一致は409で全体不変。キー不足400）。競合リンク（既存の別出動あり）409、リンク済み出動の付け替えとvoided出動は422。出動と使用履歴を活動側operationへ付替し旧operationはcountable=0で履歴/監査参照可、旧ID/理由はincident_eventsへ | Incident＋OperationLink |
@@ -138,7 +138,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-84 | POST /attachments/:id/completion | PER-04 | version,uploadAttemptId,sha256;実体HEAD/検査job | Attachment＋Job(202) |
 | API-85 | DELETE /attachments/:id | PER-04（本人分を含む） | version,reason;有効リンクがある場合422。**保持期間の猶予はD10未決のため未実装（tombstone後にjobで即時削除）** | 204（D1 tombstone後R2削除job） |
 | API-86 | GET /jobs/:id | 依頼者（PH0。担当者への拡張はPH4で通知/AI jobの利用時に判断） | なし;機微入力/内部error本文なし | Job(status,attempts,errorCode,resultRef) |
-| API-87 | PATCH /tasks/:id | PER-04/10 | version,status?,assigneeMemberId?,reason;業務対象権限 | Task |
+| API-87 | PATCH /tasks/:id | PER-04/10 | version,status?,assigneeMemberId?,reason（必須。≤2,000）;業務対象権限。**T049で実装**: version比較更新（旧版409）、遷移はdocs/11の許可辺のみ（open→assigned/in_progress/cancelled、assigned→in_progress/cancelled、in_progress→done、done→in_progressは再開理由必須、cancelledは終端422）。担当者変更はopen/assigned/in_progressから可能（done/cancelledでは422 assignee_not_assignable）。担当はactive団員のみ。権限はPER-04またはPER-10のどちらか（docs/10の和集合。両方とも無い担当外は403。一般団員はPER-04本人分）。変更前後はtask_eventsへ追記し監査/outboxは同一batch（失敗時は履歴も増えない）。Task（T049で厳格化） | Task |
 | API-88 | GET /ai/evaluation-runs | PER-08 | modelId/datasetVersion/limit/cursor | Page<EvaluationRun> |
 | API-89 | POST /ai/evaluation-runs | PER-08運用 | datasetVersion,questionVersion,modelId;架空/許諾済dataset | Job(202) |
 | API-90 | GET /documents | PER-11 | q/status/limit/cursor;文書ACL前置 | Page<Document> |

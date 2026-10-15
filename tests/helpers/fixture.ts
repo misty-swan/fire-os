@@ -64,6 +64,8 @@ const TABLES = new Set([
   "announcements", "announcement_revisions", "announcement_audience", "announcement_reads",
   // PH4: 点検期限と超過検出のログ（T048）
   "inspection_schedules", "inspection_due_detections",
+  // PH4: 業務タスク（T049）
+  "tasks", "task_events",
 ]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 

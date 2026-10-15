@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
-  Body, BusinessDate, Id, IdList, IdListMaybeEmpty, IDEM, Instant, LIMITS, P_ID, Page, Reason, Reason2000,
-  ShortText, Target, Title, Version, VersionOrZero, defineApi, listQuery, obj, provisionalDto,
+  Body, BusinessDate, Id, IdList, IdListMaybeEmpty, IDEM, Instant, LIMITS, P_ID, Page, Reason2000,
+  ShortText, Target, Title, Version, VersionOrZero, defineApi, listQuery, obj,
 } from "./common";
 import {
   activityStates, actualParticipationStates, attendanceResponses, incidentKinds, incidentStates, mobilizationStates,
@@ -331,6 +331,34 @@ const actualShape = {
 };
 export const ActualInput = obj(actualShape);
 
+/**
+ * 業務タスク（docs/04:136 tasks、docs/11 業務タスク、T049）。
+ * 手動作成（API-68。sourceDecisionId省略）と承認済みAI起点（T054が同一batchで接続）を同じ表に保存し、
+ * AI提案そのもの（pending）はai_evaluations側で管理する（docs/04「AIはpending提案へ直接確定できない」）。
+ * AI起点の行だけがsourceDecisionId/effectOperationIdを持ち（docs/04 effect_operation_id非NULL UNIQUE）、
+ * 手動作成はnull（docs/11「AI起点は承認effectから作成」）
+ */
+export const Task = obj({
+  id: Id,
+  version: Version,
+  title: Title,
+  assigneeMemberId: Id.nullable(),
+  status: z.enum(taskStates),
+  /** 業務日（YYYY-MM-DD。瞬間値と混同しない。docs/04 §1） */
+  dueDate: BusinessDate.nullable(),
+  /** 元AI評価（承認済みAI起点のみ。手動はnull） */
+  sourceEvaluationId: Id.nullable(),
+  /** 元異常 */
+  sourceIssueId: Id.nullable(),
+  /** 承認済み決定（承認済みAI起点のみ。手動はnull） */
+  sourceDecisionId: Id.nullable(),
+  /** 一意の効果操作ID（承認済みAI起点のみ。手動はnull。同effectの再実行は拒否＝二重効果0） */
+  effectOperationId: Id.nullable(),
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type TaskDto = z.infer<typeof Task>;
+
 export const operationsApis = {
   "API-05": defineApi({
     method: "GET", path: "/activities", permission: "PER-01", kind: "list", success: [200],
@@ -515,17 +543,22 @@ export const operationsApis = {
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    // T049でprovisionalから厳格化（docs/04:136どおり）。sourceDecisionId付きは承認済み決定を要求し
+    // （docs/11「AI起点は承認effectから作成」）、無ければ422 decision_not_approved
+    response: Task,
   }),
   "API-87": defineApi({
     method: "PATCH", path: "/tasks/:id", permission: "PER-04/10", kind: "mutation", success: [200],
     request: obj({
       params: P_ID,
       body: obj({
-        version: Version, status: z.enum(taskStates).optional(), assigneeMemberId: Id.nullable().optional(), reason: Reason,
+        version: Version, status: z.enum(taskStates).optional(), assigneeMemberId: Id.nullable().optional(),
+        // 変更・再開の理由（DBのCHECK task_events.reason ≤2000）に揃える
+        reason: Reason2000,
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    // T049でprovisionalから厳格化。遷移はdocs/11の許可辺のみ（done→in_progressは再開理由必須、cancelledは終端）
+    response: Task,
   }),
 } as const;

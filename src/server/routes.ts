@@ -21,6 +21,7 @@ import { registerFacilityInspectionRoutes } from "./routes/facility-inspections"
 import { registerAssetInspectionRoutes } from "./routes/asset-inspections";
 import { registerInspectionCorrectionRoutes } from "./routes/inspection-corrections";
 import { registerIssueRoutes } from "./routes/issues";
+import { registerTaskRoutes } from "./routes/tasks";
 import { registerAttendanceRoutes } from "./routes/attendance";
 import { registerActivityRoutes } from "./routes/activities";
 import { registerActivityResultRoutes } from "./routes/activity-results";
@@ -60,6 +61,7 @@ export function registerRoutes(app: ApiApp): void {
   registerAssetInspectionRoutes(app);
   registerInspectionCorrectionRoutes(app);
   registerIssueRoutes(app);
+  registerTaskRoutes(app);
   // 固定パス（/activities/:id/attendance/me）は /activities/:id/attendance/:memberId より先に照合する（docs/05 §1、Honoは登録順）
   registerAttendanceRoutes(app);
   registerActivityRoutes(app);
