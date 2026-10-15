@@ -29,7 +29,11 @@ export const attachmentStates = [
 ] as const;
 export const announcementStates = ["draft", "published", "archived"] as const;
 export const notificationApprovalStates = ["draft", "approved", "cancelled", "dispatching", "finished", "failed"] as const;
-export const deliveryStates = ["pending", "sending", "provider_accepted", "failed", "unknown", "retry_wait"] as const;
+/**
+ * 配送（docs/04:141 notification_deliveries）。cancelledは「未送分の取消」（docs/11「未送分取消は
+ * deliveries単位の取消」のT051実装。pending→cancelledのみで、送信済みを未送へ戻さない）。
+ */
+export const deliveryStates = ["pending", "sending", "provider_accepted", "failed", "unknown", "retry_wait", "cancelled"] as const;
 /**
  * 通知チャネル（docs/14 D13「チャネル未承認」）。推奨案の「アプリ内」一経路（inapp）だけを
  * 検証設定として実装し（docs/07 §5「アプリ内通知＋Web Pushまたはemailの一経路」）、Web Push/emailの
@@ -137,12 +141,13 @@ export const notificationApprovalTransitions: Transitions<(typeof notificationAp
   failed: [],
 };
 export const deliveryTransitions: Transitions<(typeof deliveryStates)[number]> = {
-  pending: ["sending"],
+  pending: ["sending", "cancelled"],
   sending: ["provider_accepted", "failed", "unknown"],
   provider_accepted: [],
   failed: ["retry_wait"],
   unknown: ["retry_wait"],
   retry_wait: ["sending"],
+  cancelled: [],
 };
 export const syncOperationTransitions: Transitions<(typeof syncOperationStates)[number]> = {
   local_draft: ["pending"],

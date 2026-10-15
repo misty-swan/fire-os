@@ -74,7 +74,8 @@ export const notificationDeliveries = sqliteTable(
     recipientId: text("recipient_id").notNull(),
     deliveryKey: text("delivery_key").notNull(),
     attemptCount: integer("attempt_count").notNull(),
-    status: text("status", { enum: ["pending", "sending", "provider_accepted", "failed", "unknown", "retry_wait"] }).notNull(),
+    /** docs/11 配送＋T051のcancelled（未送分取消。pending→cancelledのみ。遷移はstates.ts deliveryTransitions） */
+    status: text("status", { enum: ["pending", "sending", "provider_accepted", "failed", "unknown", "retry_wait", "cancelled"] }).notNull(),
     providerId: text("provider_id"),
     lastErrorCode: text("last_error_code"),
     nextAttemptAt: text("next_attempt_at"),

@@ -1,0 +1,60 @@
+import type { notificationChannels } from "../../shared/states";
+
+/** 通知チャネル（docs/14 D13の検証設定＝アプリ内一経路。states.ts notificationChannelsが正本） */
+export type NotificationChannel = (typeof notificationChannels)[number];
+
+/** provider.sendの入力（docs/16 T051のInterface）。deliveryKeyは再試行で固定の効果キー（docs/02 §5） */
+export interface DeliverySendInput {
+  deliveryKey: string;
+  addressRef: string;
+  body: string;
+}
+
+/**
+ * provider.sendの結果（docs/16 T051のInterface）。
+ * - provider_accepted: providerが受け付けた（端末到達の保証ではない。docs/11「受付≠到達≠既読」）
+ * - failed: providerが明確に拒否した（errorCodeはdeliveries.last_error_codeへ入る短いコード。再送待ちへ）
+ * - unknown: 受付の成否が不明（タイムアウト等）。無条件に再送せず、照会/人確認に回す
+ */
+export type DeliveryResult =
+  | { kind: "provider_accepted"; providerId?: string }
+  | { kind: "failed"; errorCode: string }
+  | { kind: "unknown" };
+
+/**
+ * 1チャネル1provider。sendは実チャネル次第で冪等でない（受け付けた通知を2回出し得る）ため、
+ * dispatcher（dispatchNotification）が固定のdelivery_keyで台帳側の重複を防ぎ、
+ * 同じdelivery_keyへの2回目のsendが起きないよう呼び出し側で制御する（docs/02 §5）。
+ */
+export interface NotificationProvider {
+  channel: NotificationChannel;
+  /** provider識別子（deliveries.provider_idへ記録。send結果のproviderIdを優先し、無ければこれを使う） */
+  id: string;
+  send(input: DeliverySendInput): Promise<DeliveryResult>;
+}
+
+const providers = new Map<NotificationChannel, NotificationProvider>();
+
+/** チャネルのproviderを登録する（後入れ替え可。実チャネルの追加と試験用の差し替えに使う） */
+export function registerChannelProvider(provider: NotificationProvider): void {
+  providers.set(provider.channel, provider);
+}
+
+/** チャネルのprovider（未登録ならnull。dispatcherはその宛先を送らずjobの再試行で手動確認へ落とす） */
+export function channelProvider(channel: NotificationChannel): NotificationProvider | null {
+  return providers.get(channel) ?? null;
+}
+
+/**
+ * inapp（アプリ内通知）の既定provider（docs/14 D13の検証設定＝アプリ内一経路。T050で実装済みのchannel）。
+ * アプリ内はnotification_recipients行そのものが受信箱（API-67/100が読む）で、外部への送出が無い。
+ * そのためsendは内部成立＝即座に受付済みを返す（providerIdは内部識別子）。
+ * Web Push/emailの実providerはD13の了承後にregisterChannelProviderで追加する（docs/evidence/V06-delivery.md）。
+ */
+registerChannelProvider({
+  channel: "inapp",
+  id: "internal-inbox",
+  async send() {
+    return { kind: "provider_accepted", providerId: "internal-inbox" };
+  },
+});

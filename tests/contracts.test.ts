@@ -160,7 +160,10 @@ describe("contracts (T002)", () => {
     expect(states.issueStates).toEqual(["reported", "under_review", "in_progress", "resolved", "closed"]);
     expect(states.activityStates).toEqual(["draft", "scheduled", "in_progress", "completed", "cancelled"]);
     expect(states.mobilizationStates).toEqual(["unconfirmed", "unavailable", "mobilizing", "arrived", "returned"]);
-    expect(states.deliveryStates).toHaveLength(6);
+    // 7状態（T051でcancelled＝未送分取消を追加。docs/11 pending→cancelledのみ）
+    expect(states.deliveryStates).toEqual(["pending", "sending", "provider_accepted", "failed", "unknown", "retry_wait", "cancelled"]);
+    expect(states.canTransition(states.deliveryTransitions, "pending", "cancelled")).toBe(true);
+    expect(states.canTransition(states.deliveryTransitions, "provider_accepted", "cancelled")).toBe(false);
     expect(states.canTransition(states.issueTransitions, "reported", "under_review")).toBe(true);
     expect(states.canTransition(states.issueTransitions, "reported", "closed")).toBe(false);
     expect(states.canTransition(states.activityTransitions, "completed", "in_progress")).toBe(true);

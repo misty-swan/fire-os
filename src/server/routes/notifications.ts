@@ -9,6 +9,7 @@ import { authorize } from "../auth/authorize";
 import { resolvePrincipal } from "../auth/principal";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
 import { enqueueJobStatement } from "../jobs/store";
+import "../jobs/handlers/notification"; // 配送job（notification.deliver）handlerの登録（Cron/Queueと同じ登録点。T051）
 import { canonicalJson, canonicalRequestHash, sha256Hex } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { requirePermission } from "./invitations";

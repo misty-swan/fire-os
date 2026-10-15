@@ -17697,7 +17697,8 @@
                                       "provider_accepted",
                                       "failed",
                                       "unknown",
-                                      "retry_wait"
+                                      "retry_wait",
+                                      "cancelled"
                                     ]
                                   },
                                   "attemptCount": {

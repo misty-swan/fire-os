@@ -6,6 +6,9 @@
 -- 承認（API-64）は①承認固定（bodyHash/audienceHash/version一致。不一致は409）②draft→approved
 -- ③配送jobを1本だけ同batch登録（dedupe_key=`${unitId}|notification.deliver|<通知ID>|<承認時の版>`）まで。
 -- deliveries行の生成・provider呼出し・approved→dispatching遷移はT051の配送handlerが行う（docs/16 T050裁定）。
+-- T051（2026-10-15）: delivery_key=`${通知ID}|${recipientId}|${channel}`の固定キー・attempt_count=1で行を生成。
+-- 配送statusのCHECKにcancelled（未送分取消。docs/11 pending→cancelledのみ）を追加（T050で作成したCHECKを
+-- リリース前に拡張。0014への後追い追加と同じ流儀。docs/16 T051に記録）。
 
 -- 通知承認root（docs/04:139。root可変表＝docs/04 §1の共通列付き）
 CREATE TABLE notifications (
@@ -88,7 +91,10 @@ CREATE TABLE notification_deliveries (
   -- 行は最初の送信試行で作り、current行のattempt_countを増分する（docs/04「current行のattempt_count増分」）。
   -- 各試行はnotification_eventsへ追記する（T051）
   attempt_count INTEGER NOT NULL CHECK (attempt_count >= 1),
-  status TEXT NOT NULL CHECK (status IN ('pending', 'sending', 'provider_accepted', 'failed', 'unknown', 'retry_wait')),
+  -- docs/11 配送（T051でcancelledを追加）: pending→sending→provider_accepted/failed/unknown、
+  -- failed/unknown→retry_wait→sending、pending→cancelled（未送分取消のみ。送信済みを未送へ戻さない。
+  -- 遷移表はsrc/shared/states.ts deliveryTransitions）
+  status TEXT NOT NULL CHECK (status IN ('pending', 'sending', 'provider_accepted', 'failed', 'unknown', 'retry_wait', 'cancelled')),
   provider_id TEXT CHECK (provider_id IS NULL OR length(provider_id) BETWEEN 1 AND 200),
   -- 短いコードのみ（内部の例外文・宛先を載せない。jobs.error_codeと同じ方針）
   last_error_code TEXT CHECK (last_error_code IS NULL OR length(last_error_code) BETWEEN 1 AND 100),
