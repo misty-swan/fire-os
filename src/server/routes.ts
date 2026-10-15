@@ -15,6 +15,7 @@ import { registerFacilityListRoutes } from "./routes/facility-list";
 import { registerImportPreviewRoutes } from "./routes/import-preview";
 import { registerImportCommitRoutes, registerFacilityExportRoutes } from "./routes/import-commit";
 import { registerAssetRoutes } from "./routes/assets";
+import { registerInspectionScheduleRoutes } from "./routes/inspection-schedules";
 import { registerInspectionTemplateRoutes } from "./routes/inspection-templates";
 import { registerFacilityInspectionRoutes } from "./routes/facility-inspections";
 import { registerAssetInspectionRoutes } from "./routes/asset-inspections";
@@ -51,6 +52,9 @@ export function registerRoutes(app: ApiApp): void {
   registerFacilityListRoutes(app);
   registerImportPreviewRoutes(app);
   registerAssetRoutes(app);
+  // PUT /assets/:type/:id/inspection-schedule（API-56）は /assets/:type/:id（API-51）とpathが重なるため
+  // asset routesの後に登録する（methodが異なるため照合順の影響はない。docs/05 API-56）
+  registerInspectionScheduleRoutes(app);
   registerInspectionTemplateRoutes(app);
   registerFacilityInspectionRoutes(app);
   registerAssetInspectionRoutes(app);

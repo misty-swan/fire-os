@@ -12,6 +12,13 @@ export const incidentKinds = ["simulation", "training", "actual_record"] as cons
 export const mobilizationStates = ["unconfirmed", "unavailable", "mobilizing", "arrived", "returned"] as const;
 /** docs/04:100 resource_usages。cancelledは終端（行は残り、集計から外れる。docs/11 §3） */
 export const resourceUsageStates = ["active", "cancelled"] as const;
+/**
+ * 車両・資機材のstatus（docs/11 §2の暫定扱い→T048で列挙。UI候補どおり 運用/在庫/修繕中/廃止）。
+ * DBのCHECKはSQLiteが既存表へのALTER ADD CHECKを提供しないため追加せず、変更入力（API-48/50）で
+ * 未知値を400にする。廃止の二重表現の正はarchived_at（サーバー側の廃止済み判定・超過検出のskipは
+ * archived_at IS NOT NULL OR status='廃止' の両建て）、status='廃止'はUI/API値＝docs/14 D24。
+ */
+export const assetStatuses = ["運用", "在庫", "修繕中", "廃止"] as const;
 /** docs/11 のAI処理ジョブ状態に、汎用ジョブ(T006)として stale(元版が変わり結果が使えない)を追加。 */
 export const jobStates = ["queued", "running", "succeeded", "retry_wait", "manual_review", "cancelled", "stale"] as const;
 export const aiProposalStates = ["pending", "approved", "approved_with_edit", "rejected", "stale"] as const;

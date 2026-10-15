@@ -1,6 +1,7 @@
 import { Dashboard, DashboardMetric, DashboardNextActivity } from "../../shared/contracts/operations";
 import { activityConditions, queryActivities } from "../activities/query";
 import { resolvePrincipal } from "../auth/principal";
+import { BUSINESS_TIMEZONE, businessDateIn, overdueAssetCondition } from "../jobs/handlers/inspection-due";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
 import { requirePermission } from "./invitations";
 import { attendanceResponses } from "../../shared/states";
@@ -19,7 +20,10 @@ import { attendanceResponses } from "../../shared/states";
  *   （activity_attendance.response != 'unanswered'。取り下げ行は未回答扱い。docs/11「未定と未回答は区別」）が無い」
  *   を加えたもの（T036の方式）。hrefは API-05 ?unanswered=true&from=&status=scheduled
  * - 確認待ち異常: issues.status='reported'（docs/03 SCR-07「未確認（確認待ち）」の語彙。確認中/対応中/対応実施は含めない）
- * - 点検期限: inspection_schedules は T048（PH4）で作成のため**未接続**（connected=false。0件と区別する）
+ * - 点検期限（T048で接続）: 期限超過の資産点検scheduleの件数（JST暦日で next_due_date < 今日。docs/14 D06）。
+ *   facilityはAPI-56の対象外（/assets配下はvehicle/equipmentのみ）のためcount対象外。廃止資産は除外
+ *   （docs/14 D24の両建て）。hrefはAPI-18/19に`due=overdue`を付けた一覧（/app/assets?due=overdue）で、
+ *   **件数は一覧（API-18＋API-19）と同じoverdueAssetConditionで数える**ため必ず一致する
  * - 通知・自分のタスク: API-67/API-68 は PH4 のため**未接続**（connected=false。docs/16 T047「0件と未実装を混同しない」）
  *
  * period は DASH-02（API-52、PH4）の期間集計用の予約で、T047では語彙が定まらないため値を受けない（指定は400）。
@@ -82,6 +86,14 @@ export function registerDashboardRoutes(app: ApiApp): void {
         .first<{ n: number }>()
     )?.n ?? 0;
 
+    // 点検期限（T048）: 期限超過の資産点検scheduleの件数（JST暦日基準。docs/14 D06）。
+    // 車両と資機材の2つの資産一覧の和（対象は1資産に1つなので二重計上はない）。
+    // facilityはAPI-56の対象外のため含めない。API-18/19のdue=overdueと同じoverdueAssetCondition
+    const todayJst = businessDateIn(BUSINESS_TIMEZONE, now);
+    const inspectionDueCount =
+      (await countOverdueAssets(c, p.unitId, "vehicles", todayJst)) +
+      (await countOverdueAssets(c, p.unitId, "equipment", todayJst));
+
     // hrefは一覧画面がそのまま受けるfilterクエリ（T039の活動一覧・T034の点検管理と同じURL）
     const nextActivity = DashboardNextActivity.parse({
       count: upcomingCount, href: `/app/activities?status=scheduled&from=${encodeURIComponent(now)}`, connected: true,
@@ -96,8 +108,10 @@ export function registerDashboardRoutes(app: ApiApp): void {
         href: `/app/activities?status=scheduled&from=${encodeURIComponent(now)}&unanswered=true${me ? `&memberId=${me}` : ""}`,
       },
       openIssues: DashboardMetric.parse({ count: openIssueCount, href: "/app/issues?status=reported", connected: true }),
-      // 未接続（点検期限=T048、通知・自分のタスク=PH4）。0件ではなく「未実装である」ことを画面で示す
-      inspectionDue: DashboardMetric.parse({ count: 0, href: null, connected: false }),
+      // 点検期限（T048で接続）。超過資産の一覧（/app/assets。API-18/19のdue=overdueをURLで受ける）
+      inspectionDue: DashboardMetric.parse({
+        count: inspectionDueCount, href: "/app/assets?due=overdue", connected: true,
+      }),
       notifications: DashboardMetric.parse({ count: 0, href: null, connected: false }),
       myTasks: DashboardMetric.parse({ count: 0, href: null, connected: false }),
     });
@@ -113,6 +127,18 @@ async function countActivities(
   const { where, binds } = activityConditions(filter, viewerMemberId ?? null);
   const row = await c.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM activities a WHERE a.unit_id = ?${where.length ? " AND " + where.join(" AND ") : ""}`,
+  ).bind(unitId, ...binds).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/**
+ * 期限超過の現役資産の件数（T048）。一覧（API-18/19のdue=overdue）と**同じ関数**（overdueAssetCondition）で
+ * 数えるため、inspectionDueの件数とドリルダウン先一覧の件数が必ず一致する（T047の数値＝一覧件数と同じ方式）
+ */
+async function countOverdueAssets(c: ApiContext, unitId: string, table: "vehicles" | "equipment", todayJst: string): Promise<number> {
+  const { where, binds } = overdueAssetCondition(table, todayJst);
+  const row = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM ${table} WHERE unit_id = ? AND ${where}`,
   ).bind(unitId, ...binds).first<{ n: number }>();
   return row?.n ?? 0;
 }

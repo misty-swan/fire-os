@@ -1,5 +1,6 @@
 import { Equipment, Vehicle, type AssetDetailDto } from "../../shared/contracts/assets";
 import { resolvePrincipal } from "../auth/principal";
+import { businessDateIn, isOverdue, overdueAssetCondition, BUSINESS_TIMEZONE } from "../jobs/handlers/inspection-due";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
@@ -234,6 +235,13 @@ export function registerAssetRoutes(app: ApiApp): void {
       }
       if (query.status) { where.push("status = ?"); binds.push(query.status); }
       if (storageFilter) { where.push("storage_note LIKE ? ESCAPE '\\'"); binds.push(`%${likeEscape(storageFilter)}%`); }
+      // due=overdue（T048）: 点検期限が超過している現役資産。ホームの件数（API-28 inspectionDue）と
+      // **同じ条件関数**（overdueAssetCondition）を使い、数値と一覧件数の不一致を作らない
+      if (query.due === "overdue") {
+        const overdue = overdueAssetCondition(table, businessDateIn(BUSINESS_TIMEZONE, new Date().toISOString()));
+        where.push(overdue.where);
+        binds.push(...overdue.binds);
+      }
       if (query.cursor) {
         const [code, id] = decodeCursor(query.cursor);
         where.push("(asset_code > ? OR (asset_code = ? AND id > ?))");
@@ -266,8 +274,8 @@ export function registerAssetRoutes(app: ApiApp): void {
   listRoute("API-18", "vehicles", "vehicle");
   listRoute("API-19", "equipment", "equipment");
 
-  // --- API-51: 詳細（docs/05 API-51行どおりAssetDetail。使用履歴のcursor子PageはT042で接続。
-  // 点検/異常/点検期限の子Pageは未接続＝残作業（T030/T032/T048）。続きはmeta.nextCursor） ---
+  // --- API-51: 詳細（docs/05 API-51行どおりAssetDetail。使用履歴のcursor子PageはT042、
+  // 点検期限（inspectionDue）はT048で接続。点検/異常の子Pageは未接続＝残作業（T030の残/未割当）。続きはmeta.nextCursor） ---
   defineRoute(app, "API-51", async (c) => {
     const p = await resolvePrincipal(c);
     const { params, query } = await parseApiRequest(c, "API-51");
@@ -281,7 +289,8 @@ export function registerAssetRoutes(app: ApiApp): void {
         storageFacilityId: row.storage_facility_id, archivedAt: row.archived_at,
       });
       const usages = await usageChildPage(c, p.unitId, params.type, params.id, query.cursor, query.limit);
-      return ok(c, { asset, usages: usages.page }, { nextCursor: usages.nextCursor });
+      const inspectionDue = await assetInspectionDue(c, p.unitId, params.type, params.id);
+      return ok(c, { asset, usages: usages.page, inspectionDue }, { nextCursor: usages.nextCursor });
     }
     const row = await c.env.DB.prepare("SELECT * FROM equipment WHERE id = ?").bind(params.id)
       .first<EquipmentRow>().then((r) => (r && r.unit_id === p.unitId ? r : null));
@@ -293,8 +302,27 @@ export function registerAssetRoutes(app: ApiApp): void {
       archivedAt: row.archived_at,
     });
     const usages = await usageChildPage(c, p.unitId, params.type, params.id, query.cursor, query.limit);
-    return ok(c, { asset, usages: usages.page }, { nextCursor: usages.nextCursor });
+    const inspectionDue = await assetInspectionDue(c, p.unitId, params.type, params.id);
+    return ok(c, { asset, usages: usages.page, inspectionDue }, { nextCursor: usages.nextCursor });
   });
+}
+
+/**
+ * 資産詳細の点検期限（T048。docs/05 API-51「点検期限=T048」の接続）。
+ * scheduleの現在値（業務日）と超過判定（isOverdue。JST暦日。docs/14 D06）を返す。
+ * 未設定はnull/false（0件と未設定を混同しない。docs/16 T047の未接続扱いと同じ語彙）。
+ */
+async function assetInspectionDue(
+  c: ApiContext, unitId: string, type: "vehicle" | "equipment", id: string,
+): Promise<AssetDetailDto["inspectionDue"]> {
+  const schedule = await c.env.DB.prepare(
+    `SELECT next_due_date, timezone FROM inspection_schedules WHERE ${type === "vehicle" ? "vehicle_id" : "equipment_id"} = ? AND unit_id = ?`,
+  ).bind(id, unitId).first<{ next_due_date: string; timezone: string }>();
+  if (!schedule) return { nextDueDate: null, overdue: false };
+  return {
+    nextDueDate: schedule.next_due_date,
+    overdue: isOverdue(schedule.next_due_date, new Date().toISOString(), schedule.timezone),
+  };
 }
 
 /**

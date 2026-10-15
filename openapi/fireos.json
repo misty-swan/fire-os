@@ -6259,6 +6259,17 @@
             }
           },
           {
+            "name": "due",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "overdue"
+              ]
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -6619,6 +6630,17 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 200
+            }
+          },
+          {
+            "name": "due",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "overdue"
+              ]
             }
           },
           {
@@ -13135,8 +13157,12 @@
                   },
                   "status": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100
+                    "enum": [
+                      "運用",
+                      "在庫",
+                      "修繕中",
+                      "廃止"
+                    ]
                   },
                   "storageFacilityId": {
                     "anyOf": [
@@ -13352,8 +13378,12 @@
                   },
                   "status": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 100
+                    "enum": [
+                      "運用",
+                      "在庫",
+                      "修繕中",
+                      "廃止"
+                    ]
                   },
                   "storage": {
                     "type": "object",
@@ -13702,11 +13732,37 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "inspectionDue": {
+                          "type": "object",
+                          "properties": {
+                            "nextDueDate": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date",
+                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "overdue": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "nextDueDate",
+                            "overdue"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
                         "asset",
-                        "usages"
+                        "usages",
+                        "inspectionDue"
                       ],
                       "additionalProperties": false
                     },
@@ -14635,7 +14691,7 @@
         "summary": "API-56 PUT /assets/:type/:id/inspection-schedule",
         "x-permission": "PER-03",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "type",
@@ -14693,13 +14749,58 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "target": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "vehicle",
+                                "equipment"
+                              ]
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "nextDueDate": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        "intervalDays": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 3660
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "timezone": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "target",
+                        "nextDueDate",
+                        "intervalDays",
+                        "timezone"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -14732,13 +14833,58 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "target": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "vehicle",
+                                "equipment"
+                              ]
+                            },
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "nextDueDate": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        "intervalDays": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 3660
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "timezone": {
+                          "type": "string"
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "target",
+                        "nextDueDate",
+                        "intervalDays",
+                        "timezone"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -14863,8 +15009,7 @@
                   },
                   "timezone": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64
+                    "const": "Asia/Tokyo"
                   }
                 },
                 "required": [

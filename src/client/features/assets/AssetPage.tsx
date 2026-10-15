@@ -6,13 +6,16 @@ import { MutationStatus } from "../../components/MutationStatus";
 import { PageTitle } from "../../components/Page";
 import { Banner, Button, Card, Chip, Icon, TextField } from "../../components/ui";
 import { useMutation } from "../../useMutation";
+import { assetStatuses } from "../../../shared/states";
 import type { AssetDetailDto, EquipmentDto, VehicleDto } from "../../../shared/contracts/assets";
 
 /**
  * 車両・資機材の詳細（T026、SCR-14）。台帳種別・番号・数量単位・保管先・状態を明示し、
  * 点検/異常/使用履歴への導線を作る（docs/16 T026: 未入力と0を分ける。物理削除しない）。
- * 編集・廃止はAPI-48（車両）/API-50（資機材）。廃止は状態を「廃止」にする変更（docs/04）。
- * 使用履歴はAPI-51の子Page（T042で接続。cancelledも履歴として残る。docs/04:100）。書込は出動/活動側。
+ * 編集・廃止はAPI-48（車両）/API-50（資機材）。廃止は状態を「廃止」にする変更（docs/04。
+ * archived_atがサーバー側の正でstatus='廃止'はUI/API値＝docs/14 D24）。
+ * 使用履歴はAPI-51の子Page（T042で接続。cancelledも履歴として残る。docs/04:100）。
+ * 点検期限はAPI-51のinspectionDue（T048で接続。超過はdocs/14 D06のJST暦日判定）。
  * ?from= があれば「元の記録に戻る」を出す（T044。出動/活動の使用履歴から来たときの相互導線。
  * operationIdだけでは元の記録を引けないため、遷移元をURLで受け取る。/app 配下だけを許す）。
  */
@@ -104,6 +107,18 @@ export function AssetPage() {
       {/* 導線: 点検履歴（T033の点検から作られる）。使用履歴は下のカード（T042でAPI-51の子Pageに接続） */}
       <Card className="flex flex-col gap-2" aria-label="履歴">
         <span className="text-[14px] font-bold">点検履歴</span>
+        {/* 点検期限（T048。API-51のinspectionDue。prototypeに専用指定が無いため共通部品・既存トークンで行表示） */}
+        <p className="flex flex-wrap items-center gap-2 text-[13px]">
+          <span className="text-ink-sub">次回点検期限</span>
+          {detail.inspectionDue.nextDueDate ? (
+            <>
+              <span className="font-mono text-[13px] font-semibold">{detail.inspectionDue.nextDueDate}</span>
+              {detail.inspectionDue.overdue && <Chip tone="alert">期限超過</Chip>}
+            </>
+          ) : (
+            <span className="text-ink-muted">未設定</span>
+          )}
+        </p>
         <p className="text-[13px] text-ink-sub">
           この{type === "vehicle" ? "車両" : "資機材"}の点検記録は、点検の保存後にここに表示されます。
         </p>
@@ -149,8 +164,8 @@ export function AssetPage() {
   );
 }
 
-/** 状態の候補（docs/11 §2の暫定扱い。自由な値も通るため、今の値が候補外ならその値も選べるようにする） */
-const STATUS_CANDIDATES = ["運用", "修繕中", "廃止", "在庫"] as const;
+/** 状態の候補（docs/11 §2。T048で列挙。サーバーが未知値を400にするため候補は列挙のみ） */
+const STATUS_CANDIDATES = assetStatuses;
 
 /** 編集フォーム（API-48車両 / API-50資機材）。保管先は施設か車両のどちらか一方（排他はサーバー422） */
 function AssetEditForm({ type, asset, onSaved }: { type: "vehicle" | "equipment"; asset: VehicleDto | EquipmentDto; onSaved: () => void }) {
@@ -206,7 +221,8 @@ function AssetEditForm({ type, asset, onSaved }: { type: "vehicle" | "equipment"
         body: {
           version: asset.version,
           ...(name.trim() !== asset.name ? { name: name.trim() } : {}),
-          ...(status.trim() !== asset.status ? { status: status.trim() } : {}),
+          // statusは列挙のみ（T048。ボタンの候補はassetStatuses。旧データで列挙外の値が入っている場合は変更時に選び直す）
+          ...(status.trim() !== asset.status ? { status: status.trim() as (typeof assetStatuses)[number] } : {}),
           ...storageBody,
         },
       });
@@ -233,7 +249,7 @@ function AssetEditForm({ type, asset, onSaved }: { type: "vehicle" | "equipment"
       body: {
         version: asset.version,
         ...(name.trim() !== current.name ? { name: name.trim() } : {}),
-        ...(status.trim() !== current.status ? { status: status.trim() } : {}),
+        ...(status.trim() !== current.status ? { status: status.trim() as (typeof assetStatuses)[number] } : {}),
         ...(Number(quantity) !== current.quantity ? { quantity: quantity === "" ? 0 : Number(quantity) } : {}),
         ...(quantityUnit.trim() !== current.quantityUnit ? { quantityUnit: quantityUnit.trim() || "本" } : {}),
         ...(nextStorage && storageChanged ? { storage: nextStorage } : {}),
@@ -250,10 +266,7 @@ function AssetEditForm({ type, asset, onSaved }: { type: "vehicle" | "equipment"
     }
   };
 
-  const statusChoices = [
-    ...STATUS_CANDIDATES,
-    ...(STATUS_CANDIDATES.includes(status as (typeof STATUS_CANDIDATES)[number]) ? [] : [status]),
-  ];
+  const statusChoices: readonly string[] = STATUS_CANDIDATES;
 
   return (
     <Card className="flex flex-col gap-3" aria-label="台帳の編集">

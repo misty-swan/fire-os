@@ -5,7 +5,7 @@ import {
 } from "./common";
 import { inspectionShape } from "./gis";
 import { ResourceUsageRow } from "./operations";
-import { attachmentStates, issueStates } from "../states";
+import { attachmentStates, assetStatuses, issueStates } from "../states";
 
 export const attachmentTargetTypes = [
   "facility", "activity", "vehicle", "equipment", "inspection", "issue", "announcement", "report_version", "document",
@@ -19,7 +19,7 @@ export const UploadIntent = obj({
 export const UploadAttempt = obj({ id: Id, sha256: Sha256, size: z.number().int().min(1), version: z.number().int().min(1) });
 export const AttachmentDraft = obj({ id: Id, version: z.number().int().min(1), expiresAt: z.iso.datetime() });
 
-/** 車両（docs/04 §3.2）。状態は暫定の自由文字（docs/11 §2の暫定扱い。区分はD15の承認待ち） */
+/** 車両（docs/04 §3.2）。statusはT048で列挙（docs/11 §2。変更入力API-48/50は未知値400。DBのCHECKはdocs/14 D24） */
 export const Vehicle = obj({
   id: Id, version: Version, assetCode: ShortText, name: ShortText, status: ShortText,
   storageFacilityId: Id.nullable(), archivedAt: z.iso.datetime().nullable(),
@@ -35,15 +35,37 @@ export const Equipment = obj({
 export type EquipmentDto = z.infer<typeof Equipment>;
 
 /**
- * 資産の詳細（docs/05 API-51行どおりAssetDetail。T042で使用履歴のcursor子Pageを接続）。
- * 点検/異常/点検期限の子Pageは未接続＝残作業（T030/T032/T048）。続きはmeta.nextCursor
+ * 資産の詳細（docs/05 API-51行どおりAssetDetail。T042で使用履歴のcursor子Pageを接続、
+ * T048で点検期限（inspectionDue。scheduleの現在値＋超過判定）を接続。
+ * 点検/異常の子Pageは未接続＝残作業（点検履歴=T030の残、異常=接続タスク未割当）。続きはmeta.nextCursor
  */
+export const AssetInspectionDue = obj({
+  /** 点検scheduleの現在値（業務日 YYYY-MM-DD）。未設定はnull（0件と未設定を混同しない） */
+  nextDueDate: BusinessDate.nullable(),
+  /** JST暦日で期限を過ぎているか（docs/14 D06。期限当日23:59は未超過、翌日00:00で超過） */
+  overdue: z.boolean(),
+});
 export const AssetDetail = obj({
   asset: z.union([Vehicle, Equipment]),
   /** この資産の使用履歴（docs/04:100。cancelledも行として残る。operationIdで元の活動/出動を辿れる） */
   usages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
+  /** 点検期限（T048。API-56で設定したscheduleの現在値＋超過判定） */
+  inspectionDue: AssetInspectionDue,
 });
 export type AssetDetailDto = z.infer<typeof AssetDetail>;
+
+/**
+ * 点検期限のschedule（docs/04:119。対象一つ、周期正、期限はAsia/Tokyo日付=D06）。
+ * T048でprovisionalから厳格化。facilityはAPI-56の対象外（/assets配下はvehicle/equipmentのみ）
+ */
+export const InspectionSchedule = obj({
+  id: Id, version: Version,
+  target: AssetTarget,
+  nextDueDate: BusinessDate,
+  intervalDays: z.number().int().min(1).max(3660).nullable(),
+  timezone: z.string(),
+});
+export type InspectionScheduleDto = z.infer<typeof InspectionSchedule>;
 
 /** 応答へ出す添付。R2鍵(staging/ready)・tokenのhashは内部値なので含めない */
 export const Attachment = obj({
@@ -106,12 +128,14 @@ export const assetsApis = {
   }),
   "API-18": defineApi({
     method: "GET", path: "/vehicles", permission: "PER-01", kind: "list", success: [200],
-    request: obj({ query: listQuery({ q: ShortText.optional(), status: ShortText.optional() }) }),
+    // due=overdue（T048）は点検期限が超過している現役資産（docs/14 D24の両建てで廃止を除く）。
+    // ホームのinspectionDue件数と同じWHERE（src/server/jobs/handlers/inspection-due.ts overdueAssetCondition）
+    request: obj({ query: listQuery({ q: ShortText.optional(), status: ShortText.optional(), due: z.enum(["overdue"]).optional() }) }),
     response: Page(provisionalDto()), provisional: true,
   }),
   "API-19": defineApi({
     method: "GET", path: "/equipment", permission: "PER-01", kind: "list", success: [200],
-    request: obj({ query: listQuery({ q: ShortText.optional(), status: ShortText.optional(), storage: ShortText.optional() }) }),
+    request: obj({ query: listQuery({ q: ShortText.optional(), status: ShortText.optional(), storage: ShortText.optional(), due: z.enum(["overdue"]).optional() }) }),
     response: Page(provisionalDto()), provisional: true,
   }),
   "API-20": defineApi({
@@ -142,7 +166,9 @@ export const assetsApis = {
     request: obj({
       params: P_ID,
       body: obj({
-        version: Version, assetCode: Code100.optional(), name: ShortText.optional(), status: Code100.optional(),
+        version: Version, assetCode: Code100.optional(), name: ShortText.optional(),
+        // statusはT048で列挙（docs/11 §2。運用/在庫/修繕中/廃止。未知値は400。DBのCHECKはdocs/14 D24）
+        status: z.enum(assetStatuses).optional(),
         storageFacilityId: Id.nullable().optional(),
       }),
       ...IDEM,
@@ -163,7 +189,7 @@ export const assetsApis = {
       params: P_ID,
       body: obj({
         version: Version, assetCode: Code100.optional(), name: ShortText.optional(), quantity: NonNegative.optional(),
-        quantityUnit: Code50.optional(), status: Code100.optional(), storage: storage.optional(),
+        quantityUnit: Code50.optional(), status: z.enum(assetStatuses).optional(), storage: storage.optional(),
       }),
       ...IDEM,
     }),
@@ -182,11 +208,13 @@ export const assetsApis = {
       params: obj({ type: z.enum(["vehicle", "equipment"]), id: Id }),
       body: obj({
         version: VersionOrZero, nextDueDate: BusinessDate, intervalDays: z.number().int().min(1).max(3660).optional(),
-        timezone: z.string().min(1).max(64),
+        // 業務日のタイムゾーンはD06でAsia/Tokyo固定（docs/04:119「期限はAsia/Tokyo日付」。他は400）
+        timezone: z.literal("Asia/Tokyo"),
       }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    // T048でdocs/04 inspection_schedulesどおりに厳格化（provisionalから変更）
+    response: InspectionSchedule,
   }),
   "API-94": defineApi({
     method: "GET", path: "/inspection-templates", permission: "PER-04", kind: "list", success: [200],

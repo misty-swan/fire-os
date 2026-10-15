@@ -123,7 +123,7 @@ describe("ホームの指標と同じ条件の一覧への遷移 (T047)", () => 
     await transition(i2, 2, "closed");
     await transition(i3, 1, "under_review");
 
-    // --- 点検期限はseedしない（裁定1: inspection_schedulesはT048。未接続と0件を区別する） ---
+    // 点検期限はseedしない（この試験では0件。接続済みの値と一覧の一致は下のitで確認する）
 
     // --- ダッシュボード（API-28。本人=memberのscopeで集計） ---
     const res = await fx.client(member).request("GET", "/api/v1/dashboard");
@@ -174,8 +174,10 @@ describe("ホームの指標と同じ条件の一覧への遷移 (T047)", () => 
     const hiddenDataContributed = [b1Id, bi1].some((id) => drilldownJoined.includes(id));
     expect(hiddenDataContributed).toBe(false);
 
-    // 未接続の指標（点検期限=T048、通知/自分タスク=PH4）。0件ではなく未接続として返る
-    for (const m of [data.inspectionDue, data.notifications, data.myTasks]) {
+    // 接続済みの指標（点検期限=T048で接続。seedが無いので0件。一覧との一致は下のit）。
+    // 通知・自分のタスク（PH4）は0件ではなく未接続として返る
+    expect(data.inspectionDue).toMatchObject({ count: 0, href: "/app/assets?due=overdue", connected: true });
+    for (const m of [data.notifications, data.myTasks]) {
       expect(m.connected).toBe(false);
       expect(m.href).toBeNull();
     }
@@ -195,5 +197,72 @@ describe("ホームの指標と同じ条件の一覧への遷移 (T047)", () => 
 
     // 停止された利用者は主体を引けない（401。scope以前の認可前置）
     expect((await fx.client(a.people.suspended).request("GET", "/api/v1/dashboard")).status).toBe(401);
+  });
+
+  it("inspection_due_metric_matches_overdue_asset_lists (T048)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin; // 車両・資機材・期限の設定（PER-03）
+    const member = a.people.member; // ダッシュボードと一覧の主体（PER-01）
+    const b = fx.units.b;
+
+    // 今日のJST暦日（試験側で独立に計算。docs/14 D06の業務日）
+    const todayJst = new Intl.DateTimeFormat("en-ca", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const shift = (n: number) => new Date(new Date(`${todayJst}T00:00:00.000Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);
+    const mkVehicle = async (code: string) => {
+      const res = await fx.client(admin).request("POST", "/api/v1/vehicles", { assetCode: code, name: `架空車両 ${code}`, status: "運用" }, idem());
+      expect(res.status).toBe(201);
+      return ((await json(res)).data! as { id: string }).id;
+    };
+    const putSchedule = async (type: "vehicle" | "equipment", id: string, nextDueDate: string, client: TestClient = fx.client(admin)) => {
+      const res = await client.request("PUT", `/api/v1/assets/${type}/${id}/inspection-schedule`, {
+        version: 0, nextDueDate, timezone: "Asia/Tokyo",
+      }, idem());
+      expect(res.status).toBe(201);
+    };
+
+    // seed: 超過車両／期限当日（未超過）／超過した廃止車両（対象外）／超過資機材／期限なし資機材／別分団の超過車両
+    const overdueVehicle = await mkVehicle("DASH-DUE-V1");
+    const dueTodayVehicle = await mkVehicle("DASH-DUE-V2");
+    const retiredVehicle = await mkVehicle("DASH-DUE-V3");
+    const equipmentRes = await fx.client(admin).request("POST", "/api/v1/equipment", { assetCode: "DASH-DUE-E1", name: "架空機材 DASH-DUE-E1", quantity: 1, quantityUnit: "本", storage: { note: "詰所" } }, idem());
+    const overdueEquipment = ((await json(equipmentRes)).data! as { id: string }).id;
+    const plainEquipmentRes = await fx.client(admin).request("POST", "/api/v1/equipment", { assetCode: "DASH-DUE-E2", name: "架空機材 DASH-DUE-E2", quantity: 1, quantityUnit: "本", storage: { note: "詰所" } }, idem());
+    const plainEquipment = ((await json(plainEquipmentRes)).data! as { id: string }).id;
+    await putSchedule("vehicle", overdueVehicle, shift(-3));
+    await putSchedule("vehicle", dueTodayVehicle, todayJst); // 期限当日23:59までは未超過（docs/14 D06）
+    await putSchedule("vehicle", retiredVehicle, shift(-5));
+    await putSchedule("equipment", overdueEquipment, shift(-1));
+    const bVehicle = await (async () => {
+      const res = await fx.client(b.people.admin).request("POST", "/api/v1/vehicles", { assetCode: "DASH-DUE-B1", name: "別分団の車両", status: "運用" }, idem());
+      expect(res.status).toBe(201);
+      return ((await json(res)).data! as { id: string }).id;
+    })();
+    await putSchedule("vehicle", bVehicle, shift(-2), fx.client(b.people.admin));
+    const retire = await fx.client(admin).request("PATCH", `/api/v1/vehicles/${retiredVehicle}`, { version: 1, status: "廃止" }, idem());
+    expect(retire.status).toBe(200);
+
+    // ホームの点検期限＝超過資産（車両＋資機材）の件数。hrefはその一覧（/app/assets?due=overdue）
+    const res = await fx.client(member).request("GET", "/api/v1/dashboard");
+    expect(res.status).toBe(200);
+    const data = (await json(res)).data! as unknown as DashboardData;
+    expect(data.inspectionDue.connected).toBe(true);
+    expect(data.inspectionDue.href).toBe("/app/assets?due=overdue");
+
+    // ドリルダウン先（API-18/19のdue=overdue）の件数の和と一致する（同じ条件関数で数えている）
+    const vs = await fx.client(member).request("GET", "/api/v1/vehicles?due=overdue&limit=200");
+    const es = await fx.client(member).request("GET", "/api/v1/equipment?due=overdue&limit=200");
+    expect(vs.status).toBe(200);
+    expect(es.status).toBe(200);
+    const ids = [
+      ...(((await json(vs)).data ?? []) as unknown as { id: string }[]),
+      ...(((await json(es)).data ?? []) as unknown as { id: string }[]),
+    ].map((r) => r.id);
+    expect(data.inspectionDue.count).toBe(ids.length);
+    // 超過は「超過車両＋超過資機材」の2件だけ（一覧は車両→資機材の順）
+    expect(ids).toEqual([overdueVehicle, overdueEquipment]);
+    // 期限当日は未超過、廃止・別分団・期限なしは入らない
+    expect(ids).not.toContain(dueTodayVehicle);
+    expect(ids).not.toContain(retiredVehicle);
+    expect(ids).not.toContain(plainEquipment);
   });
 });

@@ -4,9 +4,10 @@ import { BASE, acceptInvitationViaUi, adminApiData, apiHeaders, inviteNewMember,
 /**
  * ホーム（SCR-02）の指標とドリルダウン（T047、DASH-01/AT-DASH-01）。
  * タイルの数値と遷移先一覧の件数が同じ条件で一致することをUIで確認する:
- * 次回予定のダイヤル→これからの予定の一覧、本人未回答→?unanswered=trueの一覧、確認待ちの異常→点検管理?status=reported。
+ * 次回予定のダイヤル→これからの予定の一覧、本人未回答→?unanswered=trueの一覧、確認待ちの異常→点検管理?status=reported、
+ * 点検期限（T048で接続）→/app/assets?due=overdue（車両＋資機材の件数の和）。
  * 期待値は直前に本人のセッションでAPI-28を読んで取る（他の試験が同じunitにseedしても成立する形）。
- * 点検期限・通知・自分のタスクは未接続（T048/PH4）で、0件ではなく未接続の表示になる。seedと検証読みだけAPI。
+ * 通知・自分のタスクは未接続（PH4）で、0件ではなく未接続の表示になる。seedと検証読みだけAPI。
  */
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -81,6 +82,7 @@ test("home_metrics_drill_down_to_matching_lists", async ({ browser, request }, t
       nextActivity: { count: number; title: string | null };
       myUnanswered: { count: number };
       openIssues: { count: number };
+      inspectionDue: { count: number };
     };
   }).data;
   expect(dash.nextActivity.title).toBeTruthy();
@@ -125,11 +127,28 @@ test("home_metrics_drill_down_to_matching_lists", async ({ browser, request }, t
   await page.getByRole("link", { name: new RegExp(`秋季火災予防運動のお知らせ ${tag}`) }).click();
   await expect(page).toHaveURL(new RegExp(`/app/announcements/${notice.data.data.id}$`));
 
-  // --- 未接続の指標（点検期限=T048、通知・自分のタスク=PH4）は0件ではなく未接続と分かる表示 ---
+  // --- 未接続の指標（通知・自分のタスク=PH4）は0件ではなく未接続と分かる表示。
+  // 点検期限（T048で接続）は数値と一覧へのリンク（/app/assets?due=overdue）になる ---
   await page.goto("/app");
-  for (const key of ["inspectionDue", "notifications", "myTasks"]) {
+  const dueTile = page.getByTestId("metric-inspectionDue");
+  await expect(dueTile).toBeVisible();
+  await expect(dueTile).toHaveAttribute("href", "/app/assets?due=overdue");
+  for (const key of ["notifications", "myTasks"]) {
     const tile = page.getByTestId(`metric-${key}`);
     await expect(tile.getByText("未接続")).toBeVisible();
     await expect(tile.getByText("0件")).toHaveCount(0);
   }
+
+  // --- 点検期限のタイル（T048）: 押すと資産一覧が超過資産の絞り込みで開き、車両＋資機材の件数の和が一致する ---
+  await dueTile.click();
+  await expect(page).toHaveURL(new RegExp(`/app/assets\\?due=overdue$`));
+  await expect(page.getByText("点検期限を超過した資産だけ表示中")).toBeVisible();
+  // 数値＝一覧件数（docs/05 API-28）。一覧側の件数は車両・資機材の2つのタブの和（読み込み中の「—」が消えるまで待つ）
+  const tabNumber = async (key: "vehicle" | "equipment") => {
+    const label = key === "vehicle" ? "車両" : "資機材";
+    const tab = page.getByTestId(`assets-tab-${key}`);
+    await expect(tab).toHaveText(new RegExp(`^${label}\\s*\\d+$`), { timeout: 15_000 });
+    return Number((await tab.textContent())!.match(/(\d+)$/)![1]);
+  };
+  expect((await tabNumber("vehicle")) + (await tabNumber("equipment"))).toBe(dash.inspectionDue.count);
 });

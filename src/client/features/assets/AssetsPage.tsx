@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { api } from "../../api";
 import { PageTitle } from "../../components/Page";
 import { Banner, Button, Card, Chip, Icon, TextField } from "../../components/ui";
@@ -8,6 +8,9 @@ import { useMutation } from "../../useMutation";
 /**
  * 車両・資機材（T026、SCR-13/14）。台帳種別・番号・数量単位・保管先・状態を明示し、
  * 点検/異常への導線を作る。未入力と0を分ける（docs/16 T026）。
+ * ?due=overdue（T048）は点検期限が超過した現役資産だけに絞る（API-18/19のdue=overdue。
+ * ホームの「点検期限」タイル（API-28 inspectionDue）と同じ条件・同じ件数になる）。
+ * filterはURLクエリにもつ（ActivitiesPage T039と同じ流儀。ホームからのドリルダウンで同じURLを開ける）。
  */
 
 interface VehicleRow {
@@ -23,6 +26,9 @@ interface EquipmentRow {
 
 export function AssetsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 点検期限の絞り込み（T048。ホームの「点検期限」からのドリルダウン。API-18/19のdue=overdue）
+  const dueOverdue = searchParams.get("due") === "overdue";
   const [tab, setTab] = useState<"vehicle" | "equipment">("vehicle");
   const [vehicles, setVehicles] = useState<VehicleRow[] | "loading" | "error">("loading");
   const [equipment, setEquipment] = useState<EquipmentRow[] | "loading" | "error">("loading");
@@ -36,7 +42,10 @@ export function AssetsPage() {
     void (async () => {
       try {
         // 検索はAPI-18/19のq（サーバー側で絞り込む。docs/03 SCR-13「検索」）
-        const query = appliedQ.trim() ? { q: appliedQ.trim() } : {};
+        const query = {
+          ...(appliedQ.trim() ? { q: appliedQ.trim() } : {}),
+          ...(dueOverdue ? { due: "overdue" as const } : {}),
+        };
         const v = (await api("API-18", { query })) as unknown as VehicleRow[];
         const e = (await api("API-19", { query })) as unknown as EquipmentRow[];
         if (alive) { setVehicles(v); setEquipment(e); }
@@ -47,7 +56,7 @@ export function AssetsPage() {
     return () => {
       alive = false;
     };
-  }, [reloadKey, appliedQ]);
+  }, [reloadKey, appliedQ, dueOverdue]);
 
   const rows = tab === "vehicle" ? vehicles : equipment;
 
@@ -82,6 +91,24 @@ export function AssetsPage() {
           </button>
         )}
       </form>
+
+      {/* 点検期限の絞り込み中（T048。ホームの「点検期限」からのドリルダウン）。解除で全件に戻る */}
+      {dueOverdue && (
+        <div className="flex items-center gap-2">
+          <Chip tone="attention">点検期限を超過した資産だけ表示中</Chip>
+          <button
+            type="button"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete("due");
+              setSearchParams(next, { replace: true });
+            }}
+            className="flex min-h-11 items-center text-[12px] font-bold text-ink-muted underline lg:min-h-9"
+          >
+            解除
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-1.5">
         {(["vehicle", "equipment"] as const).map((t) => (
