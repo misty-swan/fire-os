@@ -52,6 +52,9 @@ const TABLES = new Set([
   "inspection_templates", "inspection_template_versions",
   "inspection_series", "facility_inspections", "asset_inspections", "inspection_items",
   "issues", "issue_events",
+  // PH3: 活動（予定）
+  "operations", "activities", "activity_audience", "activity_events",
+  "activity_attendance", "attendance_events", "activity_results", "activity_result_revisions",
 ]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  Body, BusinessDate, Id, IdList, IdListMaybeEmpty, IDEM, Instant, LIMITS, NonNegative, P_ID, Page, Reason,
+  Body, BusinessDate, Id, IdList, IdListMaybeEmpty, IDEM, Instant, LIMITS, NonNegative, P_ID, Page, Reason, Reason2000,
   ShortText, Target, Title, Version, VersionOrZero, defineApi, listQuery, obj, provisionalDto,
 } from "./common";
 import {
@@ -23,6 +23,47 @@ const endNotBeforeStart = (v: { plannedStartsAt?: string; plannedEndsAt?: string
 const orderMessage = { message: "plannedEndsAt は plannedStartsAt 以降にしてください" };
 
 export const ActivityInput = obj(activityShape).refine(endNotBeforeStart, orderMessage);
+
+/**
+ * 予定（docs/04 activities）。時刻はDB保存と同じ正規形（UTCミリ秒Z）。
+ * operationIdは活動と出動で共用する出来事root（docs/04「共通出来事」）。取消でcountable=0（docs/11 §3）
+ */
+export const Activity = obj({
+  id: Id,
+  version: Version,
+  operationId: Id,
+  title: Title,
+  kind: ShortText,
+  plannedStartsAt: Instant,
+  plannedEndsAt: Instant.nullable(),
+  locationText: ShortText,
+  ownerMemberId: Id,
+  status: z.enum(activityStates),
+  responseDueAt: Instant.nullable(),
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type ActivityDto = z.infer<typeof Activity>;
+
+/** 出欠の可視行（docs/04 activity_attendance）。回答の変更履歴（attendance_events）とPUTはT036（API-08/41） */
+export const AttendanceView = obj({
+  id: Id,
+  version: Version,
+  memberId: Id,
+  response: z.enum(attendanceResponses),
+  respondedAt: Instant.nullable(),
+});
+
+/** 予定の詳細（API-07「可視出欠と現在実績を含む」）。実績の子Page（ActivityResult）はT037で接続する */
+export const ActivityDetail = obj({
+  ...Activity.shape,
+  /** 対象者はsnapshot（activity_audience）。名簿変更で母数を変えない（docs/04） */
+  audience: z.array(Id).max(LIMITS.arrayMax),
+  attendance: z.array(AttendanceView).max(LIMITS.arrayMax),
+  /** 現在実績。activity_resultsを作るAPI（API-09）はT037のため、接続までは常にnull */
+  result: z.null(),
+});
+export type ActivityDetailDto = z.infer<typeof ActivityDetail>;
 
 const actualShape = {
   content: Body,
@@ -63,11 +104,11 @@ export const operationsApis = {
   }),
   "API-06": defineApi({
     method: "POST", path: "/activities", permission: "PER-03", kind: "mutation", success: [201],
-    request: obj({ body: ActivityInput, ...IDEM }), response: provisionalDto(), provisional: true,
+    request: obj({ body: ActivityInput, ...IDEM }), response: Activity,
   }),
   "API-07": defineApi({
     method: "GET", path: "/activities/:id", permission: "PER-01", kind: "get", success: [200],
-    request: obj({ params: P_ID }), response: provisionalDto(), provisional: true,
+    request: obj({ params: P_ID }), response: ActivityDetail,
   }),
   "API-08": defineApi({
     method: "PUT", path: "/activities/:id/attendance/me", permission: "PER-02", kind: "mutation", success: [200, 201],
@@ -91,16 +132,18 @@ export const operationsApis = {
         ...obj(activityShape).partial().shape,
         version: Version,
         status: z.enum(activityStates).optional(),
-        reason: Reason.optional(),
+        // 開催状態の履歴（activity_events.reason、DBのCHECK ≤2000）に揃える。公開済の変更は理由必須（docs/11）
+        reason: Reason2000.optional(),
       }).refine(endNotBeforeStart, orderMessage),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    response: Activity,
   }),
   "API-40": defineApi({
     method: "POST", path: "/activities/:id/cancellation", permission: "PER-03", kind: "mutation", success: [200],
-    request: obj({ params: P_ID, body: obj({ version: Version, reason: Reason }), ...IDEM }),
-    response: provisionalDto(), provisional: true,
+    // 中止理由はactivity_events.reason（DBのCHECK ≤2000）に揃える。出欠は保持し、通知は別承認（docs/05）
+    request: obj({ params: P_ID, body: obj({ version: Version, reason: Reason2000 }), ...IDEM }),
+    response: Activity,
   }),
   "API-41": defineApi({
     method: "PUT", path: "/activities/:id/attendance/:memberId", permission: "PER-02代理許可", kind: "mutation", success: [200, 201],

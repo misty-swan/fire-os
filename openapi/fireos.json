@@ -1658,7 +1658,7 @@
         "summary": "API-06 POST /activities",
         "x-permission": "PER-03",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "idempotency-key",
@@ -1695,13 +1695,76 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
-                        }
+                        },
+                        "operationId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "plannedStartsAt": {},
+                        "plannedEndsAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "locationText": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "ownerMemberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "scheduled",
+                            "in_progress",
+                            "completed",
+                            "cancelled"
+                          ]
+                        },
+                        "responseDueAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {},
+                        "updatedAt": {}
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "operationId",
+                        "title",
+                        "kind",
+                        "plannedStartsAt",
+                        "plannedEndsAt",
+                        "locationText",
+                        "ownerMemberId",
+                        "status",
+                        "responseDueAt",
+                        "createdAt",
+                        "updatedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -1874,7 +1937,7 @@
         "summary": "API-07 GET /activities/:id",
         "x-permission": "PER-01",
         "x-kind": "get",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -1910,13 +1973,137 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "operationId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "plannedStartsAt": {},
+                        "plannedEndsAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "locationText": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "ownerMemberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "scheduled",
+                            "in_progress",
+                            "completed",
+                            "cancelled"
+                          ]
+                        },
+                        "responseDueAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {},
+                        "updatedAt": {},
+                        "audience": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          }
+                        },
+                        "attendance": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "version": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "memberId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "response": {
+                                "type": "string",
+                                "enum": [
+                                  "unanswered",
+                                  "attending",
+                                  "absent",
+                                  "undecided"
+                                ]
+                              },
+                              "respondedAt": {
+                                "anyOf": [
+                                  {},
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "version",
+                              "memberId",
+                              "response",
+                              "respondedAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "result": {
+                          "type": "null"
                         }
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "operationId",
+                        "title",
+                        "kind",
+                        "plannedStartsAt",
+                        "plannedEndsAt",
+                        "locationText",
+                        "ownerMemberId",
+                        "status",
+                        "responseDueAt",
+                        "createdAt",
+                        "updatedAt",
+                        "audience",
+                        "attendance",
+                        "result"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -2003,7 +2190,7 @@
         "summary": "API-39 PATCH /activities/:id",
         "x-permission": "PER-03",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -2049,13 +2236,76 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
-                        }
+                        },
+                        "operationId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "plannedStartsAt": {},
+                        "plannedEndsAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "locationText": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "ownerMemberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "scheduled",
+                            "in_progress",
+                            "completed",
+                            "cancelled"
+                          ]
+                        },
+                        "responseDueAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {},
+                        "updatedAt": {}
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "operationId",
+                        "title",
+                        "kind",
+                        "plannedStartsAt",
+                        "plannedEndsAt",
+                        "locationText",
+                        "ownerMemberId",
+                        "status",
+                        "responseDueAt",
+                        "createdAt",
+                        "updatedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -2224,7 +2474,7 @@
                   "reason": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 20000
+                    "maxLength": 2000
                   }
                 },
                 "required": [
@@ -9641,7 +9891,7 @@
         "summary": "API-40 POST /activities/:id/cancellation",
         "x-permission": "PER-03",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -9687,13 +9937,76 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
-                        }
+                        },
+                        "operationId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "plannedStartsAt": {},
+                        "plannedEndsAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "locationText": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "ownerMemberId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "scheduled",
+                            "in_progress",
+                            "completed",
+                            "cancelled"
+                          ]
+                        },
+                        "responseDueAt": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {},
+                        "updatedAt": {}
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "operationId",
+                        "title",
+                        "kind",
+                        "plannedStartsAt",
+                        "plannedEndsAt",
+                        "locationText",
+                        "ownerMemberId",
+                        "status",
+                        "responseDueAt",
+                        "createdAt",
+                        "updatedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -9809,7 +10122,7 @@
                   "reason": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 20000
+                    "maxLength": 2000
                   }
                 },
                 "required": [

@@ -6,7 +6,7 @@
 
 業務ベース`/api/v1`、同一originのHTTPS/JSON。API-36のみ認証base path。クライアントのunit/actor/roleを信用しない。成功`{data:DTO,meta:{requestId,nextCursor?,snapshotRevision?}}`、失敗`{error:{code,message,details:[{field,reason}]},meta:{requestId}}`。binary/CSV/stream/204はJSON envelope外。Inspection DTOは原本＋seriesId/seriesVersion＋明細/添付ID、Template DTOは項目schemaと承認版。その他DTOは04の同名モデルのcamelCase＋version＋10の許可列、Secret/内部token/R2キーを返さない。ResourceUsageListのPUTはoperation版をガードし全有効集合を更新、抜けた既存行はcancelled＋イベントで保持。全件編集権がなければ拒否する。Detailは親＋認可された子PageとnextCursorを返し、子一覧の件数を黙って切り捨てない。
 
-IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-MM-DD業務日を区別。未知JSON列・列挙外を拒否。文字上限案：件名200、note/body20,000、AI/RAG質問4,000文字、JSON要求256 KiB（binary別）、limit既定50/最大200、配列最大100。大きいCSV/多数対象はimport/job分割、D1 bound parameter上限100を越えない。値は負荷検証で固定するB案で機能上限の無断削減を意味しない。**列ごとにDBのCHECKより広い共通上限を使う場合、その列の入力だけDBに揃えて引き締める（PH2〜: 管理番号・識別名・出典・資産コード・状態100、数量単位50、位置確認/訂正/対応の理由2,000、点検明細の項目コード100。docs/04の各DDLと一致）。超過は400で拒否し、通ってからDBのCHECKで500にならないようにする。**
+IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-MM-DD業務日を区別。未知JSON列・列挙外を拒否。文字上限案：件名200、note/body20,000、AI/RAG質問4,000文字、JSON要求256 KiB（binary別）、limit既定50/最大200、配列最大100。大きいCSV/多数対象はimport/job分割、D1 bound parameter上限100を越えない。値は負荷検証で固定するB案で機能上限の無断削減を意味しない。**列ごとにDBのCHECKより広い共通上限を使う場合、その列の入力だけDBに揃えて引き締める（PH2〜: 管理番号・識別名・出典・資産コード・状態100、数量単位50、位置確認/訂正/対応の理由2,000、点検明細の項目コード100、開催の変更・中止の理由2,000（activity_events.reason。T035）。docs/04の各DDLと一致）。超過は400で拒否し、通ってからDBのCHECKで500にならないようにする。**
 
 | HTTP / code | 意味 |
 |---|---|
