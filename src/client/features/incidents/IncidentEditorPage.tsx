@@ -200,10 +200,19 @@ export function IncidentEditorPage() {
           <p className="text-[11px] text-ink-muted">1つの活動に関連付けられる出動記録は1件です。既に別の出動へ関連付いた活動は選べません（保存時に拒否されます）。</p>
         </div>
 
-        {/* 使用資産（任意。API-22のresourceUsages。出動と同じ保存で作られる） */}
+        {/* 使用資産（任意。API-22のresourceUsages。出動と同じ保存で作られる）。
+            行の追加・編集もページ側のtouchedに載せる（下書きモードは登録フォーム側のLeaveConfirmに従うため。
+            効かないと使用資産だけ入力して離れたとき、警告なしで入力が失われる） */}
         <div className="flex flex-col gap-2">
           <span className="text-[12px] font-bold text-ink-sub">使用資産（任意）</span>
-          <ResourceUsageEditor mode="draft" value={usages} onChange={setUsages} />
+          <ResourceUsageEditor
+            mode="draft"
+            value={usages}
+            onChange={(next) => {
+              setTouched(true);
+              setUsages(next);
+            }}
+          />
         </div>
 
         <FormErrors issues={errors} labels={{ occurredAt: "発生日時", summary: "概要" }} />

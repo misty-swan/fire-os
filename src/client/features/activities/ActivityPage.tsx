@@ -659,6 +659,7 @@ function ProxyAnswer({
     const r = await save.run({ params: { id: activityId, memberId }, body: { version, response: value, reason: reason.trim() } });
     if (r) {
       setOpen(false);
+      setResponse("参加"); // 保存済みは下書きではない。前回の回答値を残すと、開き直したときに離脱警告が誤って出る
       setReason("");
       setTouched(false);
       onSaved();

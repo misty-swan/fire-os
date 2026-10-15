@@ -158,3 +158,55 @@ test("incident_detail_traces_activity_vehicle_and_equipment", async ({ page, bro
   await expect(officerPage).toHaveURL(new RegExp(`/app/incidents/${incidentId}$`));
   await expect(officerPage.getByText("模擬").first()).toBeVisible();
 });
+
+test("incident_new_draft_usage_rows_are_guarded_by_leave_confirm", async ({ page, browser, request }, testInfo) => {
+  test.setTimeout(240_000);
+  const viewport = testInfo.project.use.viewport!;
+  const tag = crypto.randomUUID().slice(0, 6);
+
+  // --- seed: 幹部と車両。ここだけAPI（業務操作は以下すべてUI） ---
+  const officerName = `架空 幹部 ${tag}`;
+  const officerEmail = uniqueEmail("e2e-inc-u");
+  const officer = await inviteNewMember(request, officerName, officerEmail);
+  const vehicleRes = await adminApiData(request, "POST", "/api/v1/vehicles", {
+    assetCode: `E2E-VU-${tag}`, name: `ポンプ車 ${tag}`, status: "運用",
+  });
+  expect(vehicleRes.status).toBe(201);
+  const vehicleId = (vehicleRes.data.data as { id: string }).id;
+
+  const officerCtx = await newUserContext(browser, viewport);
+  const officerPage = await officerCtx.newPage();
+  await acceptInvitationViaUi(officerPage, officerEmail, officer.token, { mfa: false });
+  const rows = (
+    await adminApiData(request, "GET", "/api/v1/members?limit=200")
+  ).data.data as { id: string; version: number; account: { authzVersion: number } | null }[];
+  const officerRow = rows.find((r) => r.id === officer.memberId)!;
+  const roles = await adminApiData(request, "PUT", `/api/v1/members/${officer.memberId}/roles`, {
+    version: officerRow.version,
+    expectedAuthzVersion: officerRow.account?.authzVersion ?? 1,
+    roleCodes: ["officer"],
+    reason: "e2e: 幹部（PER-04保持）として出動記録を操作する",
+    scopes: [],
+  });
+  expect(roles.status).toBe(200);
+
+  // --- 1) 出動登録フォームで、使用資産の行だけ入力する（発生日時・概要など他の必須欄は触らない） ---
+  await officerPage.goto("/app/incidents/new");
+  await expect(officerPage.getByText("正式な指令").first()).toBeVisible();
+  const usageCard = officerPage.getByLabel("使用履歴の下書き");
+  await usageCard.getByRole("button", { name: "行を追加" }).click();
+  await usageCard.getByLabel("使用履歴 1行目の対象").selectOption(`vehicle:${vehicleId}`);
+  await usageCard.getByLabel("使用履歴 1行目の数量").fill("1");
+
+  // --- 2) 保存せずに戻ると、使用資産の下書きも離脱確認の対象（docs/03:78「既定=編集に戻る」） ---
+  await officerPage.getByRole("link", { name: "戻る", exact: true }).click();
+  const leaveDialog = officerPage.getByRole("dialog", { name: "保存されていない変更があります" });
+  await expect(leaveDialog).toBeVisible();
+  await leaveDialog.getByRole("button", { name: "編集に戻る" }).click();
+  await expect(usageCard.getByLabel("使用履歴 1行目の数量")).toHaveValue("1"); // 戻れば入力は保持される
+
+  // --- 3) 保存せずに移動するを選ぶと、実際に一覧へ離れる ---
+  await officerPage.getByRole("link", { name: "戻る", exact: true }).click();
+  await leaveDialog.getByRole("button", { name: "保存せずに移動する" }).click();
+  await expect(officerPage).toHaveURL(/\/app\/incidents$/);
+});

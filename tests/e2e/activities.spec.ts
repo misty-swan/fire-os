@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 import { acceptInvitationViaUi, adminApiData, inviteNewMember, newUserContext, uniqueEmail } from "./helpers";
 
@@ -149,4 +150,82 @@ test("planned_answer_and_actual_presence_have_separate_labels", async ({ page, b
   await officerPage.goto(activityUrl);
   await expect(officerPage.getByText(/参加 1/)).toBeVisible();
   await expect(officerPage.getByText(/未回答 1/)).toBeVisible();
+});
+
+test("proxy_answer_form_resets_after_save_and_leaves_without_warning", async ({ page, browser, request }, testInfo) => {
+  test.setTimeout(300_000);
+  const viewport = testInfo.project.use.viewport!;
+  const tag = crypto.randomUUID().slice(0, 6);
+
+  // --- seed: 幹部と団員。ここだけAPI（回答・保存は以下すべてUI） ---
+  const officerName = `架空 幹部 ${tag}`;
+  const memberName = `架空 団員 ${tag}`;
+  const officerEmail = uniqueEmail("e2e-act-p");
+  const memberEmail = uniqueEmail("e2e-act-q");
+  const officer = await inviteNewMember(request, officerName, officerEmail);
+  const member = await inviteNewMember(request, memberName, memberEmail);
+
+  const officerCtx = await newUserContext(browser, viewport);
+  const officerPage = await officerCtx.newPage();
+  await acceptInvitationViaUi(officerPage, officerEmail, officer.token, { mfa: false });
+  const memberCtx = await newUserContext(browser, viewport);
+  const memberPage = await memberCtx.newPage();
+  await acceptInvitationViaUi(memberPage, memberEmail, member.token, { mfa: false });
+
+  const rows = (
+    await adminApiData(request, "GET", "/api/v1/members?limit=200")
+  ).data.data as { id: string; version: number; account: { authzVersion: number } | null }[];
+  const officerRow = rows.find((r) => r.id === officer.memberId)!;
+  // 幹部役割と、団員への代理回答scope（docs/10 D05。entity_type='member'×PER-02）を一度に付ける
+  const roles = await adminApiData(request, "PUT", `/api/v1/members/${officer.memberId}/roles`, {
+    version: officerRow.version,
+    expectedAuthzVersion: officerRow.account?.authzVersion ?? 1,
+    roleCodes: ["officer"],
+    reason: "e2e: 幹部（PER-03/04保持）として予定と出欠を操作する",
+    scopes: [],
+  });
+  expect(roles.status).toBe(200);
+
+  // D05の承認済み担当（entity_type='member'×PER-02）は承認フローがまだ無く、API-37はmember対象にPER-06しか
+  // 許さない（src/server/routes/member-roles.ts SCOPE_ENTITIES）。単体試験（attendance.test.ts）と同じく、
+  // 業務操作に入る前のseedとして直接DBに入れる（webServerと同じ .wrangler/e2e を操作する。unit_idと
+  // created_byはSQLの中で団員・利用者から引く）
+  const now = new Date().toISOString();
+  execFileSync("npx", ["wrangler", "d1", "execute", "DB", "--local", "--persist-to", ".wrangler/e2e", "--command",
+    "INSERT INTO scope_assignments (id, unit_id, member_id, entity_type, entity_id, permissions, created_at, updated_at, created_by, actor_kind) " +
+    `SELECT '${crypto.randomUUID()}', m.unit_id, m.id, 'member', '${member.memberId}', '["PER-02"]', '${now}', '${now}', (SELECT user_id FROM members WHERE id = m.id), 'human' ` +
+    `FROM members m WHERE m.id = '${officer.memberId}'`], { stdio: "pipe" });
+
+  // --- 1) 幹部が予定を登録して公開し、団員を対象にする（既存のactivities試験と同じ流儀） ---
+  await officerPage.goto("/app/activities/new");
+  await officerPage.getByLabel("件名").fill(`出欠の代理 ${tag}`);
+  await officerPage.getByLabel("種別").selectOption("訓練");
+  await officerPage.getByLabel("開始日時").fill(localInput(7 * 864e5));
+  await officerPage.getByLabel("終了日時").fill(localInput(7 * 864e5 + 2 * 3600e3));
+  await officerPage.getByLabel("場所").fill("第三分団詰所・前庭");
+  await officerPage.getByLabel("回答期限").fill(localInput(2 * 864e5));
+  await officerPage.getByRole("checkbox", { name: new RegExp(memberName) }).check();
+  await officerPage.getByRole("button", { name: "登録する" }).click();
+  await expect(officerPage).toHaveURL(/\/app\/activities\/(?!new)[^/]+$/, { timeout: 15_000 });
+  const activityUrl = officerPage.url();
+
+  await officerPage.getByRole("button", { name: "予定を公開" }).click();
+  await expect(officerPage.getByText("あなたの出欠")).toBeVisible({ timeout: 15_000 });
+
+  // --- 2) 幹部が団員の代理で「不参加」＋理由で保存する（UI → API-41。D05の代理scope） ---
+  const memberRow = officerPage.getByRole("list", { name: "出欠の一覧" }).getByRole("listitem").filter({ hasText: memberName });
+  await memberRow.getByRole("button", { name: "代理で回答" }).click();
+  const proxyForm = officerPage.getByLabel(`${memberName}さんの代理回答`, { exact: true });
+  await proxyForm.getByLabel(`${memberName}さんの代理回答の内容`).selectOption("不参加");
+  await proxyForm.getByLabel("代理で回答する理由（必須）").fill("出張のため幹部が代理入力");
+  // フォーム下端のボタンはスマホでは固定ナビに半分隠れて当たり判定が安定しないためキーボードで保存
+  await proxyForm.getByRole("button", { name: "代理で回答を保存" }).focus();
+  await officerPage.keyboard.press("Enter");
+  await expect(memberRow.getByText("不参加", { exact: true })).toBeVisible({ timeout: 15_000 }); // 保存で一覧の行に反映される
+
+  // --- 3) 同じ対象者のフォームを開き直し、何も入力せずに離れる → 確認ダイアログは出ない（保存済みは下書きではない） ---
+  await memberRow.getByRole("button", { name: "代理で回答" }).click();
+  await officerPage.getByRole("link", { name: "戻る", exact: true }).click();
+  await expect(officerPage).toHaveURL(/\/app\/activities$/);
+  await expect(officerPage.getByRole("dialog", { name: "保存されていない変更があります" })).not.toBeVisible();
 });
