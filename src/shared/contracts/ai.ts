@@ -153,7 +153,7 @@ export const Citation = obj({
   section: ShortText.optional(),
   quotedSpan: obj({ start: z.number().int().min(0), end: z.number().int().min(0) }),
 });
-export const RagAnswer = obj({ answer: z.string(), citations: z.array(Citation), abstained: z.boolean() });
+export const RagAnswer = obj({ answer: z.string().min(1), citations: z.array(Citation), abstained: z.boolean() });
 
 // bodyの形を保つ（T002時点の z.ZodObject 単独指定はoutputをunknownへ潰すため、
 // API-29の実装（T053）でジェネリック化した。API-32/89も同じヘルパーを使う）

@@ -93,3 +93,56 @@ export const documentChunks = sqliteTable(
   },
   (t) => [index("idx_document_chunks_version_index").on(t.versionId, t.indexStatus)],
 );
+
+/**
+ * RAG回答ログ（docs/04:154「回答の再取得でもACL再検査。全文ログ保持D10/D12」。drizzle/0029_rag_answers.sql。T067）。
+ * 追記型（API-76は都度新行。UPDATE/DELETEしない）。status語彙は0029のCHECK（answered/abstained/withheld）
+ */
+export const ragAnswers = sqliteTable(
+  "rag_answers",
+  {
+    id: text("id").primaryKey(),
+    unitId: text("unit_id").notNull(),
+    /** 回答を依頼した団員（API-76の実行者） */
+    requesterMemberId: text("requester_member_id").notNull(),
+    /** 質問本文のSHA-256（生の質問本文は保存しない＝docs/16 T067裁定） */
+    queryHash: text("query_hash").notNull(),
+    /** 回答本文（引用付き回答または固定文言の保留応答） */
+    answer: text("answer").notNull(),
+    status: text("status", { enum: ["answered", "abstained", "withheld"] }).notNull(),
+    /** 要求したモデル（カタログ名。T053/T057と同じ方針） */
+    modelId: text("model_id").notNull(),
+    /** 引用元の版（重複除去の配列。根拠版） */
+    sourceVersions: text("source_versions").notNull(),
+    actorUserId: text("actor_user_id"),
+    actorKind: text("actor_kind", { enum: ["human", "system"] }).notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("idx_rag_answers_unit_created").on(t.unitId, t.createdAt, t.id),
+    index("idx_rag_answers_requester").on(t.unitId, t.requesterMemberId, t.id),
+  ],
+);
+
+/** RAG回答の引用（docs/04:155「両FK、版/ページ/原文を辿る引用」。drizzle/0029。T067。追記型） */
+export const ragCitations = sqliteTable(
+  "rag_citations",
+  {
+    id: text("id").primaryKey(),
+    unitId: text("unit_id").notNull(),
+    answerId: text("answer_id").notNull(),
+    chunkId: text("chunk_id").notNull(),
+    /** 引用された文字列そのもの（chunk.textの部分列。応答DTOのquotedSpan {start,end}の正本） */
+    quotedSpan: text("quoted_span").notNull(),
+    /** 引用時点の所在（chunk行の複製スナップショット） */
+    pageNo: integer("page_no"),
+    section: text("section"),
+    actorUserId: text("actor_user_id"),
+    actorKind: text("actor_kind", { enum: ["human", "system"] }).notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("idx_rag_citations_answer").on(t.unitId, t.answerId),
+    index("idx_rag_citations_chunk").on(t.unitId, t.chunkId),
+  ],
+);

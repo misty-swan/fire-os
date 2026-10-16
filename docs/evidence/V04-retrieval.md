@@ -124,3 +124,38 @@
 - **実データ量・実クエリ数でのrows read実測は未実施**: 固定dataset規模の概算はT065節どおり。T082（性能・D1クエリ費用）でEXPLAIN QUERY PLANとmeta.rows_readを確認する。
 - **検索品質の実測はT065の固定dataset値のまま**: 本番経路（SQL前置＋再検査つき）での再実測・略語0/10の改善（Vectorize対比）は「未実施手順」のとおり。trigramは3字以上の語のみ一致（2字語・資料に無い略語は拾えない＝正直な限界。T067の回答は略語質問で「確認できない」になり得る）。
 - **D1のbatch内`meta.changes`はFTS仮想表のDELETEと併用時に信頼できる計上にならない**（実測で発覚。removed数はbatch後のCOUNTで確定する実装にした＝document-index.ts。将来batchのchangesを Effect数に使う場合は単文で確認すること）。
+
+## T067 出典付きRAG回答（2026-10-16。実Cloudflare未接続・実AI未実施。機構の実装と決定的検証で完了）
+
+**選択backend専用コードの具体ファイル名**:
+
+| 役割 | ファイル | 内容 |
+|---|---|---|
+| 回答の本体 | `src/server/search/rag.ts`（answerRag・runRagLlm・validateRagResponse・buildRagMessages） | フロー: 質問→許可chunk検索（T066のcreateRetrievalPort＋SEARCH_CONFIG）→生成（最小化input＝検索chunk本文＋質問〔D12〕。非信頼本文はsystemに混ぜずuser側`<chunks>`へ＝docs/06 §1）→構造/引用span検証（**決定的**: `{"answer","citations":[{chunk,quote}]}`ちょうどのJSON契約で、quoteがchunk.textに**正規化なしの完全一致**するかindexOfで検査。不適合は限定retry〔1回〕→検証不可はabstained。検証済み出力だけを保存）→出力前の現ACL再検査（authorizedDocumentVersions on cited versionIds＝docs/10 §4の3層目）→保存（rag_answers＋rag_citationsを1つのD1 batch。query_hash=SHA-256のみで質問本文は保存しない）→応答。**引用元に1つでも失権した版があれば回答全体をwithheld**（本文が失権chunkに依存しないことを機械保証できないため。引用を落として残った根拠で出す方式は本文と引用の不一致＝根拠のない主張を残す危険があるため不採用＝docs/16 T067裁定）。LLM_MODELはT057と同じ暫定固定（`@cf/meta/llama-3.3-70b-instruct-fp8-fast`） |
+| route | `src/server/routes/rag.ts`（registerRagRoutes） | API-76の登録点（Idempotency-Key不要の読み取り専用POST＝docs/05 §2）。認可以下の本体はanswerRag |
+| fake AI（e2e用） | `src/server/ai/local-fake.ts` | TEST_AI_FAKE=1（localのみ）で、検索chunk本文から質問語〔3字以上〕を含む行をそのまま引用して並べる決定的RAG応答（引用はchunk本文の部分列にしかなり得ない＝捏造不能。chunkに質問語が無ければcitations空＝abstain）。**報告書生成のfake保留は変更しない**（応答形は従来どおり不適合→保留。docs/03 §1.1） |
+| 回帰試験 | `tests/rag.test.ts`（指定試験`answer_citations_remain_authorized_and_exact`） | 下表のとおり。固定dataset（T065のrag-holdout・sha256固定）＋決定的fake＋サーバー側決定的検証 |
+| 実AI評価 | `tests/live/rag-quality.test.ts` | 実Cloudflare（staging・実AI binding）で固定dataset 50問を実行する手順。環境変数が揃わなければ必ず失敗＝未実施を成功扱いにしない |
+
+### 実施したこと（workerd〔vitest workers pool・実D1エンジン〕での実測。指定試験 `answer_citations_remain_authorized_and_exact`）
+
+固定dataset（資料100×20頁・質問55件。T065と同一のsha256 `808631d6…`）を本番経路で検索可能な状態（chunks＋document_chunks_fts）へ投入し、決定的fakeで回答させた。ブリーフのassertionは全て断言済み:
+
+| 確認 | 結果 |
+|---|---|
+| **根拠ありケース**（exact 2＋exact 1〔団員〕＋paraphrase 1。期待出典はdatasetの人手ラベルからchunk解決）は期待出典付き回答をする | 合格: `citationMatchRate === 1`・`answerableResponsesWithExpectedSources === answerableCaseIds`（全問保留で見かけ上合格にしない） |
+| **引用spanが原文と完全一致**（正規化なし。DTOのoffset→chunk.text.slice→rag_citations.quoted_span→T064のresolveCitationSpanで頁テキストへ逆引きまで） | 合格（引用は所在〔pageNo〕も保持） |
+| **権限外の内容0**（別unit・非公開〔ACL allow admin/officer〕・draft版〔FTS行まで残して検索条件が落とすのを実測〕・注入文書の指示文・悪いfakeの捏造引用） | 合格: `unauthorizedContentCount === 0`・捏造語彙（50名/18時/【指示】）は全応答に現れない |
+| **根拠なし・別unit・非公開・draft版の質問はabstained**（引用0・「確認できない」固定文言・returned=false） | 合格: `noEvidence.abstained === true` |
+| **注入文は効果を持たない**（正fakeはchunk本文の引用のみ・悪いfake〔chunk外のquoteを返す〕はサーバー検証が破棄→abstained。検証前の捏造本文はどこにも保存しない＝unvalidatedJsonSaved=false） | 合格 |
+| **生成中撤回**（fakeの生成中に正解文書を撤回〔documents.status='withdrawn'。API-92と同じ現状態〕→出力前ACL再検査で失権） | 合格: `returned === false`（withheld。引用0。status='withheld'で保存） |
+| **AI無し環境はfail-closed**（503 DEPENDENCY_UNAVAILABLE。偽の回答を作らない） | 合格（answerRag直接・route経由の両方。route未接続なら404になるので接続確認も兼ねる） |
+| **保存**（status語彙 answered/abstained/withheld・model_id=要求カタログ名・query_hash=SHA-256〔質問本文は現れない〕・source_versions=根拠版・rag_citationsのchunk_id/quoted_span/page_no/section） | 合格（API-76は都度新行＝同一質問の再実行は複数行） |
+| maxSources | 合格（引用数の上限として動く） |
+
+### 限界・残手順（検証済みとして扱わない）
+
+- **実AIでの品質評価は未実施**: staging（実AI binding）で固定dataset 50問以上を実行し、citationMatchRate===1・漏えい0・捏造0・abstained率・usageを実測して本節へ記録する（`tests/live/rag-quality.test.ts`の手順。環境変数が無い状態では必ず失敗）。実AIの応答形（`{"response": …}`の契約・json_schema構造出力への対応）は**実測で初めて確定する前提のfail-closed実装**（契約外の応答は全て検証で破棄＝abstained。T057と同じ考え方）。
+- **RAG評価のai_evaluation_runs機構への追加は未実施**（docs/04:155のkind語彙拡張='rag'は実モデル出力が存在するようになってから＝V04。プリフライト裁定3。現状の開発閾値〔引用一致100%/漏えい0/捏造0〕は本節の固定dataset＋決定的検証と上表の試験断言で運用）。
+- **回答本文の有用性は未評価**: サーバーが機械的に保証するのは「引用が原文に存在すること」と「権限外の内容が現れないこと」まで。本文の文章品質・質問への適合性・引用の足りなさ（引用は最小の行単位）は実AI評価（上記）と人の確認に委ねる。fakeは「引用の並び」しか作らない（e2e用の決定的応答であり品質の模倣ではない）。
+- **略語質問は検索0件→abstained**（T065の正直な限界のまま。Vectorize対比の再評価合否基準はT065節のとおり）。2字語は一致しないため、T070の画面側の質問入力ガイドで「3字以上の語で質問する」運用を検討する。

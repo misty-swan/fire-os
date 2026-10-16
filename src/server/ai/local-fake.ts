@@ -13,14 +13,24 @@ import type { AppEnv } from "../env";
  *   fake由来の候補は画面・記録で実AIの候補と区別が付く（偽装しない）。
  * - 候補はあくまで人の承認待ち（pending）として保存されるだけで、このfake自体は業務を
  *   一切確定させない（docs/06 §1「AIは紫、決めるのは人」。確定はAPI-31の承認だけ）。
+ * - **RAG（T067・API-76）の決定的応答**（プリフライト裁定4。docs/16 T067）: 入力がRAGの
+ *   構造出力（response_formatのjson_schemaにcitationsを含む＝src/server/search/rag.tsの
+ *   RAG_JSON_SCHEMA）のとき、**検索結果のchunk本文から質問語を含む行をそのまま引用して並べる**
+ *   応答を返す。引用文字列はchunk本文の部分列そのものにしかなり得ない設計＝捏造不能
+ *   （サーバー側の引用span完全一致検証を必ず通る）。chunkに質問語が無ければ citations 空で返す
+ *   （＝根拠なしのabstain。chunk外の文を作らない）。**報告書生成のfake保留（偽の下書きを作らない）
+ *   は変更しない**: 報告書生成（response_formatにtextだけのschema）は従来どおりJev分類の応答形を
+ *   返すため、サーバー側検証が不適合で保留に落とす（docs/evidence/V04-llm.md。docs/03 §1.1）。
  */
 export function localTestAi(env: AppEnv): NonNullable<AppEnv["AI"]> | undefined {
   if (env.APP_ENV !== "local" || env.TEST_AI_FAKE !== "1") return undefined;
   return {
-    run: async (model: string, input: { state?: unknown; questions?: unknown }) => {
-      // 固定質問（docs/06 §2）を受けた形だけを模倣する。stateの中身は候補に反映しない（決定的な値）
+    run: async (model: string, input: { state?: unknown; questions?: unknown; messages?: unknown; response_format?: unknown }) => {
       void model;
-      void input;
+      // RAGの構造出力（citationsを含むjson_schema）のときは決定的な引用応答を返す
+      if (isRagCall(input)) return ragFakeResponse(input);
+      // 既存: 固定質問（docs/06 §2）を受けた形だけを模倣する。stateの中身は候補に反映しない（決定的な値）。
+      // この応答形は報告書生成（messages＋{"text"}契約）には不適合のため、報告書生成jobは保留に落ちる
       return {
         model: "fake-local@2026-10-16",
         answers: {
@@ -35,4 +45,60 @@ export function localTestAi(env: AppEnv): NonNullable<AppEnv["AI"]> | undefined 
       };
     },
   } as unknown as NonNullable<AppEnv["AI"]>;
+}
+
+/** RAGの呼出しか（src/server/search/rag.tsのRAG_JSON_SCHEMAと同じ形のresponse_formatを持つか） */
+function isRagCall(input: { response_format?: unknown }): boolean {
+  const format = input.response_format as { json_schema?: { properties?: Record<string, unknown> } } | undefined;
+  return format?.json_schema?.properties?.citations !== undefined;
+}
+
+interface RagFakeChunk {
+  /** buildRagMessagesが振る1始まりの番号 */
+  no: number;
+  text: string;
+}
+
+/** user側の引用データ（<question>と<chunk id="N">）を取り出す（buildRagMessagesと同じ形のみを受け付ける） */
+function parseRagInput(input: { messages?: unknown }): { question: string; chunks: RagFakeChunk[] } | null {
+  const messages = input.messages as { role: string; content: string }[] | undefined;
+  const user = messages?.find((m) => m.role === "user");
+  if (!user) return null;
+  const question = /<question>([\s\S]*?)<\/question>/.exec(user.content)?.[1];
+  if (question === undefined) return null;
+  const chunks: RagFakeChunk[] = [];
+  for (const match of user.content.matchAll(/<chunk id="(\d+)">([\s\S]*?)<\/chunk>/g)) {
+    chunks.push({ no: Number(match[1]!), text: match[2]! });
+  }
+  return { question, chunks };
+}
+
+/**
+ * 決定的なRAG応答: 質問語（3字以上。trigramの一致条件と同じ）を含む行をchunkごとに1つ引用し、
+ * その引用を並べた本文を返す。引用文字列はchunk本文の部分列そのもの＝サーバー検証を必ず通る。
+ * 質問語を含むchunkが1つも無ければ citations 空で返す（chunk外の文は作らない＝捏造不能）。
+ */
+function ragFakeResponse(input: { messages?: unknown; response_format?: unknown }): { model: string; response: string; usage: { prompt_tokens: number; completion_tokens: number } } {
+  const parsed = parseRagInput(input);
+  const terms = (parsed?.question ?? "").trim().split(/\s+/).filter((t) => t.length >= 3);
+  const citations: { chunk: number; quote: string }[] = [];
+  const quotedLines: string[] = [];
+  for (const chunk of parsed?.chunks ?? []) {
+    // 質問語を含む行のうち、含む語数が最大の行（同点は先頭。決定的）を引用にする
+    let best: { line: string; hits: number } | null = null;
+    for (const line of chunk.text.split("\n")) {
+      const hits = terms.filter((t) => line.includes(t)).length;
+      if (hits > 0 && (best === null || hits > best.hits)) best = { line, hits };
+    }
+    if (best !== null) {
+      citations.push({ chunk: chunk.no, quote: best.line });
+      quotedLines.push(best.line);
+    }
+  }
+  const answer = quotedLines.length > 0 ? quotedLines.join("\n") : "根拠となる資料が見つかりませんでした。";
+  return {
+    model: "fake-local-rag@2026-10-16",
+    response: JSON.stringify({ answer, citations }),
+    usage: { prompt_tokens: 96, completion_tokens: 48 },
+  };
 }
