@@ -9793,10 +9793,6 @@
                                 "type": "string",
                                 "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                               },
-                              "sourceId": {
-                                "type": "string",
-                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                              },
                               "sourceVersion": {
                                 "type": "integer",
                                 "minimum": 1,
@@ -9885,6 +9881,10 @@
                                   "asset_inspection",
                                   "issue"
                                 ]
+                              },
+                              "sourceId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                               },
                               "outputJson": {
                                 "type": "object",
@@ -10008,7 +10008,6 @@
                             "required": [
                               "id",
                               "jobId",
-                              "sourceId",
                               "sourceVersion",
                               "inputHash",
                               "inputSnapshotRef",
@@ -10019,6 +10018,7 @@
                               "usageJson",
                               "createdAt",
                               "sourceType",
+                              "sourceId",
                               "outputJson"
                             ],
                             "additionalProperties": false
@@ -10031,10 +10031,6 @@
                                 "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                               },
                               "jobId": {
-                                "type": "string",
-                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                              },
-                              "sourceId": {
                                 "type": "string",
                                 "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                               },
@@ -10122,6 +10118,11 @@
                               "sourceType": {
                                 "type": "string",
                                 "const": "assistant"
+                              },
+                              "sourceId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
                               },
                               "outputJson": {
                                 "type": "object",
@@ -10382,7 +10383,6 @@
                             "required": [
                               "id",
                               "jobId",
-                              "sourceId",
                               "sourceVersion",
                               "inputHash",
                               "inputSnapshotRef",
@@ -10393,6 +10393,7 @@
                               "usageJson",
                               "createdAt",
                               "sourceType",
+                              "sourceId",
                               "outputJson"
                             ],
                             "additionalProperties": false

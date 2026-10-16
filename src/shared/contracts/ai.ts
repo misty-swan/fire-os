@@ -129,7 +129,10 @@ export type AssistantProposalDto = z.infer<typeof AssistantProposal>;
 const AiEvaluationBase = {
   id: Id,
   jobId: Id,
-  sourceId: Id,
+  // sourceIdは枝ごとに型が違う（下のunion）: 分類源=対象記録のId〔小文字UUID〕、
+  // assistant源=`query:<質問本文のsha256>`の合成キー（docs/05 API-77行どおり。UUIDでない）。
+  // assistant枝をIdのままにすると、assistant行が1件あるunitでAPI-30の一覧のtoDtoが落ちて
+  // 500になる（T070で発覚・assistant_rows_do_not_break_the_api_30_listで担保）
   sourceVersion: Version,
   inputHash: Sha256,
   inputSnapshotRef: ShortText.nullable(),
@@ -141,8 +144,8 @@ const AiEvaluationBase = {
   createdAt: Instant,
 };
 export const AiEvaluation = z.discriminatedUnion("sourceType", [
-  obj({ ...AiEvaluationBase, sourceType: z.enum(classificationSourceTypes), outputJson: ClassificationCandidateOutput }),
-  obj({ ...AiEvaluationBase, sourceType: z.literal("assistant"), outputJson: AssistantCandidateOutput }),
+  obj({ ...AiEvaluationBase, sourceType: z.enum(classificationSourceTypes), sourceId: Id, outputJson: ClassificationCandidateOutput }),
+  obj({ ...AiEvaluationBase, sourceType: z.literal("assistant"), sourceId: ShortText, outputJson: AssistantCandidateOutput }),
 ]);
 export type AiEvaluationDto = z.infer<typeof AiEvaluation>;
 

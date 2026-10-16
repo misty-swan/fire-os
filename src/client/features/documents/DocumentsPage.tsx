@@ -292,10 +292,14 @@ function DocumentEditor() {
   );
 }
 
-/** 詳細（API-91）。版パネル＋閲覧許可パネル＋撤回 */
+/** 詳細（API-91）。版パネル＋閲覧許可パネル＋撤回。?revision=N はAIの出典（引用元版）を辿る指定（T070） */
 function DocumentDetailRoute({ id }: { id: string }) {
   const { me } = useMe();
   const canManage = me.roles.includes("officer") || me.roles.includes("admin");
+  const [searchParams] = useSearchParams();
+  // 引用元版の指定（CitationPanelからのリンク。無効な値・存在しない版はAPI-91が404で案内になる）
+  const revisionRaw = searchParams.get("revision");
+  const citedRevision = revisionRaw !== null && /^\d+$/.test(revisionRaw) ? Number(revisionRaw) : undefined;
   // 再読込（版の作成・承認・ACL変更のあと）でも直前の内容を消さない（トーストが見える時間を守る。
   // お知らせT046の詳細と同じ流儀。初回の取得失敗だけ「存在しないか閲覧できない」扱いにする）
   const [detail, setDetail] = useState<DocumentDetailData | null>(null);
@@ -307,7 +311,7 @@ function DocumentDetailRoute({ id }: { id: string }) {
     let alive = true;
     void (async () => {
       try {
-        const d = await api("API-91", { params: { id }, query: {} });
+        const d = await api("API-91", { params: { id }, query: citedRevision !== undefined ? { revision: citedRevision } : {} });
         if (alive) {
           setDetail(d);
           setFailed(false);
@@ -320,7 +324,7 @@ function DocumentDetailRoute({ id }: { id: string }) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, reloadKey]);
+  }, [id, citedRevision, reloadKey]);
 
   if (detail === null) {
     if (failed) {
@@ -344,11 +348,22 @@ function DocumentDetailRoute({ id }: { id: string }) {
       </div>
     );
   }
-  return <DocumentDetail detail={detail} canManage={canManage} onChanged={reload} />;
+  return <DocumentDetail detail={detail} canManage={canManage} citedRevision={citedRevision} onChanged={reload} />;
 }
 
 /** 文書の詳細の本体。撤回（API-92）だけは文書レベルの操作のためここに置く */
-function DocumentDetail({ detail, canManage, onChanged }: { detail: DocumentDetailData; canManage: boolean; onChanged: () => void }) {
+function DocumentDetail({
+  detail,
+  canManage,
+  citedRevision,
+  onChanged,
+}: {
+  detail: DocumentDetailData;
+  canManage: boolean;
+  /** AIの出典として開かれた引用元版（?revision=N。T070）。無ければ通常の詳細表示 */
+  citedRevision?: number;
+  onChanged: () => void;
+}) {
   const navigate = useNavigate();
   const doc = detail.document;
   const withdraw = useMutation("API-92");
@@ -377,6 +392,13 @@ function DocumentDetail({ detail, canManage, onChanged }: { detail: DocumentDeta
         <span className="font-mono text-[11px] text-ink-muted">{fmtDay(doc.createdAt)} 登録</span>
         <h2 className="text-[26px] font-bold leading-[1.3]">{doc.title}</h2>
       </div>
+
+      {/* 引用元版を開いているときの案内（T070。AIの参照元から辿った版であることを示す） */}
+      {citedRevision !== undefined && (
+        <Notice tone="ai" icon="auto_awesome">
+          AIアシスタントの出典として 第{citedRevision}版 を開いています。表示中の版・原本はこの版のものです。
+        </Notice>
+      )}
 
       {/* 文書の現状（docs/11「承認版とdraftの別pointer」を別行で出す。policy_versionはACL・分類の改訂版） */}
       <Card className="flex flex-col gap-0 overflow-hidden p-0">

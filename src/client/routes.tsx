@@ -20,6 +20,7 @@ import { IncidentEditorPage } from "./features/incidents/IncidentEditorPage";
 import { AnnouncementsPage } from "./features/announcements/AnnouncementsPage";
 import { NotificationsPage } from "./features/notifications/NotificationsPage";
 import { AiReviewsPage } from "./features/ai/AiReviewsPage";
+import { AssistantPage } from "./features/assistant/AssistantPage";
 import { ReportDraftPage } from "./features/reports/ReportDraftPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { AnalyticsPage } from "./features/analytics/AnalyticsPage";
@@ -80,6 +81,7 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-20": <ImportPage />,
   "SCR-21": <NotificationsPage />,
   "SCR-18": <AiReviewsPage />,
+  "SCR-28": <AssistantPage />,
   "SCR-19": <ReportDraftPage />,
   "SCR-26": <AnalyticsPage />,
   "SCR-24": <DocumentsPage />,

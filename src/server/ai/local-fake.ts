@@ -25,7 +25,13 @@ import type { AppEnv } from "../env";
  *   assistantの構造出力（json_schemaにusedReadingsを含む＝src/server/ai/assistant.tsの
  *   ASSISTANT_JSON_SCHEMA）のとき、**与えられた読み取り結果（<reading>本文）から質問語を含む行を
  *   そのまま引用して並べる応答**を返す。応答本文は読み取り本文の部分列にしかなり得ない＝捏造不能。
- *   **書込提案（proposals）は出さない**（承認不要の形でも出さない。実行はAPI-31の承認だけ）。
+ *   **書込提案（proposals）は、質問が明示的に求めるとき（トリガー語）だけ**読み取りデータから派生させて
+ *   出す（T070の確認画面のe2e用。コントローラ裁定・docs/03 §1.1の規約）:
+ *   - 質問に「タスク」を含むとき＝最初に引用した読取の**題（最初の非空行そのもの）**を候補の題にするタスク提案を1件。
+ *   - 質問に「通知」を含むとき＝読取に種別activityの記録が在るときだけ、その**題（最初の非空行そのもの）**を
+ *     本文にする通知draftの提案を1件（源はactivity。通知の契約が対応している源のみ）。
+ *   - 提案の根拠（usedReadings）にその読取の番号を必ず入れる（書込提案には根拠必須＝サーバー検証）。
+ *   トリガー語が無ければ proposals は空（承認不要の形でも出さない。実行はAPI-31の承認だけ）。
  */
 export function localTestAi(env: AppEnv): NonNullable<AppEnv["AI"]> | undefined {
   if (env.APP_ENV !== "local" || env.TEST_AI_FAKE !== "1") return undefined;
@@ -119,32 +125,47 @@ function isAssistantCall(input: { response_format?: unknown }): boolean {
 interface AssistantFakeReading {
   /** buildAssistantMessagesが振る1始まりの番号 */
   no: number;
+  /** 読取の種別と記録ID（<reading>タグの属性。提案の源の特定に使う） */
+  type: string;
+  id: string;
   text: string;
 }
 
 /** user側の引用データ（<question>と<reading no="N" …>）を取り出す（buildAssistantMessagesと同じ形のみを受け付ける） */
 function parseAssistantInput(input: { messages?: unknown }): { question: string; readings: AssistantFakeReading[] } | null {
   const messages = input.messages as { role: string; content: string }[] | undefined;
-  const user = messages?.find((m) => m.role === "user");
+  if (!messages) return null;
+  const user = messages.find((m) => m.role === "user");
   if (!user) return null;
   const question = /<question>([\s\S]*?)<\/question>/.exec(user.content)?.[1];
   if (question === undefined) return null;
   const readings: AssistantFakeReading[] = [];
-  for (const match of user.content.matchAll(/<reading no="(\d+)"[^>]*>([\s\S]*?)<\/reading>/g)) {
-    readings.push({ no: Number(match[1]!), text: match[2]! });
+  for (const match of user.content.matchAll(/<reading no="(\d+)"([^>]*)>([\s\S]*?)<\/reading>/g)) {
+    const attrs = match[2] ?? "";
+    readings.push({
+      no: Number(match[1]!),
+      type: /type="([^"]*)"/.exec(attrs)?.[1] ?? "",
+      id: /id="([^"]*)"/.exec(attrs)?.[1] ?? "",
+      text: match[3]!,
+    });
   }
   return { question, readings };
 }
+
+/** 読取本文の最初の非空行（提案の題・本文は読取データの部分列そのものにしかしない＝捏造不能） */
+const firstLineOf = (text: string): string | null =>
+  text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? null;
 
 /**
  * 決定的な横断assistant応答: 質問語（3字以上。検索の一致条件と同じ）を含む行を読み取りごとに1つ引用し、
  * その引用を並べた本文を返す。応答本文は読み取り本文の部分列にしかなり得ない＝捏造不能
  * （記録外の文・注入文〔質問語を含まない〕は応答に現れない）。
- * **書込提案（proposals）は出さない**（承認不要の形でも出さない＝プリフライト裁定5）。
+ * 書込提案はトリガー語（「タスク」/「通知」）が質問に明示的に在るときだけ（docs/03 §1.1の規約）。
  */
 function assistantFakeResponse(input: { messages?: unknown; response_format?: unknown }): { model: string; response: string; usage: { prompt_tokens: number; completion_tokens: number } } {
   const parsed = parseAssistantInput(input);
-  const terms = (parsed?.question ?? "").trim().split(/\s+/).filter((t) => t.length >= 3);
+  const question = parsed?.question ?? "";
+  const terms = question.trim().split(/\s+/).filter((t) => t.length >= 3);
   const usedReadings: number[] = [];
   const quotedLines: string[] = [];
   for (const reading of parsed?.readings ?? []) {
@@ -160,9 +181,30 @@ function assistantFakeResponse(input: { messages?: unknown; response_format?: un
     }
   }
   const answer = quotedLines.length > 0 ? quotedLines.join("\n") : "根拠となる読み取りがありませんでした。";
+
+  // 書込提案（トリガー語が在るときだけ。値は読取データから派生させ、根拠の読取をusedReadingsに入れる）
+  const used = new Set(usedReadings);
+  const proposals: unknown[] = [];
+  if (question.includes("タスク") && usedReadings.length > 0) {
+    const source = parsed?.readings.find((r) => r.no === usedReadings[0]);
+    const title = source ? firstLineOf(source.text)?.slice(0, 200) : null; // 題名の上限（LIMITS.titleMax）に揃える
+    if (source && title) {
+      used.add(source.no);
+      proposals.push({ kind: "task", title });
+    }
+  }
+  if (question.includes("通知")) {
+    const activity = parsed?.readings.find((r) => r.type === "activity");
+    const body = activity ? firstLineOf(activity.text)?.slice(0, 20_000) : null; // 本文の上限（LIMITS.bodyMax）に揃える
+    if (activity && body) {
+      used.add(activity.no);
+      proposals.push({ kind: "notification", source: { type: "activity", id: activity.id }, body, channels: ["inapp"] });
+    }
+  }
+
   return {
     model: "fake-local-assistant@2026-10-16",
-    response: JSON.stringify({ answer, usedReadings, proposals: [] }),
+    response: JSON.stringify({ answer, usedReadings: [...used], proposals }),
     usage: { prompt_tokens: 120, completion_tokens: 40 },
   };
 }

@@ -465,4 +465,29 @@ describe("業務横断AIの読取と承認前の書込提案 (T068)", () => {
     });
     expect(duplicate.status).toBe(409);
   });
+
+  /**
+   * API-30の一覧（絞り込み無し）はassistant行を含むunitでも200を返す（T070で発覚した回帰）。
+   * assistant源のsource_idは `query:<sha256>` の合成キー（docs/05 API-77行どおり。UUIDでない）ため、
+   * DTOのassistant枝はsourceIdをShortTextで受ける。Id（UUID）のままだと一覧のtoDtoが落ちて
+   * AIレビューの一覧（API-30）が500になり、assistant行があるunitで画面が壊れる。
+   */
+  it("assistant_rows_do_not_break_the_api_30_list", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const fake = localTestAi({ ...env, TEST_AI_FAKE: "1" })!;
+    const query = "格納箱 対応 一覧";
+    const p = await propose(admin, fake, { query, contextRefs: [{ type: "issue", id: issueId }] }, "assistant-key-list-1");
+    expect(p.abstained).toBe(false);
+
+    const res = await fx.client(admin).request("GET", "/api/v1/ai/reviews?limit=50");
+    const j = await json(res);
+    expect(res.status, JSON.stringify(j)).toBe(200);
+    const rows = j.data! as unknown as { id: string; sourceType: string; sourceId: string; status: string }[];
+    const assistantRow = rows.find((r) => r.id === p.proposalId);
+    expect(assistantRow).toBeTruthy();
+    expect(assistantRow!.sourceType).toBe("assistant");
+    expect(assistantRow!.sourceId).toBe(`query:${await sha256Hex(query)}`);
+    expect(assistantRow!.status).toBe("pending");
+  });
 });

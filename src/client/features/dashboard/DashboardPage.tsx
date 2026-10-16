@@ -291,13 +291,17 @@ export function DashboardPage() {
       )}
       {phase === "ready" && data && <DashboardBody data={data} notices={notices} />}
 
-      {/* AIバー（prototypeホームの最下部。AIアシスタントはPH5=SCR-28のため、入口だけを置く） */}
+      {/* AIバー（prototypeホームの最下部。prototypeは質問のサジェスト「訓練の準備状況を確認する？」。
+          確定したサジェスト語彙が無いため、入口のラベル＋例示の形にした（docs/03 §1.1-19） */}
       <Link
         to="/app/assistant"
         className="fixed inset-x-3 bottom-24 z-20 flex h-[54px] items-center gap-2.5 rounded-pill bg-[rgba(20,30,50,.86)] pl-4 pr-2 shadow-[inset_0_0_0_1px_rgba(170,150,255,.32),0_14px_30px_-8px_rgba(0,0,0,.7)] backdrop-blur-[18px] lg:hidden"
       >
         <Icon name="auto_awesome" className="text-[20px] text-ai" />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink-sub">AIアシスタント（後のフェーズで実装）</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink-sub">
+          AIアシスタントに聞く
+          <span className="ml-1.5 text-ink-dim">（例: 訓練の準備状況）</span>
+        </span>
         <span className="grid size-[38px] flex-none place-items-center rounded-full bg-ai text-[#0b1220]">
           <Icon name="arrow_upward" className="text-[20px]" />
         </span>
