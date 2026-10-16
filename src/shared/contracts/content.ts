@@ -242,6 +242,35 @@ export const DocumentDetail = obj({
 });
 
 /**
+ * docs/05 API-75「成功data」（T063で厳格化。provisional解除）。
+ * request_review/changes_requestedは決定行を作らないためreviewDecisionId=null、
+ * approveだけが一版一決定の決定行とdocument.index job（受付済みqueued。handlerはT066）を持つ。
+ */
+export const DocumentDecision = obj({
+  documentId: Id,
+  versionId: Id,
+  revisionNo: Version,
+  status: z.enum(contentVersionStates),
+  decision: ReviewVerb,
+  reviewDecisionId: Id.nullable(),
+  indexJobId: Id.nullable(),
+});
+
+/**
+ * docs/05 API-92「成功data」（T063で厳格化）。deindexJobは撤回時に永続化した
+ * document.deindex job（handlerはT066。queued滞在で索引削除を遅延させてよい）。
+ * 版がまだ無い文書の撤回ではjobも作らないためnull。
+ */
+export const DocumentWithdrawal = obj({ document: Document, deindexJob: Job.nullable() });
+
+/**
+ * docs/05 API-99「成功data」（T063で厳格化）。document.policyVersionは変更後の値（全置換で増分）。
+ * reindexJobはACL・分類の変更で永続化するdocument.reindex job（緩和方向でも必ず作る。docs/16 T063）。
+ * 版がまだ無い文書ではnull。
+ */
+export const DocumentAccessPolicy = obj({ document: Document, reindexJob: Job.nullable() });
+
+/**
  * 監査ログ（追記専用）。本文・氏名・連絡先・token・Secretは入らない（metadataはIDとコードの平坦な値だけ、1KiB以下）。
  * mutationId は同じ操作のoutbox（entityVersion/eventType）と結びつき、操作・旧新版を追跡できる。
  */
@@ -406,12 +435,15 @@ export const contentApis = {
   }),
   "API-75": defineApi({
     method: "POST", path: "/documents/:id/decision", permission: "PER-10文書承認", kind: "mutation", success: [200],
+    // T063で実装: 申請（request_review）と最終決定（approve）の分離（T058のreports流儀）。
+    // request_review/changes_requestedはeventsだけ（決定行は作らない）、approveはreview_decisionsの
+    // document_version_id非NULL UNIQUEで一版一回（二重approveは409 DUPLICATE）＋document.index job
     request: obj({
       params: P_ID,
       body: obj({ version: Version, documentVersion: Version, decision: ReviewVerb, reason: Reason }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    response: DocumentDecision,
   }),
   "API-90": defineApi({
     method: "GET", path: "/documents", permission: "PER-11", kind: "list", success: [200],
@@ -427,18 +459,21 @@ export const contentApis = {
   }),
   "API-92": defineApi({
     method: "POST", path: "/documents/:id/withdrawal", permission: "PER-11管理", kind: "mutation", success: [200],
+    // T063で実装: withdrawnは終端（二重撤回は422）。文書status→withdrawn＋events＋document.deindex job。
+    // 撤回後は一覧・詳細・原文・版の全GETが404（存在も明かさない。docs/06 §5「D1側で即除外」）
     request: obj({ params: P_ID, body: obj({ version: Version, reason: Reason }), ...IDEM }),
-    response: z.looseObject({}), provisional: true,
+    response: DocumentWithdrawal,
   }),
   "API-99": defineApi({
     method: "PATCH", path: "/documents/:id/access-policy", permission: "PER-11管理", kind: "mutation", success: [200],
-    // 応答のpolicyVersionはdocuments.policy_version（T062で追加した列。T063の変更で増分）
+    // T063で実装: ACL全置換（deny優先のまま）＋classification変更＋policy_version増分＋document.reindex job。
+    // 可視範囲の緩和方向も管理PATCH自体を承認とみなし、向きを監査に記録する（docs/16 T063の裁定）
     request: obj({
       params: P_ID,
       body: obj({ version: Version, classification: ShortText, acl: Acl }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    response: DocumentAccessPolicy,
   }),
   // --- 監査 ---
   "API-93": defineApi({

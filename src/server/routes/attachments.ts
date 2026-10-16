@@ -1,5 +1,6 @@
 import { authorize } from "../auth/authorize";
 import { resolvePrincipal } from "../auth/principal";
+import { isDocumentVisible } from "../documents/authorized";
 import { HttpError, defineRoute, parseApiRequest, type ApiApp } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
@@ -28,10 +29,20 @@ export function registerAttachmentRoutes(app: ApiApp): void {
 
     // ACLの再検査: 有効なリンク（同一unit・未unlink）が1つ以上あり、その対象を閲覧できること。
     // unlink（権限の引下げ・削除）の直後の新規要求を拒否する（既に取得済みのデータ・開始済みstreamは回収できない。docs/07 §3.6）
+    // 文書（entity_type=document）のリンクは、検索・引用と同じ文書可視性の正本
+    // （src/server/documents/authorized.ts。deny優先ACL＋撤回除外）で再検査する。撤回・ACL失効は
+    // 索引やlinkの削除を待たず即404になる（docs/06 §5.5「引用原文取得でも現ACLを検査」。docs/10 §4）
     const links = await c.env.DB.prepare(
       "SELECT entity_type, entity_id FROM attachment_links WHERE attachment_id = ? AND unit_id = ? AND unlinked_at IS NULL",
     ).bind(att.id, att.unit_id).all<{ entity_type: string; entity_id: string }>();
-    const visible = links.results.some((l) => authorize(p, "PER-01", { unitId: att.unit_id, type: l.entity_type, id: l.entity_id }).allowed);
+    let visible = false;
+    for (const l of links.results) {
+      if (l.entity_type === "document") {
+        if (await isDocumentVisible(c.env, p, l.entity_id)) { visible = true; break; }
+      } else if (authorize(p, "PER-01", { unitId: att.unit_id, type: l.entity_type, id: l.entity_id }).allowed) {
+        visible = true; break;
+      }
+    }
     if (links.results.length === 0 || !visible) throw new HttpError("NOT_FOUND"); // 対象の存在と閲覧可否を分けない
 
     const obj = await c.env.FILES.get(att.ready_key);

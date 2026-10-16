@@ -33,6 +33,8 @@ import { registerOperationLinkRoutes } from "./routes/incident-activity";
 import { registerAnnouncementRoutes } from "./routes/announcements";
 import { registerNotificationRoutes } from "./routes/notifications";
 import { registerDocumentRoutes } from "./routes/documents";
+import { registerDocumentDecisionRoutes } from "./routes/document-decisions";
+import { registerDocumentPolicyRoutes } from "./routes/document-policy";
 import { registerReportRoutes } from "./routes/reports";
 import { registerReportGenerationRoutes } from "./routes/report-generation";
 import { registerReportDecisionRoutes } from "./routes/report-decisions";
@@ -86,6 +88,8 @@ export function registerRoutes(app: ApiApp): void {
   registerNotificationRoutes(app);
   // 固定パスは無いが、文書（/documents、/documents/:id）は他のドメインとpathが重ならないため順序の注意は無い
   registerDocumentRoutes(app);
+  registerDocumentDecisionRoutes(app);
+  registerDocumentPolicyRoutes(app);
   // 固定パス（/reports/manual、/reports/drafts）は /reports/:id 系より先に照合する（docs/05 §1、Honoは登録順）
   registerReportGenerationRoutes(app);
   registerReportRoutes(app);

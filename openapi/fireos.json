@@ -21580,7 +21580,7 @@
         "summary": "API-75 POST /documents/:id/decision",
         "x-permission": "PER-10文書承認",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -21617,8 +21617,72 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
+                        "revisionNo": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "in_review",
+                            "approved",
+                            "changes_requested",
+                            "superseded",
+                            "withdrawn"
+                          ]
+                        },
+                        "decision": {
+                          "type": "string",
+                          "enum": [
+                            "request_review",
+                            "approve",
+                            "changes_requested"
+                          ]
+                        },
+                        "reviewDecisionId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "indexJobId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "documentId",
+                        "versionId",
+                        "revisionNo",
+                        "status",
+                        "decision",
+                        "reviewDecisionId",
+                        "indexJobId"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -25141,7 +25205,7 @@
         "summary": "API-92 POST /documents/:id/withdrawal",
         "x-permission": "PER-11管理",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -25178,8 +25242,140 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "document": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "classification": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "draft",
+                                "approved",
+                                "withdrawn"
+                              ]
+                            },
+                            "currentVersionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "currentDraftVersionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "policyVersion": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "createdAt": {},
+                            "updatedAt": {}
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "title",
+                            "classification",
+                            "status",
+                            "currentVersionId",
+                            "currentDraftVersionId",
+                            "policyVersion",
+                            "createdAt",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "deindexJob": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "queued",
+                                    "running",
+                                    "succeeded",
+                                    "retry_wait",
+                                    "manual_review",
+                                    "cancelled",
+                                    "stale"
+                                  ]
+                                },
+                                "attempts": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "errorCode": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "resultRef": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "status",
+                                "attempts",
+                                "errorCode",
+                                "resultRef"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "document",
+                        "deindexJob"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -26597,7 +26793,7 @@
         "summary": "API-99 PATCH /documents/:id/access-policy",
         "x-permission": "PER-11管理",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -26634,8 +26830,140 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "document": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "classification": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "draft",
+                                "approved",
+                                "withdrawn"
+                              ]
+                            },
+                            "currentVersionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "currentDraftVersionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "policyVersion": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "createdAt": {},
+                            "updatedAt": {}
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "title",
+                            "classification",
+                            "status",
+                            "currentVersionId",
+                            "currentDraftVersionId",
+                            "policyVersion",
+                            "createdAt",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "reindexJob": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "queued",
+                                    "running",
+                                    "succeeded",
+                                    "retry_wait",
+                                    "manual_review",
+                                    "cancelled",
+                                    "stale"
+                                  ]
+                                },
+                                "attempts": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "errorCode": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "resultRef": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "status",
+                                "attempts",
+                                "errorCode",
+                                "resultRef"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "document",
+                        "reindexJob"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

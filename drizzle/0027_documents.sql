@@ -58,9 +58,12 @@ CREATE TABLE document_versions (
   created_by TEXT REFERENCES users (id) ON DELETE RESTRICT,
   actor_kind TEXT NOT NULL CHECK (actor_kind IN ('human', 'system')),
   CHECK (actor_kind = 'system' OR created_by IS NOT NULL),
-  -- 承認済みの版だけが承認者と承認時刻を持つ（0024の帳票版と同じ流儀）
-  CHECK ((status = 'approved') = (approved_by IS NOT NULL)),
-  CHECK ((status = 'approved') = (approved_at IS NOT NULL)),
+  -- 承認記録（approved_by/approved_at）は、承認されたことがある版（approved。superseded/withdrawnへ
+  -- 遷んだ後も保持）だけが持つ。T063でin-place拡張（0022/T051と同じ前例。docs/16 T063に記録）:
+  -- T062作成時の「approvedだけ」の語のままだと、旧承認版のapproved→superseded遷移（docs/11。
+  -- 承認列は不変のままstatusだけ遷める）がこのCHECKで失敗し、docs/11の状態機械と両立しないため
+  CHECK (status IN ('approved', 'superseded', 'withdrawn') = (approved_by IS NOT NULL)),
+  CHECK (status IN ('approved', 'superseded', 'withdrawn') = (approved_at IS NOT NULL)),
   -- 「文書/版UNIQUE」（docs/04:150）。unit一致を含める（docs/04 §1の複合原則）
   UNIQUE (unit_id, document_id, revision_no),
   UNIQUE (unit_id, id),

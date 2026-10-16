@@ -11,23 +11,26 @@ import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../htt
 import { enqueueJobStatement } from "../jobs/store";
 import { canonicalRequestHash, sha256Hex } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
+import { documentVisibilitySql } from "../documents/authorized";
 import { requirePermission } from "./invitations";
 
 /**
  * 許諾文書の原本・版・閲覧API（T062、docs/04:149/150、docs/05 API-73/74/90/91、docs/06 §5、docs/10 §2/§4）。
- * - 承認（API-75）・撤回（API-92）・ACL変更（API-99）はT063。抽出job handlerはT064（jobはqueuedのまま滞在する）。
+ * - 承認（API-75）・撤回（API-92）・ACL変更（API-99）はroutes/document-decisions.ts・document-policy.ts（T063）。
+ *   抽出job handlerはT064（jobはqueuedのまま滞在する）。
  * - 管理操作（API-73/74）はPER-11＋幹部・管理者（docs/10のPER-03 unitWide: MANAGERSと同じ実装既定。
  *   D03未承認の検証設定としてdocs/16 T062に記録）。
  * - 閲覧（API-90/91）はdeny優先のdocument_aclで前置する（docs/10 §3「SQLで対象行を絞ってからページング」）。
  *   ACL行の無い文書は同unitのPER-01保持者に見える既定。非公開文書は一覧の行・件数にも現れず、詳細は404。
+ *   撤回済み（withdrawn）の文書は誰にも現れない（T063。終端・存在も明かさない404）。
  * - 版は常に新draft版を作り、旧版の原本参照・許諾・hashは不変（docs/04:150「承認原本不変」＝0024の帳票版と同じ流儀）。
- *   current_draft_version_idだけを切替え、current_version_id（承認済pointer）はT063の承認まで触らない。
+ *   current_draft_version_idだけを切替え、current_version_id（承認済pointer）は承認（API-75のapprove）だけが切替る。
  * - attachmentIdは原本添付への直接参照（docs/04:150）。取得（API-27）のACL再検査の経路として同じ
  *   (document, attachment)のattachment_links行を版作成と同時に1本作る（docs/16 T062の裁定: 直参照とlink併用）。
  */
 
 /** PER-11＋幹部・管理者（管理操作の実装既定。docs/10 PER-11「△公開対象」の管理側） */
-function requireDocumentManage(p: AuthzPrincipal): void {
+export function requireDocumentManage(p: AuthzPrincipal): void {
   requirePermission(p, "PER-11", { unitId: p.unitId, type: "document" });
   if (!p.roles.includes("officer") && !p.roles.includes("admin")) {
     throw new HttpError("FORBIDDEN", undefined, [{ field: "permission", reason: "document_manage_required" }]);
@@ -83,32 +86,12 @@ const VERSION_WITH_JOB_JSON =
   "WHERE t.id = ? AND t.unit_id = ? ORDER BY j.created_at DESC LIMIT 1";
 
 /**
- * 文書ACL前置（deny優先）のWHERE片。permission値はT062では可視性判定に使わず、
- * 行の一致（本人または自分の役割）とeffectで判定する（細分化はT063以降。docs/16 T062に記録）。
- * - deny一致 → 非公開（deny優先）
- * - allow一致 → 可視
- * - ACL行はあるが一致無し → 非公開（ACLあり＝絞り込み）
- * - ACL行が無い → 可視（同unitのPER-01保持者に見える既定。docs/16 T062）
+ * 文書ACL前置（deny優先）のWHERE片はsrc/server/documents/authorized.tsの正本（T063で移動。
+ * 一覧・詳細・原文取得・検索/引用の全経路で同じ判定を使う）。
  */
-function documentVisibilitySql(p: AuthzPrincipal): { sql: string; binds: unknown[] } {
-  const denyMatch =
-    "(dd.member_id = ? OR dd.role_id IN (SELECT id FROM roles WHERE code IN (" +
-    p.roles.map(() => "?").join(",") + ")))";
-  const allowMatch =
-    "(da2.member_id = ? OR da2.role_id IN (SELECT id FROM roles WHERE code IN (" +
-    p.roles.map(() => "?").join(",") + ")))";
-  return {
-    sql:
-      // deny一致は先に潰す（deny優先。docs/04:151）
-      "NOT EXISTS (SELECT 1 FROM document_acl dd WHERE dd.document_id = d.id AND dd.unit_id = d.unit_id AND dd.effect = 'deny' AND " + denyMatch + ") " +
-      "AND ( NOT EXISTS (SELECT 1 FROM document_acl da WHERE da.document_id = d.id AND da.unit_id = d.unit_id) " +
-      "OR EXISTS (SELECT 1 FROM document_acl da2 WHERE da2.document_id = d.id AND da2.unit_id = d.unit_id AND da2.effect = 'allow' AND " + allowMatch + ") )",
-    binds: [p.memberId, ...p.roles, p.memberId, ...p.roles],
-  };
-}
 
 /** 存在しない/別unitの文書は同じ404（存在を明かさない。announcements.tsと同じ流儀） */
-async function loadDocument(c: { env: AppEnv }, id: string, unitId: string): Promise<DocumentRow> {
+export async function loadDocument(c: { env: AppEnv }, id: string, unitId: string): Promise<DocumentRow> {
   const row = await c.env.DB.prepare(
     "SELECT id, unit_id, version, title, classification, current_version_id, current_draft_version_id, status, policy_version, created_at, updated_at " +
       "FROM documents WHERE id = ?",
@@ -126,7 +109,7 @@ const loadVersions = async (env: AppEnv, unitId: string, documentId: string): Pr
   ).results;
 
 /** ACL入力の対象を実在（同unit団員/役割）まで検査する（docs/05 §1「IDは存在/所属/許可を全関連先まで検査」。announcementsと同じ404） */
-async function requireAclTargets(c: { env: AppEnv }, unitId: string, acl: readonly { memberId?: string; roleId?: string }[]): Promise<void> {
+export async function requireAclTargets(c: { env: AppEnv }, unitId: string, acl: readonly { memberId?: string; roleId?: string }[]): Promise<void> {
   const memberIds = acl.flatMap((e) => (e.memberId ? [e.memberId] : []));
   const roleIds = acl.flatMap((e) => (e.roleId ? [e.roleId] : []));
   if (memberIds.length > 0) {
@@ -337,9 +320,10 @@ export function registerDocumentRoutes(app: ApiApp): void {
     const { query } = await parseApiRequest(c, "API-90");
     requirePermission(p, "PER-11", { unitId: p.unitId, type: "document" });
 
-    // 可視性はSQLで対象行を絞ってからページングする（docs/10 §3「全件取得後にUIで隠す方式は禁止」）
+    // 可視性はSQLで対象行を絞ってからページングする（docs/10 §3「全件取得後にUIで隠す方式は禁止」）。
+    // 撤回済み（withdrawn）は誰にも現れない（T063。終端・存在も明かさない）
     const visibility = documentVisibilitySql(p);
-    const where = ["d.unit_id = ?", visibility.sql];
+    const where = ["d.unit_id = ?", "d.status <> 'withdrawn'", visibility.sql];
     const binds: unknown[] = [p.unitId, ...visibility.binds];
     if (query.q) {
       where.push("d.title LIKE ? ESCAPE '\\'");
@@ -385,13 +369,17 @@ export function registerDocumentRoutes(app: ApiApp): void {
     requirePermission(p, "PER-11", { unitId: p.unitId, type: "document" });
     const doc = await loadDocument(c, params.id, p.unitId);
 
-    // ACL前置（deny優先。非公開文書は存在も明かさない404。docs/10 §3「対象外IDは404」）
-    const visibility = await c.env.DB.prepare(`SELECT 1 FROM documents d WHERE d.id = ? AND ${documentVisibilitySql(p).sql}`)
-      .bind(doc.id, ...documentVisibilitySql(p).binds).first();
-    if (!visibility) throw new HttpError("NOT_FOUND");
+    // ACL前置（deny優先。非公開文書は存在も明かさない404。docs/10 §3「対象外IDは404」）。
+    // 撤回済み（withdrawn）も同じ404（T063。一覧・詳細・原文・版の全GETが存在を明かさない）
+    const visibility = documentVisibilitySql(p);
+    const visible = await c.env.DB.prepare(
+      `SELECT 1 FROM documents d WHERE d.id = ? AND d.status <> 'withdrawn' AND ${visibility.sql}`,
+    ).bind(doc.id, ...visibility.binds).first();
+    if (!visible) throw new HttpError("NOT_FOUND");
 
     const versions = await loadVersions(c.env, p.unitId, doc.id);
-    // revision?省略は現在のdraft版（無ければ承認版）。T062時点では承認が無いため常にdraft（T063以降も同じ優先順）
+    // revision?省略は現在のdraft版（無ければ承認版）。版一覧は文書ACLで見える者に全版を見せる
+    // （T063裁定: 絞り込みはしない。機密性の正文書ゲートは文書ACLと撤回で、版の審査状態はworkflowの記録。docs/16 T063）
     const currentVersionId = doc.current_draft_version_id ?? doc.current_version_id;
     const selected =
       (query.revision === undefined
