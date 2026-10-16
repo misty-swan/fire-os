@@ -90,6 +90,14 @@ describe("contracts (T002)", () => {
     expect(safeParseRequest("API-05", { query: { from: "2026-10-13" } }).success).toBe(false);
   });
 
+  it("api_76_document_ids_cap_is_80_for_d1_bind_limit", () => {
+    // documentIdsは80件まで（D1のbound parameter上限100をRAGの結合bindが超えないための契約上限。
+    // 旧上限100は81〜100件でportの80件検査が素のErrorになり500だった＝PH5レビューA中2）
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`);
+    expect(safeParseRequest("API-76", { body: { query: "堤防の巡視", documentIds: ids(80) } }).success).toBe(true);
+    expect(safeParseRequest("API-76", { body: { query: "堤防の巡視", documentIds: ids(81) } }).success).toBe(false);
+  });
+
   it("business_rules_in_input_are_validated", () => {
     // 終了が開始より前
     const activity = {

@@ -19,10 +19,12 @@ CREATE TABLE rag_answers (
   query_hash TEXT NOT NULL CHECK (length(query_hash) = 64),
   -- 回答本文（引用付き回答、または固定文言の保留応答。1〜20,000＝docs/04 §1のBody上限）
   answer TEXT NOT NULL CHECK (length(answer) BETWEEN 1 AND 20000),
-  -- docs/16 T067裁定1のstatus語彙:
+  -- docs/16 T067裁定1のstatus語彙（正本はsrc/shared/states.tsのragAnswerStates＝docs/11 §2「RAG回答」行。
+  -- D中2で正本を明記。保存後の遷移は無い〔追記型。API-76は都度新行〕）:
   --   answered  = 引用span検証と出力前ACL再検査を通った回答（citations>=1）
   --   abstained = 根拠不足・検索0件・引用span検証不可（限定retry後も不適合）。「確認できない」応答
-  --   withheld  = 出力前再検査で引用元が失権し回答を出せない（生成中の撤回を含む）。応答は引用0
+  --   withheld  = 出力前再検査で引用元が失権し回答を出せない（生成中の撤回を含む。answered→withheld
+  --               の辺＝出力前再検査での失効。docs/16 T067・docs/11 §2）。応答は引用0
   status TEXT NOT NULL CHECK (status IN ('answered', 'abstained', 'withheld')),
   -- 要求したモデル（カタログ名。T053/T057と同じ方針。実モデル版はV04で確定後に一致させる）
   model_id TEXT NOT NULL CHECK (length(model_id) BETWEEN 1 AND 200),

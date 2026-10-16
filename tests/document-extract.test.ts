@@ -304,4 +304,67 @@ describe("文書抽出・ページ/段落/offset付きchunk (T064)", () => {
     expect(jobD.error_code).toBe("document_withdrawn");
     expect(await chunkRows(createdD.version.id)).toEqual([]);
   });
+
+  /**
+   * PDF展開（inflate）の合計上限32MB（PH5レビューA低5）。高圧縮ストリーム（zip爆弾様）で
+   * メモリを大量消費できるため、展開合計が上限を超えたらunextractable_documentで例外→
+   * jobはmanual_review（chunk本文は1字も保存しない）。旧実装は無上限で展開するため、
+   * テキスト演算子の無い33MBの内容はdocument_ocr_requiredでFAILする。
+   */
+  it("inflate_over_32mb_falls_back_to_manual_review", async () => {
+    const admin = fx.units.a.people.admin;
+
+    // 展開で33MBになる高圧縮ストリーム（ゼロ列。deflateで数十KBに縮む）を作る
+    const mb = new Uint8Array(1024 * 1024);
+    const input = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < 33; i++) controller.enqueue(mb);
+        controller.close();
+      },
+    });
+    const reader = input.pipeThrough(new CompressionStream("deflate") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>).getReader();
+    const parts: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.length) parts.push(value);
+    }
+    const deflated = concatBytes(parts);
+    expect(deflated.length).toBeLessThan(1024 * 1024); // 高圧縮の前提（元は33MB）
+
+    const pdf = buildMinimalPdfWithFlateStream(deflated);
+    const doc = await createPublicDocument(admin, "高圧縮の資料（架空版）");
+    const originalId = await uploadPdfOriginal(admin, doc.id, pdf);
+    const created = await createVersion(admin, doc.id, originalId);
+    await runJobs();
+    const job = (await fx.rows("jobs", { id: created.job.id }))[0]!;
+    expect(job.status).toBe("manual_review"); // ブリーフのassertion
+    expect(job.error_code).toBe("unextractable_document"); // 展開上限超過は既存のshort code系
+    expect(await chunkRows(created.version.id)).toEqual([]);
+  });
 });
+
+/** 複数のバイト列の結合（展開上限試験のPDF組立て用） */
+const concatBytes = (parts: Uint8Array[]): Uint8Array => {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+};
+
+/** 展開上限試験用の最小PDF（Catalog→Pages→Page→Contents=FlateDecode stream。%%EOF付きで検査jobを通る） */
+const buildMinimalPdfWithFlateStream = (streamBytes: Uint8Array): Uint8Array => {
+  const head = new TextEncoder().encode(
+    "%PDF-1.4\n" +
+      "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+      "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+      "3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << >> >>\nendobj\n" +
+      `4 0 obj\n<< /Length ${streamBytes.length} /Filter /FlateDecode >>\nstream\n`,
+  );
+  const tail = new TextEncoder().encode("\nendstream\nendobj\n%%EOF\n");
+  return concatBytes([head, streamBytes, tail]);
+};

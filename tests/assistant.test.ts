@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ASSISTANT_PROMPT_VERSION, proposeAssistantAction } from "../src/server/ai/assistant";
 import { localTestAi } from "../src/server/ai/local-fake";
 import type { AuthzPrincipal } from "../src/server/auth/principal";
-import { authorizedDocumentVersions } from "../src/server/documents/authorized";
+import { authorizedDocumentVersions, isDocumentVisible } from "../src/server/documents/authorized";
 import { chunkDocument } from "../src/server/documents/chunk";
 import type { AppEnv } from "../src/server/env";
 import type { ApiContext } from "../src/server/http";
@@ -472,6 +472,66 @@ describe("業務横断AIの読取と承認前の書込提案 (T068)", () => {
    * DTOのassistant枝はsourceIdをShortTextで受ける。Id（UUID）のままだと一覧のtoDtoが落ちて
    * AIレビューの一覧（API-30）が500になり、assistant行があるunitで画面が壊れる。
    */
+  /**
+   * API-30のassistant行は、要求者が**現在可視でない文書**のreadResults要約を返さない（PH5レビューA中1）。
+   * 文書ACLで非可視（deny・一致無し）や撤回済みの文書のchunk本文（要約の元）が、PER-10保持者に
+   * 文書ACLと無関係に見えないようにする（docs/10 §4「過去の閲覧許可を永続権限とみなさない」）。
+   * 非可視の参照は{type,id,masked:true}だけ（要約テキストは返さない）。可視な参照とunit内の
+   * 参照（issue/activity等。PER-01で可視）は現行どおり全文を返す。
+   */
+  it("api_30_masks_read_results_of_documents_the_viewer_cannot_see", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const officer = a.people.officer; // PER-10保持者。hiddenDocはACL（allow=adminのみ）で不可視
+    const fake = localTestAi({ ...env, TEST_AI_FAKE: "1" })!;
+
+    // 幹部には非公開の文書と公開文書。両方を参照する提案を管理者が作る
+    const hiddenDoc = await insertApprovedDocument({
+      unitId: a.id, owner: { userId: admin.userId, memberId: admin.memberId! },
+      title: "非公開の会議資料（架空）", pageText: "格納箱の非公開メモ（架空）。秘匿の配線図が書かれている。", adminOnly: true,
+    });
+    const publicDoc = await insertApprovedDocument({
+      unitId: a.id, owner: { userId: admin.userId, memberId: admin.memberId! },
+      title: "公開の点検手順（架空）", pageText: "格納箱の公開の手順（架空）。全員が読める。",
+    });
+    // 前提の確認: 幹部はhiddenDocを見えずpublicDocは見える（可視性の正本での確認）
+    expect(await isDocumentVisible(env, principalOf(officer), hiddenDoc.documentId)).toBe(false);
+    expect(await isDocumentVisible(env, principalOf(officer), publicDoc.documentId)).toBe(true);
+
+    const proposal = await propose(admin, fake, {
+      query: "格納箱 状況", contextRefs: [
+        { type: "document", id: hiddenDoc.documentId }, { type: "document", id: publicDoc.documentId },
+      ],
+    }, "assistant-key-mask-1");
+    expect(proposal.abstained).toBe(false);
+
+    const readResultsOf = async (who: Identity) => {
+      const res = await fx.client(who).request("GET", "/api/v1/ai/reviews?limit=100");
+      const j = (await res.json()) as {
+        data?: { id: string; sourceType: string; outputJson: { readResults: { type: string; id: string; summary?: string; masked?: boolean }[] } }[];
+      };
+      expect(res.status, JSON.stringify(j)).toBe(200);
+      const row = (j.data ?? []).find((r) => r.id === proposal.proposalId);
+      expect(row?.sourceType).toBe("assistant");
+      return row!.outputJson.readResults;
+    };
+
+    // 幹部（可視でない）には非可視文書の要約が現れない（{type,id,masked:true}だけ。旧コードはFAIL）
+    const forOfficer = await readResultsOf(officer);
+    expect(forOfficer.find((r) => r.id === hiddenDoc.documentId)).toEqual({ type: "document", id: hiddenDoc.documentId, masked: true });
+    // 公開文書の要約は現行どおり全文
+    expect(forOfficer.find((r) => r.id === publicDoc.documentId)?.summary).toContain("格納箱の公開の手順");
+
+    // 依頼者（管理者。可視）は要約がそのまま見える
+    const forAdmin = await readResultsOf(admin);
+    expect(forAdmin.find((r) => r.id === hiddenDoc.documentId)?.summary).toContain("格納箱の非公開メモ");
+
+    // 撤回済み文書も伏せる（可視性の再検査は毎要求。docs/10 §4）
+    await env.DB.prepare("UPDATE documents SET status = 'withdrawn' WHERE id = ? AND unit_id = ?").bind(publicDoc.documentId, a.id).run();
+    const afterWithdraw = await readResultsOf(admin);
+    expect(afterWithdraw.find((r) => r.id === publicDoc.documentId)).toEqual({ type: "document", id: publicDoc.documentId, masked: true });
+  });
+
   it("assistant_rows_do_not_break_the_api_30_list", async () => {
     const a = fx.units.a;
     const admin = a.people.admin;

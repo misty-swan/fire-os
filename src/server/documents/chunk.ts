@@ -193,7 +193,6 @@ export function chunkDocument(input: ExtractedDocument): DocumentChunkInput[] {
         continue;
       }
       if (line.length === 0) continue; // 空行はchunkに含めない（次の行が挟む区間として現れる）
-      if (line.length === 0) continue; // 空行はchunkに含めない（次の行が挟む区間として現れる）
       if (open && end - open.start > MAX_CHUNK_CHARS) close(); // 行境界で分割
       if (!open) open = { pageNo: page.pageNo, section: currentSection, start, end };
       else open.end = end; // 空行や見出し以外は現在のchunkへ延ばす（間の"\n"は区間に含まれる）

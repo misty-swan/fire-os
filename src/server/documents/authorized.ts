@@ -47,8 +47,12 @@ const VISIBILITY_ALIAS = "d";
  * - allow一致 → 可視
  * - ACL行はあるが一致無し → 非公開（ACLあり＝絞り込み）
  * - ACL行が無い → 可視（同unitのPER-01保持者に見える既定。docs/16 T062）
+ * roles空のprincipalは**常に非可視**（PH5レビューA低1。役割の無い主体は可視判定の一致を作れない。
+ * SQLiteは`IN ()`を偽と評価するため偶然の一致は起きないが、既定可視の文書が役割無しで見える
+ * 隙間を作らないよう、ここで明示的に潰す＝単一の正本としての入力防御）
  */
 export function documentVisibilitySql(p: AuthzPrincipal): { sql: string; binds: unknown[] } {
+  if (p.roles.length === 0) return { sql: "0 = 1", binds: [] };
   const d = VISIBILITY_ALIAS;
   const denyMatch =
     `(dd.member_id = ? OR dd.role_id IN (SELECT id FROM roles WHERE code IN (` +

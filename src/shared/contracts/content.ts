@@ -204,7 +204,8 @@ export type DocumentDto = z.infer<typeof Document>;
  * 文書の版（docs/04:150）。attachmentIdは原本添付への直接参照（取得経路は同じ(document,attachment)の
  * attachment_links。docs/16 T062の裁定）。contentHashは版作成時に添付のsha256へ固定した原本のhash
  * （後続の版作成・元添付の履歴でも書変わらない）。revisionNoは文書ごとに1から採番（文書/版UNIQUE）。
- * statusはcontentVersionStates（docs/11 報告書/文書版）。承認列は承認済み（approved）だけが持つ。
+ * statusはcontentVersionStates（docs/11 報告書/文書版）。承認列は承認されたことがある版
+ * （approved。superseded/withdrawnへ遷んだ後も保持）だけが持つ（0027のCHECK拡張・T063）。
  */
 export const DocumentVersion = obj({
   id: Id,

@@ -1,8 +1,10 @@
-import { AiEvaluation, type AiEvaluationDto } from "../../shared/contracts/ai";
+import { AiEvaluation, AssistantCandidateOutput, type AiEvaluationDto, type AssistantReadResultDto, AssistantReadResultViewDto } from "../../shared/contracts/ai";
 import { Job } from "../../shared/contracts/common";
 import { isKnownQuestionVersion } from "../ai/questions";
+import type { AuthzPrincipal } from "../auth/principal";
 import { authorize } from "../auth/authorize";
 import { resolvePrincipal } from "../auth/principal";
+import { isDocumentVisible } from "../documents/authorized";
 import type { AppEnv } from "../env";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../http";
 import { enqueueJob } from "../jobs/store";
@@ -21,6 +23,8 @@ import { requirePermission } from "./invitations";
  *   同じ鍵の再送は同じdedupe_keyの既存jobを返す）。実行はjob handlerが行い、202は受付で完了ではない。
  * - API-30（PER-10）: 候補（ai_evaluations）の一覧。status/sourceTypeで絞り、作成降順の
  *   安定keyset（HMAC署名cursor。条件を変えた続き取得・改変cursorは409 SNAPSHOT_CHANGED）。
+ *   assistant源のreadResultsは要求者の現可視性で要約を伏せる（maskReadResults。PH5レビューA中1。
+ *   非可視文書・撤回済み文書の本文はPER-10保持者にも返さない）。
  *   候補は最終事実ではないため、確定（approve等）はAPI-31（T054）だけが行う。
  */
 
@@ -80,8 +84,25 @@ async function decodeCursor(key: CryptoKey, value: string): Promise<ReviewCursor
   }
 }
 
-export function registerClassificationRoutes(app: ApiApp): void {
-  // --- API-29: 分類の依頼（202=永続jobの受付。docs/05 §1「202は業務完了と表示しない」） ---
+/**
+ * API-30のassistant行のreadResultsを、要求者の**現時点の**可視性で伏せる（PH5レビューA中1）。
+ * 文書の参照はisDocumentVisible（src/server/documents/authorized.ts＝単一の正本）で毎要求再検査し、
+ * 非可視（ACLのdeny・allow一致無し・撤回済みを含む）なら{type,id,masked:true}だけを返す
+ * （要約本文＝文書chunkの先頭2,000字は返さない。docs/10 §4「過去の閲覧許可を永続権限とみなさない」）。
+ * unit内の参照（issue/activity/点検。PER-01で可視）は現行どおり全文を返す。保存値（output_json）は
+ * 変えない＝API-30の応答投影だけを伏せる（承認のstale検査はreferencesで行うため影響しない）。
+ */
+async function maskReadResults(env: AppEnv, viewer: AuthzPrincipal, readResults: readonly AssistantReadResultDto[]): Promise<AssistantReadResultViewDto[]> {
+  return Promise.all(
+    readResults.map(async (r) => {
+      if (r.type !== "document") return r;
+      if (await isDocumentVisible(env, viewer, r.id)) return r;
+      return { type: r.type, id: r.id, masked: true } satisfies AssistantReadResultViewDto;
+    }),
+  );
+}
+
+export function registerClassificationRoutes(app: ApiApp): void {  // --- API-29: 分類の依頼（202=永続jobの受付。docs/05 §1「202は業務完了と表示しない」） ---
   defineRoute(app, "API-29", async (c) => {
     const p = await resolvePrincipal(c);
     const { body } = await parseApiRequest(c, "API-29");
@@ -153,8 +174,18 @@ export function registerClassificationRoutes(app: ApiApp): void {
       }>()
     ).results;
 
-    const toDto = (r: (typeof rows)[number]): AiEvaluationDto =>
-      AiEvaluation.parse({
+    const toDto = async (r: (typeof rows)[number]): Promise<AiEvaluationDto> => {
+      // assistant源のoutputJsonは要求者の現可視性でreadResultsを伏せてから契約に通す（A中1）。
+      // 分類源は従来どおり原文を契約へ通す
+      const raw = JSON.parse(r.output_json);
+      const outputJson =
+        r.source_type === "assistant"
+          ? await (async () => {
+              const parsed = AssistantCandidateOutput.parse(raw);
+              return { ...parsed, readResults: await maskReadResults(c.env, p, parsed.readResults) };
+            })()
+          : raw;
+      return AiEvaluation.parse({
         id: r.id,
         jobId: r.job_id,
         sourceType: r.source_type,
@@ -165,13 +196,14 @@ export function registerClassificationRoutes(app: ApiApp): void {
         questionVersion: r.question_version,
         modelId: r.model_id,
         actualModelVersion: r.actual_model_version,
-        outputJson: JSON.parse(r.output_json),
+        outputJson,
         status: r.status,
         usageJson: r.usage_json ? JSON.parse(r.usage_json) : null,
         createdAt: r.created_at,
       });
+    };
 
-    const items = rows.slice(0, query.limit).map(toDto);
+    const items = await Promise.all(rows.slice(0, query.limit).map(toDto));
     if (rows.length > query.limit) {
       const last = items[items.length - 1]!;
       return ok(c, items, { nextCursor: await encodeCursor(key, { filterHash, createdAt: last.createdAt, id: last.id }) });

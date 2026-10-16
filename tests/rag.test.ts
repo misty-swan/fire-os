@@ -215,20 +215,16 @@ const authorizedVersionIds = async (who: Identity, ids: readonly string[]): Prom
 describe("出典付きRAG回答・原文一致・根拠不足保留 (T067)", () => {
   it("answer_citations_remain_authorized_and_exact", { timeout: 300_000 }, async () => {
     const admin = fx.units.a.people.admin;
+    const officer = fx.units.a.people.officer; // PER-09/PER-11保持者（幹部。D中1の権限検査を通る）
     const member = fx.units.a.people.member;
 
     // === 権限外の材料を固定datasetからpickして追加資料を作る ===================================
-    // 非公開化する文書（exact質問1件の正解文書。memberにはACLで非公開）
+    // 非公開化する文書（exact質問1件の正解文書。ACLは管理者だけにallow＝幹部・団員には非公開）
     const privateQ = pickFoundQuestions("exact", 1, new Set())[0]!;
     const privateChunk = corpus.chunkFor(privateQ.expected.docKey!, privateQ.expected.pageNo!, privateQ.expected.snippet!)!;
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO document_acl (id, unit_id, document_id, member_id, role_id, permission, effect, actor_user_id, actor_kind, created_at) VALUES (?, ?, ?, NULL, ?, 'PER-11', 'allow', ?, 'human', ?)",
-      ).bind(crypto.randomUUID(), fx.units.a.id, privateChunk.documentId, ROLE_IDS.admin, admin.userId, NOW_ISO),
-      env.DB.prepare(
-        "INSERT INTO document_acl (id, unit_id, document_id, member_id, role_id, permission, effect, actor_user_id, actor_kind, created_at) VALUES (?, ?, ?, NULL, ?, 'PER-11', 'allow', ?, 'human', ?)",
-      ).bind(crypto.randomUUID(), fx.units.a.id, privateChunk.documentId, ROLE_IDS.officer, admin.userId, NOW_ISO),
-    ]);
+    await env.DB.prepare(
+      "INSERT INTO document_acl (id, unit_id, document_id, member_id, role_id, permission, effect, actor_user_id, actor_kind, created_at) VALUES (?, ?, ?, NULL, ?, 'PER-11', 'allow', ?, 'human', ?)",
+    ).bind(crypto.randomUUID(), fx.units.a.id, privateChunk.documentId, ROLE_IDS.admin, admin.userId, NOW_ISO).run();
     // draft版の文書（検索対象外。FTS行まで作って「索引に古い行が残っても検索条件が落とす」を再現する）
     const draftDoc = await insertTestDocument({
       unitId: fx.units.a.id, owner: { userId: admin.userId, memberId: admin.memberId! },
@@ -255,10 +251,11 @@ describe("出典付きRAG回答・原文一致・根拠不足保留 (T067)", () 
     const sortedQuestions = [...dataset.questions].sort((a, b) => a.id.localeCompare(b.id));
     const otherUnitQ = sortedQuestions.find((q) => q.type === "other_unit")!;
     const noEvidenceQ = sortedQuestions.find((q) => q.type === "no_evidence")!;
-    // 根拠ありケース（期待出典は人手ラベルから解決。非公開文書とは別の文書からpick）
+    // 根拠ありケース（期待出典は人手ラベルから解決。非公開文書とは別の文書からpick。
+    // API-76はPER-09（AI送信許可）＋PER-11（読取）の併用検査〔D中1〕のため実行者はPER-09保持者）
     const answerableCases = [
       ...pickFoundQuestions("exact", 2, new Set([privateQ.expected.docKey!])).map((q) => ({ who: admin as Identity, q })),
-      ...pickFoundQuestions("exact", 1, new Set([privateQ.expected.docKey!])).map((q) => ({ who: member as Identity, q })), // 一般団員も可視文書からは回答できる
+      ...pickFoundQuestions("exact", 1, new Set([privateQ.expected.docKey!])).map((q) => ({ who: officer as Identity, q })), // PER-09保持者の幹部も可視文書からは回答できる
       ...pickFoundQuestions("paraphrase", 1, new Set([privateQ.expected.docKey!])).map((q) => ({ who: admin as Identity, q })),
     ];
     const answerableCaseIds = answerableCases.map((c) => c.q.id);
@@ -316,14 +313,14 @@ describe("出典付きRAG回答・原文一致・根拠不足保留 (T067)", () 
     }
 
     // === ③根拠なし・別unit・非公開・draft版はabstained（権限外の内容は0件） ========================
-    const noEvidence = await answerRag(ragCtx(member, fakeAi), { body: { query: noEvidenceQ.query } });
+    const noEvidence = await answerRag(ragCtx(officer, fakeAi), { body: { query: noEvidenceQ.query } });
     expect(noEvidence.abstained).toBe(true); // ブリーフのassertion
     expect(noEvidence.citations).toEqual([]);
     collectedTexts.push(noEvidence.answer);
     const deniedCases: { label: string; who: Identity; query: string; forbiddenFragment: string }[] = [
-      { label: "other_unit", who: member, query: otherUnitQ.query, forbiddenFragment: otherUnitQ.expected.snippet! },
-      { label: "private_doc", who: member, query: privateQ.query, forbiddenFragment: privateQ.expected.snippet! },
-      { label: "draft_version", who: member, query: "岸壁化計画の推進状況", forbiddenFragment: draftSecretLine },
+      { label: "other_unit", who: officer, query: otherUnitQ.query, forbiddenFragment: otherUnitQ.expected.snippet! },
+      { label: "private_doc", who: officer, query: privateQ.query, forbiddenFragment: privateQ.expected.snippet! },
+      { label: "draft_version", who: officer, query: "岸壁化計画の推進状況", forbiddenFragment: draftSecretLine },
     ];
     for (const denied of deniedCases) {
       const data = await answerRag(ragCtx(denied.who, fakeAi), { body: { query: denied.query } });
@@ -420,10 +417,17 @@ describe("出典付きRAG回答・原文一致・根拠不足保留 (T067)", () 
     });
 
     // === ⑦route接続（API-76。Idempotency-Key不要の読み取り専用POST。docs/05 §2） ===================
-    const viaRoute = await fx.client(member).request("POST", "/api/v1/search/rag", { query: noEvidenceQ.query });
+    // PER-09（AI送信許可。D中1）: PER-09を持たない一般団員は403（PER-11があってもRAGは幹部・管理者）
+    expect((await fx.client(member).request("POST", "/api/v1/search/rag", { query: "堤防の巡視" })).status).toBe(403);
+    const viaRoute = await fx.client(officer).request("POST", "/api/v1/search/rag", { query: noEvidenceQ.query });
     expect(viaRoute.status).toBe(503); // route未接続なら404になる（AI無しのfail-closed。上⑥と同じ経路）
-    const badQuery = await fx.client(member).request("POST", "/api/v1/search/rag", { query: "" });
+    const badQuery = await fx.client(officer).request("POST", "/api/v1/search/rag", { query: "" });
     expect(badQuery.status).toBe(400); // 契約検証（parseApiRequest）が動いている
+    // documentIdsは80件まで（契約上限。D1のbind上限配慮。A中2）。81〜100件は500でなく400
+    const ids81 = Array.from({ length: 81 }, () => crypto.randomUUID());
+    expect((await fx.client(admin).request("POST", "/api/v1/search/rag", { query: "堤防の巡視", documentIds: ids81 })).status).toBe(400);
+    // port側の防御の二重化: 契約を通っても80件超の入力はHttpError（VALIDATION_ERROR）で落ちる
+    await expect(searchPort.search(principalOf(admin), { query: "堤防の巡視", documentIds: ids81 })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
 
     // === ⑧保存（rag_answers／rag_citations。全文ログD10/D12。1つのD1 batch） ========================
     for (const r of responses) {

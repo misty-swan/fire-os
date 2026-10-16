@@ -4,7 +4,7 @@ import {
   defineApi, listQuery, obj, Reason,
 } from "./common";
 import { notificationSourceTypes } from "./content";
-import { aiProposalStates, notificationChannels, reviewDecisions } from "../states";
+import { aiProposalStates, notificationChannels, patrolPlanStates, reviewDecisions } from "../states";
 
 /**
  * AI分類（T053、docs/06 §2/§3）。分類の源（API-29の入力元）とJevの許可カテゴリ
@@ -68,6 +68,19 @@ export const AssistantReadResult = obj({
 export type AssistantReadResultDto = z.infer<typeof AssistantReadResult>;
 
 /**
+ * API-30のassistant行におけるreadResultsの要素（PH5レビューA中1）。要求者が**現在可視でない参照**
+ * （文書ACLのdeny・一致無し・撤回済みを含む）は`{type,id,masked:true}`だけを返し、要約本文は返さない
+ * （docs/10 §4「過去の閲覧許可を永続権限とみなさない」＝取得のたびに現可視性で判定）。可視な参照と
+ * unit内の参照（issue/activity等。PER-01で可視）はAssistantReadResultそのまま。保存値（output_json）は
+ * 変えず、API-30の応答投影だけを伏せる。
+ */
+export const AssistantReadResultView = z.union([
+  AssistantReadResult,
+  obj({ type: z.enum(assistantReadingTypes), id: Id, masked: z.literal(true) }),
+]);
+export type AssistantReadResultViewDto = z.infer<typeof AssistantReadResultView>;
+
+/**
  * AIの書込提案（実行はしない。kindはtask/notification draftの許可enumだけ＝docs/05 API-77行。
  * 形はAPI-31のconfirmedPayload.task/.notificationと同じ＝承認画面がそのまま確定予定値として使える）。
  */
@@ -107,6 +120,15 @@ export const AssistantCandidateOutput = obj({
 });
 
 /**
+ * API-30応答のassistant枝のoutputJson（PH5レビューA中1）。保存値（AssistantCandidateOutput）と同じ形だが
+ * readResultsだけがAssistantReadResultView（要求者の現可視性で要約を伏せた投影）になる。
+ */
+export const AssistantCandidateOutputView = AssistantCandidateOutput.extend({
+  readResults: z.array(AssistantReadResultView).max(LIMITS.arrayMax),
+});
+export type AssistantCandidateOutputViewDto = z.infer<typeof AssistantCandidateOutputView>;
+
+/**
  * API-77の応答（provisional解除・T068）。proposalIdはai_evaluationsの行ID。
  * 保留（根拠0件・生成応答の検証不可）は proposalId=null のabstained応答で、行も提案も作らない。
  */
@@ -124,7 +146,8 @@ export type AssistantProposalDto = z.infer<typeof AssistantProposal>;
  * AI評価（docs/04:143 ai_evaluations。API-30の一覧要素）。outputJsonは候補本体、
  * usageJsonはtoken使用量。statusはdocs/11 AI提案の語彙（作成時は常にpending＝人未承認）。
  * sourceTypeでoutputJsonの形が変わる（discriminated union）: 分類源はClassificationCandidateOutput、
- * assistant源（T068）はAssistantCandidateOutput。
+ * assistant源（T068）はAssistantCandidateOutputView（readResultsは要求者の現可視性で要約を伏せた
+ * 投影。PH5レビューA中1。保存値そのものではない）。
  */
 const AiEvaluationBase = {
   id: Id,
@@ -145,7 +168,7 @@ const AiEvaluationBase = {
 };
 export const AiEvaluation = z.discriminatedUnion("sourceType", [
   obj({ ...AiEvaluationBase, sourceType: z.enum(classificationSourceTypes), sourceId: Id, outputJson: ClassificationCandidateOutput }),
-  obj({ ...AiEvaluationBase, sourceType: z.literal("assistant"), sourceId: ShortText, outputJson: AssistantCandidateOutput }),
+  obj({ ...AiEvaluationBase, sourceType: z.literal("assistant"), sourceId: ShortText, outputJson: AssistantCandidateOutputView }),
 ]);
 export type AiEvaluationDto = z.infer<typeof AiEvaluation>;
 
@@ -250,8 +273,8 @@ export const RagAnswer = obj({ answer: z.string().min(1), citations: z.array(Cit
  * plan側status（draft/confirmed/cancelled。confirmed・cancelledは終端＝docs/16 T071の裁定）、
  * stop側はplan内でposition一意（順序一意）・facility重複なし。決定（確定/取消）の時刻decidedAtは
  * draftではnull。facilityNameは管理番号か識別名（DBのCHECKでどちらか必須）、緯度経度は候補施設の座標。
+ * status語彙はstates.tsの正本（patrolPlanStates。PH5レビューD低7で二重定義を解消）。
  */
-export const patrolPlanStates = ["draft", "confirmed", "cancelled"] as const;
 export type PatrolPlanState = (typeof patrolPlanStates)[number];
 export const PatrolStop = obj({
   facilityId: Id,
@@ -306,7 +329,9 @@ export const aiApis = {
     request: obj({
       body: obj({
         query: Question, maxSources: z.number().int().min(1).max(20).optional(),
-        documentIds: z.array(Id).min(1).max(LIMITS.arrayMax).optional(),
+        // documentIdsは80件まで（D1のbound parameter上限100を検索SQLの結合bind〔match+unit+ids+topK〕が
+        // 超えないための契約上限。port側のRETRIEVAL_DOCUMENT_IDS_MAXと一致。PH5レビューA中2）
+        documentIds: z.array(Id).min(1).max(80).optional(),
       }),
     }),
     response: RagAnswer,

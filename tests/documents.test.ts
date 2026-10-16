@@ -237,4 +237,31 @@ describe("許諾文書の原本・版・閲覧API (T062)", () => {
     const otherUnitDetail = await fx.client(fx.units.b.people.admin).request("GET", `/api/v1/documents/${privateDoc.id}`);
     expect(otherUnitDetail.status).toBe(404);
   });
+
+  /**
+   * 撤回済み（withdrawn）文書への新draft版作成は422 INVALID_TRANSITION（PH5レビューA低2）。
+   * 撤回は終端（docs/11）。旧実装は撤回後も版作成→draft pointer切替→抽出job登録まで通った
+   * （抽出handlerがstaleに落ちるため実害は無いが、終端への書込経路が残るdocs/11との不整合）。
+   */
+  it("withdrawn_document_rejects_new_version_with_422", async () => {
+    const admin = fx.units.a.people.admin;
+    const doc = await createDocument(admin, "撤回後の版作成（架空版）", [
+      { roleId: ROLE_IDS.member, permission: "PER-11", effect: "allow" },
+      { roleId: ROLE_IDS.operator, permission: "PER-11", effect: "allow" },
+      { roleId: ROLE_IDS.officer, permission: "PER-11", effect: "allow" },
+      { roleId: ROLE_IDS.admin, permission: "PER-11", effect: "allow" },
+    ]);
+    const originalId = await uploadOriginal(admin, doc.id, true);
+    // 撤回（API-92。draft→withdrawnの終端）
+    const wRes = await fx.client(admin).request("POST", `/api/v1/documents/${doc.id}/withdrawal`,
+      { version: doc.version, reason: "許諾の期限切れ（架空）" }, idem());
+    expect(wRes.status).toBe(200);
+    // 撤回後の版作成は422 INVALID_TRANSITION（旧コードは202でFAIL）
+    const res = await fx.client(admin).request("POST", `/api/v1/documents/${doc.id}/versions`,
+      { version: (await fx.rows("documents", { id: doc.id }))[0]!.version as number, attachmentId: originalId, licenseRef: "架空・自団体作成 (2026)" }, idem());
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { error?: { code: string } }).error?.code).toBe("INVALID_TRANSITION");
+    // 版は増えない（終端への書込0）
+    expect(await fx.rows("document_versions", { document_id: doc.id })).toHaveLength(0);
+  });
 });

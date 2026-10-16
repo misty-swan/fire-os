@@ -8,6 +8,7 @@ import { HttpError, type ApiContext } from "../http";
 import { requirePermission } from "../routes/invitations";
 import type { ApiResponse, ApiRequest } from "../../shared/contracts/registry";
 import { Citation, RagAnswer } from "../../shared/contracts/ai";
+import { ragAnswerStates } from "../../shared/states";
 import { SEARCH_CONFIG, createRetrievalPort } from "./adapter";
 import { RETRIEVAL_TOPK_DEFAULT, type AuthorizedChunk } from "./port";
 
@@ -217,7 +218,8 @@ async function persistAnswer(
   p: AuthzPrincipal,
   args: {
     queryHash: string;
-    status: "answered" | "abstained" | "withheld";
+    /** status語彙はstates.tsの正本（ragAnswerStates。0029のCHECKとdocs/11 §2どおり。D中2） */
+    status: (typeof ragAnswerStates)[number];
     answer: string;
     citations: ValidatedRag["citations"];
     chunks: readonly AuthorizedChunk[];
@@ -255,7 +257,10 @@ async function persistAnswer(
  */
 export async function answerRag(ctx: ApiContext, input: ApiRequest<"API-76">): Promise<ApiResponse<"API-76">> {
   const p = await resolvePrincipal(ctx);
-  // PER-11（文書の閲覧権。docs/05 API-76「PER-11/09」。可視範囲は検索と出力前再検査のACL判定が正本）
+  // PER-09（AI依頼/横断読取の送信許可）＋PER-11（文書の閲覧権）の併用検査（PH5レビューD中1。
+  // docs/05 API-76行「PER-11/09」はAPI-29/32前例と同じ「両方」の意。API-29〔ai-classification.ts〕と
+  // 同じ位置でPER-09を先に要求する。可視範囲は検索と出力前再検査のACL判定が正本）
+  requirePermission(p, "PER-09", { unitId: p.unitId, type: "ai_assistant" });
   requirePermission(p, "PER-11", { unitId: p.unitId, type: "document" });
 
   const env = ctx.env;

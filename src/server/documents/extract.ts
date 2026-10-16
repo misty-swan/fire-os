@@ -542,7 +542,11 @@ async function decodeStream(obj: PdfObject): Promise<Uint8Array> {
   return inflate(obj.stream);
 }
 
-/** zlib（FlateDecode）の展開。zlib形式で失敗したらraw deflateを試す（壊れたPDFは両方で失敗する） */
+/** zlib（FlateDecode）の展開。zlib形式で失敗したらraw deflateを試す（壊れたPDFは両方で失敗する）。
+ *  展開の合計はMAX_INFLATED_BYTESまで（PH5レビューA低5。高圧縮ストリーム〔zip爆弾様〕で
+ *  メモリを大量消費させない。超過はunextractable_documentで例外→jobはmanual_review） */
+const MAX_INFLATED_BYTES = 32 * 1024 * 1024;
+
 async function inflate(stream: Uint8Array): Promise<Uint8Array> {
   // DOM型のDecompressionStream.writableはBufferSource受けておりUint8ArrayのpipeThroughと合わないため、
   // 実行時の実型（Uint8Arrayをそのまま受ける）に揃えて使う
@@ -563,8 +567,11 @@ async function inflate(stream: Uint8Array): Promise<Uint8Array> {
         const { done, value } = await reader.read();
         if (done) break;
         if (value && value.length) {
-          parts.push(value);
           total += value.length;
+          if (total > MAX_INFLATED_BYTES) {
+            throw new DocumentExtractError("unextractable_document", "inflate_limit_exceeded");
+          }
+          parts.push(value);
         }
       }
       const out = new Uint8Array(total);
@@ -574,7 +581,9 @@ async function inflate(stream: Uint8Array): Promise<Uint8Array> {
         at += p.length;
       }
       return out;
-    } catch {
+    } catch (err) {
+      // 上限超過などの抽出不能の確定は次の形式へ落とさずそのまま通知する
+      if (err instanceof DocumentExtractError) throw err;
       // 次の形式を試す
     }
   }

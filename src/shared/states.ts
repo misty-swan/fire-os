@@ -43,6 +43,14 @@ export const documentStates = ["draft", "approved", "withdrawn"] as const;
  * （deindex/reindex・再抽出の後にT066が設定）。0027のCHECK語彙（未リリース連番のin-place追加。docs/16 T064）。
  */
 export const documentChunkIndexStates = ["pending", "indexed", "removed"] as const;
+/**
+ * RAG回答のstatus（docs/04:154 rag_answers。docs/11 §2「RAG回答」行の転記＝正本。T067裁定1）:
+ * answered=引用span検証と出力前ACL再検査を通った回答（citations>=1）、abstained=根拠不足・検索0件・
+ * 引用span検証不可（限定retry後。引用0の固定文言）、withheld=出力前再検査で引用元が失権し回答を保留
+ * （生成中の撤回を含む。answered→withheldの辺はdocs/16 T067「出力前再検査での失効」＝docs/11 §2）。
+ * rag_answersは追記型（API-76は都度新行）で保存後の遷移は無い。0029のCHECK語彙も本列挙が正本。
+ */
+export const ragAnswerStates = ["answered", "abstained", "withheld"] as const;
 export const notificationApprovalStates = ["draft", "approved", "cancelled", "dispatching", "finished", "failed"] as const;
 /**
  * 配送（docs/04:141 notification_deliveries）。cancelledは「未送分の取消」（docs/11「未送分取消は

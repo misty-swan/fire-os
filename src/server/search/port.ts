@@ -1,3 +1,4 @@
+import { HttpError } from "../http";
 import type { AuthzPrincipal } from "../auth/principal";
 import type { AppEnv } from "../env";
 
@@ -88,23 +89,25 @@ export const RETRIEVAL_TOPK_MAX = 50;
 /** documentIds絞り込みの上限（authorizedDocumentVersionsのbind上限80と一致させる） */
 export const RETRIEVAL_DOCUMENT_IDS_MAX = 80;
 
-/** inputの値域を検査する（T066の実装と選定評価の両方が使う共通の入口検査） */
+/** inputの値域を検査する（T066の実装と選定評価の両方が使う共通の入口検査）。
+ *  入力経路はAPI-76の契約検査の内側だが、port直接呼出し（assistant・評価）の防御として
+ *  拒否はHttpError（VALIDATION_ERROR）系で統一する（契約上限80とport上限の二重化。PH5レビューA中2） */
 export function validateRetrievalInput(input: RetrievalInput): void {
   if (typeof input.query !== "string" || input.query.length === 0) {
-    throw new Error("RetrievalInput: queryは1字以上の文字列であること");
+    throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "query", reason: "query_required" }]);
   }
   if (input.query.length > RETRIEVAL_QUERY_MAX_CHARS) {
-    throw new Error(`RetrievalInput: queryが上限（${RETRIEVAL_QUERY_MAX_CHARS}字）を超えています`);
+    throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "query", reason: "query_too_long" }]);
   }
   if (input.topK !== undefined && (!Number.isInteger(input.topK) || input.topK < 1 || input.topK > RETRIEVAL_TOPK_MAX)) {
-    throw new Error(`RetrievalInput: topKは1〜${RETRIEVAL_TOPK_MAX}の整数であること`);
+    throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "topK", reason: "topK_out_of_range" }]);
   }
   if (input.documentIds !== undefined) {
     if (!Array.isArray(input.documentIds) || input.documentIds.length > RETRIEVAL_DOCUMENT_IDS_MAX) {
-      throw new Error(`RetrievalInput: documentIdsは${RETRIEVAL_DOCUMENT_IDS_MAX}件まで`);
+      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "documentIds", reason: "document_ids_over_limit" }]);
     }
     if (input.documentIds.some((id) => typeof id !== "string" || id.length === 0)) {
-      throw new Error("RetrievalInput: documentIdsは空でない文字列の配列であること");
+      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "documentIds", reason: "document_ids_invalid" }]);
     }
   }
 }

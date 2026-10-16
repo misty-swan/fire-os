@@ -225,6 +225,11 @@ export function registerDocumentRoutes(app: ApiApp): void {
     // 管理権限を先に見る（非管理者は存在を問わず403。文書の存在を明かさない。docs/10 §3）
     requireDocumentManage(p);
     const doc = await loadDocument(c, params.id, p.unitId);
+    // 撤回（withdrawn）は終端（docs/11）。終端の文書へ新たな版の書込経路は作らない
+    // （PH5レビューA低2。抽出handlerのstaleで止まる以前に、受付自体を422で拒否する）
+    if (doc.status === "withdrawn") {
+      throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "document", reason: "document_withdrawn" }]);
+    }
     // licenseRefは契約必須（無い版は作れない。docs/04:150「license_ref:T」＝入力省略は共通検証の400）
 
     // 原本は同unit・readyのみ（別unit/存在しない添付は同じ404。未検査は422 ATTACHMENT_NOT_READY）。

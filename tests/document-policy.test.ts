@@ -5,6 +5,7 @@ import "../src/server/jobs/handlers/attachment"; // 添付検査jobの登録（�
 import { runDueJobs } from "../src/server/jobs/runner";
 import type { RoleCode } from "../src/server/auth/authorize";
 import type { AuthzPrincipal } from "../src/server/auth/principal";
+import { authorizedDocumentVersions, isDocumentVisible } from "../src/server/documents/authorized";
 import { ROLE_IDS } from "./fixtures/core";
 import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
 
@@ -128,6 +129,13 @@ const decide = (documentId: string, body: Record<string, unknown>, who: Identity
 const rootVersion = async (documentId: string) => (await fx.rows("documents", { id: documentId }))[0]!.version as number;
 const versionRow = async (versionId: string) => (await fx.rows("document_versions", { id: versionId }))[0]!;
 const documentRow = async (documentId: string) => (await fx.rows("documents", { id: documentId }))[0]!;
+
+/** 役割空の可視性試験用（直接INSERTの作成時刻。チェック制約のUTC形式に揃える） */
+const NOW = () => "2026-10-16T00:00:00.000Z";
+const sha256Hex = async (text: string): Promise<string> => {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+};
 
 /** authorizedDocumentVersionsへ渡す主体（試験用の最小構成。rolesはfixturesの役割） */
 const principalOf = (who: Identity): AuthzPrincipal => ({
@@ -369,5 +377,42 @@ describe("文書の承認・撤回・ACL変更と即時検索遮断 (T063)", () 
     });
     expect(lateApprove.status).toBe(409);
     expect((await fx.rows("review_decisions", { document_version_id: verD2.id })).length).toBe(1);
+  });
+
+  /**
+   * 役割を1つも持たないprincipalは常に非可視（PH5レビューA低1）。旧実装はroles空で
+   * `role_id IN ()`を組む（SQLiteは空のINを偽と評価するため、ACL行ありの文書は偶然非可視に
+   * なるが、**ACL行の無い文書（既定可視）は役割無しでも見えていた**）。役割の無い主体
+   * （役割行の全取消等の防御）は可視判定の一致を作れないため、常に非可視が正。
+   */
+  it("principal_without_roles_is_never_document_visible", async () => {
+    const admin = fx.units.a.people.admin;
+    const now = NOW();
+    // ACL行を1本も持たない文書（既定可視。API-73は最低1行のため直接INSERTで作る）
+    const documentId = crypto.randomUUID();
+    const versionId = crypto.randomUUID();
+    const attachmentId = crypto.randomUUID();
+    const contentHash = await sha256Hex(`no-acl:${documentId}`);
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO attachments (id, unit_id, owner_user_id, owner_member_id, intent_target_type, intent_target_id, content_type, byte_size, sha256, status, expires_at, classification, upload_token_hash, ready_key, created_at, updated_at, actor_kind) " +
+          "VALUES (?, ?, ?, ?, 'document', ?, 'application/pdf', 1024, ?, 'ready', ?, 'basic', ?, ?, ?, ?, 'system')",
+      ).bind(attachmentId, fx.units.a.id, admin.userId, admin.memberId!, documentId, contentHash, now, "0".repeat(64), `no-acl/${documentId}.pdf`, now, now),
+      env.DB.prepare(
+        "INSERT INTO documents (id, unit_id, title, classification, status, policy_version, created_at, updated_at, actor_kind) VALUES (?, ?, ?, '訓練資料（架空）', 'approved', 1, ?, ?, 'system')",
+      ).bind(documentId, fx.units.a.id, "ACL行なしの文書（架空）", now, now),
+      env.DB.prepare(
+        "INSERT INTO document_versions (id, unit_id, document_id, revision_no, attachment_id, status, approved_by, approved_at, license_ref, content_hash, created_at, updated_at, actor_kind) VALUES (?, ?, ?, 1, ?, 'approved', ?, ?, '架空・自団体作成（検証用）', ?, ?, ?, 'system')",
+      ).bind(versionId, fx.units.a.id, documentId, attachmentId, admin.userId, now, contentHash, now, now),
+    ]);
+    // 対照: 役割を持つ本人は見える（ACL行なし＝既定可視）
+    expect(await isDocumentVisible(env, principalOf(admin), documentId)).toBe(true);
+    const noRoles: AuthzPrincipal = { ...principalOf(admin), roles: [] };
+    // 旧コードはここでtrue（役割無しでも既定可視になっていた）＝対象機能の不備の赤
+    expect(await isDocumentVisible(env, noRoles, documentId)).toBe(false);
+    expect(await authorizedDocumentVersions(env, noRoles, [versionId])).toEqual([]);
+    // ACL行ありの文書も見えない（deny/allowの一致を作れない）
+    const aclDoc = await createPublicDocument(admin, "役割空の可視性（架空）");
+    expect(await isDocumentVisible(env, noRoles, aclDoc.id)).toBe(false);
   });
 });
