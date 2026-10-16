@@ -1,6 +1,6 @@
 # V04 文書のテキスト抽出とRAG検索への投入（T064/T065。OCR・実PDF集合の抽出率実測・Vectorize実測比較は未実施）
 
-方式: **自前の最小PDF抽出器＋fail-closed（復元できないものは保存しない）＋引用spanの原文逆引き**（docs/06 §5、docs/14 D16/D20、docs/16 T064のプリフライト裁定）。実装は `src/server/documents/extract.ts`（extractDocument・extractPdfPages。PDF構造走査＋FlateDecode展開＋テキスト演算子抽出＋ToUnicode CMap対応）、`src/server/documents/chunk.ts`（chunkDocument・resolveCitationSpan。ページ/節/offset付きchunk化）、`src/server/jobs/handlers/document-extract.ts`（document.extract jobのhandler）、fixture（`tests/fixtures/documents/sample-ja.ts`＋生成済みPDF3種。生成手順: `npx tsx scripts/generate-document-fixtures.ts`）。**検索方式の選定（T065）はこの文書のT065節**（d1_fts＋trigramをconfig/search-development.jsonに暫定固定。Vectorize実測比較は未実施手順）。
+方式: **自前の最小PDF抽出器＋fail-closed（復元できないものは保存しない）＋引用spanの原文逆引き**（docs/06 §5、docs/14 D16/D20、docs/16 T064のプリフライト裁定）。実装は `src/server/documents/extract.ts`（extractDocument・extractPdfPages。PDF構造走査＋FlateDecode展開＋テキスト演算子抽出＋ToUnicode CMap対応）、`src/server/documents/chunk.ts`（chunkDocument・resolveCitationSpan。ページ/節/offset付きchunk化）、`src/server/jobs/handlers/document-extract.ts`（document.extract jobのhandler）、fixture（`tests/fixtures/documents/sample-ja.ts`＋生成済みPDF3種。生成手順: `npx tsx scripts/generate-document-fixtures.ts`）。**検索方式の選定（T065）はこの文書のT065節**（d1_fts＋trigramをconfig/search-development.jsonに暫定固定。Vectorize実測比較は未実施手順）。**選定した索引の本番経路（投入・検索・失効回収）の実装（T066）はこの文書のT066節**。
 
 ## 実施したこと（workerd〔vitest workers pool・実D1/R2〕での実測。実Cloudflareへの接続は無し）
 
@@ -38,7 +38,7 @@
 |---|---|
 | OCR（画像PDFの文字起こし） | 未実装。D20の了承と方式確定まで、画像のみの資料はmanual_reviewのまま（検索不能を明示＝捏造しない） |
 | 実PDF集合での抽出率・エラー分布の実測 | 未実施。架空fixtureでのroundtripとfail-closed動作のみ実測 |
-| 検索（D1全文検索とVectorizeの比較） | **開発選定は実施済み**（下のT065節。d1_fts＋trigramをconfig/search-development.jsonに暫定固定）。**Vectorizeとの実測比較と本番DDL/索引投入の実装はT066の残手順** |
+| 検索（D1全文検索とVectorizeの比較） | **開発選定は実施済み**（T065節。d1_fts＋trigramをconfig/search-development.jsonに暫定固定）。**本番DDL/索引投入/検索/失効回収の実装はT066で実施**（下のT066節。実装方式と選択backend専用コードのファイル名を記録）。**Vectorizeとの実測比較と実Cloudflareでの実測が残手順**（下の「未実施手順」） |
 | RAG回答の品質（docs/06 §6のRAG評価50質問） | T067以降（引用原文一致100%・権限漏えい0の評価は後続） |
 | 実Cloudflare（staging）でのjobs/Cron動作 | 未実施。`npm run test:live`のLIVE系手順で確認する |
 
@@ -91,3 +91,36 @@
    - 安全: unauthorizedChunks=0・unexpectedHitsOnNoEvidence=0を同じく満たすこと（metadata filterのunit前置＋authorizedDocumentVersions再検査の二重。docs/06 §5.5）。
    - 費用: 月間コストの実測見積がD11の費用枠内で、索引同期・deindexを含む運用手順がdocs/07と整合すること。
    - 判定: D16の未決事項として実測表と合否をdocs/16（T065/T066欄）へ追記して確定する。基準を満たさなければd1_fts＋trigramを本番でも採用する（略語質問は「確認できない」回答で運用）。
+
+## T066 選定した索引の本番経路（投入・検索・失効回収）（2026-10-16。実Cloudflare未接続。実装はworkerd〔実D1エンジン〕で実測）
+
+**選択backend専用コードの具体ファイル名（d1_fts＋trigram。version=search-dev-v1）**:
+
+| 役割 | ファイル | 内容 |
+|---|---|---|
+| 恒久DDL | `drizzle/0028_search_index.sql` | FTS5仮想表`document_chunks_fts`（trigram。列構成はT065の選定評価と同じ: chunk_id/unit_id/version_id/document_id/page_no/chunk_no UNINDEXED＋text）。**外部contentテーブル方式は不採用**（jobの「全削除＋再投入」で重複0を保証する方が単純で、実測済みの評価条件と一致する） |
+| 索引の投入・回収 | `src/server/jobs/handlers/document-index.ts`（indexDocument） | document.index（承認）/document.deindex（撤回）/document.reindex（ACL変更）の3kindを1つのhandlerで受ける（T063がenqueue・handler登録点はsrc/server/routes/documents.tsのimport副作用）。実行時に現状態（承認済み＋非withdrawn）と突き合わせて収束。index/reindexは「FTS行の全削除＋現chunksからの再投入＋index_status='indexed'・index_key=`d1_fts:v1/<chunkId>`更新」の1つのD1 batch（重複実行で効果0）。deindexと失権中のreindexは回収（FTS行削除＋'removed'＋index_key=NULL）。失権中のindex jobは索引化せずstale（document_version_not_indexable）。抽出jobがまだの版はchunks 0件の黙確定を避けretryable（chunks_pending） |
+| 検索 | `src/server/search/adapter.ts`（createRetrievalPort(env, config)・SEARCH_CONFIG） | config/search-development.jsonを静的importでbundleに埋め込み（parseSearchConfigに加え非trigramのtokenizerも起動時拒否＝DDLはtrigram）。`RetrievalPort.search`は①検索SQL前置（unit一致・v.status='approved'・d.status<>'withdrawn'・c.index_status='indexed'・FTS行とchunks行の対応。MATCH式は語ごとに引用符で括る＝FTS構文の注入面を潰す。3字以上の語が一致条件）②hit後のauthorizedDocumentVersions再検査（src/server/documents/authorized.ts＝単一の正本）③承認済み・可視のchunkだけをAuthorizedChunkで返す（score=-rank）。backend=vectorizeは実測欠如のため例外で拒否 |
+| 回帰試験 | `tests/retrieval.test.ts`（指定試験`index_hit_is_filtered_by_current_d1_acl_and_version`） | 下表のとおり。実Cloudflareの手順は`tests/live/retrieval.test.ts`（環境変数が揃わなければ必ず失敗＝未実施を成功扱いにしない） |
+
+### 実施したこと（workerd〔vitest workers pool・実D1エンジン〕での実測。指定試験 `index_hit_is_filtered_by_current_d1_acl_and_version`）
+
+| 確認 | 結果 | 試験内の断言 |
+|---|---|---|
+| 承認（API-75）→document.index job→FTS行の投入＋chunksがindexed・index_key=`d1_fts:v1/<chunkId>`へ | 合格（result_ref=`indexed:<N>`） | `result_ref === indexed:${chunks.length}`・index_keyの完全一致 |
+| 承認済み・索引済み版の検索hit（trigram。chunk本文はchunks側の正本から返る） | 合格 | `versionIdsOf(hits) === [versionId]`・text/chunkIdがchunks行と一致 |
+| **版変更**（v2承認でv1はsuperseded。v1のFTS行は残る）でも旧版は検索で返らない | 合格 | `ftsCount(v1) > 0`（古い行が残っている）で最終検索のreturnedVersionIdsに含まれない |
+| **ACL失権**（団員をdeny）はreindex jobの実行前でも即遮断。見える者（admin）は引き続きhit | 合格 | 団員の検索結果`[]`・adminは`[vQ]`・索引にはまだ残っている（ftsCount>0） |
+| **撤回**（API-92）はdeindex jobの実行前でも即遮断し、job実行でFTS行削除＋chunksが'removed'へ回収 | 合格 | 遅延中の検索`[]`・`ftsCount(vR)===0`・全chunk行がremoved＋index_key=NULL |
+| **失権中のindex jobは索引化しない**（承認→撤回→job実行の順） | 合格 | `staleIndexActivated === false`（jobはstale document_version_not_indexable） |
+| **重複実行で効果0**（index job・deindex jobの再実行。lease失効後の再実行を模倣） | 合格 | `duplicateIndexEffects === 0`（FTS行数不変） |
+| 抽出jobの再実行でchunk行が作り直された場合、**孤児FTS行（旧chunk_id）は検索で返らない**。reindex jobで現chunksへ収束し検索が回復 | 合格 | 孤児状態の検索`[]`→reindex後、新chunk idでのhit復帰 |
+| **古いbackend hit＋現ACL/版の再検査**: 生の索引結果（superseded版のFTS行を含む）のうち、承認済み・可視の版だけが返る。再検査で落としたchunkはraw hitに実在（再検査が実働） | 合格 | `returnedVersionIds === currentAuthorizedVersionIds`（ブリーフのassertion）・admin=[v2,vQ]/団員=[v2]・droppedForMember>0・unauthorizedChunks=0 |
+| 変異テスト（手動3件。scripts/mutate.shと同じ方式。終了時に復元済み＝緑を取り直し）: ①adapterのauthorizedDocumentVersions再検査を外す→DETECTED ②失権中index jobの索引化抑止を外す→DETECTED ③索引再構築のDELETE（全削除）を外す→DETECTED | すべてDETECTED | 同上 |
+
+### 限界・残手順（検証済みとして扱わない）
+
+- **実Cloudflare（staging）での実測は未実施**: `tests/live/retrieval.test.ts`の手順（migration 0028適用→API-73/26/74/75で投入→API-86でdocument.indexのsucceededと`indexed:<N>`を確定→〔T067以降〕API-76で検索→API-92で撤回→`removed:<N>`を確定）をLIVE_BASE_URL等の環境変数が揃った状態で実施し、本節を実測で確定する（環境変数が無い状態ではこの試験は必ず失敗する＝skip成功扱いにしない）。
+- **実データ量・実クエリ数でのrows read実測は未実施**: 固定dataset規模の概算はT065節どおり。T082（性能・D1クエリ費用）でEXPLAIN QUERY PLANとmeta.rows_readを確認する。
+- **検索品質の実測はT065の固定dataset値のまま**: 本番経路（SQL前置＋再検査つき）での再実測・略語0/10の改善（Vectorize対比）は「未実施手順」のとおり。trigramは3字以上の語のみ一致（2字語・資料に無い略語は拾えない＝正直な限界。T067の回答は略語質問で「確認できない」になり得る）。
+- **D1のbatch内`meta.changes`はFTS仮想表のDELETEと併用時に信頼できる計上にならない**（実測で発覚。removed数はbatch後のCOUNTで確定する実装にした＝document-index.ts。将来batchのchangesを Effect数に使う場合は単文で確認すること）。

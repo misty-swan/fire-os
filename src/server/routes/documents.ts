@@ -13,6 +13,7 @@ import { canonicalRequestHash, sha256Hex } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { documentVisibilitySql } from "../documents/authorized";
 import "../jobs/handlers/document-extract"; // 抽出job（document.extract）handlerの登録（Cron/Queueと同じ登録点）
+import "../jobs/handlers/document-index"; // 索引job（document.index/deindex/reindex）handlerの登録（T066）
 import { requirePermission } from "./invitations";
 
 /**
