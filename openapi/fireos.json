@@ -20783,7 +20783,7 @@
         "summary": "API-73 POST /documents",
         "x-permission": "PER-11管理",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "idempotency-key",
@@ -20820,13 +20820,68 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
-                        }
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "classification": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "draft",
+                            "approved",
+                            "withdrawn"
+                          ]
+                        },
+                        "currentVersionId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "currentDraftVersionId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "policyVersion": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "createdAt": {},
+                        "updatedAt": {}
                       },
                       "required": [
                         "id",
-                        "version"
+                        "version",
+                        "title",
+                        "classification",
+                        "status",
+                        "currentVersionId",
+                        "currentDraftVersionId",
+                        "policyVersion",
+                        "createdAt",
+                        "updatedAt"
                       ],
-                      "additionalProperties": {}
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -20996,7 +21051,7 @@
         "summary": "API-90 GET /documents",
         "x-permission": "PER-11",
         "x-kind": "list",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "q",
@@ -21014,8 +21069,11 @@
             "required": false,
             "schema": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 200
+              "enum": [
+                "draft",
+                "approved",
+                "withdrawn"
+              ]
             }
           },
           {
@@ -21066,13 +21124,68 @@
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 9007199254740991
-                          }
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "classification": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "draft",
+                              "approved",
+                              "withdrawn"
+                            ]
+                          },
+                          "currentVersionId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "currentDraftVersionId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "policyVersion": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {},
+                          "updatedAt": {}
                         },
                         "required": [
                           "id",
-                          "version"
+                          "version",
+                          "title",
+                          "classification",
+                          "status",
+                          "currentVersionId",
+                          "currentDraftVersionId",
+                          "policyVersion",
+                          "createdAt",
+                          "updatedAt"
                         ],
-                        "additionalProperties": {}
+                        "additionalProperties": false
                       }
                     },
                     "meta": {
@@ -21162,7 +21275,7 @@
         "summary": "API-74 POST /documents/:id/versions",
         "x-permission": "PER-11管理",
         "x-kind": "job",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -21199,8 +21312,134 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "version": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "revisionNo": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "attachmentId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "draft",
+                                "in_review",
+                                "approved",
+                                "changes_requested",
+                                "superseded",
+                                "withdrawn"
+                              ]
+                            },
+                            "approvedBy": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "approvedAt": {
+                              "anyOf": [
+                                {},
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "licenseRef": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "contentHash": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            },
+                            "createdAt": {}
+                          },
+                          "required": [
+                            "id",
+                            "documentId",
+                            "revisionNo",
+                            "attachmentId",
+                            "status",
+                            "approvedBy",
+                            "approvedAt",
+                            "licenseRef",
+                            "contentHash",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "job": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "retry_wait",
+                                "manual_review",
+                                "cancelled",
+                                "stale"
+                              ]
+                            },
+                            "attempts": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "errorCode": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "resultRef": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "status",
+                            "attempts",
+                            "errorCode",
+                            "resultRef"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "version",
+                        "job"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -24567,7 +24806,7 @@
         "summary": "API-91 GET /documents/:id",
         "x-permission": "PER-11",
         "x-kind": "get",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "id",
@@ -24604,8 +24843,216 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "document": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "title": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "classification": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "draft",
+                                "approved",
+                                "withdrawn"
+                              ]
+                            },
+                            "currentVersionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "currentDraftVersionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "policyVersion": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "createdAt": {},
+                            "updatedAt": {}
+                          },
+                          "required": [
+                            "id",
+                            "version",
+                            "title",
+                            "classification",
+                            "status",
+                            "currentVersionId",
+                            "currentDraftVersionId",
+                            "policyVersion",
+                            "createdAt",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "versions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "documentId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "revisionNo": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "attachmentId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "draft",
+                                  "in_review",
+                                  "approved",
+                                  "changes_requested",
+                                  "superseded",
+                                  "withdrawn"
+                                ]
+                              },
+                              "approvedBy": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "approvedAt": {
+                                "anyOf": [
+                                  {},
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "licenseRef": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "contentHash": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{64}$"
+                              },
+                              "createdAt": {}
+                            },
+                            "required": [
+                              "id",
+                              "documentId",
+                              "revisionNo",
+                              "attachmentId",
+                              "status",
+                              "approvedBy",
+                              "approvedAt",
+                              "licenseRef",
+                              "contentHash",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "original": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "attachmentId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending_upload",
+                                    "uploaded",
+                                    "checking",
+                                    "ready",
+                                    "rejected",
+                                    "expired",
+                                    "deleting",
+                                    "deleted"
+                                  ]
+                                },
+                                "contentType": {
+                                  "type": "string"
+                                },
+                                "contentHash": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "pattern": "^[0-9a-f]{64}$"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "attachmentId",
+                                "status",
+                                "contentType",
+                                "contentHash"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "document",
+                        "versions",
+                        "original"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

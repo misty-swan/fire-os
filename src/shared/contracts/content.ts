@@ -1,11 +1,11 @@
 import { z } from "zod";
 import {
-  Body, Id, IdList, IDEM, Instant, LIMITS, P_ID, Page, Reason, Sha256, ShortText, Title, Version, defineApi, listQuery, noContent,
-  obj, provisionalDto,
+  Body, Id, IdList, IDEM, Instant, Job, LIMITS, P_ID, Page, Reason, Sha256, ShortText, Title, Version, defineApi, listQuery, noContent,
+  obj,
 } from "./common";
 import {
-  announcementStates, attachmentStates, contentVersionStates, deliveryStates, jobStates, notificationApprovalStates,
-  notificationChannels,
+  announcementStates, attachmentStates, contentVersionStates, deliveryStates, documentStates, jobStates,
+  notificationApprovalStates, notificationChannels,
 } from "../states";
 
 export const ReadReceipt = obj({ readAt: z.iso.datetime(), revisionNo: z.number().int().min(1).optional(), notificationVersion: z.number().int().min(1).optional() });
@@ -179,6 +179,68 @@ const AclEntry = obj({
 }).refine((v) => !!v.memberId !== !!v.roleId, { message: "memberId か roleId のどちらか一方を指定してください" });
 const Acl = z.array(AclEntry).min(1).max(LIMITS.arrayMax);
 
+// --- 文書（T062。docs/04:149/150、docs/05 API-73/74/90/91、docs/06 §5、docs/10 §2/§4） ---
+
+/**
+ * 文書root（docs/04:149）。currentVersionIdは有効な承認版（T063の承認だけが切替る）、
+ * currentDraftVersionIdは最新のdraft版（版作成で切替る）＝docs/11「承認版とdraftの別pointer」。
+ * policyVersionはACL・分類の改訂版（API-99の変更で増分。応答契約に載る。docs/04:149のT062追加列）。
+ */
+export const Document = obj({
+  id: Id,
+  version: Version,
+  title: Title,
+  classification: ShortText,
+  status: z.enum(documentStates),
+  currentVersionId: Id.nullable(),
+  currentDraftVersionId: Id.nullable(),
+  policyVersion: Version,
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type DocumentDto = z.infer<typeof Document>;
+
+/**
+ * 文書の版（docs/04:150）。attachmentIdは原本添付への直接参照（取得経路は同じ(document,attachment)の
+ * attachment_links。docs/16 T062の裁定）。contentHashは版作成時に添付のsha256へ固定した原本のhash
+ * （後続の版作成・元添付の履歴でも書変わらない）。revisionNoは文書ごとに1から採番（文書/版UNIQUE）。
+ * statusはcontentVersionStates（docs/11 報告書/文書版）。承認列は承認済み（approved）だけが持つ。
+ */
+export const DocumentVersion = obj({
+  id: Id,
+  documentId: Id,
+  revisionNo: Version,
+  attachmentId: Id,
+  status: z.enum(contentVersionStates),
+  approvedBy: Id.nullable(),
+  approvedAt: Instant.nullable(),
+  /** 許諾の出典（必須。無い版は作れない。docs/05 API-74「licenseRef」） */
+  licenseRef: ShortText,
+  contentHash: Sha256,
+  createdAt: Instant,
+});
+export type DocumentVersionDto = z.infer<typeof DocumentVersion>;
+
+/** 版の原本添付の参照（API-91「原文添付参照/引用元版」。取得はAPI-27。鍵・実体は返さない） */
+export const DocumentOriginal = obj({
+  attachmentId: Id,
+  status: z.enum(attachmentStates),
+  contentType: z.string(),
+  /** readyの添付だけが持つ原本のhash */
+  contentHash: Sha256.nullable(),
+});
+
+/**
+ * docs/05 API-91「DocumentDetail」: 文書＋版一覧＋表示中の版の原文添付の参照。
+ * revision?で引用元版を辿れる（省略は現在のdraft版。draftが無ければ承認版）。
+ * originalは版がまだ無い（または表示版が無い）ときnull。
+ */
+export const DocumentDetail = obj({
+  document: Document,
+  versions: z.array(DocumentVersion),
+  original: DocumentOriginal.nullable(),
+});
+
 /**
  * 監査ログ（追記専用）。本文・氏名・連絡先・token・Secretは入らない（metadataはIDとコードの平坦な値だけ、1KiB以下）。
  * mutationId は同じ操作のoutbox（entityVersion/eventType）と結びつき、操作・旧新版を追跡できる。
@@ -325,17 +387,22 @@ export const contentApis = {
   // --- 文書 ---
   "API-73": defineApi({
     method: "POST", path: "/documents", permission: "PER-11管理", kind: "mutation", success: [201],
+    // 権限はPER-11＋幹部・管理者（docs/10 PER-11「△公開対象」の管理操作。D03未承認の検証設定）。
+    // aclはdeny優先の投影（memberId/roleId片方。ACL行で絞られない文書は無い＝作成時必須1件以上）
     request: obj({ body: obj({ title: Title, classification: ShortText, acl: Acl }), ...IDEM }),
-    response: provisionalDto(), provisional: true,
+    response: Document,
   }),
   "API-74": defineApi({
     method: "POST", path: "/documents/:id/versions", permission: "PER-11管理", kind: "job", success: [202],
+    // ready原本＋licenseRef必須（docs/05 API-74「version,attachmentId,licenseRef;ready原本/抽出job」）。
+    // attachmentIdは同unit・ready添付（未readyは422 ATTACHMENT_NOT_READY）。licenseRefは契約必須（無ければ400）。
+    // content_hashは添付のsha256へ固定。document.extract job（202=受付で完了ではない。handlerはT064）
     request: obj({
       params: P_ID,
       body: obj({ version: Version, attachmentId: Id, licenseRef: ShortText }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    response: obj({ version: DocumentVersion, job: Job }),
   }),
   "API-75": defineApi({
     method: "POST", path: "/documents/:id/decision", permission: "PER-10文書承認", kind: "mutation", success: [200],
@@ -348,13 +415,15 @@ export const contentApis = {
   }),
   "API-90": defineApi({
     method: "GET", path: "/documents", permission: "PER-11", kind: "list", success: [200],
-    request: obj({ query: listQuery({ q: ShortText.optional(), status: ShortText.optional() }) }),
-    response: Page(provisionalDto()), provisional: true,
+    // 文書ACL前置（deny優先。ACL行が無い文書は同unitのPER-01保持者に見える既定）。
+    // SQLで対象行を絞ってからページング（docs/10 §3）。非公開文書は行・件数に現れない
+    request: obj({ query: listQuery({ q: ShortText.optional(), status: z.enum(documentStates).optional() }) }),
+    response: Page(Document),
   }),
   "API-91": defineApi({
     method: "GET", path: "/documents/:id", permission: "PER-11", kind: "get", success: [200],
     request: obj({ params: P_ID, query: obj({ revision: z.coerce.number().int().min(1).optional() }) }),
-    response: z.looseObject({}), provisional: true,
+    response: DocumentDetail,
   }),
   "API-92": defineApi({
     method: "POST", path: "/documents/:id/withdrawal", permission: "PER-11管理", kind: "mutation", success: [200],
@@ -363,6 +432,7 @@ export const contentApis = {
   }),
   "API-99": defineApi({
     method: "PATCH", path: "/documents/:id/access-policy", permission: "PER-11管理", kind: "mutation", success: [200],
+    // 応答のpolicyVersionはdocuments.policy_version（T062で追加した列。T063の変更で増分）
     request: obj({
       params: P_ID,
       body: obj({ version: Version, classification: ShortText, acl: Acl }),

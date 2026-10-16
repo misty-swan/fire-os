@@ -28,6 +28,13 @@ export const attachmentStates = [
   "pending_upload", "uploaded", "checking", "ready", "rejected", "expired", "deleting", "deleted",
 ] as const;
 export const announcementStates = ["draft", "published", "archived"] as const;
+/**
+ * 文書rootの状態（docs/04:149。docs/11「文書全体のstatusは各機能タスクで列挙とCHECKを追加」のT062実装。
+ * D03未承認の検証設定）: draft=作成直後（版の承認はまだ）、approved=有効な承認版がある（RAG対象。
+ * current_version_idが有効）、withdrawn=撤回（API-92。即時検索除外。終端）。
+ * 承認（draft→approved）と撤回（draft/approved→withdrawn）の辺はT063が使う。T062では作成（draft）のみ。
+ */
+export const documentStates = ["draft", "approved", "withdrawn"] as const;
 export const notificationApprovalStates = ["draft", "approved", "cancelled", "dispatching", "finished", "failed"] as const;
 /**
  * 配送（docs/04:141 notification_deliveries）。cancelledは「未送分の取消」（docs/11「未送分取消は

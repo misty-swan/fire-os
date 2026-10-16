@@ -20,9 +20,10 @@ import {
 } from "./sizes";
 
 /**
- * intent対象として存在確認できる業務表（docs/05 API-26行「facility/vehicle/equipment/activity/announcement」）。
+ * intent対象として存在確認できる業務表（docs/05 API-26行「facility/vehicle/equipment/activity/announcement/document」）。
  * activityはT035でactivities行が出来たため対象に含める。announcementはT046（お知らせの添付。
- * 詳細画面から追加・解除し、対象者に見える形で表示する）。
+ * 詳細画面から追加・解除し、対象者に見える形で表示する）。documentはT062（許諾文書の原本。
+ * API-26のdirect targetのみで、attachment_draft経路は使わない＝upload.tsのAPI-98で拒否）。
  * 多態の点検(inspection)・issues等は、その表ができるタスクでここへ追加する
  */
 export const ATTACHMENT_TARGET_TABLES: Record<string, string> = {
@@ -31,7 +32,11 @@ export const ATTACHMENT_TARGET_TABLES: Record<string, string> = {
   equipment: "equipment",
   activity: "activities",
   announcement: "announcements",
+  document: "documents",
 };
+
+/** 管理権限（PER-11＋幹部・管理者）で操作する対象（docs/10 PER-03のunitWide: MANAGERSと同じ実装既定。D03未承認の検証設定） */
+const MANAGED_TARGET_TYPES = new Set(["document"]);
 
 interface AttachmentRow {
   id: string; unit_id: string; owner_user_id: string; owner_member_id: string; status: string;
@@ -61,7 +66,9 @@ export function registerUploadRoutes(app: ApiApp): void {
   defineRoute(app, "API-98", async (c) => {
     const p = await resolvePrincipal(c);
     const { body, headers } = await parseApiRequest(c, "API-98");
-    if (body.intendedEntityType === "attachment_draft") {
+    // attachment_draft自身とdocumentは予約の対象にしない（documentの原本はAPI-26のdirect targetだけ。
+    // draftはAPI-74（attachmentId指定）では消費されないため、消費されない予約を作らせない。docs/16 T062）
+    if (body.intendedEntityType === "attachment_draft" || body.intendedEntityType === "document") {
       throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "intendedEntityType", reason: "unsupported_entity_type" }]);
     }
     // 親の指定は型とIDの両方が必要（片方だけではDBのCHECK違反=500になる不整合な予約を作らせない）
@@ -74,7 +81,14 @@ export function registerUploadRoutes(app: ApiApp): void {
       if (!table) throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "parentType", reason: "unsupported_entity_type" }]);
       const exists = await c.env.DB.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND unit_id = ?`).bind(body.parentId, p.unitId).first();
       if (!exists) throw new HttpError("NOT_FOUND");
-      requirePermission(p, "PER-04", { unitId: p.unitId, type: body.parentType, id: body.parentId });
+      if (MANAGED_TARGET_TYPES.has(body.parentType)) {
+        requirePermission(p, "PER-11", { unitId: p.unitId, type: body.parentType, id: body.parentId });
+        if (!p.roles.includes("officer") && !p.roles.includes("admin")) {
+          throw new HttpError("FORBIDDEN", undefined, [{ field: "permission", reason: "document_manage_required" }]);
+        }
+      } else {
+        requirePermission(p, "PER-04", { unitId: p.unitId, type: body.parentType, id: body.parentId });
+      }
     } else {
       // 親なし（これから作る業務への添付）。報告は全役割に許す（PER-04の本人報告）
       requirePermission(p, "PER-04", { unitId: p.unitId, type: "member", id: p.memberId, ownerMemberId: p.memberId });
@@ -143,9 +157,19 @@ export function registerUploadRoutes(app: ApiApp): void {
     } else {
       const table = ATTACHMENT_TARGET_TABLES[body.target.type];
       if (!table) throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "target.type", reason: "unsupported_entity_type" }]);
+      // 管理対象（document＝許諾文書の原本）はPER-11＋幹部・管理者を先に見る（非管理者は存在を問わず403。
+      // 対象の存在を明かさない。docs/10 §3）。一般団員・担当では原本を作れない
+      if (MANAGED_TARGET_TYPES.has(body.target.type)) {
+        requirePermission(p, "PER-11", { unitId: p.unitId, type: body.target.type });
+        if (!p.roles.includes("officer") && !p.roles.includes("admin")) {
+          throw new HttpError("FORBIDDEN", undefined, [{ field: "permission", reason: "document_manage_required" }]);
+        }
+      }
       const exists = await c.env.DB.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND unit_id = ?`).bind(body.target.id, p.unitId).first();
       if (!exists) throw new HttpError("NOT_FOUND");
-      requirePermission(p, "PER-04", { unitId: p.unitId, type: body.target.type, id: body.target.id });
+      if (!MANAGED_TARGET_TYPES.has(body.target.type)) {
+        requirePermission(p, "PER-04", { unitId: p.unitId, type: body.target.type, id: body.target.id });
+      }
       conditions.push({ existsSql: `SELECT 1 FROM ${table} WHERE id = ? AND unit_id = ?`, binds: [body.target.id, p.unitId], failCode: "NOT_FOUND" });
       classification = SENSITIVE_TARGET_TYPES.has(body.target.type) ? "sensitive" : "basic";
     }
