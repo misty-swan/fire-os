@@ -346,4 +346,100 @@ describe("報告書の申請・承認・差戻し・承認版出力 (T058)", () 
     expect(raw).toContain("/Count 2");
     expect(raw.match(/\/Type \/Page[^s]/g)).toHaveLength(2);
   });
+
+  /**
+   * 同一帳票の2回目の承認（承認後訂正→再申請→再承認。docs/11 approved→superseded）:
+   * API-60のapproveは旧承認版をsupersededへ遷める（承認列は不変のままstatusだけ遷む）。
+   * 0024作成時の「approvedだけが承認列を持つ」CHECKのままだと、この遷移がCHECK違反になり
+   * batch全体が失敗する（＝2回目の承認が常に失敗）。CHECKを「承認されたことがある版」へ
+   * 拡張してから緑になる（0027/T063と同型の修正。FAILを確認してから直す）。
+   */
+  it("second_approval_supersedes_previous_approved_version", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin; // 作成＋承認（PER-10）
+    const officer = a.people.officer; // 予定の担当owner
+
+    // --- 公開済み予定＋実績＋手動draft（2回目の承認を試す1本の帳票） ---
+    const createRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "再承認試験の活動（架空）",
+      kind: "訓練",
+      plannedStartsAt: "2026-10-24T01:00:00.000Z",
+      plannedEndsAt: "2026-10-24T04:00:00.000Z",
+      locationText: "架空市堤防",
+      ownerMemberId: officer.memberId!,
+      audienceMemberIds: [officer.memberId!],
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const activityId = ((await json(createRes)).data! as { id: string }).id;
+    expect((await fx.client(admin).request("PATCH", `/api/v1/activities/${activityId}`, {
+      version: 1, status: "scheduled", reason: "対象を確定して公開",
+    }, idem())).status).toBe(200);
+    expect((await fx.client(admin).request("POST", `/api/v1/activities/${activityId}/actual-results`, {
+      activityVersion: 2,
+      content: "堤防の巡視と水防訓練を実施（再承認試験用）。",
+      actualStartsAt: "2026-10-24T01:10:00.000Z",
+      actualEndsAt: "2026-10-24T03:40:00.000Z",
+      participants: [{ memberId: officer.memberId!, actualStatus: "participated" }],
+      attachmentIds: [],
+    }, idem())).status).toBe(201);
+
+    const manual = await fx.client(admin).request("POST", "/api/v1/reports/manual", {
+      activityId,
+      resultVersion: (await fx.rows("activity_results", { activity_id: activityId }))[0]!.version as number,
+      templateVersion: "test-activity-v1",
+      text: "初版の本文（架空）。",
+    }, idem());
+    expect(manual.status).toBe(201);
+    const report = (await json(manual)).data! as { report: { id: string; version: number }; versions: { id: string }[] };
+    const v1 = report.versions[0]!.id;
+    const decide = (body: Record<string, unknown>) =>
+      fx.client(admin).request("POST", `/api/v1/reports/${report.report.id}/decision`, body, idem());
+    const currentRootVersion = async () => (await reportRow(report.report.id)).version as number;
+
+    // --- 1回目の承認（v1がapprovedになり、承認済pointerがv1を指す） ---
+    expect((await decide({
+      version: await currentRootVersion(), reportVersion: 1, decision: "request_review",
+      sourceVersions: await savedSourceVersions(v1), reason: "初版を申請します",
+    })).status).toBe(200);
+    expect((await decide({
+      version: await currentRootVersion(), reportVersion: 1, decision: "approve",
+      sourceVersions: await savedSourceVersions(v1), reason: "初版を承認します",
+    })).status).toBe(200);
+    expect((await versionRow(v1)).status).toBe("approved");
+    expect((await reportRow(report.report.id)).current_approved_version_id).toBe(v1);
+
+    // --- 承認後訂正で新draft版（v2）を作り、申請（docs/11「承認後の訂正は新draft版」） ---
+    const edit = await fx.client(admin).request("POST", `/api/v1/reports/${report.report.id}/versions`, {
+      version: await currentRootVersion(),
+      text: "承認後訂正の本文（架空）。",
+      missingFields: [],
+      sourceVersions: {},
+      reason: "承認後の文言訂正",
+    }, idem());
+    expect(edit.status).toBe(201);
+    const v2 = ((await json(edit)).data! as { id: string }).id;
+    expect((await versionRow(v1)).status).toBe("approved"); // 新draft作成で旧承認版は不変
+
+    expect((await decide({
+      version: await currentRootVersion(), reportVersion: 2, decision: "request_review",
+      sourceVersions: await savedSourceVersions(v2), reason: "訂正版を申請します",
+    })).status).toBe(200);
+
+    // --- 2回目の承認: 旧承認版v1はsupersededへ、承認済pointerはv2へ切替（docs/11） ---
+    const approve2 = await decide({
+      version: await currentRootVersion(), reportVersion: 2, decision: "approve",
+      sourceVersions: await savedSourceVersions(v2), reason: "訂正版を承認します",
+    });
+    expect(approve2.status).toBe(200);
+    const v1Row = await versionRow(v1);
+    expect(v1Row.status).toBe("superseded");
+    expect(v1Row.approved_by).not.toBeNull(); // 承認列は不変のまま保持（docs/11 approved→superseded）
+    expect(v1Row.approved_at).not.toBeNull();
+    expect((await versionRow(v2)).status).toBe("approved");
+    expect((await reportRow(report.report.id)).current_approved_version_id).toBe(v2);
+    // 旧承認版にsupersededのeventsが残る（docs/04:148「superseded＝旧承認版の切替」）
+    expect((await fx.rows("content_version_events", { report_version_id: v1, action: "superseded" }))).toHaveLength(1);
+    // 承認済pointerは新承認版を指すため、出力（API-61）は引き続き可能
+    expect((await fx.client(admin).request("GET", `/api/v1/reports/${report.report.id}/content?format=csv`)).status).toBe(200);
+  });
 });
