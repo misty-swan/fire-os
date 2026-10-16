@@ -21,6 +21,11 @@ import type { AppEnv } from "../env";
  *   （＝根拠なしのabstain。chunk外の文を作らない）。**報告書生成のfake保留（偽の下書きを作らない）
  *   は変更しない**: 報告書生成（response_formatにtextだけのschema）は従来どおりJev分類の応答形を
  *   返すため、サーバー側検証が不適合で保留に落とす（docs/evidence/V04-llm.md。docs/03 §1.1）。
+ * - **横断assistant（T068・API-77）の決定的応答**（プリフライト裁定5。docs/16 T068）: 入力が
+ *   assistantの構造出力（json_schemaにusedReadingsを含む＝src/server/ai/assistant.tsの
+ *   ASSISTANT_JSON_SCHEMA）のとき、**与えられた読み取り結果（<reading>本文）から質問語を含む行を
+ *   そのまま引用して並べる応答**を返す。応答本文は読み取り本文の部分列にしかなり得ない＝捏造不能。
+ *   **書込提案（proposals）は出さない**（承認不要の形でも出さない。実行はAPI-31の承認だけ）。
  */
 export function localTestAi(env: AppEnv): NonNullable<AppEnv["AI"]> | undefined {
   if (env.APP_ENV !== "local" || env.TEST_AI_FAKE !== "1") return undefined;
@@ -29,6 +34,8 @@ export function localTestAi(env: AppEnv): NonNullable<AppEnv["AI"]> | undefined 
       void model;
       // RAGの構造出力（citationsを含むjson_schema）のときは決定的な引用応答を返す
       if (isRagCall(input)) return ragFakeResponse(input);
+      // 横断assistantの構造出力（usedReadingsを含むjson_schema）のときは読み取りの引用だけを返す（提案は出さない）
+      if (isAssistantCall(input)) return assistantFakeResponse(input);
       // 既存: 固定質問（docs/06 §2）を受けた形だけを模倣する。stateの中身は候補に反映しない（決定的な値）。
       // この応答形は報告書生成（messages＋{"text"}契約）には不適合のため、報告書生成jobは保留に落ちる
       return {
@@ -100,5 +107,62 @@ function ragFakeResponse(input: { messages?: unknown; response_format?: unknown 
     model: "fake-local-rag@2026-10-16",
     response: JSON.stringify({ answer, citations }),
     usage: { prompt_tokens: 96, completion_tokens: 48 },
+  };
+}
+
+/** 横断assistantの呼出しか（src/server/ai/assistant.tsのASSISTANT_JSON_SCHEMAと同じ形のresponse_formatを持つか） */
+function isAssistantCall(input: { response_format?: unknown }): boolean {
+  const format = input.response_format as { json_schema?: { properties?: Record<string, unknown> } } | undefined;
+  return format?.json_schema?.properties?.usedReadings !== undefined;
+}
+
+interface AssistantFakeReading {
+  /** buildAssistantMessagesが振る1始まりの番号 */
+  no: number;
+  text: string;
+}
+
+/** user側の引用データ（<question>と<reading no="N" …>）を取り出す（buildAssistantMessagesと同じ形のみを受け付ける） */
+function parseAssistantInput(input: { messages?: unknown }): { question: string; readings: AssistantFakeReading[] } | null {
+  const messages = input.messages as { role: string; content: string }[] | undefined;
+  const user = messages?.find((m) => m.role === "user");
+  if (!user) return null;
+  const question = /<question>([\s\S]*?)<\/question>/.exec(user.content)?.[1];
+  if (question === undefined) return null;
+  const readings: AssistantFakeReading[] = [];
+  for (const match of user.content.matchAll(/<reading no="(\d+)"[^>]*>([\s\S]*?)<\/reading>/g)) {
+    readings.push({ no: Number(match[1]!), text: match[2]! });
+  }
+  return { question, readings };
+}
+
+/**
+ * 決定的な横断assistant応答: 質問語（3字以上。検索の一致条件と同じ）を含む行を読み取りごとに1つ引用し、
+ * その引用を並べた本文を返す。応答本文は読み取り本文の部分列にしかなり得ない＝捏造不能
+ * （記録外の文・注入文〔質問語を含まない〕は応答に現れない）。
+ * **書込提案（proposals）は出さない**（承認不要の形でも出さない＝プリフライト裁定5）。
+ */
+function assistantFakeResponse(input: { messages?: unknown; response_format?: unknown }): { model: string; response: string; usage: { prompt_tokens: number; completion_tokens: number } } {
+  const parsed = parseAssistantInput(input);
+  const terms = (parsed?.question ?? "").trim().split(/\s+/).filter((t) => t.length >= 3);
+  const usedReadings: number[] = [];
+  const quotedLines: string[] = [];
+  for (const reading of parsed?.readings ?? []) {
+    // 質問語を含む行のうち、含む語数が最大の行（同点は先頭。決定的）を引用にする
+    let best: { line: string; hits: number } | null = null;
+    for (const line of reading.text.split("\n")) {
+      const hits = terms.filter((t) => line.includes(t)).length;
+      if (hits > 0 && (best === null || hits > best.hits)) best = { line, hits };
+    }
+    if (best !== null) {
+      usedReadings.push(reading.no);
+      quotedLines.push(best.line);
+    }
+  }
+  const answer = quotedLines.length > 0 ? quotedLines.join("\n") : "根拠となる読み取りがありませんでした。";
+  return {
+    model: "fake-local-assistant@2026-10-16",
+    response: JSON.stringify({ answer, usedReadings, proposals: [] }),
+    usage: { prompt_tokens: 120, completion_tokens: 40 },
   };
 }

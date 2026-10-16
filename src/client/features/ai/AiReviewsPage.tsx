@@ -43,6 +43,8 @@ export const SOURCE_TYPE_LABELS: Record<AiEvaluationDto["sourceType"], string> =
   facility_inspection: "施設の点検",
   asset_inspection: "資産の点検",
   issue: "異常",
+  // 横断AIの提案（T068。確認・承認画面〔SCR-28〕はT070で追加予定の間の案内表示。docs/16 T068）
+  assistant: "横断AIの提案",
 };
 
 /** URLの ?source= （例: issue:<id>）を解釈する。未知の形式はnull（到達できない画面を作らない） */
@@ -218,8 +220,10 @@ function SourceReviewPanel({ sourceType, sourceId }: { sourceType: AiEvaluationD
     };
   }, [jobActive, jobAttempts, jobId]);
 
-  /** 分類を依頼（API-29。202=jobの受付）。依頼後はURLにjobを持たせて再読込に強くする */
+  /** 分類を依頼（API-29。202=jobの受付）。依頼後はURLにjobを持たせて再読込に強くする。
+   *  横断AIの提案（assistant源・T068）は分類の再依頼を持たない（提案の作成はAPI-77） */
   const requestClassification = async (currentVersion: number) => {
+    if (sourceType === "assistant") return;
     const res = await request.run({
       body: { sourceType, sourceId, sourceVersion: currentVersion, questionVersion: "v1" },
     });
@@ -296,7 +300,9 @@ function SourceReviewPanel({ sourceType, sourceId }: { sourceType: AiEvaluationD
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="text-[13px] font-bold">
                         分類の候補 v{c.sourceVersion}
-                        <span className="ml-2 font-normal text-ink-sub">{CATEGORY_LABELS[c.outputJson.categories.representative]}</span>
+                        <span className="ml-2 font-normal text-ink-sub">
+                          {c.sourceType === "assistant" ? "横断AIの提案" : CATEGORY_LABELS[c.outputJson.categories.representative]}
+                        </span>
                       </span>
                       <span className="font-mono text-[11px] text-ink-muted">{c.createdAt.slice(0, 16).replace("T", " ")}</span>
                     </span>
@@ -473,7 +479,11 @@ function CandidateList() {
                       {SOURCE_TYPE_LABELS[c.sourceType]} v{c.sourceVersion}
                     </span>
                   </span>
-                  <span className="truncate text-[15px] font-bold">{CATEGORY_LABELS[c.outputJson.categories.representative]}</span>
+                  <span className="truncate text-[15px] font-bold">
+                    {c.sourceType === "assistant"
+                      ? "横断AIの提案（参照した記録と書込候補つき）"
+                      : CATEGORY_LABELS[c.outputJson.categories.representative]}
+                  </span>
                   <span className="truncate font-mono text-[11px] text-ink-muted">{c.createdAt.slice(0, 16).replace("T", " ")}</span>
                 </span>
                 <Icon name="chevron_right" className="flex-none text-[20px] text-ink-dim" />

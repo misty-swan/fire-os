@@ -28,7 +28,13 @@ import {
  *   未承認案を確認済み分類・正式タスクのようには見せない（docs/16 T055完了条件）。
  * - 単一件の読み取り契約が無いため候補はAPI-30の一覧から探す（上限20ページ。docs/03 §1.1-11と同じ流儀）。
  *   点検源の現行版は読み取り契約が無いため比較できず、その場合はサーバー側の版再検査（409）だけが防御になる旨を出す。
+ * - **横断AIの提案（assistant源・T068）は分類用の画面を出さない**（分類の確定・stale比較は分類源向け）。
+ *   参照した記録（references）・読み取り結果（readResults）・書込候補（proposedEffects）の概要と
+ *   API-30での確認先の案内だけを出す（確認・承認画面SCR-28はT070で追加予定。docs/16 T068）。
  */
+
+/** 分類源の候補（assistant源は案内表示の早期リターンで分ける＝docs/16 T068の最小ガード） */
+type ClassificationEvaluation = Exclude<AiEvaluationDto, { sourceType: "assistant" }>;
 
 /** API-30の一覧から候補を探す（上限20ページ。見つからない/続きに在る場合は画面で案内する） */
 async function findCandidate(id: string): Promise<{ candidate: AiEvaluationDto | null; truncated: boolean }> {
@@ -130,6 +136,38 @@ export function AiReviewDetail({ id }: { id: string }) {
     );
   }
 
+  // 横断AIの提案（assistant源・T068）: 分類の確定・stale比較の画面は出さず、概要と確認先の案内だけを出す。
+  // 提案は人の承認（API-31）まで業務を変えない。確認・承認画面（SCR-28）はT070で追加予定（docs/16 T068）
+  if (candidate.sourceType === "assistant") {
+    const statusMeta = PROPOSAL_STATUS[candidate.status];
+    return (
+      <div className="flex max-w-[720px] flex-col gap-4">
+        <SubHeader backTo="/app/ai/reviews" right={<Chip tone={statusMeta.tone}>{statusMeta.label}</Chip>} />
+        <div className="flex flex-col gap-1 px-0.5">
+          <span className="font-mono text-[11px] text-ink-muted">
+            {SOURCE_TYPE_LABELS.assistant} · 元の版 v{candidate.sourceVersion}
+          </span>
+          <h2 className="text-[26px] font-bold leading-[1.3]">横断AIの提案</h2>
+        </div>
+        <Banner tone="info" eyebrow="ASSISTANT" title="複数の記録を読んで作られた提案です">
+          <p>
+            参照した記録（references）・読み取り結果（readResults）・書込の候補（proposedEffects）は、API-30の応答
+            （outputJson）で確認できます。確認・承認の画面（SCR-28）は後続のタスク（T070）で追加予定です。
+            提案は人の承認（API-31）まで業務を変えません。
+          </p>
+        </Banner>
+        <Card className="flex flex-col gap-1" aria-label="提案の概要">
+          <span className="text-[12px] font-bold text-ink-sub">提案の概要</span>
+          <span className="text-[13px] leading-[1.7] text-ink-sub">{candidate.outputJson.answer}</span>
+          <span className="font-mono text-[11px] text-ink-muted">
+            参照 {candidate.outputJson.references.length}件 · 読み取り {candidate.outputJson.readResults.length}件 · 書込候補{" "}
+            {candidate.outputJson.proposedEffects.length}件
+          </span>
+        </Card>
+      </div>
+    );
+  }
+
   const meta = PROPOSAL_STATUS[candidate.status];
   const issueRow = issue && issue !== "error" ? issue.row : null;
 
@@ -155,7 +193,7 @@ function DetailBody({
   onDecided,
   navigate,
 }: {
-  candidate: AiEvaluationDto;
+  candidate: ClassificationEvaluation;
   issueRow: IssueRow | null;
   meta: { label: string; tone: "ai" | "ok" | "attention" | "neutral" };
   onDecided: () => void;

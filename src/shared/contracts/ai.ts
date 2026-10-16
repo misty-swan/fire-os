@@ -1,9 +1,10 @@
 import { z } from "zod";
 import {
-  Body, BusinessDate, Id, IdList, IDEM, Instant, Job, LIMITS, P_ID, Page, Question, Sha256, ShortText, Version,
+  Body, BusinessDate, Id, IdList, IDEM, Instant, Job, LIMITS, P_ID, Page, Question, Sha256, ShortText, Title, Version,
   defineApi, listQuery, obj, provisionalDto, Reason,
 } from "./common";
-import { aiProposalStates, reviewDecisions } from "../states";
+import { notificationSourceTypes } from "./content";
+import { aiProposalStates, notificationChannels, reviewDecisions } from "../states";
 
 /**
  * AI分類（T053、docs/06 §2/§3）。分類の源（API-29の入力元）とJevの許可カテゴリ
@@ -11,6 +12,21 @@ import { aiProposalStates, reviewDecisions } from "../states";
  */
 export const classificationSourceTypes = ["facility_inspection", "asset_inspection", "issue"] as const;
 export type ClassificationSourceType = (typeof classificationSourceTypes)[number];
+
+/**
+ * ai_evaluations.source_typeの全体集合（docs/04:144。T068で'assistant'を追加）。
+ * 分類API-29の入力はclassificationSourceTypesのまま（横断提案の源は'assistant'1種）。
+ */
+export const aiSourceTypes = [...classificationSourceTypes, "assistant"] as const;
+export type AiSourceType = (typeof aiSourceTypes)[number];
+
+/**
+ * 横断assistantが読み取れる記録の種別（API-77のcontextRefs・提案のreferences/readResultsの語彙。T068）。
+ * 既存の読取経路（業務service・検索port）と同じ認可関数で読む。期限（inspection_due_detections）は
+ * 単一件の読取契約が無いため含めない（docs/16 T068に記録）。
+ */
+export const assistantReadingTypes = ["facility_inspection", "asset_inspection", "issue", "activity", "document"] as const;
+export type AssistantReadingType = (typeof assistantReadingTypes)[number];
 export const classificationCategories = ["equipment_issue", "access_obstruction", "missing_equipment", "no_issue", "other"] as const;
 export type ClassificationCategory = (typeof classificationCategories)[number];
 
@@ -37,14 +53,82 @@ export const ClassificationCandidateOutput = obj({
   answers: z.record(z.string(), z.unknown()),
 });
 
+/** 提案の根拠（読み取った記録の参照。点検=series版・異常/活動=行のversion・文書=revision_no。T068）。
+ *  承認（API-31）のstale検査はこの版集合と現行版の一致で行う（docs/16 T068）。 */
+export const ProposalReference = obj({ type: z.enum(assistantReadingTypes), id: Id, version: Version });
+export type ProposalReferenceDto = z.infer<typeof ProposalReference>;
+
+/** 読み取り結果の要約（最小化本文。氏名・連絡先を含めない＝docs/14 D12。ai_evaluations.output_jsonに保存する） */
+export const AssistantReadResult = obj({
+  type: z.enum(assistantReadingTypes),
+  id: Id,
+  version: Version,
+  summary: z.string().min(1).max(2000),
+});
+export type AssistantReadResultDto = z.infer<typeof AssistantReadResult>;
+
+/**
+ * AIの書込提案（実行はしない。kindはtask/notification draftの許可enumだけ＝docs/05 API-77行。
+ * 形はAPI-31のconfirmedPayload.task/.notificationと同じ＝承認画面がそのまま確定予定値として使える）。
+ */
+export const AssistantProposedEffect = z.discriminatedUnion("kind", [
+  obj({
+    kind: z.literal("task"),
+    title: Title,
+    assigneeMemberId: Id.optional(),
+    dueDate: BusinessDate.nullable().optional(),
+  }),
+  obj({
+    kind: z.literal("notification"),
+    source: obj({ type: z.enum(notificationSourceTypes), id: Id }),
+    body: Body.optional(),
+    audienceMemberIds: z.array(Id).max(LIMITS.arrayMax).optional(),
+    channels: z.array(z.enum(notificationChannels)).min(1).max(10),
+    expiresAt: Instant.nullable().optional(),
+  }),
+]);
+export type AssistantProposedEffectDto = z.infer<typeof AssistantProposedEffect>;
+
+/**
+ * assistant源のoutput_json本体（ai_evaluations。T068）。references＝参照した記録の版集合、
+ * readResults＝読み取り結果の要約（本文は最小化）、proposedEffects＝書込候補（許可enumだけ）。
+ * 構造検証（応答schema・referencesが入力した集合の部分集合・proposedEffectsが許可enum内）を
+ * 通った出力だけを保存する（検証前の出力はどこにも保存しない＝T057/T067流儀）。
+ */
+export const AssistantCandidateOutput = obj({
+  answer: z.string().min(1),
+  references: z.array(ProposalReference).max(LIMITS.arrayMax),
+  readResults: z.array(AssistantReadResult).max(LIMITS.arrayMax),
+  proposedEffects: z.array(AssistantProposedEffect).max(10),
+  questionVersion: ShortText,
+  sourceVersion: Version,
+  model: ShortText.nullable(),
+  usage: ClassificationUsage.nullable(),
+});
+
+/**
+ * API-77の応答（provisional解除・T068）。proposalIdはai_evaluationsの行ID。
+ * 保留（根拠0件・生成応答の検証不可）は proposalId=null のabstained応答で、行も提案も作らない。
+ */
+export const AssistantProposal = obj({
+  proposalId: Id.nullable(),
+  answer: z.string().min(1),
+  references: z.array(ProposalReference).max(LIMITS.arrayMax),
+  readResults: z.array(AssistantReadResult).max(LIMITS.arrayMax),
+  proposedEffects: z.array(AssistantProposedEffect).max(10),
+  abstained: z.boolean(),
+});
+export type AssistantProposalDto = z.infer<typeof AssistantProposal>;
+
 /**
  * AI評価（docs/04:143 ai_evaluations。API-30の一覧要素）。outputJsonは候補本体、
  * usageJsonはtoken使用量。statusはdocs/11 AI提案の語彙（作成時は常にpending＝人未承認）。
+ * sourceTypeでoutputJsonの形が変わる（discriminated union）: 分類源はClassificationCandidateOutput、
+ * assistant源（T068）はAssistantCandidateOutput。
  */
-export const AiEvaluation = obj({
+const AiEvaluationBase = {
   id: Id,
   jobId: Id,
-  sourceType: z.enum(classificationSourceTypes),
   sourceId: Id,
   sourceVersion: Version,
   inputHash: Sha256,
@@ -52,11 +136,14 @@ export const AiEvaluation = obj({
   questionVersion: ShortText,
   modelId: ShortText,
   actualModelVersion: ShortText.nullable(),
-  outputJson: ClassificationCandidateOutput,
   status: z.enum(aiProposalStates),
   usageJson: ClassificationUsage.nullable(),
   createdAt: Instant,
-});
+};
+export const AiEvaluation = z.discriminatedUnion("sourceType", [
+  obj({ ...AiEvaluationBase, sourceType: z.enum(classificationSourceTypes), outputJson: ClassificationCandidateOutput }),
+  obj({ ...AiEvaluationBase, sourceType: z.literal("assistant"), outputJson: AssistantCandidateOutput }),
+]);
 export type AiEvaluationDto = z.infer<typeof AiEvaluation>;
 
 export const ReviewInput = obj({
@@ -168,7 +255,7 @@ export const aiApis = {
   }),
   "API-30": defineApi({
     method: "GET", path: "/ai/reviews", permission: "PER-10", kind: "list", success: [200],
-    request: obj({ query: listQuery({ status: z.enum(aiProposalStates).optional(), sourceType: z.enum(classificationSourceTypes).optional() }) }),
+    request: obj({ query: listQuery({ status: z.enum(aiProposalStates).optional(), sourceType: z.enum(aiSourceTypes).optional() }) }),
     response: Page(AiEvaluation),
   }),
   "API-31": defineApi({
@@ -193,13 +280,17 @@ export const aiApis = {
     response: RagAnswer,
   }),
   // AI提案(proposal)を保存するため Idempotency-Key を必須とする。書込の確定は人の承認(API-31)後。
+  // 応答はAssistantProposal（T068でprovisional解除。contextRefsのtypeは読取語彙のenum＝未知種別は400）
   "API-77": defineApi({
     method: "POST", path: "/ai/assistant", permission: "PER-09", kind: "mutation", success: [200],
     request: obj({
-      body: obj({ query: Question, contextRefs: z.array(obj({ type: ShortText, id: Id })).max(LIMITS.arrayMax) }),
+      body: obj({
+        query: Question,
+        contextRefs: z.array(obj({ type: z.enum(assistantReadingTypes), id: Id })).max(LIMITS.arrayMax),
+      }),
       ...IDEM,
     }),
-    response: z.looseObject({}), provisional: true,
+    response: AssistantProposal,
   }),
   "API-78": defineApi({
     method: "POST", path: "/patrol-plans", permission: "PER-14", kind: "mutation", success: [201],

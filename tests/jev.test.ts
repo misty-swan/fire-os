@@ -442,7 +442,8 @@ describe("Jev分類 (T053)", () => {
       expect(parsed.sourceType).toBe("issue");
       expect(parsed.inputHash).toMatch(/^[0-9a-f]{64}$/);
       expect(parsed.modelId).toBe("typesafe/jev");
-      expect(typeof parsed.outputJson.needsReview).toBe("number");
+      // sourceTypeでoutputJsonの形が分かれる（T068のunion）。分類源はneedsReview（Jevのnoul）を持つ
+      expect(parsed.sourceType === "issue" && typeof parsed.outputJson.needsReview === "number").toBe(true);
       expect(parsed.usageJson === null || typeof parsed.usageJson.promptTokens === "number").toBe(true);
     }
 

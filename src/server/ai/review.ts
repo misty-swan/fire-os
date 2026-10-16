@@ -1,11 +1,13 @@
 import { z } from "zod";
-import { classificationCategories } from "../../shared/contracts/ai";
+import { ASSISTANT_PROMPT_VERSION } from "./assistant";
+import { AssistantCandidateOutput, classificationCategories } from "../../shared/contracts/ai";
 import { BusinessDate, Body, Id, Instant, LIMITS, Title } from "../../shared/contracts/common";
 import { notificationSourceTypes } from "../../shared/contracts/content";
 import { notificationChannels } from "../../shared/states";
 import type { ApiRequest, ApiResponse } from "../../shared/contracts/registry";
 import { authorize, type PermissionCode } from "../auth/authorize";
-import { resolvePrincipal } from "../auth/principal";
+import { resolvePrincipal, type AuthzPrincipal } from "../auth/principal";
+import { documentVisibilitySql } from "../documents/authorized";
 import type { AppEnv } from "../env";
 import { HttpError, type ApiContext } from "../http";
 import { canonicalJson, canonicalRequestHash, sha256Hex } from "../mutations/hash";
@@ -157,6 +159,58 @@ function sourceFreshCondition(sourceType: string, sourceId: string, unitId: stri
   throw new HttpError("NOT_FOUND"); // source_typeはDBのCHECKで保証される（到達しない）
 }
 
+/**
+ * assistant源のstale検査（docs/16 T068）: 提案のreferences（根拠に使った記録の版集合）の**全版が
+ * 現行と一致すること**。承認中の元記録の更新も同batchで409になる（変化はVERSION_CONFLICT）。
+ * - 点検=series版・異常/活動=行のversion（分類源と同じ版の定義）
+ * - 文書=revision_noが今も承認済み・可視・有効であること（T063の正本と同じdeny優先ACL＋withdrawn除外。
+ *   ACL失効・撤回・新版承認で旧版がsupersededになると409）
+ * referencesの集合は保存時に構造検証済み（docs/16 T068）。候補本体が壊れている（検査不能）は409で扱う。
+ */
+function assistantReferenceConditions(outputJson: string, p: AuthzPrincipal): ExtraCondition[] {
+  const parsed = AssistantCandidateOutput.safeParse(JSON.parse(outputJson));
+  if (!parsed.success) {
+    return [{ existsSql: "SELECT 1 WHERE 0", binds: [], failCode: "VERSION_CONFLICT" }];
+  }
+  const conditions: ExtraCondition[] = [];
+  for (const ref of parsed.data.references) {
+    if (ref.type === "issue") {
+      conditions.push({
+        existsSql: "SELECT 1 FROM issues WHERE id = ? AND unit_id = ? AND version = ?",
+        binds: [ref.id, p.unitId, ref.version],
+        failCode: "VERSION_CONFLICT",
+      });
+    } else if (ref.type === "activity") {
+      conditions.push({
+        existsSql: "SELECT 1 FROM activities WHERE id = ? AND unit_id = ? AND version = ?",
+        binds: [ref.id, p.unitId, ref.version],
+        failCode: "VERSION_CONFLICT",
+      });
+    } else if (ref.type === "facility_inspection" || ref.type === "asset_inspection") {
+      const table = ref.type === "facility_inspection" ? "facility_inspections" : "asset_inspections";
+      conditions.push({
+        existsSql:
+          `SELECT 1 FROM ${table} i JOIN inspection_series s ON s.id = i.series_id AND s.unit_id = i.unit_id ` +
+          "WHERE i.id = ? AND i.unit_id = ? AND s.version = ?",
+        binds: [ref.id, p.unitId, ref.version],
+        failCode: "VERSION_CONFLICT",
+      });
+    } else {
+      // document: 参照版（revision_no）が今も承認済み・可視・有効であること
+      const visibility = documentVisibilitySql(p);
+      conditions.push({
+        existsSql:
+          "SELECT 1 FROM document_versions v JOIN documents d ON d.unit_id = v.unit_id AND d.id = v.document_id " +
+          "WHERE v.document_id = ? AND v.unit_id = ? AND v.revision_no = ? AND v.status = 'approved' " +
+          "AND d.status <> 'withdrawn' AND " + visibility.sql,
+        binds: [ref.id, p.unitId, ref.version, ...visibility.binds],
+        failCode: "VERSION_CONFLICT",
+      });
+    }
+  }
+  return conditions;
+}
+
 /** 確定分類の書込先を決める（docs/05 API-31行の効果先。T054裁定）:
  *  issue源はその異常、点検源は異常起票を伴う場合だけlinked issue（起票は高々1つ）。 */
 async function resolveCategoryTarget(env: AppEnv["DB"], unitId: string, sourceType: string, sourceId: string): Promise<CategoryTarget | null> {
@@ -238,13 +292,23 @@ export async function decideAiProposal(ctx: ApiContext, input: ApiRequest<"API-3
   if (body.version !== 1) {
     throw new HttpError("VERSION_CONFLICT", undefined, [{ field: "version", reason: "proposal_version_stale" }]);
   }
-  // 質問版の再検査（廃止された質問版の候補は採用できない＝stale/409）
-  if (!isKnownQuestionVersion(candidate.question_version)) {
+  // 質問版の再検査: 分類源はサーバー固定質問（廃止された質問版の候補は採用できない＝stale/409）。
+  // assistant源（T068）はプロンプト構造の版（ASSISTANT_PROMPT_VERSION）と一致するか
+  if (candidate.source_type === "assistant") {
+    if (candidate.question_version !== ASSISTANT_PROMPT_VERSION) {
+      throw new HttpError("VERSION_CONFLICT", undefined, [{ field: "questionVersion", reason: "unknown_question_version" }]);
+    }
+  } else if (!isKnownQuestionVersion(candidate.question_version)) {
     throw new HttpError("VERSION_CONFLICT", undefined, [{ field: "questionVersion", reason: "unknown_question_version" }]);
   }
 
   const storedDecision = STORED_DECISION[body.decision];
   const confirmed = parseConfirmedPayload(body.decision, body.confirmedPayload);
+  // assistant源は確定分類の反映先が無いため confirmedCategory の指定は400
+  // （決定の保存＋confirmedPayloadの効果だけ＝docs/16 T068。未知キーと同じく効果に変えない）
+  if (candidate.source_type === "assistant" && confirmed.confirmedCategory) {
+    throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "confirmedPayload.confirmedCategory", reason: "assistant_has_no_category_target" }]);
+  }
 
   // 決定理由（review_decisions.reasonは1〜2000。却下は理由必須、承認は既定文）
   const reason = body.reviewNote?.trim() || (body.decision === "reject" ? "" : DEFAULT_REASON[body.decision]);
@@ -255,9 +319,15 @@ export async function decideAiProposal(ctx: ApiContext, input: ApiRequest<"API-3
   requirePermission(p, "PER-10", { unitId: p.unitId, type: candidate.source_type, id: candidate.source_id });
 
   // --- 効果の組み立て（confirm分類/タスク/通知draft。rejectは効果0） ---
-  const categoryTarget = body.decision === "reject" ? null : await resolveCategoryTarget(ctx.env.DB, p.unitId, candidate.source_type, candidate.source_id);
+  // assistant源は分類の反映先が無い（resolvedCategoryTargetを呼ばない＝決定の保存とconfirmedPayloadの効果だけ）
+  const categoryTarget =
+    candidate.source_type === "assistant" || body.decision === "reject"
+      ? null
+      : await resolveCategoryTarget(ctx.env.DB, p.unitId, candidate.source_type, candidate.source_id);
   const confirmedCategory =
-    body.decision === "reject" ? undefined : (confirmed.confirmedCategory ?? representativeOf(candidate.output_json));
+    body.decision === "reject" || candidate.source_type === "assistant"
+      ? undefined
+      : (confirmed.confirmedCategory ?? representativeOf(candidate.output_json));
 
   // 反映先の書込権（確定分類=PER-05。docs/10 PER-10「承認対象と反映先の両書込権」）
   if (categoryTarget) {
@@ -327,8 +397,11 @@ export async function decideAiProposal(ctx: ApiContext, input: ApiRequest<"API-3
       binds: [candidate.id, p.unitId, body.sourceVersion, candidate.question_version],
       failCode: "VERSION_CONFLICT",
     },
-    // 元版の再検査（点検=series版・異常=issue版の現行version）
-    sourceFreshCondition(candidate.source_type, candidate.source_id, p.unitId, body.sourceVersion),
+    // 元版の再検査: 分類源=源の現行版（点検=series版・異常=issue版）。
+    // assistant源=referencesの全版が現行と一致（docs/16 T068）
+    ...(candidate.source_type === "assistant"
+      ? assistantReferenceConditions(candidate.output_json, p)
+      : [sourceFreshCondition(candidate.source_type, candidate.source_id, p.unitId, body.sourceVersion)]),
     // 承認者の権限（PER-10）を同batchで再検査（scopeの取消はここでも403にする）
     asCondition(permissionExpr(p, "PER-10", { type: candidate.source_type, id: candidate.source_id }, nowIso), "FORBIDDEN"),
   ];

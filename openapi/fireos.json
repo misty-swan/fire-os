@@ -9738,7 +9738,8 @@
               "enum": [
                 "facility_inspection",
                 "asset_inspection",
-                "issue"
+                "issue",
+                "assistant"
               ]
             }
           },
@@ -9780,144 +9781,76 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                          },
-                          "jobId": {
-                            "type": "string",
-                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                          },
-                          "sourceType": {
-                            "type": "string",
-                            "enum": [
-                              "facility_inspection",
-                              "asset_inspection",
-                              "issue"
-                            ]
-                          },
-                          "sourceId": {
-                            "type": "string",
-                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                          },
-                          "sourceVersion": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 9007199254740991
-                          },
-                          "inputHash": {
-                            "type": "string",
-                            "pattern": "^[0-9a-f]{64}$"
-                          },
-                          "inputSnapshotRef": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 200
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "questionVersion": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 200
-                          },
-                          "modelId": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 200
-                          },
-                          "actualModelVersion": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 200
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "outputJson": {
+                        "oneOf": [
+                          {
                             "type": "object",
                             "properties": {
-                              "categories": {
-                                "type": "object",
-                                "properties": {
-                                  "representative": {
-                                    "type": "string",
-                                    "enum": [
-                                      "equipment_issue",
-                                      "access_obstruction",
-                                      "missing_equipment",
-                                      "no_issue",
-                                      "other"
-                                    ]
-                                  },
-                                  "probabilities": {
-                                    "anyOf": [
-                                      {
-                                        "type": "object",
-                                        "propertyNames": {
-                                          "type": "string",
-                                          "enum": [
-                                            "equipment_issue",
-                                            "access_obstruction",
-                                            "missing_equipment",
-                                            "no_issue",
-                                            "other"
-                                          ]
-                                        },
-                                        "additionalProperties": {
-                                          "type": "number",
-                                          "minimum": 0,
-                                          "maximum": 1
-                                        }
-                                      },
-                                      {
-                                        "type": "null"
-                                      }
-                                    ]
-                                  },
-                                  "multipleIssues": {
-                                    "type": "boolean"
-                                  }
-                                },
-                                "required": [
-                                  "representative",
-                                  "probabilities",
-                                  "multipleIssues"
-                                ],
-                                "additionalProperties": false
-                              },
-                              "needsReview": {
-                                "type": "number",
-                                "minimum": 0,
-                                "maximum": 1
-                              },
-                              "model": {
+                              "id": {
                                 "type": "string",
-                                "minLength": 1,
-                                "maxLength": 200
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                               },
-                              "questionVersion": {
+                              "jobId": {
                                 "type": "string",
-                                "minLength": 1,
-                                "maxLength": 200
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "sourceId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
                               },
                               "sourceVersion": {
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 9007199254740991
                               },
-                              "usage": {
+                              "inputHash": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{64}$"
+                              },
+                              "inputSnapshotRef": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "questionVersion": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "modelId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "actualModelVersion": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "approved",
+                                  "approved_with_edit",
+                                  "rejected",
+                                  "stale"
+                                ]
+                              },
+                              "usageJson": {
                                 "anyOf": [
                                   {
                                     "type": "object",
@@ -9944,81 +9877,527 @@
                                   }
                                 ]
                               },
-                              "answers": {
-                                "type": "object",
-                                "propertyNames": {
-                                  "type": "string"
-                                },
-                                "additionalProperties": {}
-                              }
-                            },
-                            "required": [
-                              "categories",
-                              "needsReview",
-                              "model",
-                              "questionVersion",
-                              "sourceVersion",
-                              "usage",
-                              "answers"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "pending",
-                              "approved",
-                              "approved_with_edit",
-                              "rejected",
-                              "stale"
-                            ]
-                          },
-                          "usageJson": {
-                            "anyOf": [
-                              {
+                              "createdAt": {},
+                              "sourceType": {
+                                "type": "string",
+                                "enum": [
+                                  "facility_inspection",
+                                  "asset_inspection",
+                                  "issue"
+                                ]
+                              },
+                              "outputJson": {
                                 "type": "object",
                                 "properties": {
-                                  "promptTokens": {
-                                    "type": "integer",
+                                  "categories": {
+                                    "type": "object",
+                                    "properties": {
+                                      "representative": {
+                                        "type": "string",
+                                        "enum": [
+                                          "equipment_issue",
+                                          "access_obstruction",
+                                          "missing_equipment",
+                                          "no_issue",
+                                          "other"
+                                        ]
+                                      },
+                                      "probabilities": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "propertyNames": {
+                                              "type": "string",
+                                              "enum": [
+                                                "equipment_issue",
+                                                "access_obstruction",
+                                                "missing_equipment",
+                                                "no_issue",
+                                                "other"
+                                              ]
+                                            },
+                                            "additionalProperties": {
+                                              "type": "number",
+                                              "minimum": 0,
+                                              "maximum": 1
+                                            }
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "multipleIssues": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "representative",
+                                      "probabilities",
+                                      "multipleIssues"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "needsReview": {
+                                    "type": "number",
                                     "minimum": 0,
+                                    "maximum": 1
+                                  },
+                                  "model": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "questionVersion": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "sourceVersion": {
+                                    "type": "integer",
+                                    "minimum": 1,
                                     "maximum": 9007199254740991
                                   },
-                                  "completionTokens": {
-                                    "type": "integer",
-                                    "minimum": 0,
-                                    "maximum": 9007199254740991
+                                  "usage": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "promptTokens": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "completionTokens": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 9007199254740991
+                                          }
+                                        },
+                                        "required": [
+                                          "promptTokens",
+                                          "completionTokens"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "answers": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string"
+                                    },
+                                    "additionalProperties": {}
                                   }
                                 },
                                 "required": [
-                                  "promptTokens",
-                                  "completionTokens"
+                                  "categories",
+                                  "needsReview",
+                                  "model",
+                                  "questionVersion",
+                                  "sourceVersion",
+                                  "usage",
+                                  "answers"
                                 ],
                                 "additionalProperties": false
-                              },
-                              {
-                                "type": "null"
                               }
-                            ]
+                            },
+                            "required": [
+                              "id",
+                              "jobId",
+                              "sourceId",
+                              "sourceVersion",
+                              "inputHash",
+                              "inputSnapshotRef",
+                              "questionVersion",
+                              "modelId",
+                              "actualModelVersion",
+                              "status",
+                              "usageJson",
+                              "createdAt",
+                              "sourceType",
+                              "outputJson"
+                            ],
+                            "additionalProperties": false
                           },
-                          "createdAt": {}
-                        },
-                        "required": [
-                          "id",
-                          "jobId",
-                          "sourceType",
-                          "sourceId",
-                          "sourceVersion",
-                          "inputHash",
-                          "inputSnapshotRef",
-                          "questionVersion",
-                          "modelId",
-                          "actualModelVersion",
-                          "outputJson",
-                          "status",
-                          "usageJson",
-                          "createdAt"
-                        ],
-                        "additionalProperties": false
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "jobId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "sourceId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "sourceVersion": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "inputHash": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{64}$"
+                              },
+                              "inputSnapshotRef": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "questionVersion": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "modelId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "actualModelVersion": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "approved",
+                                  "approved_with_edit",
+                                  "rejected",
+                                  "stale"
+                                ]
+                              },
+                              "usageJson": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "promptTokens": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "completionTokens": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "promptTokens",
+                                      "completionTokens"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "createdAt": {},
+                              "sourceType": {
+                                "type": "string",
+                                "const": "assistant"
+                              },
+                              "outputJson": {
+                                "type": "object",
+                                "properties": {
+                                  "answer": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "references": {
+                                    "maxItems": 100,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "facility_inspection",
+                                            "asset_inspection",
+                                            "issue",
+                                            "activity",
+                                            "document"
+                                          ]
+                                        },
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                        },
+                                        "version": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 9007199254740991
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "id",
+                                        "version"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "readResults": {
+                                    "maxItems": 100,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": [
+                                            "facility_inspection",
+                                            "asset_inspection",
+                                            "issue",
+                                            "activity",
+                                            "document"
+                                          ]
+                                        },
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                        },
+                                        "version": {
+                                          "type": "integer",
+                                          "minimum": 1,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "summary": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 2000
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "id",
+                                        "version",
+                                        "summary"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "proposedEffects": {
+                                    "maxItems": 10,
+                                    "type": "array",
+                                    "items": {
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "task"
+                                            },
+                                            "title": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 200
+                                            },
+                                            "assigneeMemberId": {
+                                              "type": "string",
+                                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                            },
+                                            "dueDate": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "string",
+                                                  "format": "date",
+                                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "title"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "notification"
+                                            },
+                                            "source": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "activity",
+                                                    "announcement",
+                                                    "inspection_due"
+                                                  ]
+                                                },
+                                                "id": {
+                                                  "type": "string",
+                                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                                }
+                                              },
+                                              "required": [
+                                                "type",
+                                                "id"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "body": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 20000
+                                            },
+                                            "audienceMemberIds": {
+                                              "maxItems": 100,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string",
+                                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                              }
+                                            },
+                                            "channels": {
+                                              "minItems": 1,
+                                              "maxItems": 10,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "inapp"
+                                                ]
+                                              }
+                                            },
+                                            "expiresAt": {
+                                              "anyOf": [
+                                                {},
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "source",
+                                            "channels"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "questionVersion": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "sourceVersion": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "model": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "usage": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "promptTokens": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "completionTokens": {
+                                            "type": "integer",
+                                            "minimum": 0,
+                                            "maximum": 9007199254740991
+                                          }
+                                        },
+                                        "required": [
+                                          "promptTokens",
+                                          "completionTokens"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "answer",
+                                  "references",
+                                  "readResults",
+                                  "proposedEffects",
+                                  "questionVersion",
+                                  "sourceVersion",
+                                  "model",
+                                  "usage"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "jobId",
+                              "sourceId",
+                              "sourceVersion",
+                              "inputHash",
+                              "inputSnapshotRef",
+                              "questionVersion",
+                              "modelId",
+                              "actualModelVersion",
+                              "status",
+                              "usageJson",
+                              "createdAt",
+                              "sourceType",
+                              "outputJson"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       }
                     },
                     "meta": {
@@ -22045,7 +22424,7 @@
         "summary": "API-77 POST /ai/assistant",
         "x-permission": "PER-09",
         "x-kind": "mutation",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "idempotency-key",
@@ -22073,8 +22452,221 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "proposalId": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "answer": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "references": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "facility_inspection",
+                                  "asset_inspection",
+                                  "issue",
+                                  "activity",
+                                  "document"
+                                ]
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "version": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id",
+                              "version"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "readResults": {
+                          "maxItems": 100,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "facility_inspection",
+                                  "asset_inspection",
+                                  "issue",
+                                  "activity",
+                                  "document"
+                                ]
+                              },
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "version": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "summary": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "id",
+                              "version",
+                              "summary"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "proposedEffects": {
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "task"
+                                  },
+                                  "title": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "assigneeMemberId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                  },
+                                  "dueDate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "format": "date",
+                                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "title"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "notification"
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "activity",
+                                          "announcement",
+                                          "inspection_due"
+                                        ]
+                                      },
+                                      "id": {
+                                        "type": "string",
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "id"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "body": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 20000
+                                  },
+                                  "audienceMemberIds": {
+                                    "maxItems": 100,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                    }
+                                  },
+                                  "channels": {
+                                    "minItems": 1,
+                                    "maxItems": 10,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "inapp"
+                                      ]
+                                    }
+                                  },
+                                  "expiresAt": {
+                                    "anyOf": [
+                                      {},
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "source",
+                                  "channels"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "abstained": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "proposalId",
+                        "answer",
+                        "references",
+                        "readResults",
+                        "proposedEffects",
+                        "abstained"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"
@@ -22195,8 +22787,13 @@
                       "properties": {
                         "type": {
                           "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                          "enum": [
+                            "facility_inspection",
+                            "asset_inspection",
+                            "issue",
+                            "activity",
+                            "document"
+                          ]
                         },
                         "id": {
                           "type": "string",

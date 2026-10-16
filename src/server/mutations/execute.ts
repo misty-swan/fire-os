@@ -54,9 +54,10 @@ export interface MutationSpec<T> {
   /**
    * 新規作成した行（INSERT）。書込の後に「その行が今回の試行の印(last_mutation_token)付きで存在する」ことを検査する。
    * 作成だけの操作は更新対象のrootが無いので、rootsの代わりに使える（rootsとcreatedの少なくとも一方が必要）。
-   * INSERTは last_mutation_token = ctx.attempt を設定すること。
+   * INSERTは last_mutation_token = ctx.attempt を設定すること。last_mutation_token列を持たない表は
+   * noMutationToken: true を指定する（id+unit_idの存在検査になる）。
    */
-  created?: { table: string; id: string }[];
+  created?: CreatedRow[];
   /**
    * 実行主体そのものをこのbatchで作る操作（招待の受領：users行の作成と団員へのリンク）だけが使う。
    * 認可版の検査(a)より前に書かれる。主体がまだ存在しないので、失敗後の分類では「主体が有効か」を見ず、
@@ -168,6 +169,18 @@ async function resolveExisting<T>(
   };
 }
 
+export interface CreatedRow {
+  table: string;
+  id: string;
+  /**
+   * last_mutation_token列を持たない表（jobs・ai_evaluations等の内部表/中間表。T068）では
+   * id+unit_idだけの存在検査にする。INSERT自体が同じbatch内なので、この検査は「書込がbatchに乗った」
+   * ことの確認になる（0行にはならない。INSERTが失敗すればbatch全体が取り消されるため）。
+   * 既定（false）は従来どおり last_mutation_token = 今回の印 の検査。
+   */
+  noMutationToken?: boolean;
+}
+
 /**
  * 更新・冪等・監査・outboxを一つのD1 batchで確定する（docs/02 §4）。
  * batch内の順序: 認可版検査 → 冪等予約 → 前提条件(conditions) → 業務書込(比較更新) → root検査 → 監査 →
@@ -228,7 +241,11 @@ export async function executeMutation<T>(
     stmts.push(assertion(rootUpdatedExistsSql(r.table), r.id, principal.unitId, r.expectedVersion + 1, ctx.attempt));
   }
   for (const cr of spec.created ?? []) {
-    stmts.push(assertion(`SELECT 1 FROM ${cr.table} WHERE id = ? AND unit_id = ? AND last_mutation_token = ?`, cr.id, principal.unitId, ctx.attempt));
+    stmts.push(
+      cr.noMutationToken
+        ? assertion(`SELECT 1 FROM ${cr.table} WHERE id = ? AND unit_id = ?`, cr.id, principal.unitId)
+        : assertion(`SELECT 1 FROM ${cr.table} WHERE id = ? AND unit_id = ? AND last_mutation_token = ?`, cr.id, principal.unitId, ctx.attempt),
+    );
   }
   stmts.push(
     // (f) 監査（成功時のみ。本文は複製せずIDと短い値だけ）

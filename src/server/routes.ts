@@ -43,6 +43,7 @@ import { registerClassificationRoutes } from "./routes/ai-classification";
 import { registerAiDecisionRoutes } from "./routes/ai-decisions";
 import { registerAiEvaluationRoutes } from "./routes/ai-evaluation";
 import { registerRagRoutes } from "./routes/rag";
+import { registerAssistantRoutes } from "./routes/assistant";
 import { registerDashboardRoutes } from "./routes/dashboard";
 import { registerAnalyticsRoutes } from "./routes/analytics";
 
@@ -99,8 +100,9 @@ export function registerRoutes(app: ApiApp): void {
   registerClassificationRoutes(app);
   registerAiDecisionRoutes(app);
   registerAiEvaluationRoutes(app);
-  // /search/rag（API-76）は他のドメインとpathが重ならないため順序の注意は無い
+  // /search/rag（API-76）/ai/assistant（API-77）は他のドメインとpathが重ならないため順序の注意は無い
   registerRagRoutes(app);
+  registerAssistantRoutes(app);
   registerDashboardRoutes(app);
   registerAnalyticsRoutes(app);
 }

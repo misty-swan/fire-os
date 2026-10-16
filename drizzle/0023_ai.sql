@@ -20,7 +20,10 @@ CREATE TABLE ai_evaluations (
   -- この評価を出したjob（docs/04 ER「JOBS ||--o{ AI_EVALUATIONS」。同じjobの再実行では2件作らない）
   job_id TEXT NOT NULL,
   -- 分類の源（API-29のsourceType）。点検はseries版、異常はissue版をsource_versionに持つ
-  source_type TEXT NOT NULL CHECK (source_type IN ('facility_inspection', 'asset_inspection', 'issue')),
+  -- **T068実装（CHECK語彙のin-place追加。未リリース連番の前例＝0022/T051・0027/T064どおり）**:
+  -- 'assistant'（業務横断AIの提案。API-77）を追加。assistant源のsource_idは `query:<質問本文のsha256>`、
+  -- source_versionは提案自体の前提版=1（T054の「初回決定1固定」と同じ扱い。docs/16 T068）
+  source_type TEXT NOT NULL CHECK (source_type IN ('facility_inspection', 'asset_inspection', 'issue', 'assistant')),
   -- 多形参照のためFKを置かない（audit_logs.entity_idと同じ。実在・同unitはjob handlerが再検査する）
   source_id TEXT NOT NULL,
   source_version INTEGER NOT NULL CHECK (source_version >= 1),

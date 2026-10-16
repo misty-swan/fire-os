@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { classificationSourceTypes } from "../../../shared/contracts/ai";
+import { aiSourceTypes } from "../../../shared/contracts/ai";
 import { aiProposalStates } from "../../../shared/states";
 import { rootColumns } from "./core";
 
@@ -13,7 +13,7 @@ export const aiEvaluations = sqliteTable("ai_evaluations", {
   id: text("id").primaryKey(),
   unitId: text("unit_id").notNull(),
   jobId: text("job_id").notNull(),
-  sourceType: text("source_type", { enum: classificationSourceTypes }).notNull(),
+  sourceType: text("source_type", { enum: aiSourceTypes }).notNull(),
   sourceId: text("source_id").notNull(),
   sourceVersion: integer("source_version").notNull(),
   inputHash: text("input_hash").notNull(),
