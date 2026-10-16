@@ -143,13 +143,17 @@ const tooLargeField = (field: string) => new HttpError("VALIDATION_ERROR", undef
 /**
  * 差分取得（API-80）。cursorは空文字で初回（queryのafterSequence/filterで開く）。
  * cursorがあるときは位置もfilterもcursorが正（queryのafterSequenceは無視。filterはcursorに矛盾しないときだけ採用）。
- * 応答のevents/resumeCursor/resyncRequiredの意味はdocs/05 §8とsrc/shared/contracts/sync.tsの注記。
+ * explicitを渡すとqueryの絞りの代わりにそれを使う（T073のtransport。{null,null}は絞り無しの指定に正規化する。
+ * 挙動と検査順はqueryの絞りと同じ）。応答のevents/resumeCursor/resyncRequiredの意味はdocs/05 §8と
+ * src/shared/contracts/sync.tsの注記。
  */
-export async function readEvents(ctx: ApiContext, cursor: string): Promise<EventPageDto> {
+export async function readEvents(ctx: ApiContext, cursor: string, explicit?: StreamFilter): Promise<EventPageDto> {
   const p = await resolvePrincipal(ctx);
   requirePermission(p, "PER-13", { unitId: p.unitId, type: "sync" });
   const q = ctx.req.query();
-  const queryFilter = filterOf(q);
+  const queryFilter =
+    explicit === undefined ? filterOf(q)
+      : explicit.entityType === null && explicit.entityId === null ? null : explicit;
   const nowIso = systemClock.now().toISOString();
 
   let position: number;

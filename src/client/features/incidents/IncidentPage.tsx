@@ -6,7 +6,6 @@ import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { MutationStatus } from "../../components/MutationStatus";
 import { SubHeader } from "../../components/Page";
 import { Banner, Button, Card, Chip, Icon, Notice, TextArea, TextField } from "../../components/ui";
-import { useOnline } from "../../components/AppShell";
 import { initialOf, useMe } from "../../me";
 import { useMutation } from "../../useMutation";
 import type { ActivityDto, IncidentDetailDto } from "../../../shared/contracts/operations";
@@ -16,6 +15,7 @@ import {
   mobilizationStates,
 } from "../../../shared/states";
 import { INCIDENT_KIND, INCIDENT_STATUS } from "./IncidentsPage";
+import { useIncidentUpdates, type ConnectionState } from "./useIncidentUpdates";
 import { fmtDay, fmtHM, fmtInstant } from "../activities/time";
 import { ResourceUsageEditor, useAssetName } from "../operations/ResourceUsageEditor";
 
@@ -79,13 +79,22 @@ const eventLabel = (action: string) => {
 
 const timeOrBlank = (iso: string | null) => (iso ? fmtHM(iso) : null);
 
+/** 同期の状態 → 人の語（SCR-12の札。オンライン/オフラインはAppShellと同じ語彙に、同期の状態を重ねる） */
+const SYNC_LABEL: Record<ConnectionState, string> = {
+  online: "オンライン・この記録を同期中",
+  resync: "通信を確認して同期をやり直しています",
+  offline: "オフライン（回復したら同期します）",
+};
+
 export function IncidentPage() {
   const params = useParams<{ id: string }>();
   const id = params.id!;
   const { me } = useMe();
   /** PER-04は幹部・管理者が所属内で持つ（docs/10）。画面から権限一覧は持たないので操作は押してサーバーに判定させる */
   const canManage = me.roles.includes("officer") || me.roles.includes("admin");
-  const online = useOnline();
+  // 更新配信（T073）。他の端末・団員による変更をpoll輸送で受けて、画面を読み直させる
+  const sync = useIncidentUpdates(id);
+  const online = sync.status !== "offline";
 
   const [detail, setDetail] = useState<IncidentDetailDto | "loading" | "error">("loading");
   const [names, setNames] = useState<Map<string, string> | null>(null);
@@ -115,7 +124,9 @@ export function IncidentPage() {
     return () => {
       alive = false;
     };
-  }, [id, reloadKey]);
+    // refreshは遠隔の新しい版を適用するたびに参照が変わる（useIncidentUpdates）。依存に置くだけで
+    // 他端末の変更を自分の操作なしで読み直せる。手動で呼んだときも同じ経路で読み直す
+  }, [id, reloadKey, sync.refresh]);
 
   // 名前の対応（API-02。参集・登録者の表示）。取得できないときはIDの先頭で代用しない（読み込み中表示のまま）
   useEffect(() => {
@@ -211,9 +222,10 @@ export function IncidentPage() {
           {kind.label}
         </span>
         <h2 className="text-[26px] font-bold leading-[1.3]">{detail.summary}</h2>
-        <p className="flex items-center gap-2 text-[12px] text-ink-muted">
+        {/* 同期の札（T073）。poll輸送の接続状態。他の端末の変更は自動でここに届く */}
+        <p className="flex items-center gap-2 text-[12px] text-ink-muted" role="status" aria-label="同期の状態">
           <span aria-hidden="true" className={`size-[7px] rounded-full ${online ? "bg-ok" : "bg-attention"}`} />
-          {online ? "オンライン" : "オフライン"}（端末同期は後の機能で接続します）
+          {SYNC_LABEL[sync.status]}
         </p>
       </div>
 
