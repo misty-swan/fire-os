@@ -77,8 +77,8 @@ test("patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch", 
   await expect(rows.nth(0)).toContainText(`PAT-${tag}-C`);
   await expect(rows.nth(1)).toContainText(`PAT-${tag}-B`);
   await expect(rows.nth(2)).toContainText(`PAT-${tag}-A`);
-  // 上下移動（押下領域44px）でBを先頭へ。DTOのfacilityNameは管理番号か識別名（接頭辞なし）
-  await card.getByRole("button", { name: `PAT-${tag}-B を上へ移動` }).click();
+  // 上下移動（押下領域44px）でBを先頭へ。計画カードの表示名もフォームと同じfacilityName（種別接頭辞つき。PH5レビューC低4）
+  await card.getByRole("button", { name: `消火栓 PAT-${tag}-B を上へ移動` }).click();
   await expect(rows.nth(0)).toContainText(`PAT-${tag}-B`);
   await expect(rows.nth(1)).toContainText(`PAT-${tag}-C`);
   await expect(rows.nth(2)).toContainText(`PAT-${tag}-A`);
@@ -90,9 +90,9 @@ test("patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch", 
   const dialog = page.getByRole("dialog", { name: "この巡回順で確定しますか" });
   await expect(dialog.getByText(`巡回日: ${date}`)).toBeVisible();
   await expect(dialog.locator("ol li")).toHaveText([
-    `PAT-${tag}-B`,
-    `PAT-${tag}-C`,
-    `PAT-${tag}-A`,
+    `消火栓 PAT-${tag}-B`,
+    `消火栓 PAT-${tag}-C`,
+    `消火栓 PAT-${tag}-A`,
   ]);
   await expect(dialog.getByText(/出動・タスク・通知は自動では作られません/)).toBeVisible();
   await dialog.getByRole("button", { name: "確定する" }).click();

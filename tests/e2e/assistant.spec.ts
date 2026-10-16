@@ -275,3 +275,41 @@ test("assistant_proposal_requires_explicit_review_of_effects", async ({ page, re
   const withdrawnHits = await adminApiData<{ citations: unknown[] }>(request, "POST", "/api/v1/search/rag", { query: "給水活動" });
   expect(withdrawnHits.data.data.citations).toEqual([]);
 });
+
+/**
+ * 入力まわりの押下領域（PH5レビューC中1/中2）。
+ * 「記録を添える」の提案チップと質問の送信ボタンは、モバイル（360px）で44px以上の押下領域を持つ
+ * （docs/03 §1.1-5・§1.1-19⑩。測り方はmember-admin.specの `ai_evaluation_buttons_meet_touch_target_on_mobile`
+ * と同じ。チップは `h-9 … max-lg:min-h-11`〔ReportDraftPage.tsx:751の前例〕、送信ボタンは
+ * `size-11 lg:size-10`〔巡回の上下移動と同じ流儀。PCはprototypeどおり40pxが正のためモバイルだけで検査する〕）。
+ */
+test("assistant_input_controls_meet_touch_target_on_mobile", async ({ page, request }, info) => {
+  test.skip(!isPhone(info.project.use.viewport ?? page.viewportSize()), "押下領域44pxの規則はモバイル。PCはprototypeのコンパクト寸法が正のため対象外");
+  test.setTimeout(120_000);
+  const tag = crypto.randomUUID().slice(0, 6);
+  // チップ行（記録を添える）はこれからの予定があるときだけ現れるため、本体試験と同じseedの最小版をAPIで1件作る
+  const me = await adminApiData<{ profile: { memberId: string } }>(request, "GET", "/api/v1/me");
+  expect(me.status).toBe(200);
+  const startsAt = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
+  const activity = await adminApiData<{ id: string; version: number }>(request, "POST", "/api/v1/activities", {
+    title: `押下領域の確認用予定（架空 ${tag}）`, kind: "訓練", plannedStartsAt: startsAt,
+    locationText: "第三分団詰所・前庭（架空）", ownerMemberId: me.data.data.profile.memberId,
+    audienceMemberIds: [me.data.data.profile.memberId],
+  });
+  expect(activity.status).toBe(201);
+  // 作成時はdraftのため公開する（docs/11 activityTransitions。本体試験と同じAPI-39）
+  const published = await adminApiData<{ id: string }>(request, "PATCH", `/api/v1/activities/${activity.data.data.id}`, {
+    version: activity.data.data.version, status: "scheduled",
+  });
+  expect(published.status).toBe(200);
+
+  await page.goto("/app/assistant");
+  const chip = page.getByRole("button", { name: new RegExp(`押下領域の確認用予定（架空 ${tag}）`) });
+  await expect(chip).toBeVisible();
+  const chipHeight = await chip.evaluate((el) => el.getBoundingClientRect().height);
+  expect(chipHeight, "「記録を添える」チップのモバイル押下領域は44px以上（docs/03 §1.1-5・§1.1-19⑩）").toBeGreaterThanOrEqual(44);
+  const send = page.getByRole("button", { name: "送信" });
+  await expect(send).toBeVisible();
+  const sendHeight = await send.evaluate((el) => el.getBoundingClientRect().height);
+  expect(sendHeight, "質問の送信ボタンのモバイル押下領域は44px以上（docs/03 §1.1-19⑩）").toBeGreaterThanOrEqual(44);
+});

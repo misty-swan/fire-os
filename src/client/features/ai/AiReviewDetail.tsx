@@ -30,7 +30,7 @@ import {
  *   点検源の現行版は読み取り契約が無いため比較できず、その場合はサーバー側の版再検査（409）だけが防御になる旨を出す。
  * - **横断AIの提案（assistant源・T068）は分類用の画面を出さない**（分類の確定・stale比較は分類源向け）。
  *   参照した記録（references）・読み取り結果（readResults）・書込候補（proposedEffects）の概要と
- *   API-30での確認先の案内だけを出す（確認・承認画面SCR-28はT070で追加予定。docs/16 T068）。
+ *   API-30での確認先の案内だけを出す（確認・承認はAIアシスタント画面〔SCR-28 /app/assistant〕で行う。docs/16 T068。PH5レビューC中3）。
  */
 
 /** 分類源の候補（assistant源は案内表示の早期リターンで分ける＝docs/16 T068の最小ガード） */
@@ -137,7 +137,8 @@ export function AiReviewDetail({ id }: { id: string }) {
   }
 
   // 横断AIの提案（assistant源・T068）: 分類の確定・stale比較の画面は出さず、概要と確認先の案内だけを出す。
-  // 提案は人の承認（API-31）まで業務を変えない。確認・承認画面（SCR-28）はT070で追加予定（docs/16 T068）
+  // 提案は人の承認（API-31）まで業務を変えない。確認・承認はAIアシスタント画面（SCR-28 /app/assistant）で行う
+  // （T070で同画面を実装済み。docs/16 T068。PH5レビューC中3）
   if (candidate.sourceType === "assistant") {
     const statusMeta = PROPOSAL_STATUS[candidate.status];
     return (
@@ -152,8 +153,11 @@ export function AiReviewDetail({ id }: { id: string }) {
         <Banner tone="info" eyebrow="ASSISTANT" title="複数の記録を読んで作られた提案です">
           <p>
             参照した記録（references）・読み取り結果（readResults）・書込の候補（proposedEffects）は、API-30の応答
-            （outputJson）で確認できます。確認・承認の画面（SCR-28）は後続のタスク（T070）で追加予定です。
-            提案は人の承認（API-31）まで業務を変えません。
+            （outputJson）で確認できます。提案の確認・承認は
+            <Link to="/app/assistant" className="underline">
+              AIアシスタント画面
+            </Link>
+            で行います。提案は人の承認（API-31）まで業務を変えません。
           </p>
         </Banner>
         <Card className="flex flex-col gap-1" aria-label="提案の概要">

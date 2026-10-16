@@ -43,7 +43,7 @@ export const SOURCE_TYPE_LABELS: Record<AiEvaluationDto["sourceType"], string> =
   facility_inspection: "施設の点検",
   asset_inspection: "資産の点検",
   issue: "異常",
-  // 横断AIの提案（T068。確認・承認画面〔SCR-28〕はT070で追加予定の間の案内表示。docs/16 T068）
+  // 横断AIの提案（T068。確認・承認はAIアシスタント画面〔SCR-28〕で行う旨の案内表示。docs/16 T068。PH5レビューC中3）
   assistant: "横断AIの提案",
 };
 

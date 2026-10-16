@@ -149,3 +149,44 @@ test("withdrawn_document_disappears_from_search_and_citation", async ({ page, re
   const oldCitationAccessible = citeRes.ok();
   expect(oldCitationAccessible).toBe(false);
 });
+
+/**
+ * 抽出不能の表示（PH5レビューB中2。T069完了条件「処理中/抽出不能/失効を明示」の画面側の実測）。
+ * 画像だけのPDF（tests/fixtures/documents/image-only-ja.pdf。テキスト演算子が1つも無い=抽出不能スキャン相当。
+ * T064のfixture流儀）を原本にした版は、抽出job（document.extract）がdocument_ocr_requiredで保留
+ * （manual_review・chunk 0件＝捏造テキストを作らない=T064のfail-closed）になり、版パネルが
+ * 「抽出不能（error_codeの日本語）」を出す（DocumentVersionPanel.tsxのJOB_ERROR_LABELS）。
+ * この画面で版を作るため依頼job（API-86）を追跡でき、表示分岐の回帰（「抽出済み」等への誤表示）を検知する。
+ */
+test("image_only_pdf_version_shows_unextractable_reason", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const tag = crypto.randomUUID().slice(0, 6);
+  const title = `画像だけの訓練資料（架空） ${tag}`;
+  const licenseRef = `架空市消防団 検証用許諾 ${tag}`;
+  const pdf = readFileSync(new URL("../fixtures/documents/image-only-ja.pdf", import.meta.url));
+
+  await page.goto("/app/documents/new");
+  await page.getByLabel("題名").fill(title);
+  await page.getByLabel("分類").fill("訓練資料");
+  await page.getByRole("button", { name: "文書を作成する" }).click();
+  await expect(page).toHaveURL(/\/app\/documents\/[0-9a-f-]{36}$/, { timeout: 15_000 });
+
+  // 原本の添付→検査job（T069本体試験と同じ流儀。jobは開発用トリガで回す）
+  await page.setInputFiles('input[type="file"]', { name: "image-only-ja.pdf", mimeType: "application/pdf", buffer: pdf });
+  await expect(async () => {
+    await runLocalCron(request);
+    await expect(page.getByText("準備完了")).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 120_000 });
+  await page.getByLabel("許諾の出典（必須）").fill(licenseRef);
+  await page.getByRole("button", { name: "版を作成する" }).click();
+  await expect(page.getByText(/第1版/).first()).toBeVisible({ timeout: 15_000 });
+
+  // 抽出jobの完了を画面（抽出状態）で待つ。画像だけのPDFは「抽出不能（error_codeの日本語）」で保留になる
+  await expect(async () => {
+    await runLocalCron(request);
+    await expect(page.getByText(/抽出不能（画像だけのPDFのため抽出できません/)).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 120_000 });
+
+  // 検証読み: 承認・索引の無い版は検索にも乗らない（抽出不能を検索可能と偽装しない。T064）
+  expect(await searchCitations(request, tag)).toEqual([]);
+});

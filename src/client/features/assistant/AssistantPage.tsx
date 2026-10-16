@@ -718,8 +718,8 @@ export function AssistantPage() {
 
   return (
     <div className="flex max-w-[720px] flex-col gap-4">
+      {/* prototypeのAIヘッダーに小見出しは無いためeyebrowは置かない（docs/03 §1.1-19⑬。PH5レビューC低1） */}
       <PageTitle
-        eyebrow="AI · ASSISTANT"
         className="lg:[&_h2]:hidden"
         right={
           // prototype語彙: 「団員権限で参照」（読み取りは依頼者の現権限で境界。docs/10 PER-09）
@@ -772,7 +772,7 @@ export function AssistantPage() {
                     })
                   }
                   className={
-                    "flex-none whitespace-nowrap rounded-pill px-3 py-2 text-[12px] font-medium transition " +
+                    "flex h-9 flex-none items-center whitespace-nowrap rounded-pill px-3 text-[12px] font-medium transition max-lg:min-h-11 " +
                     (on ? "bg-ai/[.16] text-[#e4ddff] shadow-[inset_0_0_0_1px_rgba(185,169,255,.4)]" : "bg-white/[.06] text-ink-sub shadow-[inset_0_0_0_1px_rgba(255,255,255,.1)]")
                   }
                 >
@@ -800,7 +800,7 @@ export function AssistantPage() {
             type="submit"
             aria-label="送信"
             disabled={busy || !question.trim()}
-            className="grid size-10 flex-none place-items-center rounded-full bg-ai text-[#0b1220] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-white/[.08] disabled:text-ink-dim"
+            className="grid size-11 flex-none place-items-center rounded-full bg-ai text-[#0b1220] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-white/[.08] disabled:text-ink-dim lg:size-10"
           >
             <Icon name={busy ? "hourglass_top" : "arrow_upward"} className="text-[20px]" />
           </button>

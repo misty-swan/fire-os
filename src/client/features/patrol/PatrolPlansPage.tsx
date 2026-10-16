@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { ConfirmDialog } from "../../components/Overlay";
 import { MutationStatus } from "../../components/MutationStatus";
@@ -6,7 +6,7 @@ import { PageTitle } from "../../components/Page";
 import { Banner, Button, Card, Chip, Icon, Notice, TextArea, TextField } from "../../components/ui";
 import type { PatrolPlan, PatrolStop } from "../../../shared/contracts/ai";
 import { buildMapsUrl } from "../facilities/location";
-import { FACILITY_TYPES, facilityName, useFacilities } from "../map/useFacilities";
+import { FACILITY_TYPES, facilityName, useFacilities, type FacilityItem } from "../map/useFacilities";
 import { useMutation } from "../../useMutation";
 
 /**
@@ -54,6 +54,9 @@ export function PatrolPlansPage() {
     upsertPlan(plan);
     refresh();
   };
+  // 施設の表示名（種別接頭辞つき）を計画カードへ渡すための一覧（フォームと同じAPI-10。PH5レビューC低4）
+  const { items: facilities } = useFacilities({});
+  const facilityById = useMemo(() => new Map(facilities.map((f) => [f.id, f])), [facilities]);
 
   return (
     <div className="flex max-w-[720px] flex-col gap-4">
@@ -83,7 +86,7 @@ export function PatrolPlansPage() {
             <p className="text-[14px] text-ink-sub">まだ計画はありません。上のフォームから案を作成してください。</p>
           </Card>
         ) : (
-          plans.map((plan) => <PlanCard key={plan.id} plan={plan} onUpdate={onUpdate} />)
+          plans.map((plan) => <PlanCard key={plan.id} plan={plan} facilityById={facilityById} onUpdate={onUpdate} />)
         )}
       </section>
     </div>
@@ -208,7 +211,12 @@ function PlanCreateForm({ onCreated }: { onCreated: (plan: PatrolPlan) => void }
 }
 
 /** 作成した計画のカード。案のときは順序の編集（上下移動）と確定/取消を出す。確定済みは終端として表示する */
-function PlanCard({ plan, onUpdate }: { plan: PatrolPlan; onUpdate: (plan: PatrolPlan) => void }) {
+function PlanCard({ plan, facilityById, onUpdate }: { plan: PatrolPlan; facilityById: Map<string, FacilityItem>; onUpdate: (plan: PatrolPlan) => void }) {
+  // 施設の表示名はフォームと同じクライアント側のfacilityName（種別接頭辞つき。DTO側は変えない。PH5レビューC低4）
+  const nameOf = (stop: PatrolStop): string => {
+    const f = facilityById.get(stop.facilityId);
+    return f ? facilityName(f) : stop.facilityName;
+  };
   // 編集中の順序（案のときだけ動かせる。確定のときにサーバーへ送る。docs/03 SCR-25「順序編集」）
   const [order, setOrder] = useState<PatrolStop[]>(plan.stops);
   useEffect(() => setOrder(plan.stops), [plan]);
@@ -272,7 +280,7 @@ function PlanCard({ plan, onUpdate }: { plan: PatrolPlan; onUpdate: (plan: Patro
           <li key={stop.facilityId} className="flex items-center gap-2.5 py-2">
             <span className="grid size-8 flex-none place-items-center rounded-full bg-white/[.08] text-[13px] font-bold">{i + 1}</span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-medium">{stop.facilityName}</span>
+              <span className="block truncate text-[14px] font-medium">{nameOf(stop)}</span>
               {/* 外部経路（施設詳細と同じdestination座標の外部リンク。経路の自動最適化は行わない） */}
               <a
                 href={buildMapsUrl(stop)}
@@ -288,7 +296,7 @@ function PlanCard({ plan, onUpdate }: { plan: PatrolPlan; onUpdate: (plan: Patro
               <span className="flex flex-none gap-1">
                 <button
                   type="button"
-                  aria-label={`${stop.facilityName} を上へ移動`}
+                  aria-label={`${nameOf(stop)} を上へ移動`}
                   disabled={i === 0}
                   onClick={() => move(i, -1)}
                   className="grid size-11 place-items-center rounded-[10px] bg-white/[.06] disabled:opacity-40 lg:size-9"
@@ -297,7 +305,7 @@ function PlanCard({ plan, onUpdate }: { plan: PatrolPlan; onUpdate: (plan: Patro
                 </button>
                 <button
                   type="button"
-                  aria-label={`${stop.facilityName} を下へ移動`}
+                  aria-label={`${nameOf(stop)} を下へ移動`}
                   disabled={i === order.length - 1}
                   onClick={() => move(i, 1)}
                   className="grid size-11 place-items-center rounded-[10px] bg-white/[.06] disabled:opacity-40 lg:size-9"
@@ -341,7 +349,7 @@ function PlanCard({ plan, onUpdate }: { plan: PatrolPlan; onUpdate: (plan: Patro
           <p>目的: {plan.objective}</p>
           <ol className="list-decimal list-inside">
             {order.map((s) => (
-              <li key={s.facilityId}>{s.facilityName}</li>
+              <li key={s.facilityId}>{nameOf(s)}</li>
             ))}
           </ol>
           <p>確定した計画はもう変わりません。変更するときは、新しい案を作成します。</p>

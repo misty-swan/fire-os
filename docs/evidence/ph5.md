@@ -7,8 +7,8 @@
 |---|---|---|
 | 型検査 | `npm run typecheck` | 成功 |
 | 契約検査 | `npm run check:contracts` | 102 API / docs/05 102行 / OpenAPI一致（API-73/74/90/91/75/92/99/76/77/78/79とAPI-30/26の拡張を各タスクが契約3点セット〔台帳・docs/05・OpenAPI〕で同一コミット更新。最後の再生成はT071のAPI-78/79 provisional解除） |
-| 単体・結合試験 | `npx vitest --run` | **51ファイル241件成功**（workers＝実workerd＋D1/Queues、client＝jsdom。PH4最終は43ファイル229件。以降T062=44/230→T063=45/231→ebdcc3c=232→T064=46/233→T065=47/234→T066=48/235→T067=49/236→T068=50/238→T069=50/238→T070=50/239→T071=51/241） |
-| ブラウザ試験 | `npx playwright test` | **75件成功＋2件スキップ**（phone-360 / desktop-1280 の両プロジェクト。skipは既存のビューポート条件〔member-admin 44px・shell メニュータブ＝PC幅では対象外〕でPH4と同じ2件。進行: T068時点69+2→T069=71+2→T070=73+2→T071=75+2） |
+| 単体・結合試験 | `npx vitest --run` | **52ファイル248件成功**（workers＝実workerd＋D1/Queues、client＝jsdom。PH4最終は43ファイル229件。以降T062=44/230→T063=45/231→ebdcc3c=232→T064=46/233→T065=47/234→T066=48/235→T067=49/236→T068=50/238→T069=50/238→T070=50/239→T071=51/241→**PH5レビュー修正ラウンド1でサーバー側7件を追加**〔api_30_masks…・81件400・PER-09 403・roles空・withdrawn 422・inflate 32MB・rag-holdout。4c8c0c9〕） |
+| ブラウザ試験 | `npx playwright test` | **78件成功＋3件スキップ**。内訳=phone-360の40本＋desktop-1280の37本（宣言40本のうちdesktopでは3本をスキップ: 既存のビューポート条件2本〔member-admin 44px・shell メニュータブ＝PC幅では対象外〕＋押下領域試験1本〔assistant入力まわり。PCはprototype寸法が正のため対象外〕）＋setup project（auth.setup.ts）の1件。進行: T068時点69+2→T069=71+2→T070=73+2→T071=75+2〔74+setup1〕→PH5レビュー修正ラウンド1で押下領域1本・抽出不能表示1本を追加（宣言38本→40本） |
 | ビルド | `npm run build` | 成功（chunkサイズ警告は既存どおり） |
 | 実環境の試験 | `npm run test:live` | **未実施（実Cloudflare未接続。PH2〜PH4と同じ扱い）**: LIVE_BASE_URL / LIVE_BOOTSTRAP_EMAIL / LIVE_BOOTSTRAP_TOKEN 未設定＋wrangler未ログインのため、tests/live/の**8ファイル8件**がすべて「環境が未設定のため未実施」のエラーでfail（skipにはしない設計。PH4終了時の6本＋PH5で追加のretrieval〔T066〕・rag-quality〔T067〕） |
 
@@ -24,7 +24,7 @@ T062 `document_version_requires_ready_original_and_license`（tests/documents.te
 
 ## 試験が検出した（または発覚した）欠陥と弱さ
 - **実装側の欠陥の検出・修正は2件（ともに指定試験外の経路で発覚）**:
-  1. **0024帳票supersede CHECK不具合（T058/0024領域。T063が発見→コントローラが実検証→commit ebdcc3cで修正）**: 0024のreport_versionsは0027と同型のCHECK `(status='approved')=(approved_by IS NOT NULL)` を持ち、同一帳票で2版目を承認するsupersede経路（旧承認版のapproved→superseded遷移）が常にCHECK失敗で500になるはず。T058の試験はsupersede経路を未実行のためPH4を通過していた。修正は失敗テスト先行（tests/report-approval.test.ts新規・96行）→0024のCHECKを0027同型の「承認されたことがある版だけが承認列を持つ」へ拡張＋docs/04:147更新。T062〜T071の実装コミットには含めず`fix:`で分離。
+  1. **0024帳票supersede CHECK不具合（T058/0024領域。T063が発見→コントローラが実検証→commit ebdcc3cで修正）**: 0024のreport_versionsは0027と同型のCHECK `(status='approved')=(approved_by IS NOT NULL)` を持ち、同一帳票で2版目を承認するsupersede経路（旧承認版のapproved→superseded遷移）が常にCHECK失敗で500になるはず。T058の試験はsupersede経路を未実行のためPH4を通過していた。修正は失敗テスト先行（既存tests/report-approval.test.tsへの追加・96行・試験1件。同ファイルはT058で作成済み）→0024のCHECKを0027同型の「承認されたことがある版だけが承認列を持つ」へ拡張＋docs/04:147更新。T062〜T071の実装コミットには含めず`fix:`で分離。
   2. **T068のAPI-30一覧500（T070の全e2eでai-review desktopだけ落ちることを入口に特定・commit aeec69eで修正）**: assistant提案は `source_id="query:<sha256>"` の合成キー（docs/05 API-77行どおりのT068設計）で保存される一方、API-30のDTO（AiEvaluation）は `sourceId: Id`（小文字UUID）を要求するため、**assistant行が1件でもあるunitでAPI-30の一覧が常に500**（AIレビューの一覧が壊れる。T068時点はassistant行を作るe2eが無く未発覚）。修正は契約3点セット（AiEvaluationの**assistant枝のみsourceIdをShortText**〔分類源はIdのまま〕・docs/05 API-30行・openapi再生成）＋回帰試験（赤=500→緑=200＋sourceId断言）。
 - **指定試験が検出した実装側欠陥**: T071の**終端ガード欠落**（root版ガードだけでは「確定済み計画への現行版再確定」が200で通る→`UPDATE … AND status='draft'`を追加し422に分類。T063の「allowedStatesだけでは終端を守れない」と同型）。
 - **実装中に発見・記録した仕様上の弱さ**: D1のbatch内`meta.changes`はFTS仮想表のDELETEと併用時に信頼できる計上にならない（T066。確定数はbatch後のCOUNTで取る。将来batchのchangesを効果数に使う場合は単文で確認＝V04-retrieval T066節「限界」）。
@@ -32,7 +32,7 @@ T062 `document_version_requires_ready_original_and_license`（tests/documents.te
 
 ## 未実施・未接続（検証済みとして扱わない）
 - **実環境検証はPH0〜PH4から継続で未実施**: 実Cloudflare・実Workers・実D1・実R2・実Queues・実AI・実Vectorize（実検索基盤）・実Google Maps・実端末（iOS/Android・スクリーンリーダー・200%拡大はT083）。GitHub Actionsも未接続。`npm run test:live`は**未実施（実Cloudflare未接続）**。live試験はtests/live/のPH5追加2本（retrieval / rag-quality）を含む**8ファイル8件**が**環境変数が揃わなければ必ずfailする設計（skip＝成功扱いにしない）**。
-- **局所完了の5タスク（T064/T065/T066/T067/T068。残手順の正本はdocs/evidence/V04-retrieval.mdと各報告書の懸念節。fake adapterや決定的fakeでの成功を「実環境での完了」とは扱わない）**:
+- **局所完了の5タスク（T064/T065/T066/T067/T068。残手順の正本はdocs/evidence/V04-retrieval.mdと各報告書の懸念節。fake adapterや決定的fakeでの成功を「実環境での完了」とは扱わない。チェックボックス基準はPH4と同じ: `[x]`=完全完了・`[ ]`=局所完了で、docs/16のこの5タスクのステップ1〜5は`[ ]`のまま＝PH4レビューB低5の裁定どおり）**:
   - **T064 OCR・実PDF集合の抽出率実測（V04-retrieval。D20）**: 画像のみPDFはdocument_ocr_requiredで保留（chunk 0件＝捏造テキスト無し）。OCRの対応方式と限界、実PDF集合での抽出率実測は未実施。実装は依存追加なしの自前最小PDF抽出器（ToUnicode無しType0・/Differences・インライン画像・予測子付きFlate・暗号化は例外で部分テキストも保存しないfail-closed）で、workerd実測は試験が常時担保。
   - **T065 Vectorize実測比較（V04-retrieval「未実施手順」）**: d1_fts＋trigram（recall@5=0.581・略語0/10は正直な限界）は実測つきの**開発選定**で、実Cloudflare bindingが要るVectorizeとの実測比較（binding/index作成→upsert→同一datasetでの同一指標→usage実測）が完了するまで採用確定ではない。**モックembedding・偽の索引・偽metricsは1行も書いていない**（selectRetrievalBackendが実測の無い候補の選定を例外で拒否）。再評価の合否基準（recall@5>0.581かつ略語5/10以上回収・unauthorized=0・費用枠内。満たさなければd1_fts＋trigramを本番採用）つきで記録。費用比較は公式単価つき（実データ量での実測は未実施＝要確認）。
   - **T066 実Cloudflare実測・実データ量でのrows read実測（V04-retrieval T066節「限界・残手順」）**: 実backend（workerd＋実D1エンジンのFTS5）で投入→検索→更新→撤回は再現済み。実Cloudflare（staging）での7ステップ手順（migration 0028適用→投入→job確定→検索→撤回→回収確定）と実データ量でのrows read実測（T082）は未実施（tests/live/retrieval.test.ts）。
