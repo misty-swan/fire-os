@@ -221,7 +221,14 @@ export function registerTaskRoutes(app: ApiApp): void {
     const p = await resolvePrincipal(c);
     const { body, headers } = await parseApiRequest(c, "API-68");
     requireTaskPermission(p, { unitId: p.unitId, type: "task" });
-    if (body.assigneeMemberId) await requireActiveAssignee(c, p, body.assigneeMemberId);
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」: 鍵が既にある（=再送）ときは
+    // 状態前提の検査（担当の現在有効）を飛ばし、初回の201と同じ応答をexecuteMutationの
+    // resolveExistingへ任せる（T041流儀。初回成功後に担当が休団・退団しても再送は422にならない。
+    // 同キー別本文はIDEMPOTENCY_MISMATCH。承認済み決定の検査は決定行が不変のため再送でも同じ結果）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "task.create", headers["idempotency-key"]).first();
+    if (body.assigneeMemberId && !knownKey) await requireActiveAssignee(c, p, body.assigneeMemberId);
 
     // AI起点は承認effectから作る（docs/11）。対応する承認済み決定が無ければ422（タスクは増えない）
     const decision = body.sourceDecisionId ? await findApprovedDecision(c.env.DB, p.unitId, body.sourceDecisionId) : null;
@@ -285,16 +292,27 @@ export function registerTaskRoutes(app: ApiApp): void {
     if (!current || current.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
     requireTaskPermission(p, { unitId: p.unitId, type: "task", id: params.id, ownerMemberId: current.assignee_member_id ?? undefined });
 
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」: 鍵が既にある（=再送）ときは
+    // 状態前提の検査（担当の変更可能状態・現在有効）を飛ばし、初回の200と同じ応答を
+    // executeMutationのresolveExistingへ任せる（T041流儀。初回成功後にタスクがcancelled・
+    // 担当が休団になっても再送は422にならない。status遷移の検査は再送でも安全＝初回成功後は
+    // body.statusと現statusが一致するためstatusChangeが立たない）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "task.update", headers["idempotency-key"]).first();
+
     const statusChange = body.status !== undefined && body.status !== current.status;
     if (statusChange && !taskTransitions[current.status as keyof typeof taskTransitions].includes(body.status!)) {
       throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
     }
     // 担当者変更はopen/assigned/in_progressから（docs/16 T049裁定。done/cancelledでは422）
     const assigneeChange = body.assigneeMemberId !== undefined;
-    if (assigneeChange && !ASSIGNABLE_STATES.includes(current.status)) {
-      throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "assigneeMemberId", reason: "assignee_not_assignable" }]);
+    if (!knownKey) {
+      if (assigneeChange && !ASSIGNABLE_STATES.includes(current.status)) {
+        throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "assigneeMemberId", reason: "assignee_not_assignable" }]);
+      }
+      if (body.assigneeMemberId) await requireActiveAssignee(c, p, body.assigneeMemberId);
     }
-    if (body.assigneeMemberId) await requireActiveAssignee(c, p, body.assigneeMemberId);
     // 再開（done→in_progress）は理由必須（docs/11 業務タスク。理由は契約でも必須。ここでは空文字弾りを二重にする）
     const reopen = body.status === "in_progress" && current.status === "done";
     if (reopen && !body.reason?.trim()) {

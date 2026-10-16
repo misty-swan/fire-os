@@ -179,3 +179,76 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
   await expect(reopenDialog.getByLabel("再開の理由（必須）")).toBeVisible();
   await reopenDialog.getByRole("button", { name: "戻る" }).click();
 });
+
+/**
+ * 通知の操作で失敗（409など）が表示されること（PH4レビューC 中2）。
+ * 承認ダイアログを開いたまま、同じ下書きを別経路（管理者のAPI直操作）で先に承認済みにすると、
+ * 画面の承認は409（競合）で拒否される。拒否されたときは「他の操作で更新されています」の案内が出て、
+ * ダイアログは開いたまま（成功と失敗を区別しない画面はdocs/03 §1「conflictを区別」に反する）。
+ * draftのid/version/hashは作成応答（API-63）から拾う（送信者の一覧を読むAPIは無いため。docs/03 §1.1-14⑥）。
+ */
+test("notification_approval_shows_conflict_when_already_approved_elsewhere", async ({ browser, request }, testInfo) => {
+  test.setTimeout(180_000);
+  const tag = crypto.randomUUID().slice(0, 6);
+
+  // --- seed: 幹部（PER-12保持）と、だれも回答しない予定（未回答抽出の対象=幹部1人） ---
+  const officerEmail = uniqueEmail(`e2e-ntf-c-${tag}`);
+  const officer = await inviteNewMember(request, `架空 幹部 ${tag}`, officerEmail);
+  const startsAt = new Date(Date.now() + 7 * 86_400_000).toISOString();
+  const activity = await adminApiData<{ id: string }>(request, "POST", "/api/v1/activities", {
+    title: `出動時の持ち物 ${tag}`, kind: "訓練", plannedStartsAt: startsAt, locationText: "架空市中央公園",
+    ownerMemberId: officer.memberId, audienceMemberIds: [officer.memberId],
+  });
+  expect(activity.status).toBe(201);
+  const publish = await adminApiData(request, "PATCH", `/api/v1/activities/${activity.data.data.id}`, {
+    version: 1, status: "scheduled", reason: "e2e: 対象を確定して公開",
+  });
+  expect(publish.status).toBe(200);
+
+  const officerCtx = await newUserContext(browser, testInfo.project.use.viewport!);
+  const officerPage = await officerCtx.newPage();
+  await acceptInvitationViaUi(officerPage, officerEmail, officer.token, { mfa: false });
+  const rows = (
+    await adminApiData(request, "GET", "/api/v1/members?limit=200")
+  ).data.data as { id: string; version: number; account: { authzVersion: number } | null }[];
+  const officerRow = rows.find((r) => r.id === officer.memberId)!;
+  const roles = await adminApiData(request, "PUT", `/api/v1/members/${officer.memberId}/roles`, {
+    version: officerRow.version,
+    expectedAuthzVersion: officerRow.account?.authzVersion ?? 1,
+    roleCodes: ["officer"],
+    reason: "e2e: 幹部（PER-12保持）として通知を作成する",
+    scopes: [],
+  });
+  expect(roles.status).toBe(200);
+
+  // --- 1) 画面から下書きを作る。作成応答からid/version/hashを拾う（画面は開いたまま残る） ---
+  await officerPage.goto("/app/tasks-notifications/notifications/new");
+  await officerPage.getByLabel("通知の源").selectOption("activity");
+  const sourceSelect = officerPage.getByLabel("抽出する予定");
+  await sourceSelect.selectOption((await sourceSelect.locator("option", { hasText: `出動時の持ち物 ${tag}` }).getAttribute("value"))!);
+  await expect(officerPage.getByText(/対象者（1人/).first()).toBeVisible();
+  const draftResponsePromise = officerPage.waitForResponse(
+    (r) => r.url().includes("/api/v1/notifications/drafts") && r.request().method() === "POST",
+  );
+  await officerPage.getByRole("button", { name: "下書きを作成" }).click();
+  const draftResponse = (await (await draftResponsePromise).json()) as {
+    data: { id: string; version: number; bodyHash: string; audienceHash: string };
+  };
+  await expect(officerPage.getByText(/出欠確認/).first()).toBeVisible(); // 承認前確認に進んでいる
+
+  // --- 2) 別経路（管理者のAPI直操作）で同じ下書きを先に承認済みにする（画面の表示は古いまま） ---
+  const approveElsewhere = await adminApiData(request, "POST", `/api/v1/notifications/${draftResponse.data.id}/approval`, {
+    version: draftResponse.data.version,
+    bodyHash: draftResponse.data.bodyHash,
+    audienceHash: draftResponse.data.audienceHash,
+    decision: "approve",
+  });
+  expect([200, 202]).toContain(approveElsewhere.status);
+
+  // --- 3) 画面の承認は409で拒否され、失敗の案内が出る（開いたまま無反応、は起こらない） ---
+  await officerPage.getByRole("button", { name: "承認する" }).click();
+  const approveDialog = officerPage.getByRole("dialog", { name: "この通知を承認して送信しますか" });
+  await approveDialog.getByRole("button", { name: "承認する" }).click();
+  await expect(officerPage.getByText("他の操作で更新されています")).toBeVisible();
+  await expect(approveDialog).toBeVisible(); // 失敗したので承認は進まず、ダイアログは開いたまま案内する
+});

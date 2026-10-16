@@ -281,4 +281,69 @@ describe("報告書の申請・承認・差戻し・承認版出力 (T058)", () 
     const unapprovedExport2 = await fx.client(admin).request("GET", `/api/v1/reports/${report2.report.id}/content?format=pdf`);
     expect(unapprovedExport2.status).not.toBe(200);
   });
+
+  /**
+   * 複数ページのPDF（PH4レビューA中3）: 本文が1ページ（46行）を超える承認版では、
+   * 全ページのPageオブジェクトの/Parent（Pagesへの参照）が解決される（%PAGES%が残らない）。
+   * 現行実装は1ページ目の置換しかしないため、2ページ目以降に「/Parent %PAGES% 0 R」が残り
+   * ビューアで開けない不正なPDFになる（FAILを確認してからループ化で直す）。
+   */
+  it("multipage_pdf_resolves_parent_on_every_page", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin; // 作成＋承認（PER-10）
+    const member = a.people.member; // 担当外でも承認版は出せる（API-61）
+    const officer = a.people.officer;
+
+    // --- 公開済み予定＋実績＋手動draft（本文は60行＝改ページをまたぐ） ---
+    const createRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "複数ページPDF試験の活動（架空）",
+      kind: "訓練",
+      plannedStartsAt: "2026-10-22T01:00:00.000Z",
+      plannedEndsAt: "2026-10-22T04:00:00.000Z",
+      locationText: "架空市堤防",
+      ownerMemberId: officer.memberId!,
+      audienceMemberIds: [officer.memberId!, member.memberId!],
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const activityId = ((await json(createRes)).data! as { id: string }).id;
+    expect((await fx.client(admin).request("PATCH", `/api/v1/activities/${activityId}`, {
+      version: 1, status: "scheduled", reason: "対象を確定して公開",
+    }, idem())).status).toBe(200);
+    expect((await fx.client(admin).request("POST", `/api/v1/activities/${activityId}/actual-results`, {
+      activityVersion: 2,
+      content: "堤防の巡視と水防訓練を実施（複数ページ試験用）。",
+      actualStartsAt: "2026-10-22T01:10:00.000Z",
+      actualEndsAt: "2026-10-22T03:40:00.000Z",
+      participants: [{ memberId: member.memberId!, actualStatus: "participated" }],
+      attachmentIds: [],
+    }, idem())).status).toBe(201);
+
+    const text = Array.from({ length: 60 }, (_, i) => `訓練の記録${i + 1}行目（架空の本文）`).join("\n");
+    const manual = await fx.client(admin).request("POST", "/api/v1/reports/manual", {
+      activityId,
+      resultVersion: (await fx.rows("activity_results", { activity_id: activityId }))[0]!.version as number,
+      templateVersion: "test-activity-v1",
+      text,
+    }, idem());
+    expect(manual.status).toBe(201);
+    const report = (await json(manual)).data! as { report: { id: string; version: number }; versions: { id: string }[] };
+    const v1 = report.versions[0]!.id;
+    const savedSourceVersions = JSON.parse((await fx.rows("report_versions", { id: v1 }))[0]!.source_versions as string) as Record<string, number>;
+    const decide = (body: Record<string, unknown>) =>
+      fx.client(admin).request("POST", `/api/v1/reports/${report.report.id}/decision`, body, idem());
+    const currentRootVersion = async () => (await fx.rows("reports", { id: report.report.id }))[0]!.version as number;
+    expect((await decide({ version: await currentRootVersion(), reportVersion: 1, decision: "request_review", sourceVersions: savedSourceVersions, reason: "申請します" })).status).toBe(200);
+    expect((await decide({ version: await currentRootVersion(), reportVersion: 1, decision: "approve", sourceVersions: savedSourceVersions, reason: "内容を確認しました" })).status).toBe(200);
+
+    // --- 承認版のPDF（本文60行＋欄は46行/ページで2ページになる） ---
+    const pdfRes = await fx.client(member).request("GET", `/api/v1/reports/${report.report.id}/content?format=pdf`);
+    expect(pdfRes.status).toBe(200);
+    const bytes = new Uint8Array(await pdfRes.arrayBuffer());
+    const raw = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
+    // %PAGES%はどのページにも残らない（全ページの/ParentがPagesオブジェクトの番号で解決済み）
+    expect(raw.includes("%PAGES%")).toBe(false);
+    // ページ数の整合: /Count 2（Pagesの宣言）とPageオブジェクト2件
+    expect(raw).toContain("/Count 2");
+    expect(raw.match(/\/Type \/Page[^s]/g)).toHaveLength(2);
+  });
 });

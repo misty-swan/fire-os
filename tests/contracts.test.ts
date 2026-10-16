@@ -164,6 +164,8 @@ describe("contracts (T002)", () => {
     expect(states.deliveryStates).toEqual(["pending", "sending", "provider_accepted", "failed", "unknown", "retry_wait", "cancelled"]);
     expect(states.canTransition(states.deliveryTransitions, "pending", "cancelled")).toBe(true);
     expect(states.canTransition(states.deliveryTransitions, "provider_accepted", "cancelled")).toBe(false);
+    // unknownは終端（T051: 無条件に再送しない＝照会/人確認に回す。docs/11 配送行の辺列と同じ）
+    expect(states.canTransition(states.deliveryTransitions, "unknown", "retry_wait")).toBe(false);
     expect(states.canTransition(states.issueTransitions, "reported", "under_review")).toBe(true);
     expect(states.canTransition(states.issueTransitions, "reported", "closed")).toBe(false);
     expect(states.canTransition(states.activityTransitions, "completed", "in_progress")).toBe(true);

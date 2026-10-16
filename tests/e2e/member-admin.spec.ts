@@ -268,3 +268,20 @@ test("unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_ar
   await expect(ip).toHaveURL(/\/login/);
   await ctx.close();
 });
+
+/**
+ * AI評価パネルの押下領域（PH4レビューC 中1）。
+ * 「分類holdout（300件）を評価する」「報告書holdout（50件）を評価する」「実行履歴を再読み込み」は、
+ * モバイル（360px）で44px以上の押下領域を持つ（docs/03 §1.1-5。MembersPage.tsx:221の
+ * `h-[42px] max-lg:min-h-11` と同じ流儀。PCはコンパクト寸法42pxが正のためモバイルだけで検査する）。
+ */
+test("ai_evaluation_buttons_meet_touch_target_on_mobile", async ({ page }, info) => {
+  test.skip(!isPhone(info.project.use.viewport ?? page.viewportSize()), "押下領域44pxの規則はモバイル。PCはコンパクト寸法が正のため対象外");
+  await page.goto("/app/admin");
+  for (const name of ["分類holdout（300件）を評価する", "報告書holdout（50件）を評価する", "実行履歴を再読み込み"]) {
+    const button = page.getByRole("button", { name });
+    await expect(button).toBeVisible();
+    const height = await button.evaluate((el) => el.getBoundingClientRect().height);
+    expect(height, `「${name}」のモバイル押下領域は44px以上（docs/03 §1.1-5）`).toBeGreaterThanOrEqual(44);
+  }
+});

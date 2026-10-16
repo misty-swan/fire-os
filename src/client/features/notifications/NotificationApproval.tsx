@@ -185,11 +185,12 @@ export function NotificationApproval({ mode }: { mode: "create" }) {
 
   return (
     <div className="flex max-w-[720px] flex-col gap-4">
+      {/* 下書きは人が作る通知の状態のため中立（紫=AI由来だけ。Design System原則③。お知らせの下書きと同じ。PH4レビューC 低2） */}
       <SubHeader
         title="通知を作成"
         sub="対象者への連絡を下書きとして作り、確認してから承認（送信）します"
         backTo="/app/tasks-notifications"
-        right={<Chip tone="ai" icon="campaign">下書き</Chip>}
+        right={<Chip tone="neutral" icon="campaign">下書き</Chip>}
       />
 
       <Card className="flex flex-col gap-4">
@@ -305,7 +306,10 @@ export function NotificationApproval({ mode }: { mode: "create" }) {
         <Button busy={create.saving} onClick={() => void createDraft()}>
           {create.state.kind === "processing" ? "処理中（完了ではありません）" : "下書きを作成"}
         </Button>
-        <MutationStatus state={create.state.kind === "saved" ? create.state : { kind: "idle" }} toastBottom={100} />
+        {/* 成功（saved/processing）だけでなく失敗（conflict/rejected/forbidden/unknown等）も通す。
+            潰すと409・通信断のときダイアログが開いたまま無反応になり、成否の区別が付かない（docs/03 §1「conflictを区別」。
+            失敗時はダイアログが開いたまま、既存の表示語彙の案内が出る） */}
+        <MutationStatus state={create.state} toastBottom={100} />
       </Card>
       {/* 未保存の離脱は確認ダイアログ（docs/03 §1「未保存の離脱」。下書きを作成したあとは保存済みのため出ない） */}
       <LeaveConfirm dirty={touched} />
@@ -341,7 +345,7 @@ function ConfirmStep({
         title="通知の承認前確認"
         sub="本文と対象を確認してから承認（送信）します"
         backTo="/app/tasks-notifications"
-        right={<Chip tone={cancelled ? "neutral" : approvable ? "ai" : "ok"}>{cancelled ? "取消済み" : approvable ? "下書き" : "承認済み"}</Chip>}
+        right={<Chip tone={cancelled || approvable ? "neutral" : "ok"}>{cancelled ? "取消済み" : approvable ? "下書き" : "承認済み"}</Chip>}
       />
 
       <section aria-label="承認前の確認" className="flex flex-col gap-3">
@@ -401,7 +405,9 @@ function ConfirmStep({
       {/* 承認後の配送結果（202=配送jobの受付。完了ではない。docs/05 §1） */}
       {!approvable && !cancelled && <DeliveryResultsSection draft={draft} names={names} />}
 
-      <MutationStatus state={approvalState.kind === "saved" || approvalState.kind === "processing" ? approvalState : { kind: "idle" }} toastBottom={100} />
+      {/* 成功だけでなく失敗（409競合・422・権限・通信断）も通す。潰すとダイアログが開いたまま無反応になる
+          （docs/03 §1「conflictを区別」。PH4レビューC 中2。失敗時はダイアログが開いたまま案内が出る） */}
+      <MutationStatus state={approvalState} toastBottom={100} />
 
       {/* 送信確認（docs/03「送信確認ダイアログで本文・対象・人数を明示」） */}
       {dialogKind && draft.status === "draft" && (
@@ -582,7 +588,8 @@ export function DeliveryResultsSection({ draft, names }: { draft: NotificationDt
           <Button variant="secondary" busy={cancelUnsent.saving} className="max-lg:min-h-11 !w-auto px-4 !text-[13px]" onClick={() => setConfirmUnsent(true)}>
             未送分を取り消す（{unsentCount}人）
           </Button>
-          <MutationStatus state={cancelUnsent.state.kind === "saved" ? cancelUnsent.state : { kind: "idle" }} toastBottom={100} />
+          {/* 成功（saved）だけでなく失敗（409競合・権限・通信断）も通す（docs/03 §1「conflictを区別」。C中2と同じ） */}
+          <MutationStatus state={cancelUnsent.state} toastBottom={100} />
         </div>
       )}
 
@@ -618,9 +625,9 @@ export function DeliveryResultsSection({ draft, names }: { draft: NotificationDt
   );
 }
 
-/** 通知の承認状態の表示（docs/11 通知承認。送信者に見える6状態） */
+/** 通知の承認状態の表示（docs/11 通知承認。送信者に見える6状態。下書きは中立＝紫はAI由来だけに使う） */
 export const APPROVAL_LABEL: Record<NotificationDto["status"], { label: string; tone: "neutral" | "ai" | "ok" | "alert" | "attention" }> = {
-  draft: { label: "下書き", tone: "ai" },
+  draft: { label: "下書き", tone: "neutral" },
   approved: { label: "承認済み", tone: "attention" },
   cancelled: { label: "取消済み", tone: "neutral" },
   dispatching: { label: "配送中", tone: "attention" },

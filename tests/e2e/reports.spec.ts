@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { adminApiData, BASE } from "./helpers";
+import { adminApiData, BASE, isPhone } from "./helpers";
 
 /**
  * 報告書の生成・編集・版比較・承認・出力画面（T059、SCR-19 /app/reports/:id/draft、別入口 /app/reports。
@@ -191,4 +191,92 @@ test("report_ui_shows_missing_fields_and_only_exports_approved_version", async (
   await page.getByRole("button", { name: "CSVを出力" }).click();
   const csv2Filename = (await csv2Promise).suggestedFilename();
   expect(csv2Filename).toBe(`report-${reportId}-r${approvedVersion!.revisionNo}.csv`);
+});
+
+/**
+ * 未保存離脱の確認（PH4レビューC 中3）と押下領域（同 中4）。
+ * - 手動作成フォーム（manualText）と編集フォーム（editText＋訂正理由）は、入力中に画面を離れると
+ *   「保存されていない変更があります」の確認ダイアログを出す（docs/03 §1.1「入力途中の離脱確認」。
+ *   activities.specの実績フォームの離脱試験と同じ型。既定=編集に戻る、戻れば入力は保持される）。
+ * - 「活動詳細」「元の活動を開く」の紫pillリンクはモバイルで44px以上の押下領域
+ *   （docs/03 §1.1-5。AiReviewDetail.tsxの「異常を開く」と同じ `min-h-11 lg:min-h-9` の流儀）。
+ *   押下領域の検査はモバイルプロジェクトだけでよい（PCはコンパクト寸法が正のため）。
+ * seedは実APIのみ（AI生成を待たないため、手動作成の経路だけを短時間で確認する）。
+ */
+test("report_forms_warn_on_unsaved_leave_and_links_meet_touch_target", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  const tag = crypto.randomUUID().slice(0, 6);
+  const viewport = testInfo.project.use.viewport ?? page.viewportSize();
+
+  // --- seed: 過去の活動＋実績（API。実績入力のUIそのものはT039＝activities.spec.tsで試験済み） ---
+  const me = await adminApiData<{ profile: { memberId: string } }>(page.request, "GET", "/api/v1/me");
+  expect(me.status).toBe(200);
+  const adminMemberId = me.data.data.profile.memberId;
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+  const activity = await adminApiData<{ id: string; version: number }>(page.request, "POST", "/api/v1/activities", {
+    title: `報告書の離脱試験 ${tag}`, kind: "訓練",
+    plannedStartsAt: ago(3 * 864e5), plannedEndsAt: ago(3 * 864e5 - 2 * 3600e3),
+    locationText: "第三分団詰所・前庭", ownerMemberId: adminMemberId, audienceMemberIds: [adminMemberId],
+  });
+  expect(activity.status).toBe(201);
+  const activityId = activity.data.data.id;
+  const published = await adminApiData(page.request, "PATCH", `/api/v1/activities/${activityId}`, { version: 1, status: "scheduled" });
+  expect(published.status).toBe(200);
+  const detail = await adminApiData<{ version: number }>(page.request, "GET", `/api/v1/activities/${activityId}`);
+  expect(detail.status).toBe(200);
+  const createdResult = await adminApiData<{ id: string; version: number }>(
+    page.request, "POST", `/api/v1/activities/${activityId}/actual-results`,
+    {
+      activityVersion: detail.data.data.version,
+      content: `ポンプ車操法を実施 ${tag}`,
+      actualStartsAt: ago(3 * 864e5 - 3600e3),
+      participants: [{ memberId: adminMemberId, actualStatus: "participated" }],
+      attachmentIds: [],
+    },
+  );
+  expect(createdResult.status).toBe(201);
+
+  // --- 1) 手動作成フォーム: 入力中に「活動詳細」リンクで離れると確認ダイアログ（既定=編集に戻る） ---
+  await page.goto(`/app/reports?activity=${activityId}`);
+  const detailLink = page.getByRole("link", { name: "活動詳細" });
+  await expect(detailLink).toBeVisible();
+  if (isPhone(viewport)) {
+    const height = await detailLink.evaluate((el) => el.getBoundingClientRect().height);
+    expect(height, "モバイルの押下領域は44px以上（docs/03 §1.1-5）").toBeGreaterThanOrEqual(44);
+  }
+  await page.getByRole("button", { name: "手動で作成" }).click();
+  const manualBody = page.getByLabel("実施内容");
+  await manualBody.fill(`手動作成の離脱試験 ${tag}`);
+  await detailLink.click();
+  const leaveDialog = page.getByRole("dialog", { name: "保存されていない変更があります" });
+  await expect(leaveDialog).toBeVisible();
+  await leaveDialog.getByRole("button", { name: "編集に戻る" }).click();
+  await expect(manualBody).toHaveValue(new RegExp(tag)); // 戻れば入力は保持される
+  await detailLink.click();
+  await leaveDialog.getByRole("button", { name: "保存せずに移動する" }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/activities/${activityId}$`)); // 保存せずに移動すると実際に離れる
+
+  // --- 2) 編集フォーム（本文＋訂正の理由）も同じ離脱確認。詳細の戻るリンク（SubHeader）で離脱する ---
+  await page.goto(`/app/reports?activity=${activityId}`);
+  await page.getByRole("button", { name: "手動で作成" }).click();
+  await page.getByLabel("実施内容").fill(`ポンプ車操法と放水訓練を実施した ${tag}`);
+  await page.getByRole("button", { name: "下書きを作成" }).click();
+  await expect(page).toHaveURL(/\/app\/reports\/[^/]+\/draft$/, { timeout: 15_000 });
+  const sourceLink = page.getByRole("link", { name: "元の活動を開く" });
+  await expect(sourceLink).toBeVisible();
+  if (isPhone(viewport)) {
+    const height = await sourceLink.evaluate((el) => el.getBoundingClientRect().height);
+    expect(height, "モバイルの押下領域は44px以上（docs/03 §1.1-5）").toBeGreaterThanOrEqual(44);
+  }
+  await page.getByRole("button", { name: "編集する" }).click();
+  const editBody = page.getByLabel("実施内容");
+  await editBody.fill(`追記: 整備点検を実施した ${tag}`);
+  const back = page.getByRole("link", { name: "戻る", exact: true });
+  await back.click();
+  await expect(leaveDialog).toBeVisible();
+  await leaveDialog.getByRole("button", { name: "編集に戻る" }).click();
+  await expect(editBody).toHaveValue(new RegExp(`追記.*${tag}`)); // 戻れば入力は保持される
+  await back.click();
+  await leaveDialog.getByRole("button", { name: "保存せずに移動する" }).click();
+  await expect(page).toHaveURL(/\/app\/reports$/);
 });

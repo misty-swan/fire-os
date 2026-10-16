@@ -215,4 +215,113 @@ describe("業務タスク (T049)", () => {
     const suspended = await fx.client(a.people.suspended).request("GET", "/api/v1/tasks/me");
     expect(suspended.status).toBe(401);
   });
+
+  /**
+   * AI起点タスク（source_decision_id付き。承認effectと同じ作成文buildTaskEffectで作る）の状態変更も
+   * 手動タスクと同じAPI-87で追跡できること（docs/16 T049完了条件「手動とAI起点の双方で変更/担当/理由を
+   * 追跡可能」。PH4レビューB中1）。着手→完了→理由付き再開→担当変更の各履歴がtask_eventsへ積まれる。
+   */
+  it("ai_originated_task_tracks_status_changes_assignee_and_reason", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const { buildTaskEffect } = await import("../src/server/routes/tasks");
+    const effectOperationId = crypto.randomUUID();
+    const decisionId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await env.DB.batch(await buildTaskEffect(
+      { env, unitId: a.id, actorUserId: admin.userId, mutation: { attempt: "ai-task-track", mutationId: crypto.randomUUID(), now } },
+      { decisionId, evaluationId: null, effectOperationId, sourceIssueId: null, title: "AI起点の状態変更試験", assigneeMemberId: admin.memberId, dueDate: null },
+    ));
+    const aiTask = (await env.DB.prepare(
+      "SELECT id, version, status FROM tasks WHERE effect_operation_id = ?",
+    ).bind(effectOperationId).first<{ id: string; version: number; status: string }>())!;
+    expect(aiTask.status).toBe("open");
+
+    const patch = (body: Record<string, unknown>) =>
+      fx.client(admin).request("PATCH", `/api/v1/tasks/${aiTask.id}`, body, idem());
+    // 着手（open→in_progress）→完了→理由付き再開（done→in_progressは理由必須）→担当変更
+    expect((await patch({ version: 1, status: "in_progress", reason: "AI起点も着手する" })).status).toBe(200);
+    expect((await patch({ version: 2, status: "done", reason: "完了した" })).status).toBe(200);
+    expect((await patch({ version: 3, status: "in_progress", reason: "追加対応のため再開" })).status).toBe(200);
+    expect((await patch({ version: 4, assigneeMemberId: a.people.officer.memberId, reason: "担当を引き継ぐ" })).status).toBe(200);
+    // 一覧（API-102）は担当（officer）の分だけが見える。履歴（events）付きで読み返す
+    const readBack = (await json(await fx.client(a.people.officer).request("GET", "/api/v1/tasks/me?status=in_progress&limit=200"))).data as unknown as {
+      id: string; status: string; assigneeMemberId: string | null; events: { action: string; reason: string | null }[];
+    }[];
+    const row = readBack.find((t) => t.id === aiTask.id)!;
+    expect(row.status).toBe("in_progress");
+    expect(row.assigneeMemberId).toBe(a.people.officer.memberId);
+    // 履歴（task_events）に作成＋状態3回＋担当変更が追記され、再開と担当変更の理由が残る
+    expect(row.events.map((e) => e.action)).toEqual([
+      "created", "status.open_to_in_progress", "status.in_progress_to_done", "status.done_to_in_progress", "assignee.changed",
+    ]);
+    expect(row.events[3]!.reason).toBe("追加対応のため再開");
+    expect(row.events[4]!.reason).toBe("担当を引き継ぐ");
+    // DB上の源（decision/effect）は状態変更でも変わらない
+    const after = (await env.DB.prepare(
+      "SELECT source_decision_id, effect_operation_id FROM tasks WHERE id = ?",
+    ).bind(aiTask.id).first<{ source_decision_id: string; effect_operation_id: string }>())!;
+    expect(after.source_decision_id).toBe(decisionId);
+    expect(after.effect_operation_id).toBe(effectOperationId);
+  });
+
+  /**
+   * docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」（PH4レビューA中1）:
+   * タスク作成（API-68）の再送は、初回成功後に担当団員が非activeになっていても初回の201と同じ
+   * タスクIDを返す。現行実装は鍵の既存に関係なくrequireActiveAssigneeが走るためFAILする。
+   */
+  it("resend_with_same_idempotency_key_returns_saved_task_even_if_assignee_became_inactive", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const assignee = a.people.unlinked; // アカウントの無い団員（API-04の状態変更は団員行だけに効く）
+    const headers = { "idempotency-key": "resend-task-create-same-key-1" };
+    const body = { title: "再送試験のタスク（架空）", assigneeMemberId: assignee.memberId };
+    const first = await fx.client(admin).request("POST", "/api/v1/tasks", body, headers);
+    expect(first.status).toBe(201);
+    const saved = (await json(first)).data! as { id: string };
+
+    // 初回成功後に担当団員が休団になる（API-04）
+    const memberRow = (await fx.rows("members", { id: assignee.memberId }))[0]!;
+    const pause = await fx.client(admin).request("PATCH", `/api/v1/members/${assignee.memberId}`, {
+      version: memberRow.version as number, status: "paused", reason: "再送試験のため休団（架空）",
+    }, idem());
+    expect(pause.status).toBe(200);
+
+    const resend = await fx.client(admin).request("POST", "/api/v1/tasks", body, headers);
+    expect(resend.status).toBe(201); // 元HTTP status（現行実装は422 assignee_not_activeでFAIL）
+    expect(((await json(resend)).data! as { id: string }).id).toBe(saved.id);
+    // 再送でタスクは増えない
+    expect(await fx.rows("tasks", { title: "再送試験のタスク（架空）" })).toHaveLength(1);
+  });
+
+  /**
+   * docs/05 §2（同上）: cancelledへの遷移と担当変更を同時に行った要求（API-87）の再送は、
+   * 現status=cancelled（担当変更の許可状態でない）でも初回の200を返す。
+   * 現行実装は鍵の既存に関係なくASSIGNABLE_STATES検査が走るためFAILする。
+   */
+  it("resend_with_same_idempotency_key_returns_saved_update_even_if_task_is_cancelled", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const officer = a.people.officer;
+    const created = await fx.client(admin).request("POST", "/api/v1/tasks", { title: "取消と担当変更の同時記録" }, idem());
+    expect(created.status).toBe(201);
+    const taskId = ((await json(created)).data! as { id: string }).id;
+
+    const headers = { "idempotency-key": "resend-task-update-same-key-1" };
+    const body = { version: 1, status: "cancelled", assigneeMemberId: officer.memberId, reason: "不要のため取消し（担当の後記録）" };
+    const first = await fx.client(admin).request("PATCH", `/api/v1/tasks/${taskId}`, body, headers);
+    expect(first.status).toBe(200);
+    expect(((await json(first)).data! as { status: string }).status).toBe("cancelled");
+
+    // 初回成功後に新しい担当が休団になる（初回には通った担当の検査を再送が再実行しないことを確認）
+    const officerRow = (await fx.rows("members", { id: officer.memberId }))[0]!;
+    const pause = await fx.client(admin).request("PATCH", `/api/v1/members/${officer.memberId}`, {
+      version: officerRow.version as number, status: "paused", reason: "再送試験のため休団（架空）",
+    }, idem());
+    expect(pause.status).toBe(200);
+
+    const resend = await fx.client(admin).request("PATCH", `/api/v1/tasks/${taskId}`, body, headers);
+    expect(resend.status).toBe(200); // 元HTTP status（現行実装は422 assignee_not_assignableでFAIL）
+    expect(((await json(resend)).data! as { status: string }).status).toBe("cancelled");
+  });
 });

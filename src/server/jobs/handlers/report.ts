@@ -79,7 +79,9 @@ export async function reportJob(job: LeasedJob, env: AppEnv): Promise<JobOutcome
     throw err; // runnerがretryable handler_errorにする
   }
 
-  // ⑤保存（T056のAPI-62と同じDML順序。rootはAI初回生成として新規に作る＝1活動に複数帳票可。docs/04 ER）
+  // ⑤保存（T056のAPI-62と同じDML順序。rootはAI初回生成として新規に作る＝1活動に複数帳票可。docs/04 ER。
+  //  kindはAI生成も'manual'のまま＝docs/14 D25（CHECK拡張はしない。AIの区別は版のmodel_id/prompt_version/
+  //  input_hash/usage_jsonの生成証跡で付く。docs/04:146注記どおり）
   const reportId = crypto.randomUUID();
   const versionId = crypto.randomUUID();
   const nowIso = new Date().toISOString();

@@ -103,16 +103,17 @@ export function AiEvaluationPanel() {
         </p>
       </Banner>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" disabled={runClassification.saving} busy={runClassification.saving} onClick={() => void request("classification")} className="!h-[42px] !text-[12px]">
+        <Button variant="secondary" disabled={runClassification.saving} busy={runClassification.saving} onClick={() => void request("classification")} className="!h-[42px] max-lg:min-h-11 !text-[12px]">
           分類holdout（300件）を評価する
         </Button>
-        <Button variant="secondary" disabled={runReport.saving} busy={runReport.saving} onClick={() => void request("report")} className="!h-[42px] !text-[12px]">
+        <Button variant="secondary" disabled={runReport.saving} busy={runReport.saving} onClick={() => void request("report")} className="!h-[42px] max-lg:min-h-11 !text-[12px]">
           報告書holdout（50件）を評価する
         </Button>
       </div>
       {(runClassification.state.kind === "processing" || runReport.state.kind === "processing") && (
         <Notice tone="info" icon="hourglass_top" role="status">
-          {accepted}の評価を実行キューに入れました（{accepted === "分類holdout" ? "API-89" : "API-89"}・202=受付）。完了ではありません。実行結果は下の一覧に反映されます。
+          {/* 利用者向けの語彙で示す（API ID・docs番号・内部語彙「202=受付」を画面文面に入れない。PH4レビューC 低3） */}
+          {accepted}の評価を受け付けました（処理中であり完了ではありません）。完了したら実行履歴は下の一覧に反映されます。
         </Notice>
       )}
       {runs === "loading" && <p role="status" className="text-[13px] text-ink-muted">読み込んでいます…</p>}
@@ -162,7 +163,7 @@ export function AiEvaluationPanel() {
         </ul>
       )}
       <div>
-        <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)} className="!h-[38px] !text-[12px]">実行履歴を再読み込み</Button>
+        <Button variant="secondary" onClick={() => setReloadKey((k) => k + 1)} className="!h-[38px] max-lg:min-h-11 !text-[12px]">実行履歴を再読み込み</Button>
       </div>
     </Card>
   );

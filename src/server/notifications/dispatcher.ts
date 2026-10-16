@@ -19,6 +19,9 @@ import { channelProvider, type DeliveryResult, type NotificationChannel, type No
  *
  * 再送の安全性（docs/02 §5「外部効果の一回性は各handlerの責務」）:
  * - delivery_keyは再試行で不変。deliveriesのUNIQUEが行の二重作成を防ぎ、送信対象は pending/retry_wait の行だけ。
+ * - settle（status→sending）は状態ガード付きUPDATEにし、反映行数（meta.changes）が1の行だけを
+ *   provider.sendへ回す。読込後〜確定の間にcancel_unsentがcommittedした行は0行で変わらないため送らない
+ *   （＝「取消後のjob実行は送らない」の並行版。DBはcancelledのまま通知だけ届く事故を防ぐ）。
  * - unknownは無条件に再送しない（非冪等providerへの2回目のsendを起こさない）。受付後タイムアウトで
  *   runnerに打ち切られて sending に取り残された行も、次回実行では send せず unknown へ進める
  *   （＝同じdelivery_keyへの2回目のsendは発生しない）。
@@ -48,14 +51,15 @@ interface DeliveryRow {
   channel: string; address_ref: string;
 }
 
-/** notification_eventsへの追記（system。ID・コード形式のみで本文を複製しない） */
+/** notification_eventsへの追記（既定はsystem。API-64のhuman mutationから呼ぶ取消は'human'。ID・コード形式のみで本文を複製しない） */
 const eventStatement = (
   db: D1Database, unitId: string, notificationId: string, action: string, details: Record<string, unknown>, now: string,
+  actorKind: "human" | "system" = "system",
 ): D1PreparedStatement =>
   db.prepare(
     "INSERT INTO notification_events (id, unit_id, notification_id, action, details, actor_kind, created_at) " +
-      "VALUES (?, ?, ?, ?, ?, 'system', ?)",
-  ).bind(crypto.randomUUID(), unitId, notificationId, action, JSON.stringify(details), now);
+      "VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).bind(crypto.randomUUID(), unitId, notificationId, action, JSON.stringify(details), actorKind, now);
 
 /**
  * dispatchNotification(env, job): Promise<JobOutcome>（docs/16 T051のInterface）。
@@ -132,24 +136,28 @@ export async function dispatchNotification(env: AppEnv, job: LeasedJob): Promise
       { deliveryKey: d.delivery_key, attempt: d.attempt_count, reason: "unresolved_sending" }, now),
   ]);
 
-  // 送る行をsendingへ（初回は行作成時のattempt=1のまま、再送は+1）
-  const providers = new Map<string, NotificationProvider>();
+  // 送る行をsendingへ（初回は行作成時のattempt=1のまま、再送は+1）。settleのUPDATEは状態ガード付き
+  // （WHERE status = 読込時の状態）なので、読込と確定の間にcancel_unsentがcommittedした行は0行しか
+  // 変わらない。反映行数（meta.changes）を見て、変わった行だけをprovider.sendへ回す
+  // （docs/11「取消後のjob実行は送らない」の並行版。env.DB.batchの結果は文の順序どおりに返るため、
+  // settle文のインデックス（stuckの2文×行のあとに送信行のUPDATE）で対応させる）
+  const sendCandidates: { d: DeliveryRow; provider: NotificationProvider }[] = [];
   for (const d of toSend) {
     const provider = channelProvider(d.channel as NotificationChannel);
     if (!provider) continue; // 未登録チャネルは送らずpendingのまま（再試行上限で手動確認へ）
-    providers.set(d.id, provider);
+    sendCandidates.push({ d, provider });
     settleStatements.push(env.DB.prepare(
       "UPDATE notification_deliveries SET status = 'sending', " +
         "attempt_count = CASE WHEN ?2 = 'retry_wait' THEN attempt_count + 1 ELSE attempt_count END " +
         "WHERE id = ?1 AND unit_id = ?3 AND status = ?2",
     ).bind(d.id, d.status, job.unitId));
   }
-  if (settleStatements.length > 0) await env.DB.batch(settleStatements);
+  const settled = settleStatements.length > 0 ? await env.DB.batch(settleStatements) : [];
+  const sendables = sendCandidates.filter((_, i) => (settled[stuck.length * 2 + i]?.meta.changes ?? 0) > 0);
 
   // ④provider.send（channel別）。例外＝送信の成否が不明なのでunknown（盲目的に再送しない）
   const results = await Promise.all(
-    [...providers].map(async ([deliveryId, provider]) => {
-      const d = toSend.find((row) => row.id === deliveryId)!;
+    sendables.map(async ({ d, provider }) => {
       let result: DeliveryResult;
       try {
         result = await provider.send({ deliveryKey: d.delivery_key, addressRef: d.address_ref, body });
@@ -253,6 +261,8 @@ export function cancelUnsentDeliveryStatements(
   recipients: readonly { id: string; channel: string }[],
   now: string,
   reason: string,
+  /** dispatch.cancelledのactor_kind。API-64のhuman mutationからは'human'（同一mutation内の他eventsと揃える） */
+  actorKind: "human" | "system" = "system",
 ): D1PreparedStatement[] {
   const statements: D1PreparedStatement[] = recipients.map((r) =>
     db.prepare(
@@ -267,7 +277,7 @@ export function cancelUnsentDeliveryStatements(
       "(SELECT id FROM notification_recipients WHERE notification_id = ?3 AND unit_id = ?2)",
   ).bind(now, unitId, notificationId));
   statements.push(eventStatement(db, unitId, notificationId, "dispatch.cancelled",
-    { ensured: recipients.length, reason }, now));
+    { ensured: recipients.length, reason }, now, actorKind));
   return statements;
 }
 

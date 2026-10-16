@@ -10,7 +10,7 @@ export const reports = sqliteTable(
     id: text("id").primaryKey(),
     unitId: text("unit_id").notNull(),
     activityId: text("activity_id").notNull(),
-    /** T056は手動下書きのみ（AI下書きはT057以降でCHECK拡張） */
+    /** 種別は'manual'のみ。AI生成もkind='manual'のまま（AIの区別はreport_versions側のmodel_id/prompt_version/input_hashの生成証跡で付く。docs/14 D25。docs/04:146注記どおり） */
     kind: text("kind", { enum: ["manual"] }).notNull(),
     currentDraftVersionId: text("current_draft_version_id"),
     currentApprovedVersionId: text("current_approved_version_id"),

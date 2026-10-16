@@ -80,7 +80,7 @@ function TotalCard({ label, value, unit, note, testid }: { label: string; value:
         {label}
       </span>
       <span className="flex items-baseline gap-1">
-        <span className="font-mono text-[28px] font-semibold leading-none" data-testid={`${testid}-value`}>{value}</span>
+        <span className="font-mono text-[26px] font-semibold leading-none" data-testid={`${testid}-value`}>{value}</span>
         {unit && <span className="text-[11px] text-ink-muted">{unit}</span>}
       </span>
       {note && <span className="text-[11px] leading-[1.6] text-ink-muted">{note}</span>}
@@ -324,7 +324,8 @@ export function AnalyticsPage() {
                 ))
               )}
               <p className="px-4 pb-3.5 text-[11px] leading-[1.6] text-ink-muted">
-                実参加のあった団員だけを掲載（分団内のみ）。時間は実績の全体時間で、個人途中参加の時間は含めません（docs/14 D05案）。
+                {/* 利用者向けの語彙で示す（docs番号を画面文面に入れない。「検証設定（D05案・未承認）」の注記自体は規定語彙。PH4レビューC 低3） */}
+                実参加のあった団員だけを掲載（分団内のみ）。時間は実績の全体時間で、個人途中参加の時間は含めません。
               </p>
             </Card>
           )}
@@ -394,12 +395,13 @@ export function AnalyticsPage() {
             <Card className="flex flex-col gap-2 p-4" aria-label="年度の集計">
               <h3 className="text-[14px] font-bold">{data.fiscalYear}年度のまとめ</h3>
               <p className="text-[13px] leading-[1.8] text-ink-sub">
+                {/* 文を分け、未入力が0件のときも文が破綻しない（「（既知分のみ）では…」と読める形をなくす。PH4レビューC 低4） */}
                 {data.period.from?.slice(0, 10)} から {data.period.to?.slice(0, 10)} まで（終端を含まない）で、
                 有効な記録だけを数えると 出来事{data.totals.operationCount}件・延べ参加{data.totals.memberCount}人回です。
-                活動時間は実績の全体時間の合計（既知分のみ）で
+                活動時間は実績の全体時間の合計（既知分のみ）です。
                 {data.unknownOperationIds.length > 0
-                  ? `、時間が未入力の出来事が${data.unknownOperationIds.length}件あります（0時間には数えません）。`
-                  : "はすべての記録に時間が入っています。"}
+                  ? `時間が未入力の出来事が${data.unknownOperationIds.length}件あり、0時間には数えません。`
+                  : "すべての記録に時間が入っています。"}
               </p>
             </Card>
           )}

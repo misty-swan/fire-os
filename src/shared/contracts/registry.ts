@@ -8,7 +8,7 @@ import { gisApis } from "./gis";
 import { operationsApis } from "./operations";
 import { syncApis } from "./sync";
 
-/** 101 APIの正本。各APIの入力・出力・権限・成功statusを持ち、OpenAPIと型はここから導出する。 */
+/** 102 APIの正本。各APIの入力・出力・権限・成功statusを持ち、OpenAPIと型はここから導出する。 */
 export const registry = {
   ...authApis,
   ...gisApis,

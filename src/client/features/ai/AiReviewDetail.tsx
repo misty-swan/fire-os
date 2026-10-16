@@ -353,7 +353,7 @@ function DetailBody({
           <span>
             保留度（要確認の目安）: <span className="font-mono">{out.needsReview}</span>
           </span>
-          <span className="text-[11px] text-ink-muted">AIの保留の度合いです。正答の確率・確約ではありません（docs/06 §2）。</span>
+          <span className="text-[11px] text-ink-muted">AIの保留の度合いです。正答の確率・確約ではありません。</span>
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-ink-muted">
           <span>モデル {candidate.modelId}</span>

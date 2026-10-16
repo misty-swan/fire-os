@@ -13,6 +13,7 @@ import type { Job } from "../../../shared/contracts/common";
 import type { ReportHistoryDto, ReportVersionDto } from "../../../shared/contracts/content";
 import { ACTIVITY_STATUS, kindColor } from "../activities/ActivitiesPage";
 import { fmtDay, fmtHM, fmtInstant } from "../activities/time";
+import { LeaveConfirm } from "../../components/LeaveConfirm";
 import { REPORT_VERSION_STATUS, ReportVersionDiff } from "./ReportVersionDiff";
 
 /**
@@ -282,6 +283,9 @@ function ActivityReportsPanel({ activityId }: { activityId: string }) {
       const history = res.data as unknown as ReportHistoryDto;
       setManualOpen(false);
       setManualText("");
+      // stateの反映（dirty=falseへのコミット）を待ってから遷移する（保存後のnavigateが自分のLeaveConfirmに
+      // ブロックされないように。ActivityEditorPageの「保存後に待ってからnavigate」と同じ流儀）
+      await new Promise((r) => setTimeout(r, 1000));
       navigate(`/app/reports/${history.report.id}/draft`);
     }
   };
@@ -296,7 +300,7 @@ function ActivityReportsPanel({ activityId }: { activityId: string }) {
             この活動の報告書
           </Chip>
           {loaded && (
-            <Link to={`/app/activities/${activityId}`} className="inline-flex min-h-9 items-center gap-1 rounded-pill bg-white/[.08] px-3 text-[12px] font-bold text-ink">
+            <Link to={`/app/activities/${activityId}`} className="inline-flex min-h-11 items-center gap-1 rounded-pill bg-white/[.08] px-3 text-[12px] font-bold text-ink lg:min-h-9">
               活動詳細
               <Icon name="chevron_right" className="text-[15px]" />
             </Link>
@@ -423,8 +427,13 @@ function ActivityReportsPanel({ activityId }: { activityId: string }) {
           </>
         )}
       </Card>
-      <MutationStatus state={generate.state} toastBottom={160} />
-      <MutationStatus state={manual.state} toastBottom={160} />
+      {/* 対応表の既定110（prototype: home:160,map:110,schedule:100,ai:160,menu:100、その他110。SCR-19はschedule系だがサブ画面は既定に載る。
+          一覧パネルだけ160だったのを110へ統一した。PH4レビューC 中5） */}
+      <MutationStatus state={generate.state} toastBottom={110} />
+      <MutationStatus state={manual.state} toastBottom={110} />
+      {/* 未保存の離脱は確認ダイアログ（docs/03 §1.1「入力途中の離脱確認」。本文は2万字までの長文入力のため。
+          値ベースのdirty判定: フォームを開いていて本文に空白以外の入力があれば離脱を確認する） */}
+      <LeaveConfirm dirty={manualOpen && manualText.trim() !== ""} />
     </section>
   );
 }
@@ -543,6 +552,8 @@ function ReportDetailBody({
 
   const [editOpen, setEditOpen] = useState(false);
   const [editText, setEditText] = useState("");
+  /** フォームを開いた時点の本文（dirty判定の基準値。開いた時の値からの差分だけを「未保存」とみなす） */
+  const [editInitialText, setEditInitialText] = useState("");
   const [editReason, setEditReason] = useState("");
   const [confirmApprove, setConfirmApprove] = useState(false);
   const [approveReason, setApproveReason] = useState("内容を確認して承認しました");
@@ -554,8 +565,11 @@ function ReportDetailBody({
   // ---- 元実績の現行値（人数/時刻の比較表示。サーバー計算〔API-60承認時〕と同じ集計を画面でも出す） ----
   const activityLoaded = activity !== null && activity !== "error" ? activity : null;
   const currentRevision = activityLoaded?.result?.currentRevision ?? null;
-  const participatedCount = currentRevision ? currentRevision.participants.filter((p) => p.actualStatus === "participated").length : null;
-  const participantText = participatedCount === null || participatedCount === 0 ? "未記載" : `${participatedCount}名`;
+  /** 実参加の行があれば全員欠席の0名も「0名」と出す（行が無い「未記載」と区別。docs/03 §1.1-16⑤。
+      「未入力と0を分ける」前例〔docs/16 T026・活動分析の未入力〕と同じ流儀。PH4レビューC 低5） */
+  const participants = currentRevision?.participants ?? null;
+  const participatedCount = participants === null ? null : participants.filter((p) => p.actualStatus === "participated").length;
+  const participantText = participants === null || participants.length === 0 ? "未記載" : `${participatedCount}名`;
   const startsAtText = currentRevision?.actualStartsAt ? fmtInstant(currentRevision.actualStartsAt) : "未記載";
   const endsAtText = currentRevision?.actualEndsAt ? fmtInstant(currentRevision.actualEndsAt) : "未記載";
 
@@ -580,11 +594,13 @@ function ReportDetailBody({
 
   const openEdit = () => {
     setEditText(draftVersion?.text ?? "");
+    setEditInitialText(draftVersion?.text ?? "");
     setEditReason("");
     setEditOpen(true);
   };
   const openRevise = () => {
     setEditText(versions[versions.length - 1]!.text);
+    setEditInitialText(versions[versions.length - 1]!.text);
     setEditReason("");
     setEditOpen(true);
   };
@@ -705,7 +721,7 @@ function ReportDetailBody({
         </span>
         <h2 className="text-[26px] font-bold leading-[1.3]">活動記録（報告書）</h2>
         {activityLoaded && (
-          <Link to={`/app/activities/${report.activityId}`} className="inline-flex min-h-9 w-fit items-center gap-1 rounded-pill bg-white/[.08] px-3 text-[12px] font-bold text-ink">
+          <Link to={`/app/activities/${report.activityId}`} className="inline-flex min-h-11 w-fit items-center gap-1 rounded-pill bg-white/[.08] px-3 text-[12px] font-bold text-ink lg:min-h-9">
             元の活動を開く
             <Icon name="chevron_right" className="text-[15px]" />
           </Link>
@@ -991,6 +1007,10 @@ function ReportDetailBody({
           {rejectReason.trim() === "" && <p className="text-[12px] font-medium text-attention">理由を入力してください</p>}
         </ConfirmDialog>
       )}
+
+      {/* 未保存の離脱は確認ダイアログ（docs/03 §1.1「入力途中の離脱確認」。PH4レビューC 中3。
+          値ベースのdirty判定: フォームを開いていて、開いた時点の本文からの変更または訂正理由の入力があれば確認する） */}
+      <LeaveConfirm dirty={editOpen && (editText !== editInitialText || editReason.trim() !== "")} />
     </div>
   );
 }

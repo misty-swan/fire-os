@@ -217,6 +217,15 @@ export async function decideAiProposal(ctx: ApiContext, input: ApiRequest<"API-3
   const p = await resolvePrincipal(ctx);
   const { params, body, headers } = input;
 
+  // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」: 鍵が既にある（=再送）ときは
+  // 状態前提の検査（担当の現在有効）を飛ばし、初回の200と同じ応答をexecuteMutationの
+  // resolveExistingへ任せる（T041流儀。初回成功後に担当が休団・退団しても再送は422にならない。
+  // 同キー別本文はIDEMPOTENCY_MISMATCH、失権は403のまま。候補の実在検査は候補行が追記型で
+  // 消えないため再送でも同じ結果。stale検査はconditions側で新規実行だけが行う）
+  const knownKey = await ctx.env.DB.prepare(
+    "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+  ).bind(p.userId, "ai_review.decision", headers["idempotency-key"]).first();
+
   // --- 提案の実在・同unit（存在しない/別unitは同じ404） ---
   const candidate = await ctx.env.DB.prepare(
     "SELECT id, unit_id, source_type, source_id, source_version, question_version, output_json, status FROM ai_evaluations WHERE id = ?",
@@ -261,7 +270,8 @@ export async function decideAiProposal(ctx: ApiContext, input: ApiRequest<"API-3
     if (!asReport.allowed && !asApproval.allowed) {
       throw new HttpError("FORBIDDEN", undefined, [{ field: "permission", reason: asReport.reason }]);
     }
-    if (confirmed.task.assigneeMemberId) {
+    // 担当の現在有効検査は新規実行のときだけ（再送では保存済み応答を返す。A中1の鍵先読み）
+    if (!knownKey && confirmed.task.assigneeMemberId) {
       const m = await ctx.env.DB.prepare("SELECT unit_id, status FROM members WHERE id = ?").bind(confirmed.task.assigneeMemberId)
         .first<{ unit_id: string; status: string }>();
       if (!m || m.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");

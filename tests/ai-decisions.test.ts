@@ -30,7 +30,10 @@ beforeEach(async () => {
   await env.DB.prepare(
     "UPDATE jobs SET status = 'cancelled', lease_token = NULL, lease_until = NULL WHERE status IN ('queued', 'running', 'retry_wait')",
   ).run();
-  fx.clock.set("2026-10-16T00:00:00.000Z");
+  // jobの受付時刻（next_attempt_at）はenqueueJobの既定＝実時刻で記録されるため、runner用の
+  // 固定クロックは実時刻より先に置く（固定日付のままでは実時刻がその日時を追い越した以降、
+  // jobが永遠に未到来になりrunDueJobsが何もleaseしなくなる。2026-10-16T00:00Z固定で発生）
+  fx.clock.set(new Date(Date.now() + 3_600_000).toISOString()); // 実時刻+1時間
 });
 
 const idem = () => ({ "idempotency-key": crypto.randomUUID() });
@@ -398,5 +401,42 @@ describe("AI提案の決定 (T054)", () => {
     expect(await env.DB.prepare(
       "SELECT confirmed_category FROM issues WHERE source_facility_inspection_id = ? AND unit_id = ?",
     ).bind(withoutIssue.id, a.id).first()).toBeNull();
+  });
+
+  /**
+   * docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」（PH4レビューA中1）:
+   * 承認（API-31）の再送は、初回成功後にconfirmedPayload.task.assigneeMemberIdの団員が
+   * 休団になっていても初回の200と同じ決定IDを返す。現行実装は鍵の既存に関係なく
+   * 担当の現在有効（active）検査が走るため、再送が422 assignee_not_activeになりFAILする。
+   */
+  it("resend_with_same_idempotency_key_returns_saved_decision_even_if_assignee_became_inactive", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const assignee = a.people.unlinked; // アカウントの無い団員（API-04の状態変更は団員行だけに効く）
+    const issueId = await createIssue(admin, "再送試験の異常（架空）");
+    const candidate = await requestCandidate(admin, "issue", issueId, 1);
+    const headers = { "idempotency-key": "resend-decision-same-key-1" };
+    const body = {
+      version: 1, sourceVersion: 1, decision: "approve",
+      confirmedPayload: { task: { title: "再送試験のタスク（架空）", assigneeMemberId: assignee.memberId } },
+      reviewNote: "承認して同じ鍵の再送を試す",
+    };
+    const first = await fx.client(admin).request("POST", `/api/v1/ai/reviews/${candidate.id}/decision`, body, headers);
+    const firstJson = await json(first);
+    expect(first.status, JSON.stringify(firstJson)).toBe(200);
+    const saved = firstJson.data! as { decisionId: string; effectIds: string[] };
+
+    // 初回成功後に担当団員が休団になる（API-04。admin=PER-07。状態変更は理由必須）
+    const memberRow = (await fx.rows("members", { id: assignee.memberId }))[0]!;
+    const pause = await fx.client(admin).request("PATCH", `/api/v1/members/${assignee.memberId}`, {
+      version: memberRow.version as number, status: "paused", reason: "再送試験のため休団（架空）",
+    }, idem());
+    expect(pause.status, JSON.stringify(await json(pause))).toBe(200);
+
+    const resend = await fx.client(admin).request("POST", `/api/v1/ai/reviews/${candidate.id}/decision`, body, headers);
+    expect(resend.status).toBe(200); // 元HTTP status（現行実装は422 assignee_not_activeでFAIL）
+    expect(((await json(resend)).data! as { decisionId: string }).decisionId).toBe(saved.decisionId);
+    // 再送でタスクは増えない（初回の効果1件のまま）
+    expect(await countTasksForDecision(saved.decisionId)).toBe(1);
   });
 });

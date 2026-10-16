@@ -171,8 +171,11 @@ function pdfDocument(template: ReportTemplate, version: ApprovedReportVersion): 
     `<< /Type /Pages /Kids [${pageNums.map((n) => `${n} 0 R`).join(" ")}] /Count ${pageNums.length} >>`,
   );
   const catalogNum = add(`<< /Type /Catalog /Pages ${pagesNum} 0 R >>`);
-  // Pageの/ParentはPagesの番号が確定してから埋める
-  bodies[pageNums[0]! - 1] = bodies[pageNums[0]! - 1]!.replace("%PAGES%", String(pagesNum));
+  // Pageの/ParentはPagesの番号が確定してから埋める（**全ページ**。1ページ目だけの置換は
+  // 2ページ目以降に/Parent未解決を残しビューアで開けない不正なPDFになる）
+  for (const pn of pageNums) {
+    bodies[pn - 1] = bodies[pn - 1]!.replace("%PAGES%", String(pagesNum));
+  }
 
   const encoder = new TextEncoder();
   const parts: Uint8Array[] = [];

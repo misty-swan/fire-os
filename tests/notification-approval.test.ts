@@ -465,6 +465,37 @@ describe("通知の明示承認・本人既読 (T050)", () => {
     const draft4 = await createDraft();
     expect(byMemberOf(draft4, memberId).addressRef).toBe(`member:${memberId}#inbox`);
   });
+
+  /**
+   * docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」（PH4レビューA中1）:
+   * draft作成（API-63）の再送は、初回成功後に源の状態が変わっていても（対象者が全員回答済みに
+   * なって提案の再計算ならempty_audienceの422になる状態でも）初回の201と同じ通知IDを返す。
+   * 現行実装は鍵の既存に関係なくbuildNotificationDraftが走るため、再送が422になりFAILする。
+   */
+  it("resend_with_same_idempotency_key_returns_saved_draft_even_if_audience_became_empty", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const member = a.people.member;
+    const activityId = await createActivity([member.memberId!]);
+    const headers = { "idempotency-key": "resend-draft-same-key-1" };
+    const body = { source: { type: "activity", id: activityId }, channels: ["inapp"] };
+    const first = await fx.client(admin).request("POST", "/api/v1/notifications/drafts", body, headers);
+    expect(first.status).toBe(201);
+    const draft = (await json(first)).data! as { id: string };
+
+    // 初回成功後に源の状態が変化: 対象者が全員回答済みになる（再計算ならempty_audienceの422）
+    const now = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO activity_attendance (id, unit_id, activity_id, member_id, response, responded_at, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, ?, ?, 'attending', ?, ?, ?, ?, 'human')",
+    ).bind(crypto.randomUUID(), a.id, activityId, member.memberId!, now, now, now, admin.userId).run();
+
+    const resend = await fx.client(admin).request("POST", "/api/v1/notifications/drafts", body, headers);
+    expect(resend.status).toBe(201); // 元HTTP status（現行実装は422 empty_audienceでFAIL）
+    expect(((await json(resend)).data! as { id: string }).id).toBe(draft.id); // 元の通知ID
+    // 再送で2件目のdraftは作られない（同じ源の通知は1件）
+    expect(await fx.rows("notifications", { source_id: activityId })).toHaveLength(1);
+  });
 });
 
 /** テスト内で幹部（officer）のmemberIdを取るヘルパー */

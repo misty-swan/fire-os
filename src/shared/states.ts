@@ -145,7 +145,8 @@ export const deliveryTransitions: Transitions<(typeof deliveryStates)[number]> =
   sending: ["provider_accepted", "failed", "unknown"],
   provider_accepted: [],
   failed: ["retry_wait"],
-  unknown: ["retry_wait"],
+  // unknownは終端（T051: 無条件に再送しない＝照会/人確認に回す。docs/11 配送行の辺列どおり）
+  unknown: [],
   retry_wait: ["sending"],
   cancelled: [],
 };

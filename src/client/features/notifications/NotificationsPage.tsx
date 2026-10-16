@@ -351,7 +351,8 @@ function MyNotificationDetail({ data, onRead }: { data: MyNotificationDto; names
           </Button>
         </Card>
       )}
-      <MutationStatus state={read.state.kind === "saved" ? read.state : { kind: "idle" }} toastBottom={100} />
+      {/* 本人既読の失敗（409競合・権限・通信断）も表示する。潰すと失敗が無表示になる（docs/03 §1「conflictを区別」。PH4レビューC 中2） */}
+      <MutationStatus state={read.state} toastBottom={100} />
 
       <p className="text-[12px] text-ink-muted">
         受付や配送の記録と、自分の確認（既読）は別のものとして扱われます（docs/11「受付≠到達≠既読」）。

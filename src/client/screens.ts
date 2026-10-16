@@ -38,7 +38,7 @@ export const screens: ScreenDef[] = [
   s({ id: "SCR-08", path: "/app/activities", title: "予定・活動", desktopTitle: "予定・出欠", summary: "予定/実績の一覧、日付/種別/参加者/状態/実参加/未回答検索", ownerTask: "T039", phase: "PH3", tab: "activities" }),
   s({ id: "SCR-10", path: "/app/activities/new", aliases: ["/app/activities/:id/edit"], title: "予定の登録", summary: "日時/場所/担当/対象者/回答期限", ownerTask: "T039", phase: "PH3", tab: "activities" }),
   s({ id: "SCR-09", path: "/app/activities/:id", title: "予定・活動の詳細", summary: "本人出欠/対象者、予定編集/中止、実績入力/訂正、使用資産/報告書", ownerTask: "T039", phase: "PH3", tab: "activities" }),
-  s({ id: "SCR-19", path: "/app/reports/:id/draft", aliases: ["/app/reports"], title: "活動記録", desktopTitle: "活動記録・承認", summary: "生成依頼/処理中、下書き/不足欄、編集/版/承認/出力（PCは一覧と詳細を併置）", ownerTask: "T059", phase: "PH4", tab: "activities" }),
+  s({ id: "SCR-19", path: "/app/reports/:id/draft", aliases: ["/app/reports"], title: "活動記録", desktopTitle: "活動記録・承認", summary: "生成依頼/処理中、下書き/不足欄、編集/版/承認/出力。PCは別入口 /app/reports の一覧から詳細へ遷移（併置はしない。§1.1-16①）", ownerTask: "T059", phase: "PH4", tab: "activities" }),
   s({ id: "SCR-11", path: "/app/incidents", title: "出動履歴", desktopTitle: "出動管理", summary: "種別/日時/状態一覧・登録", ownerTask: "T044", phase: "PH3", tab: "menu" }),
   s({ id: "SCR-22", path: "/app/incidents/new", title: "出動記録の登録", summary: "種別/発生日時/概要/関連活動/使用資産", ownerTask: "T044", phase: "PH3", tab: "menu" }),
   s({ id: "SCR-12", path: "/app/incidents/:id", title: "出動記録の詳細", summary: "概要/参集/帰還/関連活動/車両/機材/履歴・同期状態（出動モード=赤テーマ）", ownerTask: "T044", phase: "PH3", tab: "menu" }),

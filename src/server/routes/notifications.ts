@@ -298,7 +298,17 @@ export function registerNotificationRoutes(app: ApiApp): void {
     const p = await resolvePrincipal(c);
     const { body, headers } = await parseApiRequest(c, "API-63");
     requirePermission(p, "PER-12", { unitId: p.unitId, type: "notification" });
-    const proposal = await buildNotificationDraft(c, {
+    // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」: 鍵が既にある（=再送）ときは
+    // 状態前提の提案組み立て（源の再読込・空対象/宛先の検査）を飛ばし、初回の201と同じ応答を
+    // executeMutationのresolveExistingへ任せる（API-64/100・inspection-schedulesと同じT041流儀。
+    // 源の対象者が初回成功後に全員回答済みになっても再送は422 empty_audienceにならない。
+    // 同キー別本文はrequestHash不一致＝IDEMPOTENCY_MISMATCH、失権は403のまま）
+    const knownKey = await c.env.DB.prepare(
+      "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
+    ).bind(p.userId, "notification.draft", headers["idempotency-key"]).first();
+
+    // 提案の組み立てとhash計算は新規実行のときだけ（再送では実行されず、使われない初期値のまま）
+    const proposal = knownKey ? null : await buildNotificationDraft(c, {
       unitId: p.unitId,
       source: body.source,
       body: body.body,
@@ -307,7 +317,7 @@ export function registerNotificationRoutes(app: ApiApp): void {
     });
     const id = crypto.randomUUID();
     // 宛先参照は団員の班（squad）で決まる部分がある（到達不明の試験/デモ用規約。addressRefForの注記）
-    const audienceRows = proposal.audienceMemberIds.length
+    const audienceRows = proposal?.audienceMemberIds.length
       ? (await c.env.DB.prepare(
           `SELECT id, squad FROM members WHERE id IN (${proposal.audienceMemberIds.map(() => "?").join(",")})`,
         ).bind(...proposal.audienceMemberIds).all<{ id: string; squad: string | null }>()).results
@@ -315,8 +325,8 @@ export function registerNotificationRoutes(app: ApiApp): void {
     const squadOf = new Map(audienceRows.map((r) => [r.id, r.squad]));
     // 承認固定に使うhash（bodyHash=本文のSHA-256、audienceHash=対象memberId整列配列の正規化JSONのSHA-256）。
     // docs/04:139にhash列はaudience_hashしか無いためbodyHashは応答時に計算して載せる
-    const bodyHash = await sha256Hex(proposal.body);
-    const audienceHash = await sha256Hex(canonicalJson(proposal.audienceMemberIds));
+    const bodyHash = proposal ? await sha256Hex(proposal.body) : "";
+    const audienceHash = proposal ? await sha256Hex(canonicalJson(proposal.audienceMemberIds)) : "";
 
     const result = await executeMutation(c.env, p, {
       operationCode: "notification.draft",
@@ -329,10 +339,10 @@ export function registerNotificationRoutes(app: ApiApp): void {
         c.env.DB.prepare(
           "INSERT INTO notifications (id, unit_id, source_type, source_id, body_revision, audience_hash, status, expires_at, last_mutation_token, created_at, updated_at, created_by, actor_kind) " +
             "VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, 'human')",
-        ).bind(id, p.unitId, proposal.sourceType, proposal.sourceId, JSON.stringify({ body: proposal.body }), audienceHash, body.expiresAt ?? null, ctx.attempt, ctx.now, ctx.now, p.userId),
+        ).bind(id, p.unitId, proposal!.sourceType, proposal!.sourceId, JSON.stringify({ body: proposal!.body }), audienceHash, body.expiresAt ?? null, ctx.attempt, ctx.now, ctx.now, p.userId),
         // 対象は明示snapshotで固定（member×channel。宛先はaddress_refの参照だけ。docs/04:140）
-        ...proposal.audienceMemberIds.flatMap((memberId) =>
-          proposal.channels.map((channel) =>
+        ...proposal!.audienceMemberIds.flatMap((memberId) =>
+          proposal!.channels.map((channel) =>
             c.env.DB.prepare(
               "INSERT INTO notification_recipients (id, unit_id, notification_id, member_id, channel, address_ref, actor_user_id, actor_kind, created_at) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, 'human', ?)",
@@ -342,13 +352,18 @@ export function registerNotificationRoutes(app: ApiApp): void {
         c.env.DB.prepare(
           "INSERT INTO notification_events (id, unit_id, notification_id, action, details, actor_user_id, actor_kind, created_at) " +
             "VALUES (?, ?, ?, 'draft.created', ?, ?, 'human', ?)",
-        ).bind(crypto.randomUUID(), p.unitId, id, JSON.stringify({ sourceType: proposal.sourceType, audienceCount: proposal.audienceMemberIds.length, channels: proposal.channels.join(",") }), p.userId, ctx.now),
+        ).bind(crypto.randomUUID(), p.unitId, id, JSON.stringify({ sourceType: proposal!.sourceType, audienceCount: proposal!.audienceMemberIds.length, channels: proposal!.channels.join(",") }), p.userId, ctx.now),
       ],
       audit: {
         action: "notification.draft", entityType: "notification", entityId: id,
-        metadata: { sourceType: proposal.sourceType, audienceCount: proposal.audienceMemberIds.length, channels: proposal.channels.join(",") },
+        // 再送（鍵既存）ではproposalが無いため、metadata/payloadは新規実行のときだけ組む（executeMutationの
+        // CODE_LIKE検査がundefined値を拒むため、未使用のundefinedを入れたままにしない）
+        ...(proposal ? { metadata: { sourceType: proposal.sourceType, audienceCount: proposal.audienceMemberIds.length, channels: proposal.channels.join(",") } } : {}),
       },
-      event: { entityType: "notification", entityId: id, entityVersion: 1, eventType: "notification.draft_created", payload: { sourceType: proposal.sourceType } },
+      event: {
+        entityType: "notification", entityId: id, entityVersion: 1, eventType: "notification.draft_created",
+        ...(proposal ? { payload: { sourceType: proposal.sourceType } } : {}),
+      },
       response: { status: 201, sql: SENDER_JSON, binds: [bodyHash, id], decode: (j) => Notification.parse(j) },
     });
     return ok(c, result.data, {}, 201);
@@ -454,7 +469,8 @@ export function registerNotificationRoutes(app: ApiApp): void {
                   "UPDATE notifications SET version = version + 1, last_mutation_token = ?, updated_at = ? " +
                     "WHERE id = ? AND unit_id = ? AND version = ?",
                 ).bind(ctx.attempt, ctx.now, params.id, p.unitId, body.version),
-                ...cancelUnsentDeliveryStatements(c.env.DB, p.unitId, params.id, cancelUnsentRecipients, ctx.now, "manual_cancel"),
+                // dispatch.cancelledのactor_kindは'human'（同一mutation内のapproval.approved等と揃える。PH4レビューA低5）
+                ...cancelUnsentDeliveryStatements(c.env.DB, p.unitId, params.id, cancelUnsentRecipients, ctx.now, "manual_cancel", "human"),
               ]
             : [c.env.DB.prepare(
                 "UPDATE notifications SET status = 'cancelled', version = version + 1, last_mutation_token = ?, updated_at = ? " +

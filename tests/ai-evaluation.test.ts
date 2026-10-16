@@ -45,7 +45,10 @@ beforeEach(async () => {
   await env.DB.prepare(
     "UPDATE jobs SET status = 'cancelled', lease_token = NULL, lease_until = NULL WHERE status IN ('queued', 'running', 'retry_wait')",
   ).run();
-  fx.clock.set("2026-10-16T00:00:00.000Z");
+  // jobの受付時刻（next_attempt_at）はenqueueJobの既定＝実時刻で記録されるため、runner用の
+  // 固定クロックは実時刻より先に置く（固定日付のままでは実時刻がその日時を追い越した以降、
+  // jobが永遠に未到来になりrunDueJobsが何もleaseしなくなる。2026-10-16T00:00Z固定で発生）
+  fx.clock.set(new Date(Date.now() + 3_600_000).toISOString()); // 実時刻+1時間
 });
 
 const idem = () => ({ "idempotency-key": crypto.randomUUID() });

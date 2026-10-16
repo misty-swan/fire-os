@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { handleJob, runDueJobs } from "../src/server/jobs/runner";
 import "../src/server/jobs/handlers/notification"; // 配送job handlerの登録（file-inspection.test.tsと同じ流儀）
 import { completeJob, leaseJob } from "../src/server/jobs/store";
-import { cancelUnsentDeliveries } from "../src/server/notifications/dispatcher";
+import { cancelUnsentDeliveries, dispatchNotification } from "../src/server/notifications/dispatcher";
 import {
   registerChannelProvider,
   type DeliveryResult,
@@ -345,5 +345,64 @@ describe("通知の実配送と再送安全性 (T051)", () => {
     expect(recovered.every((d) => d.status === "unknown")).toBe(true); // 結果不明＝照会/人確認
     // 受付0件・拒否0件（全件unknown）は「受付の無い完了」。個別状態unknownが正本
     expect(((await fx.rows("notifications", { id: draft2.id }))[0]!.status)).toBe("finished");
+  });
+
+  /**
+   * 配送jobとcancel_unsentの競合（PH4レビューA中2）: dispatcherがdeliveriesを読み込んだ後、
+   * settle（status→sendingの状態ガード付きUPDATE）をcommittedさせる前にAPI-64 cancel_unsent相当の
+   * 取消がcommittedしたとき、その行はsettleのガードで0行しか変わらないためprovider.sendへ回さない
+   * （docs/11「取消後のjob実行は送らない」の並行版。現行実装は反映行数＝meta.changesを見ずに
+   * 読込時の全行へsendするためFAILする）。DB状態はcancelledのまま通知だけが届く事故を防ぐ。
+   * 競合の窗口（読込〜settle確定の間）はenv.DB.batchを差し替えて再現する:
+   * settleのbatch（この実行では1文のUPDATE）を検出したら、委譲の前に取消を確定させる。
+   */
+  it("cancelled_pending_deliveries_are_not_sent_when_cancellation_commits_during_dispatch", async () => {
+    const a = fx.units.a;
+    const member = a.people.member.memberId!;
+    const draft = await createNotificationDraft([member]);
+    const job = await approveAndJob(draft);
+    const recipient = await recipientOf(draft.id, member);
+    const ref = `member:${member}#inbox`;
+
+    const originalBatch = env.DB.batch.bind(env.DB);
+    let injecting = false;
+    let settleIntercepted = false;
+    (env.DB as { batch: typeof env.DB.batch }).batch = (statements: D1PreparedStatement[]) => {
+      if (!injecting && !settleIntercepted && statements.length === 1) {
+        settleIntercepted = true;
+        injecting = true;
+        return (async () => {
+          try {
+            // pendingの行がこの時点でcancelledへ確定する（SELECT後・settle前のcommitと同じ）
+            const cancellation = await cancelUnsentDeliveries(env, a.id, draft.id, { reason: "manual_cancel" });
+            expect(cancellation.cancelled).toBe(1);
+          } finally {
+            injecting = false;
+          }
+          return originalBatch(statements);
+        })();
+      }
+      return originalBatch(statements);
+    };
+    try {
+      const jobRow = (await fx.rows("jobs", { id: job.id }))[0]!;
+      const leased = {
+        id: String(job.id), unitId: a.id, kind: "notification.deliver", sourceType: "notification",
+        sourceId: draft.id, sourceVersion: Number(jobRow.source_version), configVersion: String(jobRow.config_version),
+        dedupeKey: String(jobRow.dedupe_key), status: "running", attempts: 1, maxAttempts: 3,
+        nextAttemptAt: new Date().toISOString(), errorCode: null, resultRef: null, requestedBy: null,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        leaseToken: "concurrency-test", leaseUntil: new Date(Date.now() + 60_000).toISOString(),
+      } as unknown as Parameters<typeof dispatchNotification>[1];
+      await dispatchNotification(env, leased);
+    } finally {
+      env.DB.batch = originalBatch;
+    }
+
+    // 取消済みの行へsendが呼ばれないこと
+    expect(fake.calls.filter((c) => c.addressRef === ref)).toHaveLength(0);
+    // 行はcancelledのまま（結果の確定UPDATEもsending前提のガードで効かない）
+    const row = (await deliveriesOf(draft.id)).find((d) => d.recipient_id === recipient.id)!;
+    expect(row.status).toBe("cancelled");
   });
 });
