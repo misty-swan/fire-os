@@ -439,4 +439,57 @@ describe("AI提案の決定 (T054)", () => {
     // 再送でタスクは増えない（初回の効果1件のまま）
     expect(await countTasksForDecision(saved.decisionId)).toBe(1);
   });
+
+  /**
+   * docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」（PH4レビュー第2回・API-31の通知draft経路）:
+   * 通知draft付き承認（API-31）の再送は、初回成功後に源の状態が変わっていても（活動の対象者が
+   * 全員回答済みになってdraft提案の再計算なら422 empty_audienceになる状態でも）初回の200と同じ
+   * 決定IDを返す。現行実装は鍵の既存に関係なくbuildNotificationDraftが走るため、再送が422に
+   * なりFAILする（notification-approval.test.tsのdraft作成API-63の同種試験と同じ条件）。
+   */
+  it("resend_with_same_idempotency_key_returns_saved_decision_even_if_notification_source_changed", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin; // PER-10/PER-12（所属内。通知draftの効果を作れる）
+    const member = a.people.member;
+
+    // 通知draftの源（活動=未回答抽出。対象者の回答で提案の再計算結果が変わる源。API-06）
+    const actRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "通知draft再送試験の活動（架空）", kind: "training", plannedStartsAt: "2026-11-01T01:00:00.000Z",
+      locationText: "架空市中央公園", ownerMemberId: admin.memberId!, audienceMemberIds: [member.memberId!],
+    }, idem());
+    expect(actRes.status).toBe(201);
+    const activityId = ((await json(actRes)).data!.id) as string;
+
+    const issueId = await createIssue(admin, "通知draft再送試験の異常（架空）");
+    const candidate = await requestCandidate(admin, "issue", issueId, 1);
+    const headers = { "idempotency-key": "resend-decision-notif-same-key-1" };
+    const body = {
+      version: 1, sourceVersion: 1, decision: "approve",
+      confirmedPayload: {
+        confirmedCategory: "equipment_issue",
+        // 対象は源からの提案（未回答抽出）に任せる（audienceMemberIds省略＝API-63と同じ形）
+        notification: { source: { type: "activity", id: activityId }, channels: ["inapp"] },
+      },
+      reviewNote: "通知draft付き承認の同じ鍵の再送を試す",
+    };
+    const first = await fx.client(admin).request("POST", `/api/v1/ai/reviews/${candidate.id}/decision`, body, headers);
+    const firstJson = await json(first);
+    expect(first.status, JSON.stringify(firstJson)).toBe(200);
+    const saved = firstJson.data! as { decisionId: string; effectIds: string[] };
+    // 初回の通知draftは未回答抽出（member=未回答）で1件
+    expect(await fx.rows("notifications", { source_type: "activity", source_id: activityId })).toHaveLength(1);
+
+    // 初回成功後に源の状態が変化: 対象者が全員回答済みになる（再計算ならempty_audienceの422）
+    const now = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO activity_attendance (id, unit_id, activity_id, member_id, response, responded_at, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, ?, ?, 'attending', ?, ?, ?, ?, 'human')",
+    ).bind(crypto.randomUUID(), a.id, activityId, member.memberId!, now, now, now, admin.userId).run();
+
+    const resend = await fx.client(admin).request("POST", `/api/v1/ai/reviews/${candidate.id}/decision`, body, headers);
+    expect(resend.status).toBe(200); // 元HTTP status（現行実装は422 empty_audienceでFAIL）
+    expect(((await json(resend)).data! as { decisionId: string }).decisionId).toBe(saved.decisionId);
+    // 再送で通知draftは増えない（同じ源の通知は初回の1件のまま）
+    expect(await fx.rows("notifications", { source_type: "activity", source_id: activityId })).toHaveLength(1);
+  });
 });

@@ -324,4 +324,44 @@ describe("業務タスク (T049)", () => {
     expect(resend.status).toBe(200); // 元HTTP status（現行実装は422 assignee_not_assignableでFAIL）
     expect(((await json(resend)).data! as { status: string }).status).toBe("cancelled");
   });
+
+  /**
+   * docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」（PH4レビュー第2回・API-87の遷移検査）:
+   * 初回成功後に第三者（別セッション）がタスクを終端状態へ動かした場合も、API-87の再送は
+   * 初回の200（保存済み応答）を返す。現行実装は鍵の既存に関係なくstatus遷移の検査が走るため
+   * （初回 open→assigned の後、第三者が assigned→cancelled にすると再送はcancelled→assignedの
+   * 許可外遷移扱い）、再送が422 transition_not_allowedになりFAILする。
+   */
+  it("resend_with_same_idempotency_key_returns_saved_update_even_if_task_moved_to_terminal_by_others", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const officer = a.people.officer;
+    // ファイル内でDB状態が共有されるため、先行の再送試験が停止したofficerを戻す（第三者セッションの確保）。
+    // API-04の停止は利用者停止まで行い再開APIは未提供（members.ts「再開（active）は未提供」）なので、
+    // 試験の前提整備として直接戻す（tests/notification-approval.test.tsのsquad直接更新と同じ流儀）
+    const officerNow = new Date().toISOString();
+    await env.DB.prepare("UPDATE members SET status = 'active', updated_at = ? WHERE id = ?")
+      .bind(officerNow, officer.memberId!).run();
+    await env.DB.prepare("UPDATE users SET status = 'active', disabled_at = NULL, updated_at = ? WHERE id = ?")
+      .bind(officerNow, officer.userId!).run();
+    const created = await fx.client(admin).request("POST", "/api/v1/tasks", { title: "終端移動後の再送試験（架空）" }, idem());
+    expect(created.status).toBe(201);
+    const taskId = ((await json(created)).data! as { id: string }).id;
+
+    const headers = { "idempotency-key": "resend-task-transition-same-key-1" };
+    const body = { version: 1, status: "assigned", assigneeMemberId: admin.memberId, reason: "担当を決めた" };
+    const first = await fx.client(admin).request("PATCH", `/api/v1/tasks/${taskId}`, body, headers);
+    expect(first.status).toBe(200);
+    expect(((await json(first)).data! as { status: string }).status).toBe("assigned");
+
+    // 初回成功後に第三者（officer=PER-04/10の別セッション）がassigned→cancelledへ動かす
+    const cancel = await fx.client(officer).request("PATCH", `/api/v1/tasks/${taskId}`, {
+      version: 2, status: "cancelled", reason: "第三者による取り下げ（架空）",
+    }, idem());
+    expect(cancel.status, JSON.stringify(await json(cancel))).toBe(200);
+
+    const resend = await fx.client(admin).request("PATCH", `/api/v1/tasks/${taskId}`, body, headers);
+    expect(resend.status).toBe(200); // 元HTTP status（現行実装は422 transition_not_allowedでFAIL）
+    expect(((await json(resend)).data! as { status: string }).status).toBe("assigned"); // 保存済み応答
+  });
 });

@@ -218,10 +218,11 @@ export async function decideAiProposal(ctx: ApiContext, input: ApiRequest<"API-3
   const { params, body, headers } = input;
 
   // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」: 鍵が既にある（=再送）ときは
-  // 状態前提の検査（担当の現在有効）を飛ばし、初回の200と同じ応答をexecuteMutationの
-  // resolveExistingへ任せる（T041流儀。初回成功後に担当が休団・退団しても再送は422にならない。
-  // 同キー別本文はIDEMPOTENCY_MISMATCH、失権は403のまま。候補の実在検査は候補行が追記型で
-  // 消えないため再送でも同じ結果。stale検査はconditions側で新規実行だけが行う）
+  // 状態前提の検査（担当の現在有効・通知draftの提案再計算）を飛ばし、初回の200と同じ応答を
+  // executeMutationのresolveExistingへ任せる（T041流儀。初回成功後に担当が休団・源の対象が
+  // 全員回答済みになっても再送は422にならない。同キー別本文はIDEMPOTENCY_MISMATCH、失権は
+  // 403のまま。候補の実在検査は候補行が追記型で消えないため再送でも同じ結果。stale検査は
+  // conditions側で新規実行だけが行う）
   const knownKey = await ctx.env.DB.prepare(
     "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
   ).bind(p.userId, "ai_review.decision", headers["idempotency-key"]).first();
@@ -287,16 +288,24 @@ export async function decideAiProposal(ctx: ApiContext, input: ApiRequest<"API-3
   let notifExpiresAt: string | null = null;
   let notifSquads = new Map<string, string | null>();
   if (confirmed.notification) {
+    // PER-12は再送でも再検査する（認可の再検査＝docs/05 §2。上の担当検査を鍵でガードするのと同じ区別）
     requirePermission(p, "PER-12", { unitId: p.unitId, type: "notification" });
-    notifProposal = await buildNotificationDraft(ctx, {
-      unitId: p.unitId,
-      source: confirmed.notification.source,
-      body: confirmed.notification.body,
-      audienceMemberIds: confirmed.notification.audienceMemberIds,
-      channels: confirmed.notification.channels,
-    });
-    notifExpiresAt = confirmed.notification.expiresAt ?? null;
-    notifSquads = await addressRefsFor(ctx, notifProposal.audienceMemberIds);
+    // draft提案の再計算は新規実行のときだけ（再送では保存済み応答を返す。A中1の鍵先読み）。
+    // 初回成功後に源の状態が変わっていても（対象者が全員回答済み＝422 empty_audience、
+    // 源が読めない＝400 source_not_found）再送は422/400にならず、executeMutationの
+    // resolveExistingが保存済みを返す。knownKey時はnotifProposal=nullのままになり、
+    // notifAudienceHash・効果の組み立ては全てnotifProposalのnull判定で保安されている
+    if (!knownKey) {
+      notifProposal = await buildNotificationDraft(ctx, {
+        unitId: p.unitId,
+        source: confirmed.notification.source,
+        body: confirmed.notification.body,
+        audienceMemberIds: confirmed.notification.audienceMemberIds,
+        channels: confirmed.notification.channels,
+      });
+      notifExpiresAt = confirmed.notification.expiresAt ?? null;
+      notifSquads = await addressRefsFor(ctx, notifProposal.audienceMemberIds);
+    }
   }
 
   // 承認固定hash（audience_hash。API-64の承認が一致を要求する＝通知の対象/本文の承認固定に使う）

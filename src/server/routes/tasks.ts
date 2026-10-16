@@ -293,16 +293,16 @@ export function registerTaskRoutes(app: ApiApp): void {
     requireTaskPermission(p, { unitId: p.unitId, type: "task", id: params.id, ownerMemberId: current.assignee_member_id ?? undefined });
 
     // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」: 鍵が既にある（=再送）ときは
-    // 状態前提の検査（担当の変更可能状態・現在有効）を飛ばし、初回の200と同じ応答を
-    // executeMutationのresolveExistingへ任せる（T041流儀。初回成功後にタスクがcancelled・
-    // 担当が休団になっても再送は422にならない。status遷移の検査は再送でも安全＝初回成功後は
-    // body.statusと現statusが一致するためstatusChangeが立たない）
+    // 状態前提の検査（status遷移・担当の変更可能状態・現在有効）を飛ばし、初回の200と同じ応答を
+    // executeMutationのresolveExistingへ任せる（T041流儀。初回成功後に第三者がタスクを終端状態
+    // （cancelled等）へ動かしても、再送は422 transition_not_allowedにならず保存済みを返す。
+    // NOT_FOUND・requireTaskPermissionは再送でも行う＝認可の再検査）
     const knownKey = await c.env.DB.prepare(
       "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
     ).bind(p.userId, "task.update", headers["idempotency-key"]).first();
 
     const statusChange = body.status !== undefined && body.status !== current.status;
-    if (statusChange && !taskTransitions[current.status as keyof typeof taskTransitions].includes(body.status!)) {
+    if (!knownKey && statusChange && !taskTransitions[current.status as keyof typeof taskTransitions].includes(body.status!)) {
       throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "transition_not_allowed" }]);
     }
     // 担当者変更はopen/assigned/in_progressから（docs/16 T049裁定。done/cancelledでは422）
