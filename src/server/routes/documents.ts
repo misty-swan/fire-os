@@ -12,6 +12,7 @@ import { enqueueJobStatement } from "../jobs/store";
 import { canonicalRequestHash, sha256Hex } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { documentVisibilitySql } from "../documents/authorized";
+import "../jobs/handlers/document-extract"; // 抽出job（document.extract）handlerの登録（Cron/Queueと同じ登録点）
 import { requirePermission } from "./invitations";
 
 /**

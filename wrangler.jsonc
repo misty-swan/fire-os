@@ -10,7 +10,9 @@
   "compatibility_flags": ["nodejs_compat"],
   // 評価datasetの正本（tests/fixtures/ai/*.jsonl）を試験がテキストモジュールとして読むための設定（T061）。
   // サーバー本体はsrc/server/ai/dataset/（生成スクリプトが書いた同一内容のTSモジュール）を使う。
-  "rules": [{ "type": "Text", "globs": ["**/*.jsonl"] }],
+  // 文書抽出のfixture（tests/fixtures/documents/*.pdf）も試験がData（ArrayBuffer）モジュールとして
+  // 読む（T064。サーバー本体はPDFをimportしない=バンドルには載らない）。
+  "rules": [{ "type": "Text", "globs": ["**/*.jsonl"] }, { "type": "Data", "globs": ["**/*.pdf"] }],
   "assets": {
     "directory": "./dist/client",
     "binding": "ASSETS",

@@ -84,10 +84,10 @@ export const documentChunks = sqliteTable(
     pageNo: integer("page_no"),
     section: text("section"),
     text: text("text").notNull(),
-    /** 抽出原文への位置保持（docs/06 §5「ページ/節/文字offset」。JSON） */
+    /** 抽出原文への位置保持（docs/06 §5「ページ/節/文字offset」。JSON。語彙はextract.ts/chunk.ts） */
     sourceOffsets: text("source_offsets").notNull(),
-    /** 語彙はT064で抽出/索引方式（D16）と一緒に確定（0027では長さだけ拘束） */
-    indexStatus: text("index_status").notNull(),
+    /** 語彙はT064で確定（states.tsのdocumentChunkIndexStates。0027のCHECKと同一コミットで整合） */
+    indexStatus: text("index_status", { enum: ["pending", "indexed", "removed"] }).notNull(),
     indexKey: text("index_key"),
     ...rootColumns,
   },

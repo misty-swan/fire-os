@@ -35,6 +35,14 @@ export const announcementStates = ["draft", "published", "archived"] as const;
  * 承認（draft→approved）と撤回（draft/approved→withdrawn）の辺はT063が使う。T062では作成（draft）のみ。
  */
 export const documentStates = ["draft", "approved", "withdrawn"] as const;
+/**
+ * document_chunks.index_status（T064で確定。docs/04:152、docs/06 §5。検索索引の処理状態で業務状態機械ではない。
+ * D16の索引方式〔D1全文検索/Vectorizeの比較はT065/T066〕と一緒に使う）:
+ * pending=抽出済みで索引化待ち（抽出直後の値。**検索可能を意味しない**。検索対象はT066が承認済み＋
+ * authorizedDocumentVersionsで別途絞る）、indexed=T066の索引化が完了、removed=索引から外れた
+ * （deindex/reindex・再抽出の後にT066が設定）。0027のCHECK語彙（未リリース連番のin-place追加。docs/16 T064）。
+ */
+export const documentChunkIndexStates = ["pending", "indexed", "removed"] as const;
 export const notificationApprovalStates = ["draft", "approved", "cancelled", "dispatching", "finished", "failed"] as const;
 /**
  * 配送（docs/04:141 notification_deliveries）。cancelledは「未送分の取消」（docs/11「未送分取消は

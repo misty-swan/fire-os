@@ -133,9 +133,13 @@ CREATE TABLE document_chunks (
   page_no INTEGER CHECK (page_no IS NULL OR page_no >= 1),
   section TEXT CHECK (section IS NULL OR length(section) BETWEEN 1 AND 200),
   text TEXT NOT NULL CHECK (length(text) BETWEEN 1 AND 20000),
-  -- 抽出原文への位置保持（docs/06 §5「ページ/節/文字offsetを保持」のJSON。語彙はT064で確定）
+  -- 抽出原文への位置保持（docs/06 §5「ページ/節/文字offsetを保持」のJSON。語彙はT064で確定:
+  -- {contentHash,extractorVersion,pageNo,start,end}。chunk.text=頁テキスト.slice(start,end)が常に成立する）
   source_offsets TEXT NOT NULL CHECK (json_valid(source_offsets)),
-  index_status TEXT NOT NULL CHECK (length(index_status) BETWEEN 1 AND 30),
+  -- 索引の処理状態（語彙はT064で確定。docs/04:152と同一コミットで整合。docs/16 T064に記録）:
+  -- pending=抽出済みで索引化待ち（検索可能を意味しない。T066が承認済み+ACLで別途絞る）/
+  -- indexed=T066の索引化が完了 / removed=索引から外れた（T066が設定）
+  index_status TEXT NOT NULL CHECK (index_status IN ('pending', 'indexed', 'removed')),
   index_key TEXT CHECK (index_key IS NULL OR length(index_key) BETWEEN 1 AND 500),
   version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
   last_mutation_token TEXT,
