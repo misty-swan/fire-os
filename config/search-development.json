@@ -1,0 +1,9 @@
+{
+  "backend": "d1_fts",
+  "version": "search-dev-v1",
+  "tokenizer": "trigram",
+  "topK": 5,
+  "datasetHash": "808631d64ea1f4ce89598a5d519b5ed0383bd38a9b00975d462f004b700bc860",
+  "selectedAt": "2026-10-16",
+  "basis": "tests/retrieval-selection.test.ts の workerd（ローカルD1）実測。docs/evidence/V04-retrieval.md。実Cloudflare未接続の開発選定であり、Vectorizeとの実測比較が完了するまで採用確定ではない"
+}
