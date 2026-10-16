@@ -1,5 +1,6 @@
 import { Activity, Incident, IncidentDetail, IncidentEvent, IncidentParticipant } from "../../shared/contracts/operations";
 import { canTransition, incidentTransitions } from "../../shared/states";
+import { readSnapshot } from "../events/snapshot";
 import { resolvePrincipal } from "../auth/principal";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
@@ -291,72 +292,87 @@ export function registerIncidentRoutes(app: ApiApp): void {
     return ok(c, result.data);
   });
 
-  // --- API-70: 詳細（docs/05 API-70「参集/活動/使用履歴/イベント」。voidedも閲覧可能） ---
+  // --- API-70: 詳細（docs/05 API-70「参集/活動/使用履歴/イベント」。voidedも閲覧可能）。
+  // T072: 親子とunits.event_sequenceを同一D1 read batchで読み、snapshotCursorを返す（docs/05 §8）。
+  // snapshotの親子と連番が食い違う瞬間を作らないため、読み取りは1つのbatchに載せる ---
   defineRoute(app, "API-70", async (c) => {
     const p = await resolvePrincipal(c);
     const { params } = await parseApiRequest(c, "API-70");
     requirePermission(p, "PER-01", { unitId: p.unitId, type: "incident", id: params.id });
-    const current = await loadIncident(c, params.id, p.unitId);
+    const { data: detail } = await readSnapshot(c, {
+      principal: p,
+      statements: (db) => [
+        // 出動と出来事root（別unit/存在しない対象はassembleで同じ404。存在を明かさない）
+        db.prepare(
+          "SELECT i.*, o.version AS operation_version FROM incidents i " +
+            "JOIN operations o ON o.unit_id = i.unit_id AND o.id = i.operation_id WHERE i.id = ?",
+        ).bind(params.id),
+        // 関連付けた活動（docs/05 API-70「活動」。未リンクは0行→null。unit条件はincident側で検査）
+        db.prepare(
+          "SELECT a.* FROM activities a JOIN incidents i ON i.activity_id = a.id AND i.unit_id = a.unit_id " +
+            "WHERE i.id = ? AND i.unit_id = ?",
+        ).bind(params.id, p.unitId),
+        // 参集（incident_participants）。書込はAPI-23（incident-participants.ts、T041で接続）
+        db.prepare(
+          "SELECT id, version, member_id, attendance_status, mobilized_at, arrived_at, returned_at " +
+            "FROM incident_participants WHERE incident_id = ? ORDER BY member_id",
+        ).bind(params.id),
+        // 使用履歴（resource_usages。docs/04:100。cancelledも行として残る。operationIdで元出来事へ辿れる）
+        db.prepare(
+          "SELECT ru.id, ru.unit_id, ru.operation_id, ru.vehicle_id, ru.equipment_id, ru.quantity, ru.used_from, ru.used_to, " +
+            "ru.recorded_by_member_id, ru.status, ru.version FROM resource_usages ru " +
+            "JOIN incidents i ON i.unit_id = ru.unit_id AND i.operation_id = ru.operation_id " +
+            "WHERE i.id = ? AND i.unit_id = ? ORDER BY ru.rowid",
+        ).bind(params.id, p.unitId),
+        // 履歴（incident_events。追記順＝rowid。失敗した変更は残らない）
+        db.prepare(
+          "SELECT id, action, before_json, after_json, reason, created_at FROM incident_events WHERE incident_id = ? ORDER BY rowid",
+        ).bind(params.id),
+      ],
+      assemble: (rows, _eventSequence, snapshotCursor) => {
+        const current = rows[0]?.results[0] as IncidentWithOperation | undefined;
+        if (!current || current.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
 
-    // 関連付けた活動（docs/05 API-70「活動」。未リンクはnull）
-    const activity = current.activity_id
-      ? await c.env.DB.prepare("SELECT * FROM activities WHERE id = ?").bind(current.activity_id)
-          .first<Record<string, string | number>>()
-          .then((r) =>
-            r && r.unit_id === p.unitId
-              ? Activity.parse({
-                  id: r.id, version: r.version, operationId: r.operation_id, title: r.title, kind: r.kind,
-                  plannedStartsAt: r.planned_starts_at, plannedEndsAt: r.planned_ends_at, locationText: r.location_text,
-                  ownerMemberId: r.owner_member_id, status: r.status, responseDueAt: r.response_due_at,
-                  createdAt: r.created_at, updatedAt: r.updated_at,
-                })
-              : null,
-          )
-      : null;
+        const actRow = rows[1]?.results[0] as Record<string, string | number> | undefined;
+        const activity = actRow
+          ? Activity.parse({
+              id: actRow.id, version: actRow.version, operationId: actRow.operation_id, title: actRow.title, kind: actRow.kind,
+              plannedStartsAt: actRow.planned_starts_at, plannedEndsAt: actRow.planned_ends_at, locationText: actRow.location_text,
+              ownerMemberId: actRow.owner_member_id, status: actRow.status, responseDueAt: actRow.response_due_at,
+              createdAt: actRow.created_at, updatedAt: actRow.updated_at,
+            })
+          : null;
 
-    // 参集（incident_participants）。書込はAPI-23（incident-participants.ts、T041で接続）
-    const participants = (
-      await c.env.DB.prepare(
-        "SELECT id, version, member_id, attendance_status, mobilized_at, arrived_at, returned_at " +
-          "FROM incident_participants WHERE incident_id = ? ORDER BY member_id",
-      ).bind(params.id)
-        .all<{ id: string; version: number; member_id: string; attendance_status: string; mobilized_at: string | null; arrived_at: string | null; returned_at: string | null }>()
-    ).results.map((r) =>
-      IncidentParticipant.parse({
-        id: r.id, version: r.version, memberId: r.member_id, attendanceStatus: r.attendance_status,
-        mobilizedAt: r.mobilized_at, arrivedAt: r.arrived_at, returnedAt: r.returned_at,
-      }),
-    );
+        const participants = (rows[2]!.results as { id: string; version: number; member_id: string; attendance_status: string; mobilized_at: string | null; arrived_at: string | null; returned_at: string | null }[])
+          .map((r) =>
+            IncidentParticipant.parse({
+              id: r.id, version: r.version, memberId: r.member_id, attendanceStatus: r.attendance_status,
+              mobilizedAt: r.mobilized_at, arrivedAt: r.arrived_at, returnedAt: r.returned_at,
+            }),
+          );
 
-    // 使用履歴（resource_usages。T042で接続。docs/04:100。cancelledも行として残る。operationIdで元出来事へ辿れる）
-    const resourceUsages = (
-      await c.env.DB.prepare(
-        "SELECT id, unit_id, operation_id, vehicle_id, equipment_id, quantity, used_from, used_to, recorded_by_member_id, status, version " +
-          "FROM resource_usages WHERE unit_id = ? AND operation_id = ? ORDER BY rowid",
-      ).bind(p.unitId, current.operation_id).all<ResourceUsageRowShape>()
-    ).results.map(toResourceUsageDto);
+        const resourceUsages = (rows[3]!.results as unknown as ResourceUsageRowShape[]).map(toResourceUsageDto);
 
-    // 履歴（incident_events。追記順＝rowid。失敗した変更は残らない）
-    const events = (
-      await c.env.DB.prepare(
-        "SELECT id, action, before_json, after_json, reason, created_at FROM incident_events WHERE incident_id = ? ORDER BY rowid",
-      ).bind(params.id)
-        .all<{ id: string; action: string; before_json: string; after_json: string; reason: string | null; created_at: string }>()
-    ).results.map((r) =>
-      IncidentEvent.parse({
-        id: r.id, action: r.action, before: JSON.parse(r.before_json), after: JSON.parse(r.after_json),
-        reason: r.reason, createdAt: r.created_at,
-      }),
-    );
+        const events = (rows[4]!.results as { id: string; action: string; before_json: string; after_json: string; reason: string | null; created_at: string }[])
+          .map((r) =>
+            IncidentEvent.parse({
+              id: r.id, action: r.action, before: JSON.parse(r.before_json), after: JSON.parse(r.after_json),
+              reason: r.reason, createdAt: r.created_at,
+            }),
+          );
 
-    const detail = IncidentDetail.parse({
-      ...toIncident(current),
-      activity,
-      participants,
-      resourceUsages,
-      events,
-      // 出来事rootの現行版（API-57/71の版ガードに画面が使う。T044で追加）
-      operationVersion: current.operation_version,
+        return IncidentDetail.parse({
+          ...toIncident(current),
+          activity,
+          participants,
+          resourceUsages,
+          events,
+          // 出来事rootの現行版（API-57/71の版ガードに画面が使う。T044で追加）
+          operationVersion: current.operation_version,
+          // 親子と同batchで読んだunit連番の位置（T072。API-80で差分取得を始めるためのcursor）
+          snapshotCursor,
+        });
+      },
     });
     return ok(c, detail);
   });

@@ -100,9 +100,10 @@ const audienceInsert = (unitId: string, announcementId: string, memberId: string
 /**
  * PER-03（お知らせの管理）をこの主体が持つかの材料。管理者/幹部は所属内、担当は
  * entity_type='announcement'の明示scopeだけ（docs/10 PER-03「明示担当範囲、公開先を編集する権限も必要」）。
- * 一覧で authorize を行ごとに呼ばないため、同じ規則をSQLの可視条件へ写すのに使う
+ * 一覧で authorize を行ごとに呼ばないため、同じ規則をSQLの可視条件へ写すのに使う。
+ * イベント配信（src/server/events/snapshot.ts）の管理可視判定もこれを使う（T072）
  */
-function manageVisibility(p: AuthzPrincipal): { all: boolean; scopedIds: string[] } {
+export function manageVisibility(p: AuthzPrincipal): { all: boolean; scopedIds: string[] } {
   return {
     all: p.roles.includes("officer") || p.roles.includes("admin"),
     scopedIds: p.scopes

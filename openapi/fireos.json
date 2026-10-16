@@ -20426,6 +20426,11 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 9007199254740991
+                        },
+                        "snapshotCursor": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
                         }
                       },
                       "required": [
@@ -20444,7 +20449,8 @@
                         "participants",
                         "resourceUsages",
                         "events",
-                        "operationVersion"
+                        "operationVersion",
+                        "snapshotCursor"
                       ],
                       "additionalProperties": false
                     },
@@ -23396,7 +23402,7 @@
         "summary": "API-80 GET /events",
         "x-permission": "PER-13",
         "x-kind": "stream",
-        "x-provisional-response": true,
+        "x-provisional-response": false,
         "parameters": [
           {
             "name": "entityType",
@@ -23420,11 +23426,21 @@
           {
             "name": "afterSequence",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "integer",
               "minimum": 0,
               "maximum": 9007199254740991
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
             }
           }
         ],
@@ -23443,8 +23459,78 @@
                   "properties": {
                     "data": {
                       "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
+                      "properties": {
+                        "events": {
+                          "maxItems": 200,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "entityType": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "entityId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                              },
+                              "entityVersion": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "eventType": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "payload": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {}
+                              },
+                              "sequence": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 9007199254740991
+                              },
+                              "createdAt": {}
+                            },
+                            "required": [
+                              "id",
+                              "entityType",
+                              "entityId",
+                              "entityVersion",
+                              "eventType",
+                              "payload",
+                              "sequence",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "resumeCursor": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2048
+                        },
+                        "resyncRequired": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "events",
+                        "resumeCursor",
+                        "resyncRequired"
+                      ],
+                      "additionalProperties": false
                     },
                     "meta": {
                       "$ref": "#/components/schemas/SuccessMeta"

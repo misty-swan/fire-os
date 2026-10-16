@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  Body, BusinessDate, Id, IdList, IdListMaybeEmpty, IDEM, Instant, LIMITS, P_ID, Page, Reason2000,
+  Body, BusinessDate, Cursor, Id, IdList, IdListMaybeEmpty, IDEM, Instant, LIMITS, P_ID, Page, Reason2000,
   ShortText, Target, Title, Version, VersionOrZero, defineApi, listQuery, obj,
 } from "./common";
 import {
@@ -395,6 +395,11 @@ export const IncidentDetail = obj({
    * （API-57/71の応答にしか載っておらず、読み取り直後に版が取れない。docs/05 API-70行に追記）
    */
   operationVersion: Version,
+  /**
+   * 再開cursor（T072。docs/05 §8）。親子データとunits.event_sequenceを同一D1 read batchで読んだ
+   * 瞬間の位置を暗号化したopaque値。これをAPI-80に渡すと、snapshotと接続の間のcommitも回収できる
+   */
+  snapshotCursor: Cursor,
 });
 export type IncidentDetailDto = z.infer<typeof IncidentDetail>;
 
