@@ -46,6 +46,7 @@ import { registerRagRoutes } from "./routes/rag";
 import { registerAssistantRoutes } from "./routes/assistant";
 import { registerDashboardRoutes } from "./routes/dashboard";
 import { registerAnalyticsRoutes } from "./routes/analytics";
+import { registerPatrolPlanRoutes } from "./routes/patrol-plans";
 
 // APIルートの登録点。各ドメインのroute登録関数を後続タスクがここへ追加する。
 export function registerRoutes(app: ApiApp): void {
@@ -105,4 +106,6 @@ export function registerRoutes(app: ApiApp): void {
   registerAssistantRoutes(app);
   registerDashboardRoutes(app);
   registerAnalyticsRoutes(app);
+  // /patrol-plans（API-78）/patrol-plans/:id/decision（API-79）は他のドメインとpathが重ならないため順序の注意は無い
+  registerPatrolPlanRoutes(app);
 }

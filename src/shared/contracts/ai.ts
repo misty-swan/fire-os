@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   Body, BusinessDate, Id, IdList, IDEM, Instant, Job, LIMITS, P_ID, Page, Question, Sha256, ShortText, Title, Version,
-  defineApi, listQuery, obj, provisionalDto, Reason,
+  defineApi, listQuery, obj, Reason,
 } from "./common";
 import { notificationSourceTypes } from "./content";
 import { aiProposalStates, notificationChannels, reviewDecisions } from "../states";
@@ -245,6 +245,35 @@ export const Citation = obj({
 });
 export const RagAnswer = obj({ answer: z.string().min(1), citations: z.array(Citation), abstained: z.boolean() });
 
+/**
+ * 巡回計画（T071、docs/04:157「patrol_plans/patrol_plan_stops」、docs/05 API-78/79、docs/11 巡回計画）。
+ * plan側status（draft/confirmed/cancelled。confirmed・cancelledは終端＝docs/16 T071の裁定）、
+ * stop側はplan内でposition一意（順序一意）・facility重複なし。決定（確定/取消）の時刻decidedAtは
+ * draftではnull。facilityNameは管理番号か識別名（DBのCHECKでどちらか必須）、緯度経度は候補施設の座標。
+ */
+export const patrolPlanStates = ["draft", "confirmed", "cancelled"] as const;
+export type PatrolPlanState = (typeof patrolPlanStates)[number];
+export const PatrolStop = obj({
+  facilityId: Id,
+  position: z.number().int().min(1),
+  facilityName: z.string().min(1),
+  latitude: z.number(),
+  longitude: z.number(),
+});
+export type PatrolStop = z.infer<typeof PatrolStop>;
+export const PatrolPlan = obj({
+  id: Id,
+  version: Version,
+  date: BusinessDate,
+  objective: ShortText,
+  status: z.enum(patrolPlanStates),
+  stops: z.array(PatrolStop).min(1),
+  decidedAt: Instant.nullable(),
+  createdAt: Instant,
+  updatedAt: Instant,
+});
+export type PatrolPlan = z.infer<typeof PatrolPlan>;
+
 // bodyの形を保つ（T002時点の z.ZodObject 単独指定はoutputをunknownへ潰すため、
 // API-29の実装（T053）でジェネリック化した。API-32/89も同じヘルパーを使う）
 const jobRequest = <T extends z.ZodRawShape>(body: z.ZodObject<T>) => obj({ body, ...IDEM });
@@ -301,7 +330,8 @@ export const aiApis = {
       body: obj({ facilityIds: IdList, date: BusinessDate, objective: ShortText }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    // T071でprovisional解除（docs/04:157・docs/05 API-78行）。stopsはサーバーが最近傍順で提案する
+    response: PatrolPlan,
   }),
   "API-79": defineApi({
     method: "POST", path: "/patrol-plans/:id/decision", permission: "PER-14", kind: "mutation", success: [200],
@@ -310,7 +340,8 @@ export const aiApis = {
       body: obj({ version: Version, orderedFacilityIds: IdList, decision: z.enum(["confirm", "cancel"]), reason: Reason }),
       ...IDEM,
     }),
-    response: provisionalDto(), provisional: true,
+    // T071でprovisional解除（docs/04:157・docs/05 API-79行）
+    response: PatrolPlan,
   }),
   "API-88": defineApi({
     method: "GET", path: "/ai/evaluation-runs", permission: "PER-08", kind: "list", success: [200],

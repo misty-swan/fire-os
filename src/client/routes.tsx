@@ -25,6 +25,7 @@ import { ReportDraftPage } from "./features/reports/ReportDraftPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { AnalyticsPage } from "./features/analytics/AnalyticsPage";
 import { DocumentsPage } from "./features/documents/DocumentsPage";
+import { PatrolPlansPage } from "./features/patrol/PatrolPlansPage";
 import { ImportPage } from "./features/facilities/ImportPage";
 import { InspectionTemplatesPanel } from "./features/admin/InspectionTemplatesPanel";
 import { MeGate, type MeData } from "./me";
@@ -85,6 +86,7 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-19": <ReportDraftPage />,
   "SCR-26": <AnalyticsPage />,
   "SCR-24": <DocumentsPage />,
+  "SCR-25": <PatrolPlansPage />,
 };
 
 function toRoutes(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject[] {

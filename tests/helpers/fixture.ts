@@ -78,6 +78,8 @@ const TABLES = new Set([
   "reports", "report_versions", "content_version_events",
   // PH5: 文書（T062）
   "documents", "document_versions", "document_acl", "document_chunks",
+  // PH5: 巡回計画（T071）
+  "patrol_plans", "patrol_plan_stops",
 ]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 
