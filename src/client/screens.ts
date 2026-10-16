@@ -52,7 +52,9 @@ export const screens: ScreenDef[] = [
   // タスク・通知（T052）。作成・詳細はSCR-21と同じ画面の別入口（お知らせSCR-16と同じ方式。
   // 固定パスnewを:idより先に照合する並びはdocs/03 §3と同じ）
   s({ id: "SCR-21", path: "/app/tasks-notifications", aliases: ["/app/tasks-notifications/notifications/new", "/app/tasks-notifications/notifications/:id"], title: "設定・通知", desktopTitle: "タスク・通知", summary: "業務タスク、通知draft/本文/対象/承認/配送失敗/既読", ownerTask: "T052", phase: "PH4", tab: "menu" }),
-  s({ id: "SCR-24", path: "/app/documents", title: "文書・規程", summary: "許諾原本の登録/版/承認/撤回/ACL/閲覧", ownerTask: "T069", phase: "PH5", tab: "menu" }),
+  // 文書・規程（T069）。作成・詳細はSCR-24と同じ画面の別入口（お知らせSCR-16と同じ方式。
+  // 固定パスnewを:idより先に照合する並びはdocs/03 §3と同じ）
+  s({ id: "SCR-24", path: "/app/documents", aliases: ["/app/documents/new", "/app/documents/:id"], title: "文書・規程", summary: "許諾原本の登録/版/承認/撤回/ACL/閲覧", ownerTask: "T069", phase: "PH5", tab: "menu" }),
   s({ id: "SCR-25", path: "/app/patrol-plans", title: "巡回計画", summary: "対象施設/日/順序/計画案/人の確定", ownerTask: "T071", phase: "PH5", tab: "menu" }),
   s({ id: "SCR-26", path: "/app/analytics", title: "活動分析", summary: "月次/年度/団員別、元活動/出動/operation参照", ownerTask: "T060", phase: "PH4", tab: "menu" }),
   // AIレビュー（T055）。候補の詳細はSCR-18と同じ画面の別入口（お知らせSCR-16と同じ方式。単一件の
