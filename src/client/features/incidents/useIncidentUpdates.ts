@@ -80,6 +80,8 @@ export function useIncidentUpdates(id: string): { status: ConnectionState; refre
     };
 
     void (async () => {
+      // 満杯ページの追い上げ中に採用した版の記録。追い上げは採用を捨てず、最後のページで画面へ反映する
+      let pendingAdvanced = false;
       while (alive) {
         if (!online) {
           // オフラインの間は要求を出さない（AppShellの札が「オフライン」を示す）。回復したら効果が組み直されて続く
@@ -94,12 +96,15 @@ export function useIncidentUpdates(id: string): { status: ConnectionState; refre
           const page = await api("API-80", { query });
           if (!alive) return;
           cursorRef.current = page.resumeCursor;
-          const advanced = fold(page);
-          // ページが上限まで満ちている間は間を置かず追いつく（切断が長かった端末の回収）
+          pendingAdvanced = pendingAdvanced || fold(page);
+          // ページが上限まで満ちている間は間を置かず追いつく（切断が長かった端末の回収）。
+          // このページで採用した版はpendingAdvancedに保持する（捨てると、未反映がちょうど50の倍数件の
+          // ときに最終ページが空で採用が消え、次の遠隔変更まで画面が更新されない）
           if (page.events.length >= LIMITS.listLimitDefault) continue;
-          if (advanced || page.resyncRequired) {
+          if (pendingAdvanced || page.resyncRequired) {
             // 新しい版を採用した（＝画面の内容が変わる可能性）。詳細を読み直させる。
             // 初回接続でも1回動く（開いた直後に他端末の変更が入っても取りこぼさない。1回の読み直しで収まる）
+            pendingAdvanced = false;
             setSyncTick((t) => t + 1);
           }
           setDegraded(false);

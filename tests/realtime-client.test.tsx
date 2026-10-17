@@ -87,6 +87,25 @@ describe("useIncidentUpdates (T073)", () => {
     expect(result.current.status).toBe("online");
   });
 
+  it("full_page_catchup_still_triggers_screen_refresh", async () => {
+    // 切断中の未反映がちょうど50（満杯1ページ）で、最終ページが空になる境界。
+    // 満杯ページで採用した版も捨てず、追い上げの最後で画面を読み直させる
+    const full = Array.from({ length: 50 }, (_, i) => event(i + 1));
+    const fn = stubFetch((url) => {
+      if (!url.includes("/api/v1/events")) throw new Error(`unexpected: ${url}`);
+      if (url.includes("afterSequence=0")) return page(full, "c50");
+      if (url.includes("cursor=c50")) return page([], "c51");
+      return page([], "c99");
+    });
+
+    const { result } = renderHook(() => useIncidentUpdates(ID));
+    const before = result.current.refresh;
+    await act(async () => {}); // 満杯ページ→（間を置かず）空ページまで追い上げを流す
+    expect(eventsUrls(fn)[1]).toContain("cursor=c50"); // 追い上げはcursorで続いている
+    expect(result.current.refresh).not.toBe(before); // 満杯ページで採用した新版でも詳細を読み直す
+    expect(result.current.status).toBe("online");
+  });
+
   it("resync_required_recovers_via_snapshot_and_continues_with_new_cursor", async () => {
     let resolveSnap: ((r: Reply) => void) | null = null;
     const fn = stubFetch((url) => {
