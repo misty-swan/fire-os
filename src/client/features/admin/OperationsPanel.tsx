@@ -139,8 +139,11 @@ export function OperationsPanel({ enabled }: { enabled: boolean }) {
                 value={costRuns.length > 0 ? usd(costTotal) : "—"}
                 hint={costRuns.length > 0 ? `記録済みの${costRuns.length}件のみ` : "単価が固定された記録がまだ無い"}
               />
+              {/* Workers・D1・地図はアプリ内では計測できない（0と偽装せず「未計上」と示す。docs/03） */}
+              <Figure label="Workers・D1・地図の利用量" value="未計上" hint="Cloudflare管理画面で確認" />
             </div>
             <p className="text-[11px] leading-[1.6] text-ink-muted">費用の出典: {costSource}</p>
+            <p className="text-[11px] leading-[1.6] text-ink-muted">表示は最新の実行20件分の合計です。</p>
             {failedRuns.length > 0 && (
               <ul aria-label="失敗した実行" className="flex flex-col gap-1.5">
                 {failedRuns.slice(0, 5).map((r) => (
@@ -161,6 +164,7 @@ export function OperationsPanel({ enabled }: { enabled: boolean }) {
         <p className="text-[12px] font-bold text-ink-sub">費用・停止の記録（監査）</p>
         <p className="text-[12px] leading-[1.6] text-ink-muted">
           上限の接近・超過は自動で通知されません。この記録と下のしきい値を見て、運用手順（ops/cost-alerts.md）に従って対応します。
+          表示は最新の監査10件分のみです。
         </p>
         {audit === "loading" && <p role="status" className="text-[13px] text-ink-muted">読み込んでいます…</p>}
         {audit === "error" && <Notice tone="warning" icon="error" role="status">記録を取得できませんでした。</Notice>}

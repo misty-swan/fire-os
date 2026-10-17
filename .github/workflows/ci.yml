@@ -9,11 +9,16 @@ on:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+# 権限は最小限（checkoutのみ）。check:migrationsの基準ref（origin/main）を取るために完全履歴でcheckoutする
+permissions:
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

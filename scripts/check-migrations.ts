@@ -1,6 +1,9 @@
 // migrationの互換性・段階化の静的検査（T078）。scripts/migrate.ts の連番規律（欠番・重番を拒否）と矛盾させない。
-// - 純関数（checkMigrationCompatibility / parseManifest / migrationSequenceProblems）は試験（tests/deploy-config.test.ts）から
-//   直接呼ぶ。CLI（`npm run check:migrations`）は drizzle/ の実ファイルと git HEAD（適用済み履歴の基準）を比較する。
+// - 純関数（checkMigrationCompatibility / parseManifest / migrationSequenceProblems / pickHistoryRef）は
+//   試験（tests/deploy-config.test.ts）から直接呼ぶ。CLI（`npm run check:migrations`）は drizzle/ の実ファイルと
+//   履歴の基準ref（既定の選択順: origin/main → HEAD~1 → HEAD。`--base`で上書き）を比較する。
+//   作業ツリーと一致するHEADを基準にすると適用済み履歴の書き換え検出が恒真になるため（review round 1）、
+//   origin/mainがあればそちらを基準にする。CIはfetch-depth: 0でcheckoutする（.github/workflows/ci.yml）。
 // - 方針は forward-fix。schema rollbackは「コードを戻すだけでは解決しない」（ops/deploy.md §4.2）ため、
 //   破壊的変更は expand → backfill → contract に段階化することだけをファイルレベルで強制する:
 //   削除等を含むmigrationには `-- deploy: contract` と `-- requires: <expandのNNNN>` を書く。
@@ -48,6 +51,24 @@ const DESTRUCTIVE_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
 ];
 const CONTRACT_MARKER = /^\s*--\s*deploy:\s*contract\b/m;
 const REQUIRES_MARKER = /^\s*--\s*requires:\s*(\d{4})/m;
+
+/** 履歴比較の基準ref候補（選択順に並べる。CLIが実gitでavailableを判定し、試験は注入する） */
+export interface RefCandidate {
+  ref: string;
+  available: boolean;
+}
+
+/**
+ * 履歴比較の基準refを選ぶ（候補配列→選択の純関数。review round 1）。
+ * 選択順は候補の並びどおり: ①origin/main（CIの完全履歴checkoutが持つ）→ ②HEAD~1 → ③HEAD。
+ * 書き換え検出は「基準ref」と「作業ツリー」が違って初めて検出するため、作業ツリー自身（HEAD）を
+ * 基準にすると恒真になる。どの候補も利用できなければ最後の候補（HEAD）を返す
+ * （基準を空にしない。書き換え検出は空振りするが、連番・破壊的変更の単独検査は効く）。
+ */
+export function pickHistoryRef(candidates: readonly RefCandidate[]): string {
+  const available = candidates.find((candidate) => candidate.available);
+  return (available ?? candidates.at(-1))?.ref ?? "HEAD";
+}
 
 export function checkMigrationCompatibility(previous: SchemaManifest, next: SchemaManifest): CompatibilityResult {
   const failures: string[] = [];
@@ -111,7 +132,7 @@ async function lazyChildProcess(): Promise<NodeCp> {
   return (await import(/* @vite-ignore */ specifier)) as NodeCp;
 }
 
-/** gitのref（既定HEAD＝適用済み履歴の基準）からmanifestを組む。gitが使えない場合は空（全件を新規扱い）。 */
+/** gitのref（履歴比較の基準）からmanifestを組む。gitが使えない場合は空（全件を新規扱い）。 */
 async function loadManifestAtRef(ref: string): Promise<SchemaManifest> {
   try {
     const cp = await lazyChildProcess();
@@ -136,13 +157,39 @@ async function loadManifestAtRef(ref: string): Promise<SchemaManifest> {
   }
 }
 
+/** `--base <ref>` / `--base=<ref>` を読む（手動検査・試験で基準を固定したいとき。省略時は選択順に従う） */
+function parseBaseRef(argv: readonly string[]): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--base") return argv[i + 1];
+    if (argv[i]?.startsWith("--base=")) return argv[i]!.slice("--base=".length);
+  }
+  return undefined;
+}
+
+/** refが存在するか（`git rev-parse --verify --quiet`。gitが使えない環境では無い扱いにする） */
+async function refAvailable(ref: string): Promise<boolean> {
+  try {
+    const cp = await lazyChildProcess();
+    const result = cp.spawnSync("git", ["rev-parse", "--verify", "--quiet", ref], { encoding: "utf8" as const });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
 async function main(): Promise<number> {
   const fs = await lazyFs();
   const names = fs.readdirSync("drizzle").filter((file) => file.endsWith(".sql")).sort();
   const files: Record<string, string> = {};
   for (const name of names) files[name] = fs.readFileSync(`drizzle/${name}`, "utf8");
   const next = parseManifest(files);
-  const previous = await loadManifestAtRef("HEAD");
+  const base = parseBaseRef(process.argv.slice(2)) ??
+    pickHistoryRef([
+      { ref: "origin/main", available: await refAvailable("origin/main") },
+      { ref: "HEAD~1", available: await refAvailable("HEAD~1") },
+      { ref: "HEAD", available: true },
+    ]);
+  const previous = await loadManifestAtRef(base);
 
   const compat = checkMigrationCompatibility(previous, next);
   const problems = [...migrationSequenceProblems(names), ...compat.failures];
@@ -150,7 +197,7 @@ async function main(): Promise<number> {
     console.error("migration検査に失敗:\n- " + problems.join("\n- "));
     return 1;
   }
-  console.log(`migration検査OK: ${next.entries.length}件 / 連番・適用済み履歴（HEAD基準）・破壊的変更の段階化`);
+  console.log(`migration検査OK: ${next.entries.length}件 / 連番・適用済み履歴（基準ref: ${base}）・破壊的変更の段階化`);
   return 0;
 }
 

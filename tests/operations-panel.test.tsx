@@ -71,6 +71,13 @@ describe("OperationsPanel (T080)", () => {
     // 費用合計はcostUsdを持つ1件だけ（0.042。無い実行を0と偽装して合算しない）
     expect(screen.getByText("$0.042")).toBeTruthy();
     expect(screen.getByText("記録済みの1件のみ")).toBeTruthy();
+    // アプリ内で計測できない利用量はFigureとして「未計上」と示す（0と偽装しない。docs/03どおり。review round 1）
+    expect(screen.getByText("Workers・D1・地図の利用量")).toBeTruthy();
+    expect(screen.getByText("未計上")).toBeTruthy();
+    expect(screen.getByText("Cloudflare管理画面で確認")).toBeTruthy();
+    // 合計の窓（既存の読み取り経路の最新N件）を明示する（review round 1）
+    expect(screen.getByText("表示は最新の実行20件分の合計です。")).toBeTruthy();
+    expect(screen.getByText(/表示は最新の監査10件分のみです/)).toBeTruthy();
     // 失敗した実行は合格と数えない（失敗・未判定=1件）
     expect(screen.getByText("1件")).toBeTruthy();
     // 監査の記録は理由コードの日本語で出る

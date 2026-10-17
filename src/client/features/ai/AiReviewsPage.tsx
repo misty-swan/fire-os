@@ -107,10 +107,11 @@ export async function findCandidatesForSource(
 }
 
 /** 候補が無いjobの保留理由（jobのerror_code。docs/06 §2「原本を失わず失敗表示する」） */
-const JOB_ERROR_LABELS: Record<string, string> = {
+export const JOB_ERROR_LABELS: Record<string, string> = {
   ai_unavailable: "この環境ではAIを使えないため、自動分類は保留になりました（元の記録は変わっていません）。",
   ai_output_invalid: "AIの応答が契約外だったため、保留になりました（元の記録は変わっていません）。",
   input_too_large: "元の記録が大きすぎるため、保留になりました（元の記録は変わっていません）。",
+  budget_stopped: "AIの月次上限に達したため、人の確認用に保留になりました（元の記録は変わっていません）。停止の解除は運用側で行います。",
   source_changed: "依頼の後に元の記録が変わったため、この結果は採用しません。現行版で再依頼してください。",
   requester_unauthorized: "依頼した人が権限を失ったため、この結果は採用しません。",
   question_version_unknown: "質問の版が廃止されたため、この結果は採用しません。",

@@ -15,11 +15,16 @@ on:
 concurrency:
   group: deploy-production
   cancel-in-progress: false
+# 権限は最小限（checkoutのみ）。SecretはGitHub Environment "production" 経由の参照だけで受ける
+permissions:
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -40,6 +45,8 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc

@@ -9,7 +9,7 @@ import {
   type DeploymentConfig,
   type WranglerEnvConfig,
 } from "../scripts/check-environment";
-import { checkMigrationCompatibility, parseManifest } from "../scripts/check-migrations";
+import { checkMigrationCompatibility, parseManifest, pickHistoryRef } from "../scripts/check-migrations";
 
 /**
  * 配置ゲートの静的検査（T078、docs/08 CT-15、docs/13 RG-09、docs/02 §2）。
@@ -214,6 +214,39 @@ describe("deploy-config (T078)", () => {
           expect(line, line).toMatch(/\$\{\{ secrets\./);
         }
       }
+    }
+  });
+
+  it("history_base_ref_selection_prefers_origin_main_then_head_1_then_head", () => {
+    // 適用済み履歴の書き換え検出は「基準ref」と「作業ツリー」が違って初めて検出する（review round 1）。
+    // CIのcheckout（=HEAD）を基準にすると恒真になるため、基準の選択順を純関数（候補配列→選択）で
+    // 固定して試験する: ①origin/main（CIがfetch-depth: 0で持ってくる）②HEAD~1（ローカルの単独commit）
+    // ③HEAD（gitが使えない最低限。書き換え検出は空振りするが単独検査は効く）。
+    const candidates = (originMain: boolean, head1: boolean) => [
+      { ref: "origin/main", available: originMain },
+      { ref: "HEAD~1", available: head1 },
+      { ref: "HEAD", available: true },
+    ];
+    expect(pickHistoryRef(candidates(true, true))).toBe("origin/main");
+    expect(pickHistoryRef(candidates(false, true))).toBe("HEAD~1");
+    expect(pickHistoryRef(candidates(false, false))).toBe("HEAD");
+    // 全候補が利用できなくても基準が空にならない（比較基準が無い状態を作らない）
+    expect(pickHistoryRef([
+      { ref: "origin/main", available: false },
+      { ref: "HEAD~1", available: false },
+      { ref: "HEAD", available: false },
+    ])).toBe("HEAD");
+  });
+
+  it("workflows_declare_read_only_permissions_and_fetch_full_history_for_migration_base", () => {
+    // A要1（review round 1）: workflowの権限は contents: read の最小限（workflowに書込権限を持たせない）
+    for (const yaml of [ciYaml, deployStagingYaml, deployProductionYaml]) {
+      expect(yaml).toMatch(/^permissions:\n {2}contents: read$/m);
+    }
+    // 指摘1（review round 1）: check:migrationsの基準ref（origin/main）がCI上で存在するように、
+    // 完全履歴でcheckoutする（浅いcheckoutではorigin/mainが無く、書き換え検出が空振りする）
+    for (const yaml of [ciYaml, deployStagingYaml, deployProductionYaml]) {
+      expect(yaml).toContain("fetch-depth: 0");
     }
   });
 });

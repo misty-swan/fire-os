@@ -44,11 +44,12 @@ import { REPORT_VERSION_STATUS, ReportVersionDiff } from "./ReportVersionDiff";
 const REPORT_TEMPLATE_VERSION = "test-activity-v1";
 
 /** 生成jobの保留理由の日本語（jobのerror_code。docs/06 §2「原本を失わず失敗表示する」） */
-const REPORT_JOB_ERROR_LABELS: Record<string, string> = {
+export const REPORT_JOB_ERROR_LABELS: Record<string, string> = {
   ai_unavailable: "この環境ではAIを使えないため、下書きの自動作成は保留になりました（元の実績は変わっていません）。手動で作成できます。",
   ai_output_invalid: "AIの応答が契約外だったため、保留になりました（元の実績は変わっていません）。手動で作成できます。",
   ai_run_failed: "AIの呼び出しが失敗したため、再試行しています。完了するまで報告書は現れません。",
   input_too_large: "元の実績が大きすぎるため、保留になりました（元の実績は変わっていません）。手動で作成できます。",
+  budget_stopped: "AIの月次上限に達したため、人の確認用に保留になりました（元の実績は変わっていません）。停止の解除は運用側で行います。手動で作成できます。",
   source_changed: "依頼の後に元の実績が変わったため、この結果は採用しません。現行版で再依頼してください。",
   requester_unauthorized: "依頼した人が権限を失ったため、この結果は採用しません。",
   template_version_unknown: "様式の版が使えなくなったため、この結果は採用しません。",

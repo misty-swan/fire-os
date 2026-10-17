@@ -404,9 +404,14 @@ describe("メトリクス・課金予兆・上限停止 (T080)", () => {
     expect(limited.status).toBe("stopped"); // 429の多発は停止
     expect(limited.reasons).toContain("ai_rate_limited_over");
 
-    const costly = evaluateBudget({ ...snapshot, aiTokensInput: 200_000_000 }, BUDGET_POLICY); // 単価固定分のみの下限試算
+    // 月累計（month-to-date）の費用試算が月額上限を超えると停止（review round 1で月累計判定に統一）。
+    // 当日のtokensだけでは発火しない量でも、当月の累計で判定する（units-review-1の月次実績に相当する注入）
+    const costly = evaluateBudget({ ...snapshot, monthAiTokensInput: 200_000_000 }, BUDGET_POLICY); // 単価固定分のみの下限試算
     expect(costly.reasons).toContain("monthly_cost_estimate_over");
     expect(costly.expensiveCallsAllowed).toBe(false);
+    // 対照: 当日のtokensが多く見えても月累計が上限未満なら費用理由では止めない（日次の枠は別理由で効く）
+    const notCostlyYet = evaluateBudget({ ...snapshot, aiTokensInput: 200_000_000, monthAiTokensInput: 1_000_000 }, BUDGET_POLICY);
+    expect(notCostlyYet.reasons).not.toContain("monthly_cost_estimate_over");
 
     // --- 停止前の対照: 通常量では分類が成功し、使用量が計上される ---
     const callsBeforeSuccess = await knownSum("ai", "ai.calls");
@@ -521,5 +526,49 @@ describe("メトリクス・課金予兆・上限停止 (T080)", () => {
     expect(existingRecordsReadable).toBe(true);
     expect(unknownRows.every((r) => r.amount === null)).toBe(true); // unknownUsageMarkedZero=false
     expect(piiInMetrics).toEqual([]);
+  });
+
+  it("monthly_cost_estimate_is_computed_from_month_to_date_tokens_not_single_day", async () => {
+    // 月額の費用上限は「当月初日（UTC）以降の累計（month-to-date）」で判定する（review round 1）。
+    // 旧実装は当日のtokensだけを月額上限と比べていたため、月額上限が実質発火しなかった。
+    // 同一月内の2日で、各日のtokensは上限未満・月累計は超過 → monthly_cost_estimate_over で停止。
+    // 前月末（2026-02-28）の大量行は月累計に含めない（月初境界。当日が月初の週でも取得窓が前月に跨る）。
+    const now = new Date("2026-03-05T12:00:00.000Z");
+    const evalAt = async () => evaluateBudget(await buildUsageSnapshot(env, { now }), BUDGET_POLICY);
+    const seedTokens = async (isoDay: string, amount: number) =>
+      recordMetric(env, { service: "ai", metric: "ai.tokens.input", unit: "tokens", amount, source: "seed:month-mtd" }, { now: new Date(isoDay) });
+
+    // 前月末の大量行（誤って月累計に入ると単独で上限超になる量）と、当月1日分（上限未満）
+    await seedTokens("2026-02-28T10:00:00.000Z", 200_000_000);
+    await seedTokens("2026-03-04T10:00:00.000Z", 60_000_000);
+
+    // 1日分のtokensは費用上限未満（60M×$0.042/M=$2.52 < $5）。月累計もまだ未満 → 停止しない
+    const beforeOver = await evalAt();
+    expect(beforeOver.reasons).not.toContain("monthly_cost_estimate_over");
+    expect(beforeOver.status).not.toBe("stopped");
+
+    // 当月の2日目を足すと月累計$5.04 > $5 → monthly_cost_estimate_over で停止
+    await seedTokens("2026-03-05T10:00:00.000Z", 60_000_000);
+    const afterOver = await evalAt();
+    expect(afterOver.reasons).toContain("monthly_cost_estimate_over");
+    expect(afterOver.status).toBe("stopped");
+    expect(afterOver.expensiveCallsAllowed).toBe(false);
+
+    // snapshotの月累計は当月初日以降の全行（120M）。前月末の200Mは含まない
+    const snap = await buildUsageSnapshot(env, { now });
+    expect(snap.monthAiTokensInput).toBe(120_000_000);
+    expect(snap.aiTokensInput).toBe(60_000_000); // 当日の集計（日次の意味）は変わらない
+  });
+
+  it("spike_baseline_keeps_recent_window_even_when_query_window_extends_to_month_start", async () => {
+    // 取得窓を当月初日まで広げても、急増判定の基準（直近spikeWindowDays日の平均）の意味は変えない:
+    // 窓の中で基準期間より前の日のAI呼出しはbaselineに入れない（review round 1）。
+    const now = new Date("2026-03-15T12:00:00.000Z"); // 急増の基準期間=03-08〜03-14。取得窓は当月初日03-01から
+    const seedCalls = async (isoDay: string, amount: number) =>
+      recordMetric(env, { service: "ai", metric: "ai.calls", unit: "count", amount, source: "seed:month-spike" }, { now: new Date(isoDay) });
+    await seedCalls("2026-03-03T10:00:00.000Z", 60); // 当月初日以降だが急増の基準期間より前
+    await seedCalls("2026-03-10T10:00:00.000Z", 10); // 基準期間内
+    const snap = await buildUsageSnapshot(env, { now });
+    expect(snap.priorAiCalls).toEqual([{ day: "2026-03-10", known: 10 }]);
   });
 });

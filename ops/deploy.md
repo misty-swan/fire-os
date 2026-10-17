@@ -22,7 +22,7 @@ CI（`.github/workflows/ci.yml`）と配置workflowの `verify` ジョブは、�
 
 1. `npm run typecheck` — 型検査（tsc --noEmit。lint/formatterの代わりの主ゲート）
 2. `npm run check:contracts` — API台帳×docs/05×OpenAPIの一致（古い生成物の検出）
-3. `npm run check:migrations` — 連番（欠番・重番の拒否。migrate.tsと同じ規律）、適用済み履歴の書き換え検出（git HEAD比較）、破壊的変更の段階化（次節のマーカー）
+3. `npm run check:migrations` — 連番（欠番・重番の拒否。migrate.tsと同じ規律）、適用済み履歴の書き換え検出（基準ref＝origin/main。無ければHEAD~1。`--base`で上書き可。CIはfetch-depth: 0でcheckoutする）、破壊的変更の段階化（次節のマーカー）
 4. `npm run build` — vite build → dist/client
 5. `npm run check:environment` — **Secret検査を含む**: 4環境の必須binding・資源分離（demo→production参照の拒否、RG-09/CT-15）、/apiをSPA fallbackへ流さない設定、varsとdist/にSecret名が現れないこと
 6. `npx vitest --run` — workers（実workerd＋D1/Queues）とclient（jsdom）の両方

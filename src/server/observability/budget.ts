@@ -21,7 +21,7 @@ import { METRIC_SERVICES, dayUtcOf, type MetricService } from "./metrics";
 
 export type { BudgetPolicy };
 
-/** 評価の入力（docs/16 T080のUsageSnapshot）。1日（UTC暦日）の使用量をservice別に集めたもの */
+/** 評価の入力（docs/16 T080のUsageSnapshot）。当日（UTC暦日）の使用量と当月のtokens累計をservice別に集めたもの */
 export interface UsageSnapshot {
   day: string;
   /** AI呼出しの試行（ai.callsの既知合計。usageの未知/既知と無関係に1試行=1） */
@@ -31,6 +31,9 @@ export interface UsageSnapshot {
   /** usage未知を含むtokens等の合計には入らない行数（0と偽装しないための別枠） */
   aiTokensInput: number;
   aiTokensOutput: number;
+  /** 当月初日（UTC）以降のtokens累計（month-to-date。月額の費用試算に使う。unknownは含まず、前月末の行は含めない。review round 1） */
+  monthAiTokensInput: number;
+  monthAiTokensOutput: number;
   /** providerの応答制限（429。ai.rate_limited） */
   aiRateLimited: number;
   /** 通知の配送試行（notification.deliveries） */
@@ -96,13 +99,17 @@ export const UNMEASURED_SERVICES: readonly MetricService[] =
   METRIC_SERVICES.filter((s) => s === "workers" || s === "d1" || s === "maps");
 
 /**
- * 使用量のsnapshotを作る（今日＋急増判定の基準日。1本の集計SQLでusage_metricsを読む）。
+ * 使用量のsnapshotを作る（当日＋当月のtokens累計＋急増判定の基準日。1本の集計SQLでusage_metricsを読む）。
+ * 取得窓は「急増判定の直近spikeWindowDays日」と「当月初日（UTC）」の早い方（review round 1）:
+ * 月額の費用上限がmonth-to-dateのtokensで判定されるため、当月初日以降の全行が必要。
  * 使い切りの集計であり、usage_metrics自体は追記型（更新・削除しない。opsが月次で実請求と照合する）。
  */
 export async function buildUsageSnapshot(env: Pick<AppEnv, "DB">, opts: { now?: Date } = {}): Promise<UsageSnapshot> {
   const now = opts.now ?? new Date();
   const today = dayUtcOf(now);
-  const windowStart = dayUtcOf(new Date(now.getTime() - BUDGET_POLICY.spikeWindowDays * 24 * 3_600_000));
+  const spikeStart = dayUtcOf(new Date(now.getTime() - BUDGET_POLICY.spikeWindowDays * 24 * 3_600_000));
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const windowStart = spikeStart < monthStart ? spikeStart : monthStart;
   const rows = (
     await env.DB.prepare(
       "SELECT day, service, metric, " +
@@ -114,6 +121,8 @@ export async function buildUsageSnapshot(env: Pick<AppEnv, "DB">, opts: { now?: 
   ).results;
 
   const priorAiCalls: { day: string; known: number }[] = [];
+  // 当月初日以降（今日を除く）のtokens累計。今日の分はsnapに集計してから合算する
+  const monthTokensBeforeToday = { input: 0, output: 0 };
   const snap = {
     day: today,
     aiCallsKnown: 0,
@@ -132,9 +141,14 @@ export async function buildUsageSnapshot(env: Pick<AppEnv, "DB">, opts: { now?: 
   for (const r of rows) {
     snap.unknownRows += r.unknown_rows;
     if (r.day !== today) {
-      // 今日より前は急増判定の基準（AI呼出しのみ。他serviceは予兆判定に使わない）
-      if (r.service === "ai" && r.metric === "ai.calls") {
+      // 今日より前は2つに使う: 急増判定の基準（直近spikeWindowDays日のAI呼出しのみ。取得窓を
+      //   当月初日まで広げてもbaselineの意味は変えない）と、当月初日以降のtokens（月累計。前月末は含めない）
+      if (r.day >= spikeStart && r.service === "ai" && r.metric === "ai.calls") {
         priorAiCalls.push({ day: r.day, known: r.known_amount });
+      }
+      if (r.day >= monthStart && r.service === "ai") {
+        if (r.metric === "ai.tokens.input") monthTokensBeforeToday.input += r.known_amount;
+        else if (r.metric === "ai.tokens.output") monthTokensBeforeToday.output += r.known_amount;
       }
       continue;
     }
@@ -157,7 +171,13 @@ export async function buildUsageSnapshot(env: Pick<AppEnv, "DB">, opts: { now?: 
       else if (r.metric === "sync.rejected") snap.syncRejections += r.known_amount;
     }
   }
-  return { ...snap, unmeasuredServices: UNMEASURED_SERVICES, priorAiCalls: priorAiCalls.sort((x, y) => (x.day < y.day ? -1 : 1)) };
+  return {
+    ...snap,
+    monthAiTokensInput: monthTokensBeforeToday.input + snap.aiTokensInput,
+    monthAiTokensOutput: monthTokensBeforeToday.output + snap.aiTokensOutput,
+    unmeasuredServices: UNMEASURED_SERVICES,
+    priorAiCalls: priorAiCalls.sort((x, y) => (x.day < y.day ? -1 : 1)),
+  };
 }
 
 /** 費用の出典（管理画面・監査・試験が「実請求との照合は未実施」を示し続けるための常時注記） */
@@ -176,13 +196,14 @@ export function evaluateBudget(usage: UsageSnapshot, policy: BudgetPolicy, opts:
   if (usage.notifications > policy.dailyNotificationCap) reasons.push("daily_notifications_over");
   if (usage.aiRateLimited > policy.maxRateLimitedPerDay) reasons.push("ai_rate_limited_over");
 
-  // 費用の下限試算: 単価が固定されている分だけ（LLM等の未固定単価は含まない＝勝手に推計しない）
+  // 費用の下限試算: 当月初日以降の記録済みusage（month-to-date。月額の上限と比較する。review round 1）。
+  // 単価が固定されている分だけ（LLM等の未固定単価は含まない＝勝手に推計しない）
   const priceIn = policy.prices.aiInputUsdPerMTokens;
   const priceOut = policy.prices.aiOutputUsdPerMTokens;
   const costEstimateUsd =
     priceIn === null && priceOut === null
       ? null
-      : Math.round(((usage.aiTokensInput * (priceIn ?? 0) + usage.aiTokensOutput * (priceOut ?? 0)) / 1_000_000) * 1e6) / 1e6;
+      : Math.round(((usage.monthAiTokensInput * (priceIn ?? 0) + usage.monthAiTokensOutput * (priceOut ?? 0)) / 1_000_000) * 1e6) / 1e6;
   if (costEstimateUsd !== null && costEstimateUsd > policy.monthlyLimitUsd) reasons.push("monthly_cost_estimate_over");
 
   // 急増: 基準日（window内の平均）と比べてspikeFactor倍超。立ち上げ期の誤検知をspikeMinCallsで避ける
