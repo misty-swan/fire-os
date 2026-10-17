@@ -1,0 +1,64 @@
+# production配置（T078）。正式リリース判定（docs/13 の全ゲート合格と管理主体＋開発責任者の承認）を
+# 終えた版のみ配置する。判定前の動作確認は必ず検証側環境で行うこと（ops/deploy.md §2/§3）。
+# 実行されない限り何もしない: 手動起動（workflow_dispatch）のみで、confirm 入力が正確に "production" で、
+# main からの起動でなければ各ジョブは動かない。加えてGitHub側でEnvironment "production" の
+# 保護ルール（承認者レビュー）を設定すること（手順は ops/deploy.md §3）。
+# Secretの値はこのファイルに書かない。実施前にはD1 exportとR2のmanifestを取る（ops/deploy.md §3）。
+name: deploy-production
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "誤起動防止。production と正確に入力された場合のみ配置する"
+        required: true
+        type: string
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run check:contracts
+      - run: npm run check:migrations
+      - run: npm run build
+      - run: npm run check:environment
+      - run: npx vitest --run
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'production'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check:environment
+      - name: D1 migration（expand（追加のみ）を先に適用し、旧workerとの互換を保つ）
+        run: npm run migrate -- --env production --remote --yes-i-know
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_PRODUCTION }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_PRODUCTION }}
+      - name: Worker deploy
+        run: npx wrangler deploy --env production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_PRODUCTION }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_PRODUCTION }}
+      - name: 配置確認（稼働versionを記録。障害時は ops/deploy.md §4 のrollback手順）
+        run: npx wrangler deployments list --env production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_PRODUCTION }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_PRODUCTION }}

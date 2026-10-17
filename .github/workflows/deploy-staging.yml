@@ -1,0 +1,55 @@
+# staging配置（T078）。手動起動のみ。verifyジョブ（全ゲート）に通らなければdeployは実行されない（needs）。
+# Secretの値はこのファイルに書かない。GitHub Environment "staging" に、staging資源だけに権限を狭した
+# API token と account ID を登録し、このworkflowからは secrets 経由の名前だけで参照する。手順の正本は ops/deploy.md。
+name: deploy-staging
+on:
+  workflow_dispatch:
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run check:contracts
+      - run: npm run check:migrations
+      - run: npm run build
+      - run: npm run check:environment
+      - run: npx vitest --run
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run check:environment
+      - name: D1 migration（expand（追加のみ）を先に適用し、旧workerとの互換を保つ）
+        run: npm run migrate -- --env staging --remote --yes-i-know
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STAGING }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_STAGING }}
+      - name: Worker deploy
+        run: npx wrangler deploy --env staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STAGING }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_STAGING }}
+      - name: 配置確認（稼働versionを記録。障害時は ops/deploy.md §4 のrollback手順）
+        run: npx wrangler deployments list --env staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STAGING }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_STAGING }}

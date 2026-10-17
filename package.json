@@ -16,6 +16,8 @@
     "test:live": "vitest --run --config vitest.live.config.ts",
     "test:load": "echo 'test:load は PH7 で実装' && exit 1",
     "check:contracts": "tsx scripts/check-contracts.ts",
+    "check:environment": "tsx scripts/check-environment.ts",
+    "check:migrations": "tsx scripts/check-migrations.ts",
     "check:coverage": "echo 'check:coverage は PH7 で実装' && exit 1",
     "migrate": "tsx scripts/migrate.ts",
     "generate:contracts": "tsx scripts/check-contracts.ts --write",
