@@ -16,7 +16,7 @@ import { securityHeaders } from "./headers";
  *   認証経路（/api/auth/*）はライブラリがD1に数えるuser/IP単位の上限（src/server/auth/config.tsのrateLimit。
  *   sign-in/sign-up 5回/分）が担当。
  * - アプリ内の計数は**isolate内のメモリ**（Workerの1実行体）でしかない。厳密な全体上限はCloudflare側の
- *   WAF/Rate Limiting製品層で行う前提（docs/evidence/security.mdの限界節、T087で確認）。
+ *   WAF/Rate Limiting製品層で行う前提（docs/evidence/security.mdの限界節、T086で確認）。
  * - 計数のstateはrulesのオブジェクト（WeakMapの鍵。policyの次元ごと）に分く。index.tsは要求ごとにcreateAppを
  *   再構築するため、middlewareをclosureにすると計数が1要求で消える——そのためstateはモジュール側に
  *   置き、既定policyのstateはisolateの生存期間で共有する。
@@ -41,7 +41,7 @@ export interface SecurityPolicy {
   userRateLimit?: Record<RateLimitBucket, RateLimitRule>;
 }
 
-/** 開発設定（未承認。docs/07の上限案を「開発設定」として置いたもの。実環境の値はT087の負荷検証とD11の承認で確定）。 */
+/** 開発設定（未承認。docs/07の上限案を「開発設定」として置いたもの。実環境の値はT086の負荷検証とD11の承認で確定）。 */
 export const DEVELOPMENT_SECURITY_POLICY: SecurityPolicy = {
   rateLimit: {
     // 認証はライブラリのD1上限（sign-in/sign-up等 5回/分/IP）が実効上限。この層はそれより広い後段の防衛線

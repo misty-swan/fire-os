@@ -9,7 +9,7 @@ import type { AppBindings } from "../env";
  *   Content-Type/Content-Disposition/nosniffは上書きしない（**値が無い場合だけ付ける**）。
  * - cache-control: no-store もここで一括して付ける（従来index.tsのOrigin middlewareが付けていたものを
  *   集約。個別routeがprivate,no-store等を既に設定している場合はそれを優先する）。
- * - SPA静的asset（ASSETS.fetch）は対象外。実CDN/WAF層の設定と併せてT087で確認する
+ * - SPA静的asset（ASSETS.fetch）は対象外。実CDN/WAF層の設定と併せてT086で確認する
  *   （docs/evidence/security.mdの限界節）。
  */
 export const API_SECURITY_HEADERS: Readonly<Record<string, string>> = {
