@@ -15,9 +15,12 @@ if (process.argv.includes("--reset")) {
 }
 sh("npx", ["tsx", "scripts/ensure-dev-vars.ts"]);
 
+// 起動のたびに未適用のmigrationを流す（wranglerは適用済みを記録するため冪等。前回のデータは消さない）。
+// 初回だけだと、古いデータで起動したときに後続PHで増えた表が無く500になる（activities等）。
+const mig = sh("npx", ["wrangler", "d1", "migrations", "apply", "DB", "--local", "--persist-to", PERSIST]);
+if (mig.status !== 0) throw new Error(mig.stderr || mig.stdout);
+
 if (!existsSync(PERSIST)) {
-  const m = sh("npx", ["wrangler", "d1", "migrations", "apply", "DB", "--local", "--persist-to", PERSIST]);
-  if (m.status !== 0) throw new Error(m.stderr || m.stdout);
   const b = sh("npx", [
     "tsx", "scripts/bootstrap-admin.ts", "--env", "local", "--persist-to", PERSIST,
     "--unit-name", "架空市 第一分団", "--admin-name", "架空 管理者", "--email", "admin@example.test",
