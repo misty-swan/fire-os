@@ -1,15 +1,15 @@
-# PH7 実行証跡（2026-10-17）
+# PH7 実行証跡（2026-10-17〜18）
 
-対象: T078〜T082（全環境のCI・migration・デプロイ/rollback手順・D1/R2のバックアップ/復元・メトリクスと課金予兆の上限停止・全APIの権限/入力/濫用試験・代表件数の性能とD1クエリ費用）。実行環境はローカル（Node v26 / workerd / wrangler 4.x / vitest / Playwright chromium）。**実Cloudflare・実GitHub Actions・実staging・実D1・実R2・実端末は使っていない（wrangler未ログイン。PH0〜PH6から継続で未接続）**。D1はwranglerのローカルシミュレータ。migrationは0032（usage_metrics/budget_state〔T080〕）を空DBから適用。**T082の索引追加はsnapshot.tsのACL判定バッチ化で代替のため0033は無し**（poll走査はUNIQUE(unit_id, sequence)の既存索引で有界＝クエリ計画監査）。データはすべて架空。実装はsubagent-driven（タスクごとに実装サブエージェント→タスクレビュー→修正ラウンド。**T079/T080/T081/T082が修正ラウンド1回ずつ、すべて1回で収束**。T078は修正不要）で遂行し、実装コミットは9本（b2d52dc〔T078〕・91d0193＋1c5c8bb〔T079＋docs修正〕・1bf2abb＋a1cf153〔T080〕・f90a2db＋6186bde〔T081〕・0ef82f4＋1abc273〔T082〕。実装HEAD=1abc273（docs改訂は別コミット））。証跡文書はT079/T080/T082が各自で作成（docs/evidence/V07-restore.md・cost-estimate.md・V07-performance.md）。
+対象: T078〜T082（全環境のCI・migration・デプロイ/rollback手順・D1/R2のバックアップ/復元・メトリクスと課金予兆の上限停止・全APIの権限/入力/濫用試験・代表件数の性能とD1クエリ費用）。実行環境はローカル（Node v26 / workerd / wrangler 4.x / vitest / Playwright chromium）。**実Cloudflare・実GitHub Actions・実staging・実D1・実R2・実端末は使っていない（wrangler未ログイン。PH0〜PH6から継続で未接続）**。D1はwranglerのローカルシミュレータ。migrationは0032（usage_metrics/budget_state〔T080〕）を空DBから適用。**T082の索引追加はsnapshot.tsのACL判定バッチ化で代替のため0033は無し**（poll走査はUNIQUE(unit_id, sequence)の既存索引で有界＝クエリ計画監査）。データはすべて架空。実装はsubagent-driven（タスクごとに実装サブエージェント→タスクレビュー→修正ラウンド。**T079/T080/T081/T082が修正ラウンド1回ずつ、すべて1回で収束**。T078は修正不要）で遂行し、実装コミットは9本（b2d52dc〔T078〕・91d0193＋1c5c8bb〔T079＋docs修正〕・1bf2abb＋a1cf153〔T080〕・f90a2db＋6186bde〔T081〕・0ef82f4＋1abc273〔T082〕。実装HEAD=1abc273）＋docs統合389067e＋**レビューサイクルの修正4本（64d2f33〔server/client〕・24c33c4・301166f〔docs〕・353ae0e〔comments〕）**。証跡文書はT079/T080/T082が各自で作成（docs/evidence/V07-restore.md・cost-estimate.md・V07-performance.md）。
 
 ## 実行結果
 | 確認 | コマンド | 結果 |
 |---|---|---|
 | 型検査 | `npm run typecheck` | 成功 |
 | 契約検査 | `npm run check:contracts` | **102 API / docs/05 102行 / OpenAPI一致**（PH7でAPI契約の追加・変更なし。docs/05 §1へ429共通挙動の段落追記〔T081〕のみ。OpenAPI再生成不要をcheck:contractsで確認） |
-| 単体・結合試験 | `npx vitest --run` | **64ファイル286件成功**（workers＝実workerd＋D1/Queues、client＝jsdom。PH6最終は57ファイル266件。T078=58/269→T079=59/271→T080=61/275→修正ラウンドで277→T081=64/285→修正ラウンドで286→T082=64/286。**tests/loadは`vitest.load.config.ts`の負荷設定に分離**し正規スイートから除外〔二重実行・タイムアウト事故の防止〕） |
+| 単体・結合試験 | `npx vitest --run` | **65ファイル291件成功**（workers＝実workerd＋D1/Queues、client＝jsdom。PH6最終は57ファイル266件。T078=58/269→T079=59/271→T080=61/275→修正ラウンドで277→T081=64/285→修正ラウンドで286→T082=64/286→**レビューサイクル修正ラウンド1で291**〔+1ファイル=client-job-error-labels〕。**tests/loadは`vitest.load.config.ts`の負荷設定に分離**し正規スイートから除外〔二重実行・タイムアウト事故の防止〕） |
 | 負荷試験 | `npm run test:load` | **2ファイル3件成功**（約33秒。api-load 2件＋reconnect 1件。PH7でrunnerをplaceholderのechoから本runner化＝実workerd＋実D1エンジン＋fake AI） |
-| ブラウザ試験 | `npm run test:e2e` | **87件成功＋1件失敗＋3件スキップ**（8.1分。宣言45本×phone-360/desktop-1280＋setup project。**失敗はdocuments.spec desktopの「保存しました」トースト断言＝ph5/ph6記録の既知flap型で、単独再実行は緑（2 passed）を確認済み**。両方を正直に記録。desktopの条件スキップ3本はPH5から継続） |
+| ブラウザ試験 | `npm run test:e2e` | **2回のフル実行でいずれも87件成功＋1件失敗＋3件スキップ**（1abc273時点8.1分／353ae0e〔最終〕時点7.8分。宣言45本×phone-360/desktop-1280＋setup project。**失敗は2回ともdocuments.spec desktopの「保存しました」トースト断言＝ph5/ph6記録の既知flap型で、単独再実行は2回とも緑（2 passed）**。フル実行2/2での再現はph5/ph6（各1回）より頻度が上がっており観察を強化〔下記「既知フレーキー」〕。desktopの条件スキップ3本はPH5から継続） |
 | ビルド | `npm run build` | 成功（precache 9 entries / sw.js生成） |
 | 実環境の試験 | `npm run test:live` | **未実施（実Cloudflare未接続。PH2〜PH6と同じ扱い）**: LIVE_*環境変数が揃わないためtests/live/の**9ファイル9件**がすべて「環境が未設定のため未実施」のエラーでfail（skipにはしない設計）。このharnessは実30端末測定＝V06-realtime残手順の実行体のまま |
 
@@ -30,7 +30,7 @@ T078 `demo_binding_or_incompatible_schema_blocks_deploy`（tests/deploy-config.t
 - **T080 2件**: ①停止の効かないAI消費経路〔RAG（API-76）・アシスタント（API-77）が計上・停止の対象外〕→ job handlersと同じ`expensiveCallGate`を2経路へ接続（停止中は503 DEPENDENCY_UNAVAILABLE＝fail-closed。同キー再送の保存済み応答は停止の影響なし。`ai.calls`をsource別に計上）②監視項目の無記録省略→ job滞留・配送不明・同期拒否・スキャン不能を既存成果点からcount計上（超過はwarnのみ＝**停止に使わない**。しきい値はconfigのmonitors）＋p95レイテンシは「usage_metricsは加算合計前提で分布値を載せられない」ことを理由に**未実装として記録**。
 - **T081 2件**: ①レート制限のuser次元欠落〔IP鍵のみでは同一IPの他人を巻き込む〕→ `resolvePrincipal`内部（有効性確認の直後）を第二計上点とする2層方式（全業務routeが通るため102 routeへの手書き追加不要。同一利用者の3回目が429＋`user_default`で同じIPの別利用者は200を試験）②`unclassified=[]`断言の恒真性 → 全102行の明示対応表（`CLASSIFICATION`）を`as const satisfies`で型強制し、1行抜きで実際に落ちることを確認（前節どおり）。
 - **T082 2件**: ①計画監査のゲートがsampleキーと不一致で**13監査のうち6件が断言に接続されていなかった**〔死に回路〕→ 監査キーをsampleのAPI文字列に統一（13文→8キー）し「各キーの直接断言＋sample合計（`unboundedQueryCount=0`）」の二重ゲートへ。強制発火変異で断言が落ちることを確認②reconnectの「初回要求強制失敗」が**実際には900ms待つだけ**だった〔虚偽〕→ 要求を発射したまま応答を放棄（body cancel）する**実喪失**へ変更（クライアント側timeout＝実回線の応答ロストと同じ状態。喪失10件は失敗sampleとして劣化p95の百分位に実際に入る。再送端末はbacklog全体をもう一度受領＝at-least-once）。
-- **PH7全体のレビューサイクル**（ph0〜ph6と同じ手順）は**実施中**。証跡はdocs/evidence/ph7-review.mdとしてレビューサイクル完了時に作成（本稿執筆時点では未存在）。サイクルで高・中が出た場合はコントローラがdocs/16 T081の状態を再更新する。
+- **PH7全体のレビューサイクル（ph0〜ph6と同じ手順）は完了（2026-10-18）**: 4体並行レビュー（A正確さ・セキュリティ／B完了条件・試験妥当性／C prototype準拠／D docs整合。範囲=b8c0fa6..389067e）→ 指摘**高0/中5/低16/要確認4**をメインエージェントが一件ずつ実検→確認済み中5件を失敗テスト先行で修正（64d2f33・24c33c4・301166f・353ae0e）→新しいサブエージェント2体で再レビュー→**全指摘ADDRESSED・新規の高・中0件**。証跡の正本は**docs/evidence/ph7-review.md**。docs/16 T081の状態欄もこの確定値へ更新済み。
 
 ## 未実施・未接続（検証済みとして扱わない）
 - **実環境検証はPH0〜PH6から継続で未実施**: 実Cloudflare・実Workers・実D1・実R2・実Queues・実AI・実Vectorize・実Google Maps・実端末（T083）・**実GitHub Actions**。`npm run test:live`は**未実施**（9ファイル9件が環境変数が揃わなければ必ずfailする設計＝skip＝成功扱いにしない）。**実30端末の測定（V06-realtime残手順）とT077のT033接続〔点検訂正UI完成時のoffline capture追加〕はPH7でも未接続のまま継続**。
@@ -46,5 +46,5 @@ T078 `demo_binding_or_incompatible_schema_blocks_deploy`（tests/deploy-config.t
 実装した画面部品: **OperationsPanel（SCR-17の管理画面〔AccessPanel末尾〕へのパネル追加。prototypeに該当画面が無く共通部品で構成＝docs/03 §1.1-23に理由を記録済み。routes.tsxは変更不要＝既存のAccessPanel経由でページ構成に参加）**。**パネルの実ブラウザe2eは無くjsdom試験のみで担保〔正直に記録。T083前後のe2e整備時にtests/e2e/member-admin.spec.tsへの追加を推奨〕**。トークン（Design Systemのsurface等。AI紫・警告色は既存規約どおり）と44px押下領域（再読み込みボタン`max-lg:min-h-11`）。**「実際の請求との照合は未実施」（NOT MEASURED）の常時注記**＋Workers/D1/地図が未計上である旨の注記〔実請求照合未実施を偽装しない〕。現在の停止状態の照会APIが無いため**状態は表示せず取得できるように見せない**。しきい値表は未承認の明記つき。costUsdの無い実行を費用合計に入れない。403/二要素未設定の扱いは**ゲート構造がAuditPanelと同じ**。表示は403=Notice warning（AuditPanelはBanner error）。パネルは変更操作を持たないためトースト位置は未使用。
 
 ## 既知フレーキー
-- **documents.spec desktopの「保存しました」トースト断言**: 本検証のフル実行で1件再現〔87成功＋1失敗〕・**単独再実行は緑（2 passed）**。ph5/ph6-review記録の既知flap型。観察継続。
+- **documents.spec desktopの「保存しました」トースト断言**: **PH7のフル実行2回で2回とも再現**〔1abc273・353ae0e時点。いずれも87成功＋1失敗〕・**単独再実行は2回とも緑（2 passed）**。ph5/ph6では各1回の観測だったため頻度が上がっている。**サーバー側の経路変更（T080の計上・T081のrate limit・T082のsnapshotバッチ化）は文書作成POSTに触れておらず既知のトースト表示競合の型**と判断するが、頻度上昇の要因は特定できていないため次の担当を明記する: **次にdocuments.specへ触る際（またはT083の実機確認時）にトースト断言を固定時間依存でない待ち合わせへ作り直す**（roles/status待ち等）。
 - **auth-adapter系の時間依存試験**: PH7中に2回観測〔T078報告: `verify_totp_only_revokes_other_sessions_when_it_actually_enables_mfa`〔TOTP時間依存〕・T081報告: `measures_password_hash_cost_for_v01`〔壁時計<5000msの計測〕。いずれも単独実行・フル再実行で緑＝重いフル走行で揺れる時間感応試験〕。**本検証のフル実行では再現せず**。観察継続。
