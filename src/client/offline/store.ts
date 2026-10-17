@@ -218,6 +218,45 @@ export class IndexedDbDraftStore implements DraftStore {
     }
   }
 
+  /** 写真の実体を読む（T077の同期転送用）。参照が壊れている下書きはrunnerが人に報告する（黙って飛ばさない） */
+  async getAttachment(key: string): Promise<{ data: ArrayBuffer; contentType: string; byteSize: number } | null> {
+    assertNonEmpty("key", key);
+    try {
+      const db = await this.db();
+      const tx = db.transaction(DRAFT_STORES.blobs, "readonly");
+      const row = (await requestAsPromise(tx.objectStore(DRAFT_STORES.blobs).get(key))) as
+        | { data: ArrayBuffer; contentType: string; byteSize: number }
+        | undefined;
+      return row ? { data: row.data, contentType: row.contentType, byteSize: row.byteSize } : null;
+    } catch (e) {
+      throw asStoreError(e);
+    }
+  }
+
+  /**
+   * 下書き1件と、その下書きだけが参照する写真を実削除する（T077。反映済み・人が削除した分）。
+   * 送信済みの操作は端末に残さない（docs/07「まだ送っていない業務入力」だけを置く）ため、
+   * appliedになった行はこのメソッドで消す。写真は他の下書きが同じblobKeyを参照しない前提
+   * （capture時に1下書きごとの鍵にする。store.putAttachmentの呼び出し規約）で、参照する分だけ消す。
+   */
+  async remove(clientOperationId: string): Promise<void> {
+    assertNonEmpty("clientOperationId", clientOperationId);
+    try {
+      const db = await this.db();
+      const tx = db.transaction([DRAFT_STORES.drafts, DRAFT_STORES.blobs], "readwrite");
+      const drafts = tx.objectStore(DRAFT_STORES.drafts);
+      const row = (await requestAsPromise(drafts.get(clientOperationId))) as LocalDraft | undefined;
+      drafts.delete(clientOperationId);
+      if (row) {
+        const blobs = tx.objectStore(DRAFT_STORES.blobs);
+        for (const attachment of row.attachments ?? []) blobs.delete(attachment.blobKey);
+      }
+      await transactionDone(tx);
+    } catch (e) {
+      throw asStoreError(e);
+    }
+  }
+
   /** 下書きを保存する。参照する写真が端末に無い場合は保存しない（同期に回せない壊れた下書きを残さない） */
   async put(input: LocalDraft): Promise<void> {
     validate(input);

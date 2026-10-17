@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router";
 import type { ApiResponse } from "../shared/contracts/registry";
 import { ApiError, api } from "./api";
 import { purgeForeignDrafts } from "./offline/lifecycle";
+import { startAutoSync } from "./offline/sync-runner";
+import { IndexedDbDraftStore } from "./offline/store";
 import { Banner, Button } from "./components/ui";
 
 /** API-01 の値。サイドバー・メニューの利用者表示、管理画面の出し分けに使う（権限判定そのものはサーバー） */
@@ -13,8 +15,13 @@ interface MeValue {
 }
 const MeContext = createContext<MeValue | null>(null);
 
+/** MeGateの外でも壊れない読み取り（T077のuseMutationが通信断下書きのscopeを決めるのに使う。内側では必ず取れる） */
+export function useMeOrNull(): MeValue | null {
+  return useContext(MeContext);
+}
+
 export function useMe(): MeValue {
-  const v = useContext(MeContext);
+  const v = useMeOrNull();
   if (!v) throw new Error("useMe は MeGate の内側で使います");
   return v;
 }
@@ -67,6 +74,19 @@ export function MeGate({ me: provided, children }: { me?: MeData; children: Reac
   }, []);
 
   const value = useMemo(() => (me ? { me, refresh: load } : null), [me, load]);
+
+  // 自動同期（T077・docs/16「syncStartsWithinSeconds≤60」）: 起動・online・タブ復帰で即時、逃したら30秒周期。
+  // scopeは毎回このme（認証済みAPI-01）から組み立てる（T075レビューからの持ち越し事項。引数や入力値から決めない）。
+  // 停止で実行中のパスも中断する（ログアウト時に下書きを触り続けない）
+  useEffect(() => {
+    if (!me) return;
+    return startAutoSync(() => ({
+      userId: me.profile.memberId,
+      unitId: me.unitName,
+      deviceId: IndexedDbDraftStore.deviceIdOf(),
+    }));
+  }, [me?.profile.memberId, me?.unitName]);
+
   if (value) return <MeContext.Provider value={value}>{children}</MeContext.Provider>;
   return (
     <div className="grid min-h-dvh place-items-center px-5">

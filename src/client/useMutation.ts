@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiCall, newIdempotencyKey, type ApiInput, type ApiResult } from "./api";
+import { captureOfflineDraft } from "./offline/capture";
+import { useMeOrNull } from "./me";
 import type { ApiId } from "../shared/contracts/registry";
 
 /**
@@ -44,6 +46,9 @@ export function useMutation<I extends ApiId>(id: I) {
   const [state, setState] = useState<MutationState>({ kind: "idle" });
   const inFlight = useRef(false);
   const abort = useRef<AbortController | null>(null);
+  // 通信断入力の下書き化（T077）で使う認証済みme。実行時点の値を見るためrefに置く（useCallbackのclosureを古くしない）
+  const meRef = useRef<ReturnType<typeof useMeOrNull>>(null);
+  meRef.current = useMeOrNull();
 
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -70,6 +75,12 @@ export function useMutation<I extends ApiId>(id: I) {
         // 429(待機)では、前回が実は反映済みかもしれないので同じ鍵を残す（他の内容の鍵には触れない）
         if (["invalid", "forbidden", "conflict", "rejected"].includes(next.kind)) pendingKeys.delete(signature);
         setState(next);
+        // 通信断入力（T077）: ネットワーク層の未知失敗（status 0）のときだけ、allowlistの元操作を
+        // 同じ送信鍵のまま端末下書きに置く（SCR-27から後で同期できる。結果が確定した拒否は置かない）。
+        // 画面の表示は変えない（下書きに置けないときも、この失敗表示が正として残る）
+        if (err.status === 0) {
+          void captureOfflineDraft(meRef.current?.me ?? null, id, input, key).catch(() => undefined);
+        }
         return undefined;
       } finally {
         inFlight.current = false;

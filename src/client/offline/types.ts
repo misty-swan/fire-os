@@ -52,6 +52,28 @@ export interface LocalDraft {
   createdAt: string;
   /** この時刻を過ぎた下書きは送信されず消える（expire）。D14推奨案の検証設定7日（lifecycle.DRAFT_TTL_DAYS） */
   expiresAt: string;
+  /**
+   * 同期runner（T077）が書く進行メモ（任意欄。無い行はT075作成時の形としてそのまま扱う）。
+   * 状態語彙はstatusに寄せ、判明した付帯情報（写真のattachmentId・応答不明印・サーバー側の操作ID・
+   * 保留理由）だけをここに置く。ユーザー入力は含まないためsecret検査の対象外。
+   */
+  memo?: DraftSyncMemo;
+}
+
+/** 同期runnerの進行メモ（LocalDraft.memo。任意。T075の行には無い欄なので無いものとしても動く） */
+export interface DraftSyncMemo {
+  /** blobKey → サーバーのattachmentId（転送・検査を済ませた写真の再利用。同じblobを二重に上げない） */
+  attachmentIds?: Record<string, string>;
+  /** 送信の応答が消失している（同じclientOperationIdでの照会・再送が必要。勝手に新しい鍵は作らない） */
+  responseUnknown?: boolean;
+  /** サーバーの同期操作ID（判明していればAPI-82で照会する。docs/05 API-82「本人」） */
+  syncOperationId?: string;
+  /** 最後に試みた日時（ISO） */
+  at?: string;
+  /** 保留理由の表示用（サーバーのdetails要約・写真待ちなど。STATUS_LABELと一緒にSCR-27で出す） */
+  reason?: string;
+  /** サーバーのエラーコード（VERSION_CONFLICT / IDEMPOTENCY_MISMATCH / DUPLICATE など） */
+  errorCode?: string;
 }
 
 /** 端末保存の失敗の種類。画面はquota/limitを「保存できなかった」と報告する（成功と表示しない。docs/16 T075） */
@@ -70,10 +92,17 @@ export class DraftStoreError extends Error {
   }
 }
 
-/** 端末下書きの読み書き。実装はstore.ts（IndexedDB）。scopeによる分離とログアウト消去の責務を持つ */
+/**
+ * 端末下書きの読み書き。実装はstore.ts（IndexedDB）。scopeによる分離とログアウト消去の責務を持つ
+ * （getAttachment/removeはT077の同期runnerと削除操作が使う。読みは必ず本人の鍵だけ）。
+ */
 export interface DraftStore {
   put(input: LocalDraft): Promise<void>;
   list(scope: { userId: string; unitId: string; deviceId: string }): Promise<LocalDraft[]>;
   purge(scope: DraftScope): Promise<void>;
   expire(now: string): Promise<void>;
+  /** 写真の実体を読む（同期時の転送用。無い鍵はnull＝壊れた下書きとして人に報告する） */
+  getAttachment(key: string): Promise<{ data: ArrayBuffer; contentType: string; byteSize: number } | null>;
+  /** 下書き1件と、それだけが参照する写真を実削除する（反映済み・人が削除した分。送信済みは端末に残さない） */
+  remove(clientOperationId: string): Promise<void>;
 }
