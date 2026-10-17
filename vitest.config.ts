@@ -36,7 +36,9 @@ export default defineConfig(async () => {
             name: "workers",
             include: ["tests/**/*.test.ts"],
             // offline-store（T075の端末下書き）はjsdom＋fake-indexeddbのclient側試験なのでworkersで動かさない
-            exclude: ["tests/e2e/**", "tests/live/**", "tests/offline-store.test.ts"],
+            // tests/load（T082の負荷試験）は vitest.load.config.ts（npm run test:load）で動かす。ここで動かすと
+            // 代表件数のseedが正規スイートに乗って遅くなるため除外する（二重実行・タイムアウト事故の防止）
+            exclude: ["tests/e2e/**", "tests/live/**", "tests/load/**", "tests/offline-store.test.ts"],
             globalSetup: ["./tests/helpers/build-client.ts"],
           },
         },

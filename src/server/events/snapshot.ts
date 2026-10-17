@@ -3,7 +3,7 @@ import type { EventPageDto, SyncEventDto } from "../../shared/contracts/sync";
 import { authorize } from "../auth/authorize";
 import type { AuthzPrincipal } from "../auth/principal";
 import { resolvePrincipal } from "../auth/principal";
-import { isDocumentVisible } from "../documents/authorized";
+import { documentVisibilitySql } from "../documents/authorized";
 import { systemClock } from "../clock";
 import { HttpError, type ApiContext } from "../http";
 import { requirePermission } from "../routes/invitations";
@@ -89,42 +89,107 @@ const UNIT_WIDE_VISIBLE = new Set([
   "incident_participant", "member",
 ]);
 
-/** 1行のイベントが今のACLで見えるか。管理系・宛先付きの種別は行ごとに判定する（docs/05 §8「現在のACLでfilter」） */
-async function eventVisible(env: Pick<ApiContext["env"], "DB">, p: AuthzPrincipal, row: EventRow): Promise<boolean> {
-  if (row.unit_id !== p.unitId) return false;
-  if (UNIT_WIDE_VISIBLE.has(row.entity_type)) return true;
-  // 通知（API-65「PER-12/対象者」）: 宛先本人、または管理権限（幹部・管理者）/明示scopeの保持者
-  if (row.entity_type === "notification") {
-    const managed = p.roles.includes("officer") || p.roles.includes("admin") ||
-      p.scopes.some((s) => s.entityType === "notification" && s.permissions.includes("PER-12") && s.entityId === row.entity_id);
-    if (managed) return true;
-    return await env.DB.prepare(
-      "SELECT 1 FROM notification_recipients WHERE notification_id = ? AND unit_id = ? AND member_id = ?",
-    ).bind(row.entity_id, p.unitId, p.memberId).first() !== null;
+/**
+ * 走査1バッチ（≤SCAN_BATCH行）の可視性をまとめて判定する（T082。旧eventVisible〔1行ずつのSQL〕の
+ * バッチ化。判定の語彙と結果は同一＝fail-closed・非可視は走査位置だけ進める）。
+ * 根拠: 代表件数（出欠イベント約2,300件のunitを30端末がpoll）の実測で、1行ずつの点ルックアップは
+ * 1要求あたり最大SCAN_MAX_ROWS回のSQLになりp95≈8.9秒だった（docs/evidence/V07-performance.md）。
+ * バッチ化で1走査バッチにつき種別ごと最大1回のSQL（IN句はD1のbind上限内に分割＝出欠・通知・
+ * お知らせは90件ずつ、visibility SQLのbindを伴う文書は80件ずつ。analytics/query.tsと同じ注意）。
+ * 判定規則は旧1行版と同じ（docs/05 §8・各読み取りAPIの可視規則）:
+ *  - 他unit → 非可視。UNIT_WIDE_VISIBLE → 可視。未収録種別 → 非可視（既定拒否）
+ *  - 通知（API-65「PER-12/対象者」）: 宛先本人、または管理権限（幹部・管理者）/明示scopeの保持者
+ *  - お知らせ（API-24「可視公開対象のみ」）: 対象者、または管理権限（manageVisibilityと同じ判定）
+ *  - 文書（API-90/91）: deny優先の文書ACLと撤回（authorized.tsと同じWHERE片）
+ *  - 出欠（API-07と同じ読み取り規則）: 行の本人、または親活動の管理権（PER-03）
+ */
+async function visibleFlagsOfBatch(env: Pick<ApiContext["env"], "DB">, p: AuthzPrincipal, rows: EventRow[]): Promise<boolean[]> {
+  const flags = new Array<boolean>(rows.length).fill(false);
+  const pending: Record<"notification" | "announcement" | "document" | "activity_attendance", number[]> = {
+    notification: [], announcement: [], document: [], activity_attendance: [],
+  };
+  rows.forEach((row, i) => {
+    if (row.unit_id !== p.unitId) return; // 他unitは非可視
+    if (UNIT_WIDE_VISIBLE.has(row.entity_type)) { flags[i] = true; return; }
+    if (row.entity_type === "notification") {
+      const managed = p.roles.includes("officer") || p.roles.includes("admin") ||
+        p.scopes.some((s) => s.entityType === "notification" && s.permissions.includes("PER-12") && s.entityId === row.entity_id);
+      if (managed) flags[i] = true;
+      else pending.notification.push(i);
+      return;
+    }
+    if (row.entity_type === "announcement") {
+      const manage = manageVisibility(p);
+      if (manage.all || manage.scopedIds.includes(row.entity_id)) flags[i] = true;
+      else pending.announcement.push(i);
+      return;
+    }
+    if (row.entity_type === "document") { pending.document.push(i); return; }
+    if (row.entity_type === "activity_attendance") { pending.activity_attendance.push(i); return; }
+    // 未収録の種別（報告書・招待・添付・AI等）は非可視。配信する場合は収録と権限確認をセットで
+  });
+
+  // IN句はD1のbind上限（100）を超えないよう分割する（src/server/analytics/query.tsと同じ注意）。
+  // 文書branchはvisibility SQLのbind（本人+役割の2組=最大10）を伴うため80件にする
+  const chunksOf = <T>(values: T[], size = 90): T[][] => {
+    const chunks: T[][] = [];
+    for (let i = 0; i < values.length; i += size) chunks.push(values.slice(i, i + size));
+    return chunks;
+  };
+
+  // 通知: 宛先本人の行だけ見える（API-65。旧1行版と同じ条件のIN版）
+  for (const chunk of chunksOf(pending.notification)) {
+    const ids = chunk.map((i) => rows[i]!.entity_id);
+    const found = new Set(
+      (await env.DB.prepare(
+        `SELECT notification_id FROM notification_recipients WHERE unit_id = ? AND member_id = ? AND notification_id IN (${ids.map(() => "?").join(",")})`,
+      ).bind(p.unitId, p.memberId, ...ids).all<{ notification_id: string }>()).results.map((r) => r.notification_id),
+    );
+    for (const i of chunk) if (found.has(rows[i]!.entity_id)) flags[i] = true;
   }
-  // お知らせ（API-24「可視公開対象のみ」）: 対象者、または管理権限（announcements.tsのmanageVisibilityと同じ判定）
-  if (row.entity_type === "announcement") {
-    const manage = manageVisibility(p);
-    const managed = manage.all || manage.scopedIds.includes(row.entity_id);
-    if (managed) return true;
-    return await env.DB.prepare(
-      "SELECT 1 FROM announcement_audience WHERE announcement_id = ? AND unit_id = ? AND member_id = ?",
-    ).bind(row.entity_id, p.unitId, p.memberId).first() !== null;
+
+  // お知らせ: 対象者の行だけ見える（API-24。旧1行版と同じ条件のIN版）
+  for (const chunk of chunksOf(pending.announcement)) {
+    const ids = chunk.map((i) => rows[i]!.entity_id);
+    const found = new Set(
+      (await env.DB.prepare(
+        `SELECT announcement_id FROM announcement_audience WHERE unit_id = ? AND member_id = ? AND announcement_id IN (${ids.map(() => "?").join(",")})`,
+      ).bind(p.unitId, p.memberId, ...ids).all<{ announcement_id: string }>()).results.map((r) => r.announcement_id),
+    );
+    for (const i of chunk) if (found.has(rows[i]!.entity_id)) flags[i] = true;
   }
-  // 文書（API-90/91）: deny優先の文書ACLと撤回（authorized.tsの単一の正本）
-  if (row.entity_type === "document") return isDocumentVisible(env, p, row.entity_id);
-  // 出欠（API-07と同じ読み取り規則）: 行の本人、または親活動の管理権（PER-03）。読み取りAPIが開けない
-  // 他人の回答を行は配信しない（PH6レビューA中2。activities.ts:299の行絞りと同じ判定）
-  if (row.entity_type === "activity_attendance") {
-    const attendance = await env.DB.prepare(
-      "SELECT a.member_id, a.activity_id, act.owner_member_id FROM activity_attendance a " +
-        "JOIN activities act ON act.id = a.activity_id AND act.unit_id = a.unit_id WHERE a.id = ? AND a.unit_id = ?",
-    ).bind(row.entity_id, p.unitId).first<{ member_id: string; activity_id: string; owner_member_id: string }>();
-    if (!attendance) return false; // 行が無い/別unitなら非可視（走査位置だけ進める）
-    if (attendance.member_id === p.memberId) return true;
-    return authorize(p, "PER-03", { unitId: p.unitId, type: "activity", id: attendance.activity_id, ownerMemberId: attendance.owner_member_id }).allowed;
+
+  // 文書: deny優先ACL＋撤回除外の可視集合（authorized.tsの単一の正本と同じWHERE片。1行版と同じ行集合）
+  const visibility = documentVisibilitySql(p);
+  for (const chunk of chunksOf(pending.document, 80)) {
+    const ids = chunk.map((i) => rows[i]!.entity_id);
+    const found = new Set(
+      (await env.DB.prepare(
+        `SELECT d.id FROM documents d WHERE d.unit_id = ? AND d.id IN (${ids.map(() => "?").join(",")}) AND d.status <> 'withdrawn' AND ${visibility.sql}`,
+      ).bind(p.unitId, ...ids, ...visibility.binds).all<{ id: string }>()).results.map((r) => r.id),
+    );
+    for (const i of chunk) if (found.has(rows[i]!.entity_id)) flags[i] = true;
   }
-  return false; // 未収録の種別（報告書・招待・添付・AI等）は非可視。配信する場合は収録と権限確認をセットで
+
+  // 出欠: 行の本人、または親活動の管理権（PER-03。API-07と同じ読み取り規則。行が無い/別unitは非可視）
+  for (const chunk of chunksOf(pending.activity_attendance)) {
+    const ids = chunk.map((i) => rows[i]!.entity_id);
+    const attendanceRows = (await env.DB.prepare(
+      "SELECT a.id, a.member_id, a.activity_id, act.owner_member_id FROM activity_attendance a " +
+        "JOIN activities act ON act.id = a.activity_id AND act.unit_id = a.unit_id " +
+        `WHERE a.unit_id = ? AND a.id IN (${ids.map(() => "?").join(",")})`,
+    ).bind(p.unitId, ...ids).all<{ id: string; member_id: string; activity_id: string; owner_member_id: string }>()).results;
+    const byId = new Map(attendanceRows.map((r) => [r.id, r]));
+    for (const i of chunk) {
+      const attendance = byId.get(rows[i]!.entity_id);
+      if (!attendance) continue; // 行が無い/別unitなら非可視（走査位置だけ進める）
+      if (attendance.member_id === p.memberId) { flags[i] = true; continue; }
+      if (authorize(p, "PER-03", { unitId: p.unitId, type: "activity", id: attendance.activity_id, ownerMemberId: attendance.owner_member_id }).allowed) {
+        flags[i] = true;
+      }
+    }
+  }
+  return flags;
 }
 
 const toSyncEvent = (row: EventRow): SyncEventDto => ({
@@ -221,14 +286,16 @@ export async function readEvents(ctx: ApiContext, cursor: string, explicit?: Str
   let scanned = 0;
   let rows = (firstScan!.results as unknown as EventRow[]).slice();
   for (;;) {
-    for (const row of rows) {
-      last = row.sequence;
+    // 1走査バッチ（≤SCAN_BATCH行）の可視性をまとめて判定する（T082。1行ずつのSQL→バッチ1SQL。
+    // 判定結果は旧1行版eventVisibleと同一。不可視イベントも走査位置は進める＝docs/05 §8）
+    const flags = await visibleFlagsOfBatch(ctx.env, p, rows);
+    for (let i = 0; i < rows.length; i++) {
+      last = rows[i]!.sequence;
       scanned++;
-      // 不可視イベントも走査位置は進める（docs/05 §8「非可視イベントは走査位置だけ進め」）
-      if (await eventVisible(ctx.env, p, row)) events.push(toSyncEvent(row));
-      if (events.length >= PAGE_LIMIT) break;
+      if (flags[i]) events.push(toSyncEvent(rows[i]!));
+      if (events.length >= PAGE_LIMIT) break; // ページ満杯。未走査の残りはresumeCursorの位置から再開
     }
-    // ページが満ちるか、走査上限・末尾に達したら返す（未走査の残りはresumeCursorの位置から再開）
+    // ページが満ちるか、走査上限・末尾に達したら返す
     if (events.length >= PAGE_LIMIT || rows.length < SCAN_BATCH || scanned >= SCAN_MAX_ROWS) break;
     rows = ((await scan(last).all()).results ?? []) as unknown as EventRow[];
   }
