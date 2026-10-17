@@ -12,7 +12,7 @@
 | 既送の再送が起きないことの動的観測 | 復元後に配送jobを実際に回し、provider.sendは**既送のdeliveryKeyに0回**、未送分（retry_wait）は1回（配送の継続） | deliveryKey＝通知ID＋recipient＋channelの固定キー（docs/07 §5）。「バックアップがある」ことではなく「復元後に再送が起きない」ことを観測 |
 | 旧sessionが業務に入れないこと | 復元後sessions失効（`users.session_revoked_before`＝復元点。API-38と同じ機構）で `resolvePrincipal` が401 `session_revoked` | 実ログイン（better-auth）のCookieを使い、認証ライブラリのsession行が復元で復活した状態でも業務側が拒否する経路を観測 |
 | 孤児（参照しないready実体）の照合 | `verifyRestore` がR2 list（ready/前置き）とD1の参照を突き合わせ、孤児を `orphanReadyObjects` に報告する（回収はしない。docs/07 §3.7） | CLI（wrangler）にはR2一覧が無いため、この照合はWorkers試験経路のみ。実環境ではR2インベントリ等で別途確立（未実施） |
-| 追記専用表の復元契約 | audit_logs/domain_events等（8表）はトリガーがDELETE・上書きINSERTを拒否するため、**復元先が空でないと `applyRestore` が拒否する** | 復元は「新規にschemaを作った別環境」のみ。監査・履歴を復元で書き換えられない（docs/07 §1と一致） |
+| 追記専用表の復元契約 | audit_logs/domain_events等（8表）はトリガーがDELETE・上書きINSERTを拒否するため、**復元先が空でないと `applyRestore` が拒否する** | 復元は「新規にschemaを作った別環境」のみ。監査・履歴を復元で書き換えられない（docs/07 §8と一致） |
 | `verify_restore_detects_missing_object_lost_deliveries_and_unrevoked_sessions` | 実体の欠落・hash破損・孤児・既送delivery行の復元漏れ・失効基準の改変を注入 → **全項目が報告され `ok: false`** | 検出能力の裏付け（positiveだけの空回りを防ぐ。CT-08の「消失写真/孤児/既送通知/旧sessions」の検査が効いていることの確認） |
 
 ## ローカルCLIでの実行記録（実行可能な手順の実証）

@@ -59,9 +59,9 @@ API-82照会分岐の「到達不能コード」（ph6.md記録）: **T081の同
 ## 6. 限界（実施済みと未実施の正直な区別）
 
 - **実ペネトレーションテストは未実施**。本試験は自分たちの防御（拒否・漏えい無し・効果無し）を機械展開で確認したもので、外部の専門評価ではない。
-- **レート上限はisolate内メモリ**（Workerの1実行体ごと）。複数isolateに分散する実環境では合計が上限×isolate数に緩む——**厳密な全体上限はCloudflare WAF/Rate Limiting製品層で行う前提**であり、実環境での設定と検証（T087）は未実施。
-- **実WAF/実CDN/実Workers環境**での確認（headersの実効性・IPヘッダの信頼性〔`cf-connecting-ip`の偽装可否はCloudflare層の保証〕・CSP）は未実施（T087）。
-- **SPA静的asset（ASSETS経由）へのCSPは未設定**（本タスクはAPI応答が対象。HTMLのCSPは実CDN/ホスティング設定と併せてT087で判断する）。
+- **レート上限はisolate内メモリ**（Workerの1実行体ごと）。複数isolateに分散する実環境では合計が上限×isolate数に緩む——**厳密な全体上限はCloudflare WAF/Rate Limiting製品層で行う前提**であり、実環境での設定と検証（T086）は未実施。
+- **実WAF/実CDN/実Workers環境**での確認（headersの実効性・IPヘッダの信頼性〔`cf-connecting-ip`の偽装可否はCloudflare層の保証。不在時は`x-forwarded-for`先頭へフォールバックするが、Cloudflare経由の配信では常在のため実質不使用〕・CSP）は未実施（T086）。
+- **SPA静的asset（ASSETS経由）へのCSPは未設定**（本タスクはAPI応答が対象。HTMLのCSPは実CDN/ホスティング設定と併せてT086で判断する）。
 - **ジョブ・バックグラウンド経路の内部ログ**（`mutations/execute.ts`、`src/server/jobs/`配下の`String(err)`）は本文をそのまま出す経路が残る（要求本文を含まないサーバー側jobの文脈。将来の改善点として記録）。
 - pixel完全デコード・PDFのmalware検査は未実装（docs/evidence/V02-files.mdに記録済み。T081では再実施しない）。添付の検査・取得の機微ヘッダは既存試験（attachments.test.ts等）が担保。
 - 既存の認証・招待・セッション失効・権限変更のライフサイクル試験（auth-adapter/authorization/revocation/invitations各試験）を**置き換えず拡充**の位置づけ。matrix試験はそれらと重複しない（HTTP全routeの機械展開＋深掘りのみ）。
@@ -69,4 +69,4 @@ API-82照会分岐の「到達不能コード」（ph6.md記録）: **T081の同
 ## 7. 予約欄
 
 - **重大未解決0のレビュー証跡**: PH7レビューサイクルで記録（この節は予約。実施後に結果を追記する）。
-- 実環境での遮断・rotation演習: ops/security-response.md §7（初回手順つき）をT087で実施後、結果を追記。
+- 実環境での遮断・rotation演習: ops/security-response.md §7（初回手順つき）をT084で実施後、結果を追記。

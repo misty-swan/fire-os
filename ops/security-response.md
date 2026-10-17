@@ -46,7 +46,7 @@
    対象の特定は監査と名簿から: `SELECT id, user_id, display_name FROM members WHERE ...`。名簿の休団（`members.status='paused'`）でも同じく401になる。
 2. **分団全体**を止める（漏えいの範囲がunitに及ぶ疑い）: `UPDATE units SET status='disabled' WHERE id='<unit_id>'`。解除は `status='active'`。
 3. **高価な系列（AI等）を止める**: ops/cost-alerts.md §3.6の手順（`budget_state`を`stopped, source='manual'`へ。手動停止は自動解除されない）。既存記録の閲覧は止まらない。
-4. **外部からの洪水**: アプリ内のレート上限（`src/server/security/limits.ts`。auth/ai/search/upload/既定の5バケット）はisolate内の防衛線。**全体を確実に止めるにはCloudflareのWAF/Rate Limitingルール**（ダッシュボードまたはTerraform。T087で設定手順を確定する。それまではダッシュボードの手動設定）。特定IPの遮断もCloudflare側で行う。
+4. **外部からの洪水**: アプリ内のレート上限（`src/server/security/limits.ts`。auth/ai/search/upload/既定の5バケット）はisolate内の防衛線。**全体を確実に止めるにはCloudflareのWAF/Rate Limitingルール**（ダッシュボードまたはTerraform。T086で設定手順を確定する。それまではダッシュボードの手動設定）。特定IPの遮断もCloudflare側で行う。
 5. **遮断の記録**: 実行したSQL・時刻・実行者を監査に残す（`audit_logs`へのINSERT。§6）。
 
 ## 4. 鍵・Secretのrotation（漏洩が疑われるら最優先。順序は「rotateしてから調査」）
@@ -80,5 +80,5 @@
 
 1. staging環境（`--env staging --remote --yes-i-know`）で架空の事象（テスト用利用者の不正アクセス想定）を作り、§1→§3.1→§5を通しで実施して記録する（実データを使わない）。
 2. `BETTER_AUTH_SECRET`のrotation演習（staging限定。全セッション無効→再ログインを確認）。
-3. Cloudflare WAF/Rate Limitingの設定と、アプリ内レート上限との役割分担をT087の負荷検証で確認し、docs/evidence/security.mdと本書を実測で更新する。
+3. Cloudflare WAF/Rate Limitingの設定と、アプリ内レート上限との役割分担をT086の公開設定とT084の障害演習で確認し、docs/evidence/security.mdと本書を実測で更新する。
 4. 演習の結果はこの節を「実施済み」に更新して残す（実施日・発見・修正）。

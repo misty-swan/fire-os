@@ -24,7 +24,7 @@ CI（`.github/workflows/ci.yml`）と配置workflowの `verify` ジョブは、�
 2. `npm run check:contracts` — API台帳×docs/05×OpenAPIの一致（古い生成物の検出）
 3. `npm run check:migrations` — 連番（欠番・重番の拒否。migrate.tsと同じ規律）、適用済み履歴の書き換え検出（基準ref＝origin/main。無ければHEAD~1。`--base`で上書き可。CIはfetch-depth: 0でcheckoutする）、破壊的変更の段階化（次節のマーカー）
 4. `npm run build` — vite build → dist/client
-5. `npm run check:environment` — **Secret検査を含む**: 4環境の必須binding・資源分離（demo→production参照の拒否、RG-09/CT-15）、/apiをSPA fallbackへ流さない設定、varsとdist/にSecret名が現れないこと
+5. `npm run check:environment` — **Secret検査を含む**: 4環境の必須binding・資源分離（demo→production参照の拒否、RG-09/CT-15）、/apiをSPA fallbackへ流さない設定、varsとdist/にSecret名が現れないこと。既定のSecret名照合対象は`BETTER_AUTH_SECRET`と`dev-only-`マーカーのみ。他のSecret（例: `GOOGLE_MAPS_API_KEY`）は`--secret`で明示追加する
 6. `npx vitest --run` — workers（実workerd＋D1/Queues）とclient（jsdom）の両方
 7. `npm run test:e2e` — Playwright（phone-360 / desktop-1280の両プロジェクト）
 
@@ -67,7 +67,7 @@ npx wrangler rollback --env <環境>             # 対話で対象versionを選�
 
 方針は**forward-fix（前に進めて直す）**。`DROP COLUMN` 等を適用した後で旧コードへ戻しても、削除された列は復元されない。schemaを「戻す」必要が生じたら、次の順で考える。
 
-1. **適用済みmigrationは書き換えない・削除しない。** 履歴が適用済みDBと一致しなくなると、以後のmigration適用が拒否され、どの時点から再開できるかも分からなくなる。履歴の書き換えは `check:migrations`（git HEAD比較）が検出して停止する。
+1. **適用済みmigrationは書き換えない・削除しない。** 履歴が適用済みDBと一致しなくなると、以後のmigration適用が拒否され、どの時点から再開できるかも分からなくなる。履歴の書き換えは `check:migrations`（基準ref＝origin/main。無ければHEAD~1。`--base`で上書き可。§1のとおり）が検出して停止する（mainへのpush直後のCIでは基準＝作業木となり書き換え検出は空振り。PR・ブランチ実行で検出が効く）。
 2. **破壊的変更は必ず段階化する（expand → backfill → contract）。**
    - expand: 列・表の**追加のみ**（旧workerでも稼働可）。最初に適用する。
    - backfill: データ退避（UPDATE等。schemaの破壊ではない）。

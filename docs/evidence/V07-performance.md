@@ -47,7 +47,7 @@ apiごとの内訳（p95、遅い順。CT-14の「operation単位」の証跡）
 
 ## 実施した遅いクエリの修正（docs/16 T082「slow SQLを修正」。migration不要）
 
-**`src/server/events/snapshot.ts` のACL判定を1行ずつのSQLから1走査バッチ1SQLへ変えた**（旧`eventVisible`→`visibleFlagsOfBatch`）。走査そのものはUNIQUE(unit_id, sequence)の暗黙索引で有界（下の計画監査）だったが、**非可視行1行ごとに点ルックアップ1回**（出欠ならactivity_attendance＋activitiesのJOIN）が最大SCAN_MAX_ROWS=1,000回/要求走り、代表件数の最悪窓でp95 8.9秒だった。バッチ化（通知・お知らせ・文書・出欠の各branchをD1のbind上限内のIN分割＝90件ずつ〔文書はvisibility SQLのbindを伴うため80件〕。analytics/query.tsと同じ注意）で、判定の語彙と結果は1行版と同一（fail-closed・行が無い/別unitは非可視・本人の行は本人に見える＝API-07と同じ規則）のまま、**p95を8,942ms→496msへ下げた**。既存のT072/T073試験（tests/events.test.ts・tests/realtime.test.ts）と正規スイート全体（64ファイル286試験）は無変更で通る。**索引追加は不要だった**（migration 0033は作っていない。計画監査のとおり既存索引で境界内）。
+**`src/server/events/snapshot.ts` のACL判定を1行ずつのSQLから1走査バッチ1SQLへ変えた**（旧`eventVisible`→`visibleFlagsOfBatch`）。走査そのものはUNIQUE(unit_id, sequence)の暗黙索引で有界（下の計画監査）だったが、**非可視行1行ごとに点ルックアップ1回**（出欠ならactivity_attendance＋activitiesのJOIN）が最大SCAN_MAX_ROWS=1,000回/要求走り、代表件数の最悪窓でp95 8.9秒だった。バッチ化（通知・お知らせ・文書・出欠の各branchをD1のbind上限内のIN分割＝90件ずつ〔文書はvisibility SQLのbindを伴うため80件〕。analytics/query.tsと同じ注意）で、判定の語彙と結果は1行版と同一（fail-closed・行が無い/別unitは非可視・本人の行は本人に見える＝API-07と同じ規則）のまま、**p95を8,942ms→496msへ下げた**。既存のT072/T073試験（tests/events.test.ts・tests/realtime.test.ts）と正規スイート全体（64ファイル286試験）は無変更で通る。**索引追加は不要だった**（migration 0033は作っていない。計画監査のとおり既存索引で境界内）。test:loadはCIゲートにもAGENTS.mdの検証コマンド順にも含まれず、手動実行（`npm run test:load`）で恒久回帰ゲートが効く。
 
 ## クエリ計画監査（境界外走査0のゲート。ローカルD1＝SQLiteのEXPLAIN QUERY PLAN）
 
@@ -81,7 +81,7 @@ apiごとの内訳（p95、遅い順。CT-14の「operation単位」の証跡）
 | RAG 1回 | 約260行 | FTS一致（topK=5＋結合）＋再検査＋回答・引用の書込み（読み替え約50行） |
 | 出動の保存1件（mutation） | 読み約20行／**書き約6行** | 版と冪等の検査＋原本/履歴/監査/outboxの書込み |
 
-**月額の目安（1unit・30端末。単価はdocs/evidence/cost-estimate.md §1の公开価格）**: 業務時間8時間×20日で30端末がpoll（0.5req/s）すると約864万要求/月≈**読み取り約6,900万行/月≈$0.07/月**（無料枠〔500万行読み/日〕は日あたり約350万行で収まる）。 通常操作（数百リクエスト/日/人）と集計を合わせても桁は変わらず、**D1読み取り費用はpoll輸送（docs/14 D16）の暫定固定を覆す規模ではない**。この概算は「実測ではない」——実rows_readの照合は未実施節の手順で行い、ops/cost-alerts.md §4の月次照合に載せる。
+**月額の目安（1unit・30端末。単価はdocs/evidence/cost-estimate.md §1の公開価格）**: 業務時間8時間×20日で30端末がpoll（0.5req/s）すると約864万要求/月≈**読み取り約6,900万行/月≈$0.07/月**（無料枠〔500万行読み/日〕は日あたり約350万行で収まる）。 通常操作（数百リクエスト/日/人）と集計を合わせても桁は変わらず、**D1読み取り費用はpoll輸送（docs/14 D16）の暫定固定を覆す規模ではない**。この概算は「実測ではない」——実rows_readの照合は未実施節の手順で行い、ops/cost-alerts.md §4の月次照合に載せる。
 
 ## 出欠イベントのACL判定とoutbox非正規化の判断材料（PH6レビュー「方針で残す」#6）
 

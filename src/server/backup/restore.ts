@@ -185,7 +185,7 @@ async function batchAll(db: D1Database, statements: D1PreparedStatement[]): Prom
 /**
  * 追記専用・版履歴の表（drizzleのトリガーがDELETE/上書きINSERTを拒否する。docs/04 §1、PH0レビュー A-F3、
  * 0001/0003/0012/0020/0022/0024/0027）。復元はこの表を「書き戻す」のではなく、空のschemaへ新規に入れる。
- * 監査と履歴を復元で書き換えられないことは契約（docs/07 §1「監査は追記型」）と一致する。
+ * 監査と履歴を復元で書き換えられないことは契約（docs/07 §8「監査はD1追記型」）と一致する。
  */
 export const APPEND_ONLY_TABLES: readonly string[] = [
   "audit_logs",
