@@ -3,13 +3,19 @@ import { assertEnvName, type AppBindings, type AppEnv, type JobMessage } from ".
 import { handleQueueBatch, handleScheduled } from "./jobs/dispatch";
 import { errorResponse, notFound, onError } from "./http";
 import { registerRoutes } from "./routes";
+import { applySecurity, DEVELOPMENT_SECURITY_POLICY, type SecurityPolicy } from "./security/limits";
 
 /**
  * アプリ本体。順序が重要：
  *  1. /api/* は必ずJSONで終わる(未実装APIをSPAのHTMLで成功に見せない)
  *  2. それ以外はReact(静的ファイル)。未知のURLはSPAのindex.html
+ *
+ * securityPolicyは共通セキュリティ処理（applySecurity）の差し替え口。既定は寛容な開発設定。
+ * Honoは登録順に照合するため、policyは**routesの登録前に**適用される必要がある——後から
+ * applySecurity(app, …)を呼んでも、既に登録されたrouteの前には挟まらない（試験で確認済み）。
+ * 試験・T082の負荷試験はこの引数で厳しい/緩和policyを差す。
  */
-export function createApp(env: Pick<AppEnv, "APP_ENV">): Hono<AppBindings> {
+export function createApp(env: Pick<AppEnv, "APP_ENV">, securityPolicy: SecurityPolicy = DEVELOPMENT_SECURITY_POLICY): Hono<AppBindings> {
   assertEnvName(env.APP_ENV);
   const app = new Hono<AppBindings>();
 
@@ -19,8 +25,13 @@ export function createApp(env: Pick<AppEnv, "APP_ENV">): Hono<AppBindings> {
     c.header("x-request-id", c.get("requestId"));
   });
 
+  // 共通セキュリティ処理（T081）。既定は寛容な開発設定（DEVELOPMENT_SECURITY_POLICY）。
+  applySecurity(app, securityPolicy);
+
   // 他originからの変更要求を拒否する（CSRF対策。Cookieは SameSite=Lax だが、Originも二重に見る）。
   // ブラウザは変更要求にOriginを付ける。Originが無い場合は sec-fetch-site が cross-site でないことを要求する。
+  // ※ security headers（nosniff等）と cache-control: no-store は上のapplySecurity（headers.ts）が
+  //   全API応答へ一括で付ける（T081で集約。ここでの重複付与はしない）。
   app.use("/api/*", async (c, next) => {
     if (["POST", "PUT", "PATCH", "DELETE"].includes(c.req.method)) {
       const origin = c.req.header("origin");
@@ -29,8 +40,6 @@ export function createApp(env: Pick<AppEnv, "APP_ENV">): Hono<AppBindings> {
       if (crossSite) return errorResponse(c, "FORBIDDEN", [{ field: "origin", reason: "cross_origin" }]);
     }
     await next();
-    // 個人情報・認可状態を含み得る応答を共有キャッシュ/ブラウザに残さない
-    c.header("cache-control", "no-store");
   });
 
   registerRoutes(app);

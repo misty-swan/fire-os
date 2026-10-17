@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { LIMITS, errorStatus, type ErrorCode } from "../shared/contracts/common";
 import { ContractError, apiDef, parseRequest, type ApiId, type ParsedRequest } from "../shared/contracts/registry";
 import type { AppBindings } from "./env";
+import { redactError } from "./security/redact";
 
 export type ApiApp = Hono<AppBindings>;
 export type ApiContext = Context<AppBindings>;
@@ -44,9 +45,10 @@ export function errorResponse(
   code: ErrorCode,
   details: { field: string; reason: string }[] = [],
   message?: string,
+  extraHeaders: Record<string, string> = {},
 ): Response {
-  const headers: Record<string, string> = {};
-  if (code === "RATE_LIMITED") headers["retry-after"] = "60";
+  const headers: Record<string, string> = { ...extraHeaders };
+  if (code === "RATE_LIMITED" && !headers["retry-after"]) headers["retry-after"] = "60";
   return c.json(
     { error: { code, message: message ?? publicMessage[code], details }, meta: { requestId: c.get("requestId") } },
     errorStatus[code],
@@ -58,12 +60,17 @@ export function notFound(c: Ctx): Response {
   return errorResponse(c, "NOT_FOUND");
 }
 
-/** Honoのonerror。内部例外の本文は応答へ出さない（requestIdでログと突き合わせる）。 */
-export function onError(err: Error, c: Ctx): Response {
+/**
+ * Honoのonerror。内部例外の本文は応答へ出さない（requestIdでログと突き合わせる）。
+ * ログにも例外本文を出さない（T081のredact。本文はライブラリ内部で要求本文・bind値を含むことがあるため）。
+ */
+export function onError(err: Error, c: Ctx): Response | Promise<Response> {
   if (err instanceof HttpError) return errorResponse(c, err.code, err.details, err.message === err.code ? undefined : err.message);
   if (err instanceof ContractError) return errorResponse(c, "VALIDATION_ERROR", err.details);
-  console.error(JSON.stringify({ requestId: c.get("requestId"), error: String(err) }));
-  return errorResponse(c, "INTERNAL_ERROR");
+  return redactError(err).then((redacted) => {
+    console.error(JSON.stringify({ requestId: c.get("requestId"), error: redacted }));
+    return errorResponse(c, "INTERNAL_ERROR");
+  });
 }
 
 export function ok<T>(c: Ctx, data: T, meta: { nextCursor?: string; snapshotRevision?: number } = {}, status: 200 | 201 | 202 = 200) {
