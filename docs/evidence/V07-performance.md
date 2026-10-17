@@ -31,10 +31,10 @@ apiごとの内訳（p95、遅い順。CT-14の「operation単位」の証跡）
 
 | 条件 | p95（1要求） | 壁時計（30端末全部の完了） | 内容 |
 |---|---|---|---|
-| 通常 | **39ms** | 40ms | 全端末が同じ窓（単調順・重複なし）で4件を受領し最新版へ収束 |
-| 通信劣化 | **669ms** | 1,558ms | 片道300msのRTT注入＋端末1/3の初回要求を強制失敗（timeout→同じcursorで再送）。at-least-onceで取りこぼしなし |
+| 通常 | **32ms** | 33ms | 全端末が同じ窓（単調順・重複なし）で4件を受領し最新版へ収束 |
+| 通信劣化 | **687ms** | 1,320ms | 片道300msのRTT注入＋端末1/3の**初回要求を実際に喪失**（要求を発射したまま応答を放棄＝クライアント側timeout。サーバーは処理を完遂してもクライアントは受け取れない＝実回線の応答ロストと同じ状態。1 RTT待って**同じcursorで再送**）。喪失は失敗sample 10件として記録し**p95の百分位に含める**。再送端末はbacklogをもう一度受け取る（at-least-once。重複の畳み込みはクライアントの責務）で、取りこぼしなし |
 
-「通信劣化」は**人工的なRTT注入と初回失敗の再送**の模擬であり、実回線の帯域制限・パケットロス・電池最適化は含まない。V06（定常pollの更新反映p95≈2.3秒）の再接続版として、poll周期2秒が支配的でbacklog回収の1要求はpoll周期に比べて無視できる規模。
+「通信劣化」は**人工的なRTT注入と初回要求の喪失（応答放棄＝クライアントtimeout）→同じcursorでの再送**の模擬であり、実回線の帯域制限・パケットロス分布・電池最適化は含まない。V06（定常pollの更新反映p95≈2.3秒）の再接続版として、poll周期2秒が支配的でbacklog回収の1要求はpoll周期に比べて無視できる規模。
 
 ### 出欠イベント窓の30端末drain（PH6レビュー#6。tests/load/api-load.test.ts後半）
 
@@ -49,9 +49,9 @@ apiごとの内訳（p95、遅い順。CT-14の「operation単位」の証跡）
 
 **`src/server/events/snapshot.ts` のACL判定を1行ずつのSQLから1走査バッチ1SQLへ変えた**（旧`eventVisible`→`visibleFlagsOfBatch`）。走査そのものはUNIQUE(unit_id, sequence)の暗黙索引で有界（下の計画監査）だったが、**非可視行1行ごとに点ルックアップ1回**（出欠ならactivity_attendance＋activitiesのJOIN）が最大SCAN_MAX_ROWS=1,000回/要求走り、代表件数の最悪窓でp95 8.9秒だった。バッチ化（通知・お知らせ・文書・出欠の各branchをD1のbind上限内のIN分割＝90件ずつ〔文書はvisibility SQLのbindを伴うため80件〕。analytics/query.tsと同じ注意）で、判定の語彙と結果は1行版と同一（fail-closed・行が無い/別unitは非可視・本人の行は本人に見える＝API-07と同じ規則）のまま、**p95を8,942ms→496msへ下げた**。既存のT072/T073試験（tests/events.test.ts・tests/realtime.test.ts）と正規スイート全体（64ファイル286試験）は無変更で通る。**索引追加は不要だった**（migration 0033は作っていない。計画監査のとおり既存索引で境界内）。
 
-## クエリ計画監査（unboundedQueryCount=0の根拠。ローカルD1＝SQLiteのEXPLAIN QUERY PLAN）
+## クエリ計画監査（境界外走査0のゲート。ローカルD1＝SQLiteのEXPLAIN QUERY PLAN）
 
-測定対象APIが主に使う13種の読み取りをserver実装と同じ形のSQLで監査した（tests/load/api-load.test.ts `planAudits`。実装の複製である限界は次節）。判定基準は「SCAN <主表> で索引（USING INDEX）もFTS MATCH制約も無い」＝**境界外走査**。結果は**0件**（試験の断言 `unboundedQueryCount=0` に接続）。主な計画:
+測定対象APIが主に使う **13種の読み取り（8キー）** をserver実装と同じ形のSQLで監査した（tests/load/api-load.test.ts `planAudits`。実装の複製である限界は次節）。判定基準は「SCAN <主表> で索引（USING INDEX）もFTS MATCH制約も無い」＝**境界外走査**。監査キーは `LoadSampler` がsampleに記録するAPI文字列と同じ（`API-01/02/10/28/44/52/76/80`。API-28は4本のCOUNTを、API-80は走査・絞り付き・出欠バッチACLの3文を同じキーで監査）で、結果は **①各キーの直接断言**〔`expect(…, "plan-audit: …").toBe(0)`。監査が境界外を検出すればこの断言が落ちる〕と **②sample記録→summarizeLoadの合計**（`unboundedQueryCount=0`）の **二重ゲート** に接続する。監査を強制発火させる変異を入れたとき直接断言が落ちること（`plan-audit: API-80 … expected 4 to be +0`）を確認済み（T082修正ラウンド1）。結果は**0件**。主な計画:
 
 | クエリ（api） | EXPLAIN QUERY PLAN |
 |---|---|
@@ -92,7 +92,7 @@ apiごとの内訳（p95、遅い順。CT-14の「operation単位」の証跡）
 ## 限界（この数字を過大に読まないこと）
 
 - **同一workerd・同一D1（miniflareのSQLite）**であり、実Cloudflare D1の分散構成・ネットワーク往復・CPU/IO性能は含まない。実環境のレイテンシはこの数字より悪くなる前提で、V07の残手順で実測し直す。
-- **実回線のRTT・帯域・パケットロス・端末の電池最適化は含まない**。「通信劣化」は人工的なRTT注入＋初回失敗の再送の模擬。
+- **実回線のRTT・帯域・パケットロス・端末の電池最適化は含まない**。「通信劣化」は人工的なRTT注入＋初回要求の喪失（応答放棄＝クライアントtimeout）→再送の模擬。
 - 30端末は「同じ団員が開いた30接続」であり、**30利用者の実セッション認証・招待・MFAの負荷は含まない**（認証注入）。30利用者での実測はV06残手順と共通。
 - AI（API-76）は**決定的なfake AI**での測定（検索・引用検証・保存の経路は実物、モデルの遅延は実物ではない）。実モデルのp95・単価はV04（docs/evidence/V04-llm.md）の残手順。
 - クエリ計画監査とD1費用は**概算**（server実装のSQLの複製＋SQLiteのプラン）。実D1のrows_readはSQLiteのプランと行カウントの考え方が同じでも、実測でしか確定しない。

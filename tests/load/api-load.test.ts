@@ -18,8 +18,10 @@ import { LoadClient, LoadSampler, idem, makeLoadApp, toJson } from "./helpers";
  * 確かめること:
  *  - 通常API（閲覧/保存/集計/添付）のp95が開発目標内で、地図（API-10）とAI（API-76）は **別bucket** で測る
  *  - 失敗要求を集計から外さない（omittedFailedRequests=0。平均だけでなくp50/p95/maxで判定する）
- *  - 測定対象の主要クエリに「境界外走査」（絞りに索引を使えない全表走査）が無い（unboundedQueryCount=0）。
- *    計画監査はEXPLAIN QUERY PLAN（ローカルD1＝SQLite）で行う。実D1のrows_read実測はV07残手順
+ *  - 測定対象の主要クエリ（13文・8キー。キーはsampleのAPI文字列と一致）に「境界外走査」
+ *    （絞りに索引を使えない全表走査）が無い。監査（EXPLAIN QUERY PLAN。ローカルD1＝SQLite）の結果を
+ *    **各キーで直接断言**し、さらにsample記録→summarizeLoadの合計（unboundedQueryCount=0）でも二重に見る。
+ *    実D1のrows_read実測はV07残手順
  *  - 出欠イベント（activity_attendance）大量のunitで30端末がpollしたときの、1行ずつACL判定の
  *    読み取り増を実測する（PH6レビュー#6・docs/14 D16＝outbox非正規化の判断材料。V07に記録）
  */
@@ -73,14 +75,14 @@ async function planAudits(unitId: string): Promise<PlanAudit[]> {
       binds: [unitId, seq],
     },
     {
-      // API-80（絞り付き。SCR-12の詳細同期）
-      api: "API-80-filtered", table: "domain_events",
+      // API-80（絞り付き。SCR-12の詳細同期。キーはsampleのAPI文字列と揃える＝監査がsampleに接続される）
+      api: "API-80", table: "domain_events",
       sql: "SELECT id, unit_id, entity_type, entity_id, entity_version, event_type, payload_minimal, sequence, created_at FROM domain_events WHERE unit_id = ? AND sequence > ? AND entity_type = ? AND entity_id = ? ORDER BY sequence LIMIT 200",
       binds: [unitId, seq, "incident", crypto.randomUUID()],
     },
     {
-      // 全APIのprincipal解決（src/server/auth/principal.ts BASE_SQL）
-      api: "principal", table: "users",
+      // 全APIのprincipal解決（src/server/auth/principal.ts BASE_SQL）。API-01（me）が毎回実行する読み取り
+      api: "API-01", table: "users",
       sql: "SELECT u.id AS user_id, u.authz_version, u.status AS user_status, u.session_revoked_before, m.id AS member_id, m.status AS member_status, m.unit_id, n.status AS unit_status, m.display_name, m.rank, n.name AS unit_name FROM users u JOIN members m ON m.user_id = u.id JOIN units n ON n.id = m.unit_id WHERE u.id = ?",
       binds: [LOAD_MEMBER.userId],
     },
@@ -103,23 +105,24 @@ async function planAudits(unitId: string): Promise<PlanAudit[]> {
       binds: [unitId, facility!.id, 51],
     },
     {
-      // API-28（src/server/routes/dashboard.tsの件数。活動/異常/通知/タスク）
-      api: "API-28-activities", table: "activities",
+      // API-28（src/server/routes/dashboard.tsの件数。活動/異常/通知/タスク。キーはsampleどおりAPI-28に揃え、
+      // 4本のCOUNTを同じキーで監査する）
+      api: "API-28", table: "activities",
       sql: "SELECT COUNT(*) AS n FROM activities a WHERE a.unit_id = ? AND a.planned_starts_at >= ? AND a.status = ?",
       binds: [unitId, new Date().toISOString(), "scheduled"],
     },
     {
-      api: "API-28-issues", table: "issues",
+      api: "API-28", table: "issues",
       sql: "SELECT COUNT(*) AS n FROM issues WHERE unit_id = ? AND status = ?",
       binds: [unitId, "reported"],
     },
     {
-      api: "API-28-notifications", table: "notification_recipients",
+      api: "API-28", table: "notification_recipients",
       sql: "SELECT COUNT(*) AS n FROM notifications n JOIN notification_recipients r ON r.notification_id = n.id AND r.unit_id = n.unit_id WHERE n.unit_id = ? AND r.member_id = ? AND n.status IN ('approved', 'dispatching', 'finished', 'failed') AND r.read_at IS NULL",
       binds: [unitId, LOAD_MEMBER.memberId],
     },
     {
-      api: "API-28-tasks", table: "tasks",
+      api: "API-28", table: "tasks",
       sql: "SELECT COUNT(*) AS n FROM tasks WHERE unit_id = ? AND assignee_member_id = ? AND status IN ('open', 'assigned', 'in_progress')",
       binds: [unitId, LOAD_MEMBER.memberId],
     },
@@ -131,8 +134,8 @@ async function planAudits(unitId: string): Promise<PlanAudit[]> {
     },
     {
       // API-80の1バッチACL判定（src/server/events/snapshot.ts visibleFlagsOfBatchの出欠branch。
-      // T082で1行ずつの点ルックアップからIN一括へ変えた。PH6レビュー#6）
-      api: "eventVisible-attendance", table: "activity_attendance",
+      // T082で1行ずつの点ルックアップからIN一括へ変えた。PH6レビュー#6。drain経路＝API-80の読み取り）
+      api: "API-80", table: "activity_attendance",
       sql: "SELECT a.id, a.member_id, a.activity_id, act.owner_member_id FROM activity_attendance a JOIN activities act ON act.id = a.activity_id AND act.unit_id = a.unit_id WHERE a.unit_id = ? AND a.id IN (?, ?, ?)",
       binds: [unitId, crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()],
     },
@@ -145,7 +148,12 @@ async function planAudits(unitId: string): Promise<PlanAudit[]> {
   ];
 }
 
-/** 計画監査の実行。「SCAN <主表>」で索引もFTS MATCH制約も無い計画を境界外として数える */
+/**
+ * 計画監査の実行。「SCAN <主表>」で索引もFTS MATCH制約も無い計画を境界外として数える。
+ * キーはLoadSamplerがsampleに記録するAPI文字列と同じ（同じキーの監査は合算する）。
+ * 結果は呼び出し側で**各エントリごと直接断言する**（T082修正ラウンド1。sampleへの記録と二重ゲート。
+ * 監査キーがsampleと一致しないと断言が永遠に0を見るだけになるため）。
+ */
 async function auditQueryPlans(unitId: string): Promise<Map<string, number>> {
   const result = new Map<string, number>();
   for (const audit of await planAudits(unitId)) {
@@ -159,7 +167,7 @@ async function auditQueryPlans(unitId: string): Promise<Map<string, number>> {
     if (unbounded.length > 0) {
       console.error(`[plan-audit] ${audit.api}: 境界外走査 ${JSON.stringify(rows.map((r) => r.detail))}`);
     }
-    result.set(audit.api, unbounded.length);
+    result.set(audit.api, (result.get(audit.api) ?? 0) + unbounded.length);
   }
   return result;
 }
@@ -188,8 +196,14 @@ describe("代表件数・30端末の性能 (T082)", () => {
   it(
     "ordinary_api_p95_is_measured_separately_from_map_and_ai",
     async () => {
-      // --- 0) クエリ計画監査（要求の前に。結果はsampleへ記録してsummarizeLoadが合計する） ---
+      // --- 0) クエリ計画監査（要求の前に）。結果は①各エントリの直接断言（本ゲート）と
+      //        ②sampleへの記録→summarizeLoadの合計（unboundedQueryCount断言）の二重で接続する ---
       const unboundedByApi = await auditQueryPlans(LOAD_MEMBER.unitId);
+      expect(unboundedByApi.size).toBeGreaterThanOrEqual(8); // 監査が空だと二重ゲートが空振りするため下限を断言
+      for (const [api, unbounded] of unboundedByApi) {
+        expect(unbounded, `plan-audit: ${api} のクエリ計画に境界外走査（絞りに索引を使えない全表走査）`).toBe(0);
+      }
+      console.log(`[plan-audit] 監査キー（sampleのAPIと一致）: ${[...unboundedByApi.keys()].sort().join(", ")}`);
       const sampler = new LoadSampler(env, unboundedByApi);
 
       // --- 1) 負荷の下地: 30端末のpoll接続（0.5req/s±20%。V06の実測条件と同じ） ---

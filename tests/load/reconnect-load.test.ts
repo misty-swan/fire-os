@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { LOAD_ADMIN, LOAD_MEMBER, REPRESENTATIVE_PROFILE, seedLoad } from "../../scripts/seed-load";
+import { LOAD_ADMIN, LOAD_MEMBER, REPRESENTATIVE_PROFILE, seedLoad, summarizeLoad, type RequestSample } from "../../scripts/seed-load";
 import { LoadClient, idem, makeLoadApp, toJson } from "./helpers";
 
 /**
@@ -9,8 +9,11 @@ import { LoadClient, idem, makeLoadApp, toJson } from "./helpers";
  *
  * V06（tests/realtime.test.ts）は定常pollの更新反映遅延を測った。ここではその **再接続** を代表件数下で測る:
  * 30端末が同時に再開したとき（切断中のcommitのbacklogがある状態）の1要求あたりの遅延と回収の正しさ。
- * 「通信劣化」は **人工的なRTT注入＋初回要求の強制失敗（1回のtimeout→再送）** で模擬する。実回線の
- * 帯域制限・パケットロス・電池最適化は含まない（docs/evidence/V07-performance.mdの限界節）。
+ * 「通信劣化」は **人工的なRTT注入＋端末1/3の初回要求の喪失（応答を放棄＝クライアント側timeout。
+ * 1 RTT待って同じcursorで再送）** で模擬する。要求を投げた後で応答を放棄するため、サーバー側は処理を
+ * 完遂してもクライアントは受け取れない（実回線の「応答ロスト」と同じ状態）＝ **at-least-onceの再送経路の実測**。
+ * 喪失は失敗sample（ok=false）として記録し、p95の百分位に含める（成功要求だけの性能判定をしない）。
+ * 実回線の帯域制限・パケットロス分布・電池最適化は含まない（docs/evidence/V07-performance.mdの限界節）。
  *
  * 合否はD18の開発案（更新反映p95 5秒）を開発目標として使う（承認済み合格値ではない）。
  */
@@ -33,7 +36,6 @@ interface EventPage {
 }
 
 const json = async (r: Response) => (await r.json()) as { data?: Record<string, unknown>; error?: { code: string } };
-const percentile = (values: number[], p: number) => [...values].sort((a, b) => a - b)[Math.ceil(p * values.length) - 1]!;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** 切断中に幹部がcommitする（backlogを作る。作成1件＋訂正3件＝4イベント。出動イベントがunit配信に流れる） */
@@ -75,20 +77,24 @@ describe("30端末の再接続集中（通常と通信劣化） (T082)", () => {
   it(
     "reconnect_storm_recovers_the_backlog_within_the_development_target_in_normal_and_degraded_network",
     async () => {
-      // --- 通常: 30端末が同時に再開（backlog=切断中の3件のcommit） ---
+      // --- 通常: 30端末が同時に再開（backlog=切断中の作成1＋訂正3の4イベント） ---
       const cursorsNormal = await mintCursors();
       const backlog = await commitBacklog();
 
       const t0 = Date.now();
+      const normalSamples: RequestSample[] = [];
       const normal = await Promise.all(cursorsNormal.map(async (cursor) => {
         const startedAt = Date.now();
         const r = await member.request("GET", `/api/v1/events?cursor=${encodeURIComponent(cursor)}`);
         expect(r.status).toBe(200);
         const page = (await toJson<{ data: EventPage }>(r)).data;
-        return { durationMs: Date.now() - startedAt, page };
+        normalSamples.push({ api: "API-80", bucket: "poll", ok: true, status: r.status, durationMs: Date.now() - startedAt });
+        return { page };
       }));
       const normalWallMs = Date.now() - t0;
-      const normalP95 = percentile(normal.map((x) => x.durationMs), 0.95);
+      // summarizeLoadで集計する（このフェーズに失敗は無いが、劣化側と同じ百分位の正本を使う）
+      const normalMetrics = summarizeLoad(normalSamples);
+      const normalP95 = normalMetrics.buckets.poll.p95Ms;
 
       // 全端末が同じ窓（単調順・取りこぼしなし）で受領する（V06と同じ検収）
       for (const x of normal) {
@@ -99,41 +105,61 @@ describe("30端末の再接続集中（通常と通信劣化） (T082)", () => {
       );
       expect(Math.min(...versionNormal)).toBe(backlog.version); // 30端末すべてが最新版へ収束
 
-      // --- 通信劣化: RTT注入＋1/3の端末の初回要求を強制失敗（timeout→再送） ---
-      // 実回線の帯域・ロス・電池最適化は含まない（人工劣化の限界はV07に記録）
-      const RTT_MS = 300; // 上下それぞれに掛ける片道目安（モバイル回線の典型的なRTTのオーダー）
+      // --- 通信劣化: RTT注入＋端末1/3の初回要求を実際に喪失させる（T082修正ラウンド1） ---
+      // 初回は要求を発射したまま応答を放棄する（クライアント側timeout。サーバーは処理を完遂しても
+      // クライアントは受け取れない＝実回線の応答ロストと同じ状態）。1 RTT待って同じcursorで再送するので、
+      // 再送端末はbacklogをもう一度受け取る（at-least-once。重複の畳み込みはクライアントの責務）。
+      // 喪失は失敗sample（ok=false）として記録し、p95の百分位に含める（成功だけの判定をしない）。
+      // 実回線の帯域・ロス分布・電池最適化は含まない（人工劣化の限界はV07に記録）
+      const RTT_MS = 300; // 上下それぞれに掛ける片道目安（モバイル回線の典型的なRTTのオーダー）。timeout待ちも1 RTT
       const cursorsDegraded = await mintCursors();
       const backlog2 = await commitBacklog();
 
       const degradedStarted = Date.now();
+      const degradedSamples: RequestSample[] = [];
+      const droppedBodies: Promise<void>[] = [];
       const degraded = await Promise.all(cursorsDegraded.map(async (cursor, i) => {
-        const attempt = async (): Promise<{ durationMs: number; page: EventPage }> => {
-          const startedAt = Date.now();
-          await sleep(RTT_MS * (0.8 + Math.random() * 0.4)); // uplink
-          const r = await member.request("GET", `/api/v1/events?cursor=${encodeURIComponent(cursor)}`);
-          await sleep(RTT_MS * (0.8 + Math.random() * 0.4)); // downlink
-          expect(r.status).toBe(200);
-          const page = (await toJson<{ data: EventPage }>(r)).data;
-          return { durationMs: Date.now() - startedAt, page };
-        };
+        const url = `/api/v1/events?cursor=${encodeURIComponent(cursor)}`;
         if (i % 3 === 0) {
-          // 初回は失敗（timeout。応答を受け取れない）→ クライアントは同じcursorで再送する
-          await sleep(RTT_MS * 3);
-          return await attempt();
+          await sleep(RTT_MS * (0.8 + Math.random() * 0.4)); // uplink（初回分）
+          // 初回要求を発射して応答を放棄する（bodyは後始末だけする。中身は読まない＝クライアントは受け取れない）
+          droppedBodies.push(
+            member.request("GET", url).then(
+              (r) => { void r.body?.cancel().catch(() => {}); },
+              () => {}, // そもそも失敗しても「喪失」の扱いとして同じ
+            ),
+          );
+          degradedSamples.push({ api: "API-80", bucket: "poll", ok: false, status: 0, durationMs: RTT_MS }); // 喪失（client timeout）
+          await sleep(RTT_MS); // 1 RTT待って諦める（client timeout）
         }
-        return await attempt();
+        // 再送（喪失しなかった端末は初回）。**同じcursor**で要求する（at-least-onceの再送）
+        const startedAt = Date.now();
+        await sleep(RTT_MS * (0.8 + Math.random() * 0.4)); // uplink
+        const r = await member.request("GET", url);
+        await sleep(RTT_MS * (0.8 + Math.random() * 0.4)); // downlink
+        expect(r.status).toBe(200);
+        const page = (await toJson<{ data: EventPage }>(r)).data;
+        degradedSamples.push({ api: "API-80", bucket: "poll", ok: true, status: r.status, durationMs: Date.now() - startedAt });
+        return { page, retried: i % 3 === 0 };
       }));
+      await Promise.all(droppedBodies); // 放棄した初回の後始末を待ってから検収する（テスト終了時の宙ぶらりんを作らない）
       const degradedWallMs = Date.now() - degradedStarted;
-      const degradedP95 = percentile(degraded.map((x) => x.durationMs), 0.95);
+      // summarizeLoadは失敗sampleも百分位に投入する（成功要求だけの性能判定をしない＝docs/08 CT-14）
+      const degradedMetrics = summarizeLoad(degradedSamples);
+      const degradedP95 = degradedMetrics.buckets.poll.p95Ms;
+      // 再送端末（10本）: 応答を放棄された初回の代わりに、同じcursorの再送で **backlogをもう一度** 受け取る
       for (const x of degraded) {
         expect(x.page.events.map((e) => `${e.entityType}:${e.entityId}:${e.entityVersion}`)).toEqual(backlog2.ids);
+        if (x.retried) expect(x.page.events.length).toBe(backlog2.ids.length); // at-least-onceの再配信（窓全体）
       }
+      expect(degradedMetrics.buckets.poll.failedCount).toBe(REPRESENTATIVE_PROFILE.terminals / 3); // 喪失10本が記録されている
+      expect(degradedMetrics.omittedFailedRequests).toBe(0); // 失敗を集計から外していない
 
-      console.log(`[reconnect] 通常: p95=${normalP95}ms wall=${normalWallMs}ms / 劣化(RTT300ms＋1/3初回失敗): p95=${degradedP95}ms wall=${degradedWallMs}ms`);
+      console.log(`[reconnect] 通常: p95=${normalP95}ms wall=${normalWallMs}ms / 劣化(RTT300ms＋1/3初回喪失→再送): p95=${degradedP95}ms wall=${degradedWallMs}ms 失敗sample=${degradedMetrics.buckets.poll.failedCount}（p95に含む）`);
       // D18開発案（更新反映p95 5秒）を開発目標として使う。承認済み合格値ではない（V07の残手順で実測し直す）
       expect(normalP95).toBeLessThanOrEqual(5000);
       expect(degradedP95).toBeLessThanOrEqual(5000);
-      // 劣化は通常より遅い（注入したRTT分。これが逆なら測定の作り込みが壊れている）
+      // 劣化は通常より遅い（注入したRTTと喪失→再送の分。これが逆なら測定の作り込みが壊れている）
       expect(degradedP95).toBeGreaterThan(normalP95);
     },
     600_000,
