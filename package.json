@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build --config vite.pwa.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:e2e": "playwright test",
@@ -54,7 +54,11 @@
     "tsx": "4.23.15",
     "typescript": "5.9.3",
     "vite": "8.3.4",
+    "vite-plugin-pwa": "^2.0.0",
     "vitest": "4.1.11",
+    "workbox-core": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1",
     "wrangler": "4.150.0"
   }
 }

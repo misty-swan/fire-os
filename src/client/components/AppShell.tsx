@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import { clsx } from "clsx";
 import { authEvents } from "../api";
 import { initialOf, roleLabel, splitUnit, useMe } from "../me";
+import { PwaUpdateNotice } from "../pwa/UpdateNotice";
 import { bottomTabs, desktopNavGroups, dispatchNav, matchDesktopNav, matchScreen } from "../screens";
 import { BrandMark } from "./BrandMark";
 import { Icon } from "./ui";
@@ -268,6 +269,9 @@ export function AppShell() {
       </div>
 
       {!current?.hideNav && <BottomNav activeTab={current?.tab} />}
+
+      {/* Service Workerの更新案内（T074。prototypeに無いPWAのchrome。docs/03 §1.1-21） */}
+      <PwaUpdateNotice />
     </div>
   );
 }
