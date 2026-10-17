@@ -5,6 +5,7 @@ import { resolvePrincipal } from "../auth/principal";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
 import { executeMutation, IDEMPOTENCY_TTL_MS } from "../mutations/execute";
 import { canonicalRequestHash } from "../mutations/hash";
+import { recordMetricSafe } from "../observability/metrics";
 import { ALLOWLIST, type SyncCommandData } from "../sync/allowlist";
 import { requirePermission } from "./invitations";
 
@@ -106,8 +107,17 @@ export function registerSyncRoutes(app: ApiApp): void {
   // --- API-81: 保留操作の適用（現在認可・重複検知。docs/05 API-81、docs/16 T076） ---
   defineRoute(app, "API-81", async (c) => {
     const input = await parseApiRequest(c, "API-81");
-    const applied = await applySyncCommand(c, input);
-    return ok(c, applied, {}, 200);
+    try {
+      const applied = await applySyncCommand(c, input);
+      return ok(c, applied, {}, 200);
+    } catch (err) {
+      // 同期の拒否の計上（T080 review round 1。監視のみ）: 競合・検査違反など401（再認証待ち）以外の
+      // 拒否。docs/07 §8「同期競合」。再認証待ち（401）は端末の正常な回復経路なので数えない
+      if (err instanceof HttpError && err.code !== "UNAUTHENTICATED") {
+        await recordMetricSafe(c.env, { service: "d1", metric: "sync.rejected", unit: "count", amount: 1, source: "api:sync.apply" });
+      }
+      throw err;
+    }
   });
 
   // --- API-82: 同期操作の結果照会（本人/端末operationのみ。docs/05 API-82「PER-13本人」） ---

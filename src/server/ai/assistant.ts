@@ -16,6 +16,8 @@ import type { AppEnv } from "../env";
 import { HttpError, type ApiContext } from "../http";
 import { canonicalJson, canonicalRequestHash, sha256Hex } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
+import { expensiveCallGate } from "../observability/budget";
+import { recordMetricSafe } from "../observability/metrics";
 import { requirePermission } from "../routes/invitations";
 import { SEARCH_CONFIG, createRetrievalPort } from "../search/adapter";
 import type { ApiRequest, ApiResponse } from "../../shared/contracts/registry";
@@ -60,7 +62,7 @@ const READINGS_TOTAL_MAX_CHARS = 12000;
 export const ASSISTANT_ABSTAINED_ANSWER =
   "この質問について、現在閲覧できる記録から提案を作成できる根拠を確認できませんでした。";
 
-/** AI呼出し自体の失敗（一時的。503へ。応答の破棄とは区別する。T067のRagAiErrorと同じ区分） */
+/** AI呼出し自体の失敗（一時的。503へ。応答の破棄とは区別する。T067のRagAiErrorと同じ区分）。messageは生の失敗区分（429判定に使う。応答には出ない） */
 export class AssistantAiError extends Error {}
 
 /** 読み取り結果（モデルへの入力であり、検証済み出力と一緒にai_evaluations.output_jsonへ保存する） */
@@ -212,8 +214,8 @@ export async function runAssistantLlm(
     let raw: unknown;
     try {
       raw = await ai.run(LLM_MODEL, payload);
-    } catch {
-      throw new AssistantAiError("assistant llm run failed");
+    } catch (err) {
+      throw new AssistantAiError(String(err)); // 生の失敗区分を保持（呼出し側が429を計上する。docs/07 §8）
     }
     const validated = validateAssistantResponse(raw, readings.length);
     if (validated.ok) return validated.value;
@@ -359,6 +361,12 @@ export async function proposeAssistantAction(ctx: ApiContext, input: ApiRequest<
   let inputHash = "0".repeat(64);
 
   if (!knownKey) {
+    // 課金上限の停止ゲート（T080・review round 1）: 横断アシスタントも「高価なAI呼び出し」であり、
+    // 分類・報告書生成と同じ停止対象（docs/07 §8、docs/14 D11）。停止中は読まず呼ばず503でfail-closed
+    // （偽の提案を作らない方針と同じ落ち先。解除はops/cost-alerts.mdの手順）。
+    // 既存の同キー再送（knownKey）は保存済み応答を返すため停止の影響を受けない＝記録の読取は止まらない
+    const gate = await expensiveCallGate(ctx.env, { unitId: p.unitId, source: "api:ai.assistant" });
+    if (!gate.allowed) throw new HttpError("DEPENDENCY_UNAVAILABLE");
     const readings = await gatherReadings(ctx.env, p, input.body.query, input.body.contextRefs);
     // 読取0件＝返すべき根拠が無い（権限で落とされた分を含む。漏えいではない）→保留（行も提案も作らない）
     if (readings.length === 0) {
@@ -369,17 +377,37 @@ export async function proposeAssistantAction(ctx: ApiContext, input: ApiRequest<
     }
     const ai = ctx.env.AI ?? localTestAi(ctx.env);
     if (!ai) throw new HttpError("DEPENDENCY_UNAVAILABLE"); // AI無しで偽の提案を作らない（fail-closed）
+
+    // 使用量の計上（T080・review round 1。RAGと同じ語彙。同期HTTP経路のため1リクエスト=1呼出し）
+    await recordMetricSafe(ctx.env, { service: "ai", metric: "ai.calls", unit: "count", amount: 1, source: "api:ai.assistant" });
     let validated: ValidatedAssistant;
     try {
       validated = await runAssistantLlm(ai, input.body.query, readings);
     } catch (err) {
-      if (err instanceof AssistantAiError) throw new HttpError("DEPENDENCY_UNAVAILABLE");
+      if (err instanceof AssistantAiError) {
+        // providerの応答制限（429）は別metric（予兆の監視対象。docs/07 §8。実providerでの区分確定はV04）
+        const rateLimited = /429/.test(String(err));
+        await recordMetricSafe(ctx.env, {
+          service: "ai", metric: rateLimited ? "ai.rate_limited" : "ai.call_failed", unit: "count", amount: 1, source: "api:ai.assistant",
+        });
+        throw new HttpError("DEPENDENCY_UNAVAILABLE");
+      }
+      // 検証不可（限定retry後）: 呼出し自体は起きた（課金対象の可能性）。usageは未知として計上する（0と偽装しない）
+      await recordMetricSafe(ctx.env, { service: "ai", metric: "ai.tokens.input", unit: "tokens", amount: null, source: "api:ai.assistant" });
       // 検証不可は保留（限定retry後。行も提案も作らない。docs/16 T068。偽の提案を作らない）
       return AssistantProposal.parse({
         proposalId: null, answer: ASSISTANT_ABSTAINED_ANSWER,
         references: [], readResults: [], proposedEffects: [], abstained: true,
       });
     }
+    await recordMetricSafe(ctx.env, {
+      service: "ai", metric: "ai.tokens.input", unit: "tokens",
+      amount: validated.usage ? validated.usage.promptTokens : null, source: "api:ai.assistant",
+    });
+    await recordMetricSafe(ctx.env, {
+      service: "ai", metric: "ai.tokens.output", unit: "tokens",
+      amount: validated.usage ? validated.usage.completionTokens : null, source: "api:ai.assistant",
+    });
     // referencesは「モデルが根拠に使った読取」の版集合（入力した集合の部分集合＝検証済み。重複除去）
     const byNo = new Map(readings.map((r, i) => [i + 1, r]));
     const refSeen = new Set<string>();

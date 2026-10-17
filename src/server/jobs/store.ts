@@ -1,4 +1,5 @@
 import type { AppEnv } from "../env";
+import { recordMetricSafe } from "../observability/metrics";
 import type { jobStates } from "../../shared/states";
 
 export type JobStatus = (typeof jobStates)[number];
@@ -135,7 +136,13 @@ export async function reapExpiredLeases(env: Pick<AppEnv, "DB">, nowIso: string)
        lease_token = NULL, lease_until = NULL, error_code = 'lease_expired', updated_at = ?1
      WHERE status = 'running' AND lease_until <= ?1`,
   ).bind(nowIso).run();
-  return res.meta.changes ?? 0;
+  const expired = res.meta.changes ?? 0;
+  // 使用量の計上（T080 review round 1）: job滞留の兆候（lease失効。監視のみ。docs/07 §8「lease滞留」）。
+  // 観測は業務を止めない。0件のときは行を作らない
+  if (expired > 0) {
+    await recordMetricSafe(env, { service: "d1", metric: "jobs.lease_expired", unit: "count", amount: expired, source: "cron:lease" });
+  }
+  return expired;
 }
 
 /**

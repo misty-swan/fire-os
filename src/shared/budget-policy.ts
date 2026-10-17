@@ -36,6 +36,20 @@ export const BudgetPolicySchema = z.object({
     aiInputUsdPerMTokens: z.number().min(0).nullable(),
     aiOutputUsdPerMTokens: z.number().min(0).nullable(),
   }),
+  /**
+   * 監視のみの項目（review round 1。**停止には使わない**＝超過は予兆（warn）だけ）。
+   * 停止対象（月額/日次枠/429/費用試算）と監視のみ（この値）の区別はops/cost-alerts.md §1に明記
+   */
+  monitors: z.object({
+    /** job滞留の兆候（lease失効）の許容件数/日 */
+    maxJobLeaseExpiredPerDay: z.number().int().min(0),
+    /** 配送不明（unknown）の許容件数/日 */
+    maxDeliveryUnknownPerDay: z.number().int().min(0),
+    /** 同期操作の拒否（競合・検査違反など401以外のHttpError）の許容件数/日 */
+    maxSyncRejectionsPerDay: z.number().int().min(0),
+    /** 添付の検査で拒否（スキャン不能）の許容件数/日 */
+    maxScanRejectedPerDay: z.number().int().min(0),
+  }),
   /** 単価の出典（管理画面にそのまま出す。docs/06 §2と同じ記録形式） */
   priceSource: z.string().min(1).max(500),
   /** 設定の根拠と限界（未承認・照合未実施の明記） */

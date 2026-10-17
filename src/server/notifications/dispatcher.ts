@@ -177,6 +177,15 @@ export async function dispatchNotification(env: AppEnv, job: LeasedJob): Promise
     }),
   );
 
+  // 配送不明の計上（T080 review round 1。監視のみ）: 送信前に取り残された行（stuck→unknown）と、
+  // provider.sendの例外で成否不明になった行。docs/07 §8「通知不明」のアプリ内で見える分
+  const unknownCount = stuck.length + results.filter((r) => r.result.kind === "unknown").length;
+  if (unknownCount > 0) {
+    await recordMetricSafe(env, {
+      service: "notification", metric: "notification.delivery_unknown", unit: "count", amount: unknownCount, source: "job:notification.deliver",
+    });
+  }
+
   // ⑤結果をdeliveriesへ確定（状態ガード付き。lease切れの後発実行が既に確定済みの行を壊さない）
   const resultStatements: D1PreparedStatement[] = [];
   for (const { d, provider, result } of results) {

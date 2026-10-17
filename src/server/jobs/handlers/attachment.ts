@@ -57,6 +57,10 @@ export async function inspectUpload(job: LeasedJob, env: AppEnv): Promise<JobOut
     return { kind: "retryable", errorCode: "scanner_unavailable" };
   }
   if (scan.verdict === "rejected") {
+    // スキャン不能（検査拒否）の計上（T080 review round 1。監視のみ。docs/07 §8「検査失敗」）
+    await recordMetricSafe(env, {
+      service: "r2", metric: "attachments.scan_rejected", unit: "count", amount: 1, source: "job:attachment.inspect",
+    });
     await env.DB.batch([
       env.DB.prepare(
         "UPDATE attachments SET status = 'rejected', version = version + 1, updated_at = ? WHERE id = ? AND unit_id = ? AND version = ? AND status = 'checking'",

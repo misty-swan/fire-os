@@ -1,9 +1,15 @@
 import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { proposeAssistantAction } from "../src/server/ai/assistant";
+import { localTestAi } from "../src/server/ai/local-fake";
+import { chunkDocument } from "../src/server/documents/chunk";
 import type { AppEnv } from "../src/server/env";
+import type { ApiContext } from "../src/server/http";
+import { sha256Hex } from "../src/server/mutations/hash";
 import "../src/server/jobs/handlers/classification"; // 分類job handlerの登録（Cron/Queueと同じ登録点）
 import { runDueJobs } from "../src/server/jobs/runner";
+import { answerRag } from "../src/server/search/rag";
 import {
   applyBudgetDecision,
   buildUsageSnapshot,
@@ -106,6 +112,84 @@ const okAnswer = () => ({
   usage: { prompt_tokens: 120, completion_tokens: 8 },
 });
 
+// --- 出典つき回答（API-76）・横断アシスタント（API-77）の試験用（tests/rag.test.ts・assistant.test.tsと同じ最小ctx） ---
+
+const aiCtx = (who: Identity, ai: NonNullable<AppEnv["AI"]> | undefined): ApiContext =>
+  ({
+    env: { ...env, AI: ai },
+    req: { header: (name: string) => (name === "x-test-identity" ? JSON.stringify({ userId: who.userId }) : undefined) },
+    get: () => "budget-test",
+  }) as unknown as ApiContext;
+
+const errCodeOf = async (run: () => Promise<unknown>): Promise<string> => {
+  try {
+    await run();
+    return "no_error";
+  } catch (err) {
+    return String((err as { code?: string }).code ?? "other");
+  }
+};
+
+/** 呼出し回数を数えるfake（localTestAiの決定的応答をそのまま使う） */
+const countingLocalAi = () => {
+  const fake = localTestAi({ ...env, TEST_AI_FAKE: "1" })!;
+  let calls = 0;
+  const counting = {
+    run: async (model: string, input: unknown) => {
+      calls++;
+      return fake.run(model, input as never);
+    },
+  };
+  return { ai: counting as unknown as NonNullable<AppEnv["AI"]>, callsOf: () => calls };
+};
+
+/** RAGの根拠文書（approved版＋FTS索引行。tests/rag.test.tsのinsertTestDocument縮小版。ACL行なし＝既定可視） */
+const insertRagDocument = async (
+  unitId: string,
+  owner: { userId: string; memberId: string },
+  title: string,
+  pageText: string,
+): Promise<void> => {
+  const documentId = crypto.randomUUID();
+  const versionId = crypto.randomUUID();
+  const attachmentId = crypto.randomUUID();
+  const contentHash = await sha256Hex(`budget-test:${title}`);
+  const now = "2026-10-16T00:00:00.000Z";
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO attachments (id, unit_id, owner_user_id, owner_member_id, intent_target_type, intent_target_id, content_type, byte_size, sha256, status, expires_at, classification, upload_token_hash, ready_key, created_at, updated_at, actor_kind) " +
+        "VALUES (?, ?, ?, ?, 'document', ?, 'application/pdf', 1024, ?, 'ready', '2027-10-16T00:00:00.000Z', 'basic', ?, ?, ?, ?, 'system')",
+    ).bind(attachmentId, unitId, owner.userId, owner.memberId, documentId, contentHash, "0".repeat(64), `budget-test/${documentId}.pdf`, now, now),
+    env.DB.prepare(
+      "INSERT INTO documents (id, unit_id, title, classification, status, policy_version, created_at, updated_at, actor_kind) VALUES (?, ?, ?, '訓練資料（架空）', 'approved', 1, ?, ?, 'system')",
+    ).bind(documentId, unitId, title, now, now),
+    env.DB.prepare(
+      "INSERT INTO document_versions (id, unit_id, document_id, revision_no, attachment_id, status, approved_by, approved_at, license_ref, content_hash, created_at, updated_at, actor_kind) VALUES (?, ?, ?, 1, ?, 'approved', ?, ?, '架空・自団体作成（検証用）', ?, ?, ?, 'system')",
+    ).bind(versionId, unitId, documentId, attachmentId, owner.userId, now, contentHash, now, now),
+  ]);
+  const chunks = chunkDocument({
+    versionId, documentId, unitId, contentHash, extractorVersion: "budget-test",
+    pages: [{ pageNo: 1, text: pageText }],
+  });
+  const chunkStmts: D1PreparedStatement[] = [];
+  const ftsStmts: D1PreparedStatement[] = [];
+  for (const chunk of chunks) {
+    const chunkId = crypto.randomUUID();
+    chunkStmts.push(
+      env.DB.prepare(
+        "INSERT INTO document_chunks (id, unit_id, version_id, chunk_no, page_no, section, text, source_offsets, index_status, index_key, created_at, updated_at, actor_kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'indexed', ?, ?, ?, 'system')",
+      ).bind(chunkId, unitId, versionId, chunk.chunkNo, chunk.pageNo, chunk.section, chunk.text, JSON.stringify(chunk.sourceOffsets), `budget-test:v1/${chunkId}`, now, now),
+    );
+    ftsStmts.push(
+      env.DB.prepare(
+        "INSERT INTO document_chunks_fts (chunk_id, unit_id, version_id, document_id, page_no, chunk_no, text) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ).bind(chunkId, unitId, versionId, documentId, chunk.pageNo, chunk.chunkNo, chunk.text),
+    );
+  }
+  await env.DB.batch(chunkStmts);
+  await env.DB.batch(ftsStmts);
+};
+
 // --- 計上の読み取り ---
 
 const knownSum = async (service: string, metric: string): Promise<number> =>
@@ -116,7 +200,8 @@ const knownSum = async (service: string, metric: string): Promise<number> =>
 const unknownRowCount = async (): Promise<number> =>
   (await env.DB.prepare("SELECT count(*) AS n FROM usage_metrics WHERE amount_known = 0").first<{ n: number }>())!.n;
 
-const budgetAuditRows = async (action: string) => fx.rows("audit_logs", { action, entity_type: "budget" });
+const budgetAuditRows = async (action: string, unitId?: string) =>
+  fx.rows("audit_logs", unitId ? { action, entity_type: "budget", unit_id: unitId } : { action, entity_type: "budget" });
 
 /** メトリクス/状態の全行をテキスト化してPII（UUID・氏名・本文）を探す */
 const collectMetricTexts = async (): Promise<string[]> => {
@@ -170,6 +255,100 @@ describe("メトリクス・課金予兆・上限停止 (T080)", () => {
     expect(jobRow.error_code).toBe("ai_run_failed");
     expect(await knownSum("ai", "ai.calls")).toBe(callsBefore + 1); // 試行は1回
     expect(await knownSum("ai", "ai.rate_limited")).toBe(rateLimitedBefore + 1);
+  });
+
+  it("rag_and_assistant_are_metered_and_stopped_by_budget", async () => {
+    const a = fx.units.a;
+    const b = fx.units.b;
+    const adminB = b.people.admin;
+
+    // --- 準備: RAGの根拠文書（unit B・ACL行なし＝既定可視）と、横断のcontextRefにする異常 ---
+    await insertRagDocument(b.id, { userId: adminB.userId!, memberId: adminB.memberId! }, "格納箱の点検要領（架空）", "格納箱の前には資材を置かないこと。\n点検の結果は記録すること。");
+    const issue = await createIssue(adminB, "横断試験の異常（架空）");
+    const { ai: fakeAi, callsOf } = countingLocalAi();
+
+    // --- 計上（未接続ならai.callsが増えない＝赤） ---
+    const callsBefore = await knownSum("ai", "ai.calls");
+    const tokensBefore = await knownSum("ai", "ai.tokens.input");
+    const rag = await answerRag(aiCtx(adminB, fakeAi), { body: { query: "格納箱" } });
+    expect(rag.abstained).toBe(false); // 出典つきの回答（AIを1回呼んでいる）
+    expect(callsOf()).toBe(1);
+    expect(await knownSum("ai", "ai.calls")).toBe(callsBefore + 1);
+    expect(
+      (await env.DB.prepare("SELECT count(*) AS n FROM usage_metrics WHERE service = 'ai' AND metric = 'ai.calls' AND source = 'api:search.rag'").first<{ n: number }>())!.n,
+    ).toBe(1);
+
+    const proposal = await proposeAssistantAction(aiCtx(adminB, fakeAi), {
+      body: { query: "格納箱", contextRefs: [{ type: "issue", id: issue.id }] },
+      headers: { "idempotency-key": crypto.randomUUID() },
+    });
+    expect(proposal.abstained).toBe(false);
+    expect(proposal.proposalId).not.toBeNull();
+    expect(callsOf()).toBe(2);
+    expect(await knownSum("ai", "ai.calls")).toBe(callsBefore + 2);
+    expect(
+      (await env.DB.prepare("SELECT count(*) AS n FROM usage_metrics WHERE service = 'ai' AND metric = 'ai.calls' AND source = 'api:ai.assistant'").first<{ n: number }>())!.n,
+    ).toBe(1);
+    // usage既知のtokensも計上される（RAGのfake usage=96、assistantのfake usage=120）
+    expect(await knownSum("ai", "ai.tokens.input")).toBe(tokensBefore + 96 + 120);
+
+    // --- 停止中は出典つき回答・横断アシスタントも503で止まり、AIは呼ばれない（auditはunit Bに記録） ---
+    await recordMetric(env, { service: "ai", metric: "ai.calls", unit: "count", amount: BUDGET_POLICY.dailyAiCallCap, source: "seed:demo-burst-rag" });
+    const stoppedDecision = evaluateBudget(await buildUsageSnapshot(env), BUDGET_POLICY);
+    expect(stoppedDecision.status).toBe("stopped");
+    await applyBudgetDecision(env, { decision: stoppedDecision, source: "auto", auditUnitId: b.id, note: "test:stop-rag" });
+    expect(await budgetAuditRows("budget.stop", b.id)).toHaveLength(1);
+    const callsWhenStopped = callsOf();
+    expect(await errCodeOf(() => answerRag(aiCtx(adminB, fakeAi), { body: { query: "格納箱" } }))).toBe("DEPENDENCY_UNAVAILABLE");
+    expect(await errCodeOf(() => proposeAssistantAction(aiCtx(adminB, fakeAi), {
+      body: { query: "格納箱", contextRefs: [{ type: "issue", id: issue.id }] },
+      headers: { "idempotency-key": crypto.randomUUID() },
+    }))).toBe("DEPENDENCY_UNAVAILABLE");
+    expect(callsOf()).toBe(callsWhenStopped); // 停止中のAI呼出しは0
+
+    // --- 解除: 当日の急増を除いて（実環境では日が変わる。usage_metricsは観測データなので試験内で日経過を相当させる）評価が枠内に戻れば、次の呼出しで自然解除され呼べる ---
+    await env.DB.prepare("DELETE FROM usage_metrics WHERE source = 'seed:demo-burst-rag'").run();
+    const ragAfter = await answerRag(aiCtx(adminB, fakeAi), { body: { query: "格納箱" } });
+    expect(ragAfter.abstained).toBe(false);
+    expect(callsOf()).toBe(callsWhenStopped + 1);
+    expect(await budgetAuditRows("budget.resume", b.id)).toHaveLength(1);
+    // 最後の断言（このケースの要点）: 停止中のAI消費は0・計上は既存経路と同じ表に載る
+    expect(knownSum("ai", "ai.calls")).resolves.toBeGreaterThan(0);
+  });
+
+  it("monitor_counters_are_aggregated_and_warn_but_do_not_stop", async () => {
+    // 監視項目（review round 1）: job滞留（lease失効）・配送不明・同期の拒否・検査不能（scan rejected）。
+    // 既存の成果点がusage_metricsへcount計上し、しきい値超過は「予兆（warn）」＝停止にはしない
+    await recordMetric(env, { service: "d1", metric: "jobs.lease_expired", unit: "count", amount: 3, source: "seed:monitor" });
+    await recordMetric(env, { service: "notification", metric: "notification.delivery_unknown", unit: "count", amount: 2, source: "seed:monitor" });
+    await recordMetric(env, { service: "d1", metric: "sync.rejected", unit: "count", amount: 1, source: "seed:monitor" });
+    await recordMetric(env, { service: "r2", metric: "attachments.scan_rejected", unit: "count", amount: 1, source: "seed:monitor" });
+    await recordMetric(env, { service: "ai", metric: "ai.call_failed", unit: "count", amount: 1, source: "seed:monitor" });
+
+    const snapshot = await buildUsageSnapshot(env);
+    expect(snapshot.jobLeaseExpired).toBe(3);
+    expect(snapshot.deliveryUnknown).toBe(2);
+    expect(snapshot.syncRejections).toBe(1);
+    expect(snapshot.scanRejected).toBe(1);
+    expect(snapshot.aiCallsFailed).toBe(1); // 失敗率の元データ（割算はopsが月次に算出。ops/cost-alerts.md §未実装）
+
+    // しきい値内は理由なし
+    const normal = evaluateBudget(snapshot, BUDGET_POLICY);
+    expect(normal.reasons).toEqual([]);
+    expect(normal.status).toBe("normal");
+    // しきい値超過はwarn（停止しない。どれが停止対象かはconfig/ops/cost-alerts.mdに明記）
+    const warned = evaluateBudget({
+      ...snapshot,
+      jobLeaseExpired: BUDGET_POLICY.monitors.maxJobLeaseExpiredPerDay + 1,
+      deliveryUnknown: BUDGET_POLICY.monitors.maxDeliveryUnknownPerDay + 1,
+      syncRejections: BUDGET_POLICY.monitors.maxSyncRejectionsPerDay + 1,
+      scanRejected: BUDGET_POLICY.monitors.maxScanRejectedPerDay + 1,
+    }, BUDGET_POLICY);
+    expect(warned.status).toBe("warn");
+    expect(warned.expensiveCallsAllowed).toBe(true); // 監視項目だけで高価な呼び出しは止めない
+    expect(warned.reasons).toEqual(expect.arrayContaining([
+      "job_lease_expired_over", "delivery_unknown_over", "sync_rejections_over", "scan_rejected_over",
+    ]));
   });
 
   it("budget_exhaustion_stops_optional_inference_but_preserves_saved_records", async () => {
@@ -257,19 +436,19 @@ describe("メトリクス・課金予兆・上限停止 (T080)", () => {
       .rejects.toThrow(); // 監査へ書けないときは判定の適用ごと失敗する（半適用を作らない）
     // 状態は壊れていない: 停止はしていない（ゲートの評価が書いたnormal行のみ）し、監査も増えていない
     expect((await readPersistedBudgetState(env))?.status ?? "normal").toBe("normal");
-    expect(await budgetAuditRows("budget.stop")).toHaveLength(0);
+    expect(await budgetAuditRows("budget.stop", a.id)).toHaveLength(0);
     await env.DB.prepare("DROP TRIGGER budget_test_fail_audit").run();
     // 再適用は成功し、失敗attemptの残留がない（budget.stopの監査は1本だけ）
     const applied = await applyBudgetDecision(env, { decision: stoppedDecision, source: "auto", auditUnitId: a.id, note: "test:stop" });
     expect(applied.changed).toBe(true);
     expect((await readPersistedBudgetState(env))!.status).toBe("stopped");
-    const stopRows = await budgetAuditRows("budget.stop");
+    const stopRows = await budgetAuditRows("budget.stop", a.id);
     expect(stopRows).toHaveLength(1);
     expect(stopRows[0]!.actor_kind).toBe("system");
     expect(JSON.parse(stopRows[0]!.metadata_json as string)).toMatchObject({ to: "stopped" });
     // 再適用は冪等（停止済みで同じ判定なら監査を増やさない）
     expect((await applyBudgetDecision(env, { decision: stoppedDecision, source: "auto", auditUnitId: a.id, note: "test:stop" })).changed).toBe(false);
-    expect(await budgetAuditRows("budget.stop")).toHaveLength(1);
+    expect(await budgetAuditRows("budget.stop", a.id)).toHaveLength(1);
 
     // --- 停止後の高価な呼び出しは0（既存の記録の読取は止まらない） ---
     const callsAtStop = await knownSum("ai", "ai.calls");
@@ -315,7 +494,7 @@ describe("メトリクス・課金予兆・上限停止 (T080)", () => {
     const resumed = await applyBudgetDecision(env, { decision: nextDayDecision, source: "auto", auditUnitId: a.id, note: "test:resume" });
     expect(resumed.changed).toBe(true);
     expect(resumed.state.status).toBe("normal");
-    expect(await budgetAuditRows("budget.resume")).toHaveLength(1);
+    expect(await budgetAuditRows("budget.resume", a.id)).toHaveLength(1);
 
     // --- 手動停止（運用手順による停止）は評価が正常でも自動解除しない。解除は手順 ---
     await recordMetric(env, { service: "ai", metric: "ai.calls", unit: "count", amount: BUDGET_POLICY.dailyAiCallCap, source: "seed:demo-burst" });
@@ -334,7 +513,7 @@ describe("メトリクス・課金予兆・上限停止 (T080)", () => {
     expect(lifted.changed).toBe(false);
     expect(lifted.state.status).toBe("normal");
     // ゲート単位の復帰確認（実環境での停止復帰演習は未実施。ops/cost-alerts.mdに手順を記録）
-    const gate = await expensiveCallGate(env, { unitId: a.id, jobKind: "ai.classify", jobId: "gate-check" });
+    const gate = await expensiveCallGate(env, { unitId: a.id, source: "test:gate-check" });
     expect(gate.allowed).toBe(false); // 当日の急増が残っているため、解除しても直ちに再停止する（保護）
 
     // --- 最終断言（brief） ---

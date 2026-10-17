@@ -10,8 +10,8 @@
 |---|---|---|
 | 使用量の記録 | D1（`usage_metrics`。Workers/D1/R2/AI/Maps/通知を別計上）。unknown（計測できない使用量）はNULLで記録し0と偽装しない | `src/server/observability/metrics.ts`（recordMetric）、drizzle/0032 |
 | しきい値 | 開発設定 `config/budget-development.json`（版・日付・**未承認**であることの明記つき） | `src/shared/budget-policy.ts`（サーバーと管理画面の両方で同じ値） |
-| 評価 | 純関数。日次枠/通知枠/429/費用試算の超過で `stopped`、急増で `warn` | `src/server/observability/budget.ts`（evaluateBudget） |
-| 停止の効き目 | **AI分類（API-29）と報告書下書き生成（API-32）が「保留（budget_stopped）」になる**。既存記録の閲覧・読み取り・他の業務更新は止まらない | `src/server/jobs/handlers/classification.ts` / `report.ts` の expensiveCallGate |
+| 評価 | 純関数。日次枠/通知枠/429/費用試算の超過で `stopped`、急増と監視項目（§1の監視のみ）で `warn` | `src/server/observability/budget.ts`（evaluateBudget） |
+| 停止の効き目 | **AI分類（API-29）と報告書下書き生成（API-32）が「保留（budget_stopped）」、出典つき回答（API-76）と横断アシスタント（API-77）が503**になる。いずれもAIを呼ばない（review round 1でRAG/アシスタントにも接続）。既存記録の閲覧・読み取り・他の業務更新は止まらない | `handlers/classification.ts` / `handlers/report.ts` / `search/rag.ts` / `ai/assistant.ts` の expensiveCallGate |
 | 停止の状態 | D1単一行 `budget_state`（status normal/warn/stopped、source auto/manual）。履歴の正本は監査（`audit_logs` の entity_type='budget'） | 同上（applyBudgetDecision。状態＋監査を1つのD1 batchで確定） |
 | 解除 | **手順（本書§3）のみ**。手動停止（source=manual）は評価が正常でも自動解除しない。自動停止（source=auto）は使用量が枠内に戻る評価（日次枠なら翌日）で自然解除する | 同上 |
 | アラート | **自動送信は作らない**。監査への記録＋管理画面の運用パネル＋本書の手順を人が実行する | `src/client/features/admin/OperationsPanel.tsx`（SCR-17に追加） |
@@ -20,16 +20,30 @@
 
 ## 1. しきい値（config/budget-development.json。開発設定・未承認）
 
+**停止対象（超えると高価なAI呼び出しが止まる）**:
+
 | しきい値 | 値 | 超えたとき |
 |---|---|---|
 | 月額の費用上限（試算） | $5（Workers Paid基本料込みのD11推奨案） | 停止 |
 | AI呼び出しの1日の枠 | 500回 | 停止 |
 | 通知の1日の枠 | 2,000通 | 停止 |
 | 応答制限（429）の許容 | 10件/日 | 停止 |
-| 急増 | 直近7日の平均の5倍（1日20回未満は判定しない） | 予兆（warn。停止しない） |
+
+**監視のみ（超えても止めない。warn＝気づき）**:
+
+| 監視項目 | 計上元（usage_metricsのmetric） | しきい値 | 見方 |
+|---|---|---|---|
+| 使用量の急増 | `ai.calls`（直近7日の平均の5倍。1日20回未満は判定しない） | — | 予兆（warn）。放置すると枠を超えるので先に見る |
+| job滞留の兆候 | `jobs.lease_expired`（service d1。作業権の期限切れ=処理が止まったjob） | 20件/日 | 処理の詰まり・handlerの繰り返し失敗の兆候 |
+| 配送不明 | `notification.delivery_unknown`（service notification。stuck→unknown＋providerで成否不明） | 10件/日 | 宛先・providerの障害兆候。docs/07 §5の「到達不明」と同じ語彙 |
+| 同期の拒否 | `sync.rejected`（service d1。API-81の401以外のHttpError） | 20件/日 | 競合・版の不一致の多発。端末の同期トラブル兆候 |
+| スキャン不能 | `attachments.scan_rejected`（service r2。添付検査の拒否） | 20件/日 | 壊れた画像・対応外形式の投入兆候 |
+| AI呼出しの失敗 | `ai.call_failed`（service ai。失敗率の元データ） | （しきい値なし。割算はopsが月次に算出） | 失敗率＝call_failed÷ai.calls。429は別metric（`ai.rate_limited`。停止対象） |
 
 - 費用の試算は「記録済みusage×単価固定分のみ」の**下限**（LLM等の単価未固定分は含まない。出典はconfigの `priceSource`。実請求とは照合していない）。
-- しきい値を変えるときは: configの `version` を進め、`setAt` を更新し、理由をこのファイルと docs/evidence/cost-estimate.md に残す。**評価後に都合よく変えない**（AI評価の閾値と同じ規律）。
+- 監視のみの項目は**停止には使わない**（誤検知で業務のAIを止めないため。docs/07 §8の「監視」は気づきのため）。しきい値を変更するときは: configの `version` を進め、`setAt` を更新し、理由をこのファイルと docs/evidence/cost-estimate.md に残す。**評価後に都合よく変えない**（AI評価の閾値と同じ規律）。
+
+**未実装の監視項目（p95レイテンシ。実装時の手掛かりつき）**: docs/07 §8の「p95」はアプリ内では未計上。理由: usage_metricsは「1行=加算する量」の前提（dayごとのSUM）で作っており、p95のような分布値をそのまま載せられない。実装のときは①AI呼出し前後のDate.now()差をunit 'ms'で**ms範囲ごとのcountバケット**（例: 0-500/500-1000/…）として計上し、opsが累積でp95を算出する（usage_metricsの語彙を増やさない方式）、または②Workers Analytics/Logpush（Cloudflare側の正本）で見る。どちらにするかは実Cloudflare接続後の実測（T087の運用検証）で判断する。現在は把握したいときはダッシュボードのレイテンシを見る。
 
 ## 2. 日常の見方（週次。5分）
 
@@ -44,6 +58,8 @@
 ```bash
 npx wrangler d1 execute DB --local --command "SELECT status, source, reasons_json, updated_at FROM budget_state WHERE id='global'"
 npx wrangler d1 execute DB --local --command "SELECT day, service, metric, SUM(amount) AS known, SUM(amount_known = 0) AS unknown_rows FROM usage_metrics WHERE day >= date('now','-7 day') GROUP BY day, service, metric ORDER BY day DESC, service"
+# 監視のみの項目だけを見る（job滞留・配送不明・同期の拒否・スキャン不能・AI失敗/429）
+npx wrangler d1 execute DB --local --command "SELECT day, metric, SUM(amount) AS n FROM usage_metrics WHERE metric IN ('jobs.lease_expired','notification.delivery_unknown','sync.rejected','attachments.scan_rejected','ai.call_failed','ai.rate_limited') AND day >= date('now','-7 day') GROUP BY day, metric ORDER BY day DESC"
 ```
 
 ## 3. 停止したとき（対応の順序）

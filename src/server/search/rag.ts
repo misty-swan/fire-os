@@ -5,6 +5,8 @@ import { resolvePrincipal } from "../auth/principal";
 import { authorizedDocumentVersions } from "../documents/authorized";
 import type { AppEnv } from "../env";
 import { HttpError, type ApiContext } from "../http";
+import { expensiveCallGate } from "../observability/budget";
+import { recordMetricSafe } from "../observability/metrics";
 import { requirePermission } from "../routes/invitations";
 import type { ApiResponse, ApiRequest } from "../../shared/contracts/registry";
 import { Citation, RagAnswer } from "../../shared/contracts/ai";
@@ -51,7 +53,7 @@ export const RAG_ABSTAINED_ANSWER = "この質問について、現在閲覧で�
 /** 出力前再検査で失権した場合の固定文言（生成中の撤回を含む。docs/06 §5.5「回答失効」） */
 export const RAG_WITHHELD_ANSWER = "この質問の根拠資料が現在参照できないため、回答を保留しました。";
 
-/** AI呼出し自体の失敗（一時的。回答を出さず503へ。応答の破棄とは区別する） */
+/** AI呼出し自体の失敗（一時的。回答を出さず503へ。応答の破棄とは区別する）。messageは生の失敗区分（429判定に使う。応答には出ない） */
 export class RagAiError extends Error {}
 
 /** 引用span検証を通った生成結果（保存と応答の共通形） */
@@ -189,8 +191,8 @@ export async function runRagLlm(
     let raw: unknown;
     try {
       raw = await ai.run(LLM_MODEL, payload);
-    } catch {
-      throw new RagAiError("rag llm run failed");
+    } catch (err) {
+      throw new RagAiError(String(err)); // 生の失敗区分を保持（呼出し側が429を計上する。docs/07 §8）
     }
     const validated = validateRagResponse(raw, chunks, maxSources);
     if (validated.ok) return validated.value;
@@ -264,6 +266,12 @@ export async function answerRag(ctx: ApiContext, input: ApiRequest<"API-76">): P
   requirePermission(p, "PER-11", { unitId: p.unitId, type: "document" });
 
   const env = ctx.env;
+  // 課金上限の停止ゲート（T080・review round 1）: 出典つき回答も「高価なAI呼び出し」であり、
+  // 分類・報告書生成と同じ停止対象（docs/07 §8、docs/14 D11）。停止中は検索も呼ばず503でfail-closed
+  // （偽の回答を作らない方針と同じ落ち先。既存記録の読取は止まらない。解除はops/cost-alerts.mdの手順）
+  const gate = await expensiveCallGate(env, { unitId: p.unitId, source: "api:search.rag" });
+  if (!gate.allowed) throw new HttpError("DEPENDENCY_UNAVAILABLE");
+
   const ai = env.AI ?? localTestAi(env);
   if (!ai) throw new HttpError("DEPENDENCY_UNAVAILABLE"); // AI無しで偽の回答を作らない（fail-closed）
 
@@ -278,15 +286,35 @@ export async function answerRag(ctx: ApiContext, input: ApiRequest<"API-76">): P
     return RagAnswer.parse({ answer: RAG_ABSTAINED_ANSWER, citations: [], abstained: true });
   }
 
-  // 生成＋決定的検証（限定retry）。AI呼出し自体の失敗は503（外部依存）。検証不可はabstained
+  // 生成＋決定的検証（限定retry）。使用量の計上（T080・review round 1）: 呼出し試行・usage既知/未知・
+  // 失敗/429を分類・報告書生成と同じ語彙でusage_metricsへ記録する（観測は応答を壊さない）。
+  // jobではなく同期的なHTTP経路のため、job再実行のような重複計上はなく1リクエスト=1呼出し。
+  await recordMetricSafe(env, { service: "ai", metric: "ai.calls", unit: "count", amount: 1, source: "api:search.rag" });
   let validated: ValidatedRag;
   try {
     validated = await runRagLlm(ai, input.body.query, chunks, maxSources);
   } catch (err) {
-    if (err instanceof RagAiError) throw new HttpError("DEPENDENCY_UNAVAILABLE");
+    if (err instanceof RagAiError) {
+      // providerの応答制限（429）は別metric（予兆の監視対象。docs/07 §8。実providerでの区分確定はV04）
+      const rateLimited = /429/.test(String(err));
+      await recordMetricSafe(env, {
+        service: "ai", metric: rateLimited ? "ai.rate_limited" : "ai.call_failed", unit: "count", amount: 1, source: "api:search.rag",
+      });
+      throw new HttpError("DEPENDENCY_UNAVAILABLE");
+    }
+    // 検証不可（限定retry後）: 呼出し自体は起きた（課金対象の可能性）。usageは未知として計上する（0と偽装しない）
+    await recordMetricSafe(env, { service: "ai", metric: "ai.tokens.input", unit: "tokens", amount: null, source: "api:search.rag" });
     await persistAnswer(env, p, { queryHash, status: "abstained", answer: RAG_ABSTAINED_ANSWER, citations: [], chunks });
     return RagAnswer.parse({ answer: RAG_ABSTAINED_ANSWER, citations: [], abstained: true });
   }
+  await recordMetricSafe(env, {
+    service: "ai", metric: "ai.tokens.input", unit: "tokens",
+    amount: validated.usage ? validated.usage.promptTokens : null, source: "api:search.rag",
+  });
+  await recordMetricSafe(env, {
+    service: "ai", metric: "ai.tokens.output", unit: "tokens",
+    amount: validated.usage ? validated.usage.completionTokens : null, source: "api:search.rag",
+  });
   // 引用がない回答はabstained（docs/06 §5.4。回答本文だけを出さない）
   if (validated.citations.length === 0) {
     await persistAnswer(env, p, { queryHash, status: "abstained", answer: RAG_ABSTAINED_ANSWER, citations: [], chunks });

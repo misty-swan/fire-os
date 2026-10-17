@@ -26,6 +26,8 @@ export interface UsageSnapshot {
   day: string;
   /** AI呼出しの試行（ai.callsの既知合計。usageの未知/既知と無関係に1試行=1） */
   aiCallsKnown: number;
+  /** 呼出し失敗（ai.call_failed。失敗率の元データ。割算はopsが月次に算出） */
+  aiCallsFailed: number;
   /** usage未知を含むtokens等の合計には入らない行数（0と偽装しないための別枠） */
   aiTokensInput: number;
   aiTokensOutput: number;
@@ -33,8 +35,16 @@ export interface UsageSnapshot {
   aiRateLimited: number;
   /** 通知の配送試行（notification.deliveries） */
   notifications: number;
+  /** 配送不明（unknown。stuck→unknown＋providerで成否不明） */
+  deliveryUnknown: number;
   /** R2へ新規保存したbytes（r2.bytes.stored。既存不変キーの再利用は増分0なので計上しない） */
   r2BytesStored: number;
+  /** job滞留の兆候（lease失効。jobs.lease_expired） */
+  jobLeaseExpired: number;
+  /** 同期操作の拒否（sync.rejected） */
+  syncRejections: number;
+  /** 添付の検査で拒否＝スキャン不能（attachments.scan_rejected） */
+  scanRejected: number;
   /** unknown（amount NULL）の行数。合計に偽装されず別枠で見える */
   unknownRows: number;
   /** アプリ内では計測できず、実Cloudflareのダッシュボード/請求での確認にしかならないサービス */
@@ -67,7 +77,19 @@ export const BUDGET_REASON_CODES = [
   "ai_rate_limited_over",
   "monthly_cost_estimate_over",
   "ai_calls_spike",
+  "job_lease_expired_over",
+  "delivery_unknown_over",
+  "sync_rejections_over",
+  "scan_rejected_over",
 ] as const;
+
+/** 停止にする理由（docs/16 T080「高価な呼び出しの停止」）。これ以外（急増・監視項目）は予兆＝warnで止めない */
+const STOP_REASONS: ReadonlySet<string> = new Set([
+  "daily_ai_calls_over",
+  "daily_notifications_over",
+  "ai_rate_limited_over",
+  "monthly_cost_estimate_over",
+]);
 
 /** アプリ内では計測できず、実Cloudflareのダッシュボード/請求での確認になるサービス（docs/07 §8） */
 export const UNMEASURED_SERVICES: readonly MetricService[] =
@@ -95,11 +117,16 @@ export async function buildUsageSnapshot(env: Pick<AppEnv, "DB">, opts: { now?: 
   const snap = {
     day: today,
     aiCallsKnown: 0,
+    aiCallsFailed: 0,
     aiTokensInput: 0,
     aiTokensOutput: 0,
     aiRateLimited: 0,
     notifications: 0,
+    deliveryUnknown: 0,
     r2BytesStored: 0,
+    jobLeaseExpired: 0,
+    syncRejections: 0,
+    scanRejected: 0,
     unknownRows: 0,
   };
   for (const r of rows) {
@@ -113,13 +140,21 @@ export async function buildUsageSnapshot(env: Pick<AppEnv, "DB">, opts: { now?: 
     }
     if (r.service === "ai") {
       if (r.metric === "ai.calls") snap.aiCallsKnown += r.known_amount;
+      else if (r.metric === "ai.call_failed") snap.aiCallsFailed += r.known_amount;
       else if (r.metric === "ai.tokens.input") snap.aiTokensInput += r.known_amount;
       else if (r.metric === "ai.tokens.output") snap.aiTokensOutput += r.known_amount;
       else if (r.metric === "ai.rate_limited") snap.aiRateLimited += r.known_amount;
-    } else if (r.service === "notification" && r.metric === "notification.deliveries") {
-      snap.notifications += r.known_amount;
-    } else if (r.service === "r2" && r.metric === "r2.bytes.stored") {
-      snap.r2BytesStored += r.known_amount;
+    } else if (r.service === "notification") {
+      if (r.metric === "notification.deliveries") snap.notifications += r.known_amount;
+      else if (r.metric === "notification.delivery_unknown") snap.deliveryUnknown += r.known_amount;
+    } else if (r.service === "r2") {
+      // bytes=実保存量。scan_rejected=スキャン不能（検査拒否。監視のみの計上）
+      if (r.metric === "r2.bytes.stored") snap.r2BytesStored += r.known_amount;
+      else if (r.metric === "attachments.scan_rejected") snap.scanRejected += r.known_amount;
+    } else if (r.service === "d1") {
+      // 監視のみの計上（jobs=job滞留の兆候、sync=同期の拒否。DB側の行として記録）
+      if (r.metric === "jobs.lease_expired") snap.jobLeaseExpired += r.known_amount;
+      else if (r.metric === "sync.rejected") snap.syncRejections += r.known_amount;
     }
   }
   return { ...snap, unmeasuredServices: UNMEASURED_SERVICES, priorAiCalls: priorAiCalls.sort((x, y) => (x.day < y.day ? -1 : 1)) };
@@ -131,8 +166,9 @@ export const budgetCostSource = (policy: BudgetPolicy): string =>
 
 /**
  * 使用量とpolicyから予兆・上限超過を評価する（純関数。docs/16 T080のInterface）。
- * 停止（stopped）にするのは「日次枠・通知枠・429許容・費用試算」の超過。急増（spike）は
- * 予兆として warn にする（アラート対象。停止にしない。docs/14 D11「実測＋月額/急増通知」）。
+ * 停止（stopped）にするのは「日次枠・通知枠・429許容・費用試算」の超過のみ。急増（spike）と
+ * 監視項目（job滞留・配送不明・同期の拒否・スキャン不能。review round 1）は予兆として warn にする
+ * （**監視項目は停止に使わない**。docs/07 §8の「監視」は気づきのため。docs/14 D11「実測＋月額/急増通知」）。
  */
 export function evaluateBudget(usage: UsageSnapshot, policy: BudgetPolicy, opts: { now?: Date } = {}): BudgetState {
   const reasons: string[] = [];
@@ -156,7 +192,13 @@ export function evaluateBudget(usage: UsageSnapshot, policy: BudgetPolicy, opts:
     reasons.push("ai_calls_spike");
   }
 
-  const stopped = reasons.some((r) => r !== "ai_calls_spike");
+  // 監視のみの項目（review round 1。超過はwarn＝気づき。停止には使わない。ops/cost-alerts.md §1）
+  if (usage.jobLeaseExpired > policy.monitors.maxJobLeaseExpiredPerDay) reasons.push("job_lease_expired_over");
+  if (usage.deliveryUnknown > policy.monitors.maxDeliveryUnknownPerDay) reasons.push("delivery_unknown_over");
+  if (usage.syncRejections > policy.monitors.maxSyncRejectionsPerDay) reasons.push("sync_rejections_over");
+  if (usage.scanRejected > policy.monitors.maxScanRejectedPerDay) reasons.push("scan_rejected_over");
+
+  const stopped = reasons.some((r) => STOP_REASONS.has(r));
   const status = stopped ? "stopped" : reasons.length > 0 ? "warn" : "normal";
   return {
     policyVersion: policy.version,
@@ -296,20 +338,21 @@ export interface BudgetGateResult {
 }
 
 /**
- * 高価な呼び出し（AI分類・報告書生成）の前で使うゲート（T080）。
- * 毎回使用量を再評価し、判定→適用（監査込み）を行ってから「呼んでよいか」を返す。
- * 既存記録の読取は止めない（このゲートを読み取り経路には置かない）。
+ * 高価な呼び出し（AI分類・報告書生成・出典つき回答〔API-76〕・横断アシスタント〔API-77〕）の前で
+ * 使うゲート（T080。review round 1でRAG/アシスタントにも接続）。毎回使用量を再評価し、
+ * 判定→適用（監査込み）を行ってから「呼んでよいか」を返す。既存記録の読取は止めない
+ * （このゲートを読み取り経路には置かない。AIを伴わない検索・一覧・詳細はそのまま使える）。
  */
 export async function expensiveCallGate(
   env: AppEnv,
-  via: { unitId: string; jobKind: string; jobId: string },
+  via: { unitId: string; source: string },
 ): Promise<BudgetGateResult> {
   const decision = evaluateBudget(await buildUsageSnapshot(env), BUDGET_POLICY);
   const applied = await applyBudgetDecision(env, {
     decision,
     source: "auto",
     auditUnitId: via.unitId,
-    note: `job:${via.jobKind}`,
+    note: via.source,
   });
   return { allowed: applied.state.status !== "stopped", status: applied.state.status, reasons: decision.reasons };
 }

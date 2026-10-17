@@ -15,6 +15,10 @@ const REASON_LABEL: Record<string, string> = {
   ai_rate_limited_over: "AIサービスの応答制限（429）が許容を超過",
   monthly_cost_estimate_over: "費用の試算が月額の上限を超過",
   ai_calls_spike: "使用量が急増",
+  job_lease_expired_over: "処理が止まった作業（job滞留）が多発",
+  delivery_unknown_over: "届いたか分からない通知が多発",
+  sync_rejections_over: "端末からの同期の拒否が多発",
+  scan_rejected_over: "検査で読めなかった写真が多発",
 };
 /** 費用・停止の記録（監査）の表示名 */
 const ACTION_LABEL: Record<string, string> = {
@@ -194,9 +198,9 @@ export function OperationsPanel({ enabled }: { enabled: boolean }) {
         <p className="text-[12px] font-bold text-ink-sub">上限としきい値（開発用の検証設定）</p>
         <div className="flex flex-wrap gap-2">
           <Figure label="月額の費用上限（試算）" value={`$${BUDGET_POLICY.monthlyLimitUsd}`} hint="実団体の承認済みではない" />
-          <Figure label="AI呼び出しの1日の枠" value={`${BUDGET_POLICY.dailyAiCallCap.toLocaleString("ja-JP")}回`} />
-          <Figure label="通知の1日の枠" value={`${BUDGET_POLICY.dailyNotificationCap.toLocaleString("ja-JP")}通`} />
-          <Figure label="応答制限（429）の許容" value={`${BUDGET_POLICY.maxRateLimitedPerDay}件/日`} />
+          <Figure label="AI呼び出しの1日の枠" value={`${BUDGET_POLICY.dailyAiCallCap.toLocaleString("ja-JP")}回`} hint="超えるとAIを停止" />
+          <Figure label="通知の1日の枠" value={`${BUDGET_POLICY.dailyNotificationCap.toLocaleString("ja-JP")}通`} hint="超えるとAIを停止" />
+          <Figure label="応答制限（429）の許容" value={`${BUDGET_POLICY.maxRateLimitedPerDay}件/日`} hint="超えるとAIを停止" />
           <Figure
             label="急増の判定"
             value={`平均の${BUDGET_POLICY.spikeFactor}倍`}
@@ -204,14 +208,25 @@ export function OperationsPanel({ enabled }: { enabled: boolean }) {
           />
         </div>
         <p className="text-[11px] leading-[1.6] text-ink-muted">単価の出典: {BUDGET_POLICY.priceSource}</p>
+        <p className="text-[12px] font-bold text-ink-sub">監視項目（超えてもAIは止まりません。気づきのため）</p>
+        <div className="flex flex-wrap gap-2">
+          <Figure label="処理が止まった作業" value={`${BUDGET_POLICY.monitors.maxJobLeaseExpiredPerDay}件/日`} hint="滞留の兆候" />
+          <Figure label="届いたか分からない通知" value={`${BUDGET_POLICY.monitors.maxDeliveryUnknownPerDay}件/日`} />
+          <Figure label="同期の拒否" value={`${BUDGET_POLICY.monitors.maxSyncRejectionsPerDay}件/日`} />
+          <Figure label="検査で読めなかった写真" value={`${BUDGET_POLICY.monitors.maxScanRejectedPerDay}件/日`} />
+        </div>
+        <p className="text-[11px] leading-[1.6] text-ink-muted">
+          これらの現在の値は、この画面では確認できません（運用コマンドでの確認になります。手順は運用手順の書類に記載）。
+        </p>
       </div>
 
       {/* 停止と解除の案内（照会用のAPIは無いため、現在の状態は表示しない＝取得できるように見せない） */}
       <div className="flex flex-col gap-2 border-t border-white/5 pt-3.5">
         <p className="text-[12px] font-bold text-ink-sub">停止と解除</p>
         <p className="text-[12px] leading-[1.6] text-ink-muted">
-          上限を超えると、AIによる分類と報告書の下書き生成が「保留」になります（理由に停止である旨が表示されます）。
-          既存の記録の閲覧や登録は止まりません。解除は、サーバーの状態を更新する運用手順（ops/cost-alerts.md）で行います。
+          上限を超えると、AIによる分類・報告書の下書き生成が「保留」に、出典つきの回答とアシスタントへの質問は「使えない（503）」になります
+          （いずれもAIを呼ばないため、停止中にAIの費用は増えません）。既存の記録の閲覧や登録は止まりません。
+          解除は、サーバーの状態を更新する運用手順（ops/cost-alerts.md）で行います。
         </p>
         <Notice tone="info" icon="visibility_off" role="status">
           現在の停止状態は、この画面からは確認できません（照会用の仕組みがまだ無いため）。停止したときは上の「費用・停止の記録」に現れます。

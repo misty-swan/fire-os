@@ -121,7 +121,7 @@ export async function classifyJob(job: LeasedJob, env: AppEnv): Promise<JobOutco
   // 課金上限の停止ゲート（T080）: 高価なAI呼出しの前に使用量を再評価し、停止中は呼ばずに保留へ
   // （docs/07 §8、docs/14 D11。既存記録の読取は止めない。解除はops/cost-alerts.mdの手順。
   //   判定→適用は監査と1つのbatch。docs/16 T080「既存APIを利用/共通処理」）
-  const gate = await expensiveCallGate(env, { unitId: job.unitId, jobKind: CLASSIFY_JOB_KIND, jobId: job.id });
+  const gate = await expensiveCallGate(env, { unitId: job.unitId, source: "job:ai.classify" });
   if (!gate.allowed) return { kind: "manual_review", errorCode: "budget_stopped" };
 
   // 使用量の計上（T080。観測は業務を止めない。試行1回=1。usageの既知/未知・失敗/429を別metricで計上する。
