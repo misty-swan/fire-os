@@ -5,6 +5,7 @@ import { registerJobHandler } from "../runner";
 import { insertLinkSql, LINK_ENTITY_TABLES } from "../../attachments/link";
 import { FileScanner } from "../../attachments/scanner";
 import { readyKeyFor } from "../../attachments/sizes";
+import { recordMetricSafe } from "../../observability/metrics";
 
 /**
  * 添付の検査job（T016）。API-84のcompletionと同じbatchで登録された job(attachment.inspect) を実行する。
@@ -119,6 +120,13 @@ export async function inspectUpload(job: LeasedJob, env: AppEnv): Promise<JobOut
   if ((finalize[0]?.meta.changes ?? 0) !== 1) {
     // 遅れて確定しようとした案件。ready候補のオブジェクトは孤児として回収対象（D10の遅延削除）
     return { kind: "stale", errorCode: "source_changed" };
+  }
+  // 使用量の計上（T080）: 新規に保存した分だけ（既存の不変キーの再利用はR2の増分0なので計上しない）。
+  // 観測は業務を止めない（docs/07 §8。byte_sizeは検査jobが確定した既知値）
+  if (!existing) {
+    await recordMetricSafe(env, {
+      service: "r2", metric: "r2.bytes.stored", unit: "bytes", amount: scan.bytes.byteLength, source: "job:attachment.inspect",
+    });
   }
   return { kind: "succeeded", resultRef: readyKey };
 }

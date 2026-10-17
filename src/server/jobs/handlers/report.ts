@@ -4,6 +4,8 @@ import {
 import { getReportTemplate, type ReportTemplate } from "../../reports/templates";
 import { LlmOutputError, AiRunError, type ReportDraftCandidate } from "../../ai/llm";
 import type { AppEnv } from "../../env";
+import { expensiveCallGate } from "../../observability/budget";
+import { recordMetricSafe } from "../../observability/metrics";
 import { registerJobHandler } from "../runner";
 import type { JobOutcome, LeasedJob } from "../store";
 
@@ -64,6 +66,15 @@ export async function reportJob(job: LeasedJob, env: AppEnv): Promise<JobOutcome
   if (!input) return stale("source_missing");
   const inputHash = await reportGenerationInputHash(input);
 
+  // 課金上限の停止ゲート（T080）: 高価なAI呼出しの前に使用量を再評価し、停止中は呼ばずに保留へ
+  // （docs/07 §8、docs/14 D11。既存記録（元実績・報告書）の読取は止めない。解除はops/cost-alerts.mdの手順）
+  const gate = await expensiveCallGate(env, { unitId: job.unitId, jobKind: REPORT_JOB_KIND, jobId: job.id });
+  if (!gate.allowed) return { kind: "manual_review", errorCode: "budget_stopped" };
+
+  // 使用量の計上（T080。観測は業務を止めない。試行1回=1。usageの既知/未知・失敗/429を別metricで計上する。
+  //   jobの再実行で呼出しがやり直されると試行分が重複計上され得る＝近似であることをdocs/07 §8に記録）
+  await recordMetricSafe(env, { service: "ai", metric: "ai.calls", unit: "count", amount: 1, source: "job:ai.report" });
+
   // env.AIの存在確認（localには無い。無い環境では保留にして偽の下書きを作らない＝src/server/env.tsの契約）
   if (!env.AI) return { kind: "manual_review", errorCode: "ai_unavailable" };
 
@@ -72,12 +83,30 @@ export async function reportJob(job: LeasedJob, env: AppEnv): Promise<JobOutcome
     candidate = await generateReportDraft(env, input);
   } catch (err) {
     if (err instanceof LlmOutputError) {
+      // 呼出し自体は起きた（課金対象の可能性）。usageは未知として計上する（0と偽装しない）
+      await recordMetricSafe(env, { service: "ai", metric: "ai.tokens.input", unit: "tokens", amount: null, source: "job:ai.report" });
       // 構造不適合（限定retry後）・入力上限・捏造はすべて保留。原本（元実績）はそのまま残る
       return { kind: "manual_review", errorCode: err.reason };
     }
-    if (err instanceof AiRunError) return { kind: "retryable", errorCode: "ai_run_failed" }; // 一時失敗は再試行
+    if (err instanceof AiRunError) {
+      // providerの応答制限（429）は別metric（予兆の監視対象。docs/07 §8。実providerでの区分確定はV04）
+      const rateLimited = /429/.test(String(err));
+      await recordMetricSafe(env, {
+        service: "ai", metric: rateLimited ? "ai.rate_limited" : "ai.call_failed", unit: "count", amount: 1, source: "job:ai.report",
+      });
+      return { kind: "retryable", errorCode: "ai_run_failed" }; // 一時失敗は再試行
+    }
     throw err; // runnerがretryable handler_errorにする
   }
+  // usageの計上（既知はtokens、未知はNULL。docs/16 T080「unknown使用量を0と偽装しない」）
+  await recordMetricSafe(env, {
+    service: "ai", metric: "ai.tokens.input", unit: "tokens",
+    amount: candidate.usage ? candidate.usage.promptTokens : null, source: "job:ai.report",
+  });
+  await recordMetricSafe(env, {
+    service: "ai", metric: "ai.tokens.output", unit: "tokens",
+    amount: candidate.usage ? candidate.usage.completionTokens : null, source: "job:ai.report",
+  });
 
   // ⑤保存（T056のAPI-62と同じDML順序。rootはAI初回生成として新規に作る＝1活動に複数帳票可。docs/04 ER。
   //  kindはAI生成も'manual'のまま＝docs/14 D25（CHECK拡張はしない。AIの区別は版のmodel_id/prompt_version/

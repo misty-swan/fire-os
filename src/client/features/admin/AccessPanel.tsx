@@ -12,6 +12,7 @@ import { ROLE_LABEL, ROLE_OPTIONS, STATUS_LABEL, useMembers, type MemberRow } fr
 import { AuditPanel } from "./AuditPanel";
 import { InspectionTemplatesPanel } from "./InspectionTemplatesPanel";
 import { AiEvaluationPanel } from "./AiEvaluationPanel";
+import { OperationsPanel } from "./OperationsPanel";
 
 /** サーバーが返した理由コードを、利用者に分かる文にする（コードを見せない） */
 const REASON_TEXT: Record<string, string> = {
@@ -446,6 +447,7 @@ export function AccessPanel() {
       <AuditPanel enabled={mfaReady} members={rows} />
           <InspectionTemplatesPanel />
           <AiEvaluationPanel />
+          <OperationsPanel enabled={mfaReady} />
     </div>
   );
 }

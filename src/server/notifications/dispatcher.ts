@@ -1,5 +1,6 @@
 import type { AppEnv } from "../env";
 import { JOB_LIMITS, type JobOutcome, type LeasedJob } from "../jobs/store";
+import { recordMetricSafe } from "../observability/metrics";
 import { channelProvider, type DeliveryResult, type NotificationChannel, type NotificationProvider } from "./provider";
 
 /**
@@ -154,6 +155,14 @@ export async function dispatchNotification(env: AppEnv, job: LeasedJob): Promise
   }
   const settled = settleStatements.length > 0 ? await env.DB.batch(settleStatements) : [];
   const sendables = sendCandidates.filter((_, i) => (settled[stuck.length * 2 + i]?.meta.changes ?? 0) > 0);
+
+  // 使用量の計上（T080）: providerへの送信試行（送った行数。jobの再実行で重複計上され得る近似。
+  //   観測は配送の成否に依存しない。docs/07 §8「通知を別計上」）
+  if (sendables.length > 0) {
+    await recordMetricSafe(env, {
+      service: "notification", metric: "notification.deliveries", unit: "count", amount: sendables.length, source: "job:notification.deliver",
+    });
+  }
 
   // ④provider.send（channel別）。例外＝送信の成否が不明なのでunknown（盲目的に再送しない）
   const results = await Promise.all(

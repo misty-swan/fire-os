@@ -1,0 +1,16 @@
+{
+  "version": "budget-dev-v1",
+  "setAt": "2026-10-17",
+  "approved": false,
+  "currency": "USD",
+  "monthlyLimitUsd": 5,
+  "dailyAiCallCap": 500,
+  "dailyNotificationCap": 2000,
+  "spikeFactor": 5,
+  "spikeWindowDays": 7,
+  "spikeMinCalls": 20,
+  "maxRateLimitedPerDay": 10,
+  "prices": { "aiInputUsdPerMTokens": 0.042, "aiOutputUsdPerMTokens": 0 },
+  "priceSource": "docs/06 §2のJev定価（検証設定）: 入力$0.042/100万tokens・出力$0。LLM等の単価未固定分は含まない（docs/14 D16）。実請求の実測はV04（未実施）",
+  "basis": "docs/14 D11の推奨案（Workers Paid $5基本を許容し実測＋月額/急増通知）を開発用の検証設定として固定したもの。実団体の承認済みではない。実請求との照合は未実施（実Cloudflare未接続）。docs/evidence/cost-estimate.mdの試算とops/cost-alerts.mdの手順と共に運用する"
+}

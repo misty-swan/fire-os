@@ -5,6 +5,8 @@ import {
   JEV_MODEL, JevOutputError, AiRunError, buildStoredCandidate, runJev,
 } from "../../ai/jev";
 import type { AppEnv } from "../../env";
+import { expensiveCallGate } from "../../observability/budget";
+import { recordMetricSafe } from "../../observability/metrics";
 import { canonicalJson, sha256Hex } from "../../mutations/hash";
 import { registerJobHandler } from "../runner";
 import type { JobOutcome, LeasedJob } from "../store";
@@ -26,6 +28,8 @@ import type { JobOutcome, LeasedJob } from "../store";
  * ただし試験専用のfake（local かつ TEST_AI_FAKE=1。e2eのwrangler devだけが付ける＝src/server/ai/local-fake.ts）
  * があるときは実AIの代わりにその決定的な応答で候補を作る（実AI bindingがあれば常に優先）。
  * 同じjobの再実行では既存の評価を返す（外部推論の再課金完全一回性は保証しない＝docs/06 §3の上限/計測管理）。
+ * さらに課金上限（T080）: AI呼出しの前に使用量を再評価し、停止中は呼ばずに保留 budget_stopped へ
+ * （docs/07 §8、docs/14 D11。使用量の計上はusageの既知/未知を偽装しない。src/server/observability/budget.ts）。
  */
 
 export const CLASSIFY_JOB_KIND = "ai.classify";
@@ -114,6 +118,16 @@ export async function classifyJob(job: LeasedJob, env: AppEnv): Promise<JobOutco
   // env.AIの存在確認（localには無い。src/server/env.tsの契約どおり、無い環境では保留にして偽の候補を作らない）。
   // ただし試験専用のfake（local かつ TEST_AI_FAKE=1。e2eのwrangler devだけが付ける。src/server/ai/local-fake.ts）
   // があるときだけ、実AIの代わりに決定的なfakeで候補を作る（実AI bindingがあれば常にそちらを優先）
+  // 課金上限の停止ゲート（T080）: 高価なAI呼出しの前に使用量を再評価し、停止中は呼ばずに保留へ
+  // （docs/07 §8、docs/14 D11。既存記録の読取は止めない。解除はops/cost-alerts.mdの手順。
+  //   判定→適用は監査と1つのbatch。docs/16 T080「既存APIを利用/共通処理」）
+  const gate = await expensiveCallGate(env, { unitId: job.unitId, jobKind: CLASSIFY_JOB_KIND, jobId: job.id });
+  if (!gate.allowed) return { kind: "manual_review", errorCode: "budget_stopped" };
+
+  // 使用量の計上（T080。観測は業務を止めない。試行1回=1。usageの既知/未知・失敗/429を別metricで計上する。
+  //   jobの再実行で呼出しがやり直されると試行分が重複計上され得る＝近似であることをdocs/07 §8に記録）
+  await recordMetricSafe(env, { service: "ai", metric: "ai.calls", unit: "count", amount: 1, source: "job:ai.classify" });
+
   const ai = env.AI ?? localTestAi(env);
   if (!ai) return { kind: "manual_review", errorCode: "ai_unavailable" };
 
@@ -124,10 +138,32 @@ export async function classifyJob(job: LeasedJob, env: AppEnv): Promise<JobOutco
     candidate = result.candidate;
     validated = result.validated;
   } catch (err) {
-    if (err instanceof JevOutputError) return { kind: "manual_review", errorCode: err.reason }; // 壊れ出力/入力上限は保留
-    if (err instanceof AiRunError) return { kind: "retryable", errorCode: "ai_run_failed" }; // 一時失敗は再試行
+    if (err instanceof JevOutputError) {
+      // 呼出し自体は起きた（課金対象の可能性）。usageは未知として計上する（0と偽装しない）
+      await recordMetricSafe(env, { service: "ai", metric: "ai.tokens.input", unit: "tokens", amount: null, source: "job:ai.classify" });
+      return { kind: "manual_review", errorCode: err.reason }; // 壊れ出力/入力上限は保留
+    }
+    if (err instanceof AiRunError) {
+      // providerの応答制限（429）は別metric（予兆の監視対象。docs/07 §8）。区分は生応答の粗い観測であり、
+      // 実providerでの区分確定はV04（未実施）
+      const rateLimited = /429/.test(String(err));
+      await recordMetricSafe(env, {
+        service: "ai", metric: rateLimited ? "ai.rate_limited" : "ai.call_failed", unit: "count", amount: 1, source: "job:ai.classify",
+      });
+      return { kind: "retryable", errorCode: "ai_run_failed" }; // 一時失敗は再試行
+    }
     throw err; // runnerがretryable handler_errorにする
   }
+
+  // usageの計上（既知はtokens、未知はNULL。docs/16 T080「unknown使用量を0と偽装しない」）
+  await recordMetricSafe(env, {
+    service: "ai", metric: "ai.tokens.input", unit: "tokens",
+    amount: validated.usage ? validated.usage.promptTokens : null, source: "job:ai.classify",
+  });
+  await recordMetricSafe(env, {
+    service: "ai", metric: "ai.tokens.output", unit: "tokens",
+    amount: validated.usage ? validated.usage.completionTokens : null, source: "job:ai.classify",
+  });
 
   // ④候補の保存（評価は追記型。statusは常にpending＝人未承認。docs/11 AI提案）
   const id = crypto.randomUUID();
