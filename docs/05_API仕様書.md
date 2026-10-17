@@ -14,7 +14,7 @@ IDは存在/所属/許可を全関連先まで検査。ISO8601 UTC瞬間とYYYY-
 | 400 VALIDATION_ERROR | 型/範囲/未知列/形式違反 |
 | 401 UNAUTHENTICATED | セッションなし/失効 |
 | 403 FORBIDDEN、404 NOT_FOUND | 既知対象の操作不可/存在を明かさない対象不可 |
-| 409 VERSION_CONFLICT / IDEMPOTENCY_MISMATCH / DUPLICATE / SNAPSHOT_CHANGED / RESYNC_REQUIRED | 旧版、同キー別本文または保持期限切れのキー（details.reason=key_expired）、競合リンク/番号、続き取得中のsnapshot更新(§5)、再開cursor失効(§8) |
+| 409 VERSION_CONFLICT / IDEMPOTENCY_MISMATCH / DUPLICATE / SNAPSHOT_CHANGED / RESYNC_REQUIRED | 旧版、同キー別本文（details.reason=request_hash_mismatch）または保持期限切れのキー（details.reason=key_expired）、競合リンク/番号、続き取得中のsnapshot更新(§5)、再開cursor失効(§8。details.reason=cursor_invalid/cursor_expired/authz_changed/filter_changed) |
 | 422 INVALID_TRANSITION / UNAPPROVED_POLICY / ATTACHMENT_NOT_READY | 業務前提/採用未決/未検査添付 |
 | 429 RATE_LIMITED | 認証/AI/検索/アップロード上限、Retry-After |
 | 500 INTERNAL_ERROR、503 DEPENDENCY_UNAVAILABLE | rollback済か結果不明かをoperation照会で確認。内部本文を漏らさない |
@@ -27,7 +27,7 @@ API-36はライブラリ契約を別検証。API-83はバイナリで別規則�
 
 同じキー/本文の再送は元HTTP status/dataを返し、現在の認可は再検査する（失権後に旧レスポンスのPIIを返さない）。応答不明時は同キー照会/再送。既存rowはversion必須、未作成PUTは0を指定してINSERT UNIQUEをガード。version欠落400、旧版409。競合では履歴/監査成功行/通知を残さない。02のassertion方式で確認し、処理不成立ログは業務成功監査と分離する。
 
-binary upload API-83はintent/attempt ID＋content hashで再送を判定し、試行ごとに不変一時キーを使用。既にreadyになった実体は上書きしない。notification delivery keyとAI job dedupe、端末clientOperationIdはAPI冪等キーと役割が異なる。**T076実装**: 同期（API-81）はallowlistの元操作（点検保存/訂正・本人出欠・参集）だけを受け、元APIの契約で本文を検査してから元handlerと同じ認可・版・状態前提で再実行する（オフライン操作も再認可。docs/10 PER-13。Idempotency-KeyはclientOperationIdと同値）。sync_operationsはuser/device/clientOperationIdのUNIQUEを恒久保持し、expires_atは冪等と同じ7日（期限後の同キー再送は409 details.reason=key_expired。人が新しい操作を作る。docs/07）。適用済みの再送は保存済みのSyncOperation({id,status})を返し、台帳行は元業務mutationと同一batch（MutationSpec.sideEffects）で書込む。元APIの直接実行と鍵を共有する（同requestHash。二重効果なし）。
+binary upload API-83はintent/attempt ID＋content hashで再送を判定し、試行ごとに不変一時キーを使用。既にreadyになった実体は上書きしない。notification delivery keyとAI job dedupe、端末clientOperationIdはAPI冪等キーと役割が異なる。**T076実装**: 同期（API-81）はallowlistの元操作（点検保存/訂正・本人出欠・参集）だけを受け、元APIの契約で本文を検査してから元handlerと同じ認可・版・状態前提で再実行する（オフライン操作も再認可。docs/10 PER-13。Idempotency-KeyはclientOperationIdと同値）。sync_operationsはuser/device/clientOperationIdのUNIQUEを恒久保持し、expires_atは冪等と同じ7日（期限後の同キー再送は409 details.reason=key_expired。人が新しい操作を作る。docs/07）。Idempotency-KeyとclientOperationIdの不一致は400 VALIDATION_ERROR（details.reason=client_operation_id_mismatch）。適用済みの再送は保存済みのSyncOperation({id,status})を返し、台帳行は元業務mutationと同一batch（MutationSpec.sideEffects）で書込む。元APIの直接実行と鍵を共有する（同requestHash。二重効果なし）。
 
 ## 3. リソース入力DTO
 
@@ -132,8 +132,8 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 | API-78 | POST /patrol-plans | PER-14 | facilityIds,date,objective;D01設計案で検証、正式対象は提案時確認。**T071で実装**: facilityIdsは同unit・現役（archived_at NULL）の施設のみで重複不可（別unit・不在・停止は区別せず404＝存在を明かさない。重複は400）、dateは業務日、objectiveは1〜200。**対象施設1件ごとにPER-14を検査**（幹部・管理者は所属内、担当者は担当scope。docs/10「参照施設の権限」）。作成時にstopsへ**最近傍順の候補順を保存**（開始点は最も南の施設、同点は経度→id。決定的ルールでGoogle Routes等の外部最適化は使わない＝docs/14 D01）し、statusはdraft。Idempotency-Key必須（docs/05 §2。knownKey先読みのT041流儀で再送は対象読み取りを飛ばす） | PatrolPlan(draft)。**T071でprovisional解除**: id/version/date/objective/status〔draft/confirmed/cancelled〕/stops[{facilityId,position,facilityName,latitude,longitude}]/decidedAt〔draftはnull〕/createdAt/updatedAt（openapi再生成。docs/04:157・docs/16 T071） |
 | API-79 | POST /patrol-plans/:id/decision | PER-14 | version,orderedFacilityIds,decision=confirm/cancel,reason;人が確定。**T071で実装**: version一致ガード（旧版は409）、**orderedFacilityIdsは対象施設と完全一致の集合かつ重複なしが必須**（対象外・欠け・重複〔二重順序〕は400。DBのUNIQUE(unit,plan,position)/(unit,plan,facility)でも防ぐ）。confirmはstatus→confirmed＋stopsを人が送った順序で確定（同じbatch内のDELETE+INSERT）、cancelはdraft→cancelled（stopsは不変）。**confirmed/cancelledは終端**（再操作は現行版でも422。変更は新しい案を作る＝docs/11「confirmedの変更は新revision」の解釈。docs/16 T071の裁定）。**自動派生0**: 確定でも出動・タスク・通知・点検を1件も作らない（計画確定を実災害の指令/設備安全判断にしない。画面に常時注記＝docs/03 SCR-25）。権限は対象施設1件ごとのPER-14（API-78と同じ） | PatrolPlan（provisional解除。API-78と同じ形。docs/16 T071） |
 | API-80 | GET /events | PER-13 | entityType/entityId/afterSequence/cursor。**T072で実装**（docs/05 §8）: 応答はEventPage（events/resumeCursor/resyncRequired。poll型。接続方式はT073・D16で確定）。cursorがあるとき位置もfilterもcursorが正（queryのafterSequenceは無視。filter未結合のcursor〔snapshotCursor〕にはqueryの絞りを採用して結合し、結合済みcursorと矛盾する絞りは409 RESYNC_REQUIRED）。認可版不一致/期限切れ/改変/別unitのcursorも409 RESYNC_REQUIRED。不可視イベント（他unit・権限が無い対象）は応答に現さず走査位置だけ進めるため、露出するsequenceの飛びは通信欠落ではない。可視は現在のACLで種別ごとに判定（全役割が読める種別の許可リスト＋notification=宛先/管理・document=文書ACL・announcement=対象/管理の行判定。未収録の種別は非可視＝既定拒否） | EventPage（T072でprovisional解除） |
-| API-81 | POST /sync/commands | PER-13＋元操作 | SyncCommand;許可元API/同requestHash/baseVersion;Idempotency-Key=clientOperationId同値 | SyncOperation(200/202/409) |
-| API-82 | GET /sync/operations/:id | PER-13本人 | なし;本人/端末operation | SyncOperation |
+| API-81 | POST /sync/commands | PER-13＋元操作 | SyncCommand;**PER-13（同期接続）と元操作を併用検査**（PER-13はAPI-80前例と同じ経路入口。台帳の再送経路も入口で拒否。PH6レビューA中1）;許可元API/同requestHash/baseVersion;Idempotency-Key=clientOperationId同値 | SyncOperation(200/202/409) |
+| API-82 | GET /sync/operations/:id | PER-13本人 | なし;**PER-13は経路入口で検査**（本人/端末絞りと併用。PH6レビューA中1）;本人/端末operation | SyncOperation |
 | API-83 | PUT /attachments/:id/upload | PER-04本人申請 | `x-upload-token`ヘッダー(URLに残さない),本文bytes;実測容量、試行専用キー | UploadAttempt(id,sha256,size,version) |
 | API-84 | POST /attachments/:id/completion | PER-04 | version,uploadAttemptId,sha256;実体HEAD/検査job | Attachment＋Job(202) |
 | API-85 | DELETE /attachments/:id | PER-04（本人分を含む） | version,reason;有効リンクがある場合422。**保持期間の猶予はD10未決のため未実装（tombstone後にjobで即時削除）** | 204（D1 tombstone後R2削除job） |

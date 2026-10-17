@@ -1,5 +1,6 @@
 import { LIMITS } from "../../shared/contracts/common";
 import type { EventPageDto, SyncEventDto } from "../../shared/contracts/sync";
+import { authorize } from "../auth/authorize";
 import type { AuthzPrincipal } from "../auth/principal";
 import { resolvePrincipal } from "../auth/principal";
 import { isDocumentVisible } from "../documents/authorized";
@@ -79,11 +80,13 @@ interface EventRow {
  * 点検/使用履歴/参集/結果など対象の見える子。団員の基本項目は全役割が読める。docs/10 §1。
  * イベントのpayloadは最小値で本文を持たないため、これらの変更通知は種別の読み取り可視と同じ範囲）。
  * ここに無い種別は**非可視（既定拒否）**。新種別を配信するときは読み取りAPIの権限を確認してから収録する。
+ * 出欠（activity_attendance）は読み取りAPI-07/08が「PER-03の管理権なら全行、なければ自分の行だけ」を
+ * 開けるため収録しない（全役割に開くと読み取りAPIより広く他人の回答が配信される。行判定は下のeventVisible）。
  */
 const UNIT_WIDE_VISIBLE = new Set([
   "incident", "activity", "operation", "facility", "vehicle", "equipment", "issue", "task",
   "facility_inspection", "asset_inspection", "inspection_schedule", "activity_result",
-  "activity_attendance", "incident_participant", "member",
+  "incident_participant", "member",
 ]);
 
 /** 1行のイベントが今のACLで見えるか。管理系・宛先付きの種別は行ごとに判定する（docs/05 §8「現在のACLでfilter」） */
@@ -110,6 +113,17 @@ async function eventVisible(env: Pick<ApiContext["env"], "DB">, p: AuthzPrincipa
   }
   // 文書（API-90/91）: deny優先の文書ACLと撤回（authorized.tsの単一の正本）
   if (row.entity_type === "document") return isDocumentVisible(env, p, row.entity_id);
+  // 出欠（API-07と同じ読み取り規則）: 行の本人、または親活動の管理権（PER-03）。読み取りAPIが開けない
+  // 他人の回答を行は配信しない（PH6レビューA中2。activities.ts:299の行絞りと同じ判定）
+  if (row.entity_type === "activity_attendance") {
+    const attendance = await env.DB.prepare(
+      "SELECT a.member_id, a.activity_id, act.owner_member_id FROM activity_attendance a " +
+        "JOIN activities act ON act.id = a.activity_id AND act.unit_id = a.unit_id WHERE a.id = ? AND a.unit_id = ?",
+    ).bind(row.entity_id, p.unitId).first<{ member_id: string; activity_id: string; owner_member_id: string }>();
+    if (!attendance) return false; // 行が無い/別unitなら非可視（走査位置だけ進める）
+    if (attendance.member_id === p.memberId) return true;
+    return authorize(p, "PER-03", { unitId: p.unitId, type: "activity", id: attendance.activity_id, ownerMemberId: attendance.owner_member_id }).allowed;
+  }
   return false; // 未収録の種別（報告書・招待・添付・AI等）は非可視。配信する場合は収録と権限確認をセットで
 }
 

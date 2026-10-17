@@ -6,6 +6,7 @@ import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiConte
 import { executeMutation, IDEMPOTENCY_TTL_MS } from "../mutations/execute";
 import { canonicalRequestHash } from "../mutations/hash";
 import { ALLOWLIST, type SyncCommandData } from "../sync/allowlist";
+import { requirePermission } from "./invitations";
 
 /**
  * 保留操作の同期（T076、docs/05 §2・API-81/82、docs/07 端末保持）。
@@ -28,6 +29,9 @@ import { ALLOWLIST, type SyncCommandData } from "../sync/allowlist";
  */
 export async function applySyncCommand(c: ApiContext, input: ApiRequest<"API-81">): Promise<ApiResponse<"API-81">> {
   const p = await resolvePrincipal(c); // 毎要求D1から引き直す（停止・失権は401で止まる。docs/10 PER-13「オフライン操作も再認可」）
+  // 経路入口のPER-13（docs/05 API-81「PER-13＋元操作」。API-80と同じ入口検査。台帳の再送経路は元操作の
+  // 再検査を通らないため、ここでの検査が「現在の認可は再検査」（docs/05 §2）の最低保証になる。PH6レビューA中1）
+  requirePermission(p, "PER-13", { unitId: p.unitId, type: "sync" });
   const cmd: SyncCommandData = input.body;
 
   // 1操作1鍵: Idempotency-KeyはclientOperationIdと同値（docs/05 §2。取違えると鍵が二重に増えるため拒否）
@@ -109,6 +113,7 @@ export function registerSyncRoutes(app: ApiApp): void {
   // --- API-82: 同期操作の結果照会（本人/端末operationのみ。docs/05 API-82「PER-13本人」） ---
   defineRoute(app, "API-82", async (c) => {
     const p = await resolvePrincipal(c);
+    requirePermission(p, "PER-13", { unitId: p.unitId, type: "sync" }); // 経路入口のPER-13（API-80と同じ。PH6レビューA中1）
     const { params } = await parseApiRequest(c, "API-82");
     const row = await c.env.DB.prepare("SELECT id, status FROM sync_operations WHERE id = ? AND user_id = ?")
       .bind(params.id, p.userId)

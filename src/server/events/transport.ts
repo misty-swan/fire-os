@@ -6,7 +6,7 @@ import { readEvents } from "./snapshot";
  * 更新配信の輸送（T073、docs/14 D16・docs/evidence/V06-realtime.md）。
  *
  * 30端末の更新配信は **poll方式に固定**した: API-80（差分取得・T072）の再開cursorを一定間隔で回す。
- * 根拠はローカルworkerd＋D1での30端末実測（更新反映p95≈2.4秒〔D18開発案の5秒以内〕）と費用である:
+ * 根拠はローカルworkerd＋D1での30端末実測（更新反映p95≈2.3秒〔D18開発案の5秒以内〕）と費用である:
  * - SSE: push源を作るために結局D1の内部pollかDOが要る（二重実装）。長時間接続の再接続・保持の管理も増える。
  * - Durable Objects: wranglerのenvはbindingを継承しないため4環境すべてへのbinding/class/migration追加と
  *   課金（DOリクエスト）が対価として要る。unit内の単調連番とACL filterはD1 outboxが既に担っているため、

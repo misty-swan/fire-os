@@ -322,4 +322,46 @@ describe("保留操作の同期 (T076)", () => {
     expect((await json(again)).data).toEqual(viaSyncData as unknown as Record<string, unknown>);
     expect(await effectsOf(activityId)).toBe(1);
   });
+
+  it("sync_routes_require_per13_at_entry_so_role_stripped_caller_is_403", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const member = a.people.member; // 役割を外す主体（PER-13は全役割。役割が無ければ拒否になる）
+
+    const activityId = await seedPublishedActivity(admin, [member.memberId!]);
+
+    // 役割を外す前に適用済みの操作を作る（照会・再送の対象。docs/05 API-81/82）
+    const cmd = await syncCmd({ operationCode: "attendance.respond", targetId: activityId, baseVersion: 0, payload: { response: "attending" } });
+    const first = await postSync(member, cmd);
+    expect(first.status).toBe(200);
+    const applied = (await json(first)).data! as { id: string; status: string };
+    expect(await effectsOf(activityId)).toBe(1);
+
+    // 役割を全て失効させる（resolvePrincipalは毎要求D1から有効な役割だけ引く。tests/revocation.test.tsと同じ直接更新）
+    await env.DB.prepare("UPDATE member_roles SET revoked_at = ? WHERE member_id = ? AND revoked_at IS NULL")
+      .bind("2026-10-13T01:00:00.000Z", member.memberId).run();
+
+    // --- API-82: 本人のoperation照会でもPER-13が無ければ403（経路入口で拒否。docs/05 API-82「PER-13本人」） ---
+    const query = await fx.client(member).request("GET", `/api/v1/sync/operations/${applied.id}`);
+    expect(query.status).toBe(403);
+
+    // --- API-81: 適用済みの同キー再送（台帳で解決される経路。元操作の再検査を通らない）も入口のPER-13で403
+    // （docs/05 API-81「PER-13＋元操作」。再送でも「現在の認可は再検査」。docs/05 §2） ---
+    const replay = await postSync(member, cmd);
+    expect(replay.status).toBe(403);
+    expect((await json(replay)).error?.code).toBe("FORBIDDEN");
+    expect(await effectsOf(activityId)).toBe(1);
+
+    // --- 新規の操作も拒否され、業務効果も台帳も増えない（docs/10 PER-13「オフライン操作も再認可」） ---
+    const freshCmd = await syncCmd({ operationCode: "attendance.respond", targetId: activityId, baseVersion: 0, payload: { response: "undecided" } });
+    const fresh = await postSync(member, freshCmd);
+    expect(fresh.status).toBe(403);
+    expect(await effectsOf(activityId)).toBe(1);
+    expect(await fx.rows("sync_operations", { client_operation_id: freshCmd.clientOperationId })).toHaveLength(0);
+
+    // 後片付け（fixtureは同じファイルの試験で共有。役割を戻すと本人照会は通る）
+    await env.DB.prepare("UPDATE member_roles SET revoked_at = NULL WHERE member_id = ?").bind(member.memberId).run();
+    const restored = await fx.client(member).request("GET", `/api/v1/sync/operations/${applied.id}`);
+    expect(restored.status).toBe(200);
+  });
 });

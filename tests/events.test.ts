@@ -278,4 +278,49 @@ describe("認可済snapshot・イベント再開cursor・差分取得 (T072)", (
     expect(otherPage.events.length).toBeGreaterThan(0);
     expect(otherPage.events.every((e) => e.entityType === "incident" || e.entityType === "activity")).toBe(true);
   });
+
+  it("attendance_events_follow_the_api_07_read_acl", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin; // 活動の登録者（幹部・管理者はPER-03の管理権）
+    const member = a.people.member; // 一般団員（出欠は自分の行だけ。API-07の読み取り規則と同じ範囲）
+    const officer = a.people.officer; // 幹部（PER-03の管理権で全行）
+
+    const actRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "出欠の配信範囲の試験（架空）",
+      kind: "訓練",
+      plannedStartsAt: "2099-12-01T01:00:00.000Z",
+      locationText: "架空市器具庫",
+      ownerMemberId: admin.memberId!,
+      audienceMemberIds: [member.memberId!, officer.memberId!],
+    }, idem());
+    expect(actRes.status).toBe(201);
+    const activityId = ((await json(actRes)).data! as { id: string }).id;
+    expect((await fx.client(admin).request("PATCH", `/api/v1/activities/${activityId}`, {
+      version: 1, status: "scheduled", reason: "対象を確定して公開",
+    }, idem())).status).toBe(200);
+
+    // memberとofficerが回答（出欠イベントは行ごと。entityId=出欠行のID）
+    const ownRes = await fx.client(member).request("PUT", `/api/v1/activities/${activityId}/attendance/me`, { version: 0, response: "attending" }, idem());
+    expect(ownRes.status).toBe(201);
+    const otherRes = await fx.client(officer).request("PUT", `/api/v1/activities/${activityId}/attendance/me`, { version: 0, response: "absent" }, idem());
+    expect(otherRes.status).toBe(201);
+    const rows = await fx.rows("activity_attendance", { activity_id: activityId });
+    const ownAttendanceId = rows.find((r) => r.member_id === member.memberId!)!.id as string;
+    const otherAttendanceId = rows.find((r) => r.member_id === officer.memberId!)!.id as string;
+
+    // --- 一般団員の接続: 自分の出欠イベントだけ（他人の回答は読み取りAPI-07が開けないため配信もしない。docs/05 §8「現在のACLでfilter」） ---
+    const page = await fx.client(member).request("GET", "/api/v1/events?afterSequence=0&entityType=activity_attendance");
+    expect(page.status).toBe(200);
+    const data = (await json(page)).data! as unknown as EventPage;
+    const attendanceIds = data.events.filter((e) => e.entityType === "activity_attendance").map((e) => e.entityId);
+    expect(attendanceIds).toContain(ownAttendanceId);
+    expect(attendanceIds).not.toContain(otherAttendanceId);
+
+    // --- 幹部（PER-03管理権）には出勤の全行が見える ---
+    const officerPage = await fx.client(officer).request("GET", "/api/v1/events?afterSequence=0&entityType=activity_attendance");
+    expect(officerPage.status).toBe(200);
+    const officerData = (await json(officerPage)).data! as unknown as EventPage;
+    const officerIds = officerData.events.filter((e) => e.entityType === "activity_attendance").map((e) => e.entityId);
+    expect(officerIds).toEqual(expect.arrayContaining([ownAttendanceId, otherAttendanceId]));
+  });
 });
