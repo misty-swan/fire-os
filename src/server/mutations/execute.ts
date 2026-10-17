@@ -84,6 +84,12 @@ export interface MutationSpec<T> {
   duplicateOn?: readonly string[];
   /** 応答はbatch内のSQLが組み立てる。sqlは1行1列(JSON文字列)を返すSELECT。202=永続jobの受付（docs/05 §1） */
   response: { status: 200 | 201 | 202; sql: string; binds?: unknown[]; decode: (json: unknown) => T };
+  /**
+   * 応答確定(h)と同じbatchで追加実行する従属書込（同期台帳T076など）。業務効果と同一commitに載せるための
+   * 唯一の差し込み点で、ここが失敗すればbatch全体が取消になる。検査付きの業務書込は置かないこと
+   * （roots/conditionsの対象外。台帳行など「失敗時に業務ごと取り消されてよい従属」だけを入れる）。
+   */
+  sideEffects?: (ctx: MutationContext) => D1PreparedStatement[];
 }
 
 export interface MutationResult<T> {
@@ -272,6 +278,8 @@ export async function executeMutation<T>(
       `UPDATE idempotency_records SET state = 'completed', response_status = ?, response_json = (${spec.response.sql}) WHERE id = ? AND state = 'reserved'`,
       spec.response.status, ...(spec.response.binds ?? []), recordId,
     ),
+    // (h2) 応答確定と同じbatchの従属書込（同期台帳など。T076。業務効果と同一commit。docs/16 T076）
+    ...(spec.sideEffects?.(ctx) ?? []),
     // (i) 検査行の掃除と、保存した応答の読出し
     prep("DELETE FROM mutation_assertions WHERE attempt_token = ?", ctx.attempt),
     prep("SELECT response_json FROM idempotency_records WHERE id = ?", recordId),

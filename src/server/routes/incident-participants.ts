@@ -1,10 +1,11 @@
-import { IncidentParticipant } from "../../shared/contracts/operations";
+import { IncidentParticipant, type IncidentParticipantDto } from "../../shared/contracts/operations";
 import { canTransition, mobilizationStates, mobilizationTransitions } from "../../shared/states";
 import { hasScope } from "../auth/authorize";
 import { resolvePrincipal, type AuthzPrincipal } from "../auth/principal";
-import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
+import type { AppEnv } from "../env";
+import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
-import { executeMutation } from "../mutations/execute";
+import { executeMutation, type MutationSpec } from "../mutations/execute";
 import { requirePermission } from "./invitations";
 
 /**
@@ -23,6 +24,8 @@ import { requirePermission } from "./invitations";
  *   代理の操作は履歴のafter_jsonにproxyFor（対象団員）と理由を記録する。本人はproxyFor=NULL。
  * - returnedは帰還記録であり、出欠のabsentや実参加のabsentとは別物（docs/11:21。混同しない）。
  * - 同時競合で負けた側は業務書込・履歴・監査・outboxのすべてが残らない（1つのbatchで取消）。
+ * - T076: mutationの組み立てはbuildRecordParticipationとして公開し、通信断同期（API-81）が同じ
+ *   認可・版・状態前提のまま再利用する（オフライン操作も再認可。docs/10 PER-13）。
  */
 
 const PARTICIPANT_JSON =
@@ -46,20 +49,26 @@ interface ExistingRow {
   mobilized_at: string | null; arrived_at: string | null; returned_at: string | null;
 }
 
+export interface BuiltParticipation {
+  spec: MutationSpec<IncidentParticipantDto>;
+  participantId: string;
+}
+
 /**
- * 本人または許可代理の参集記録。対象団員の行を1行だけ作成/更新し、履歴・監査・outboxを同じbatchで確定する。
- * 存在しない/別unitの出動・団員は同じ404（存在を明かさない）。
+ * 本人または許可代理の参集記録のmutationを組み立てる。対象団員の行を1行だけ作成/更新し、履歴・監査・outboxを
+ * 同じbatchに載せる。存在しない/別unitの出動・団員は同じ404（存在を明かさない）。
+ * 実行は呼出し側がexecuteMutationで行う（T076の同期は実行前に台帳書込をspecに追加するため）。
  */
-async function recordParticipation(
-  c: ApiContext,
+export async function buildRecordParticipation(
+  env: AppEnv,
   p: AuthzPrincipal,
   incidentId: string,
   targetMemberId: string,
   body: RecordBody,
   key: string,
   requestPath: string,
-): Promise<{ status: 200 | 201; data: unknown }> {
-  const incident = await c.env.DB.prepare("SELECT id, unit_id FROM incidents WHERE id = ?").bind(incidentId)
+): Promise<BuiltParticipation> {
+  const incident = await env.DB.prepare("SELECT id, unit_id FROM incidents WHERE id = ?").bind(incidentId)
     .first<{ id: string; unit_id: string }>();
   if (!incident || incident.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
 
@@ -69,7 +78,7 @@ async function recordParticipation(
     requirePermission(p, "PER-04", { unitId: p.unitId, type: "incident", id: incidentId, ownerMemberId: p.memberId });
   } else {
     // 代理の対象は同unitの団員（存在しない/別unitは存在を明かさず同じ404）
-    const targetMember = await c.env.DB.prepare("SELECT unit_id FROM members WHERE id = ?").bind(targetMemberId)
+    const targetMember = await env.DB.prepare("SELECT unit_id FROM members WHERE id = ?").bind(targetMemberId)
       .first<{ unit_id: string }>();
     if (!targetMember || targetMember.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
     // 代理はD08の代理scopeだけ（対象団員×PER-04）。scopeが無い本人以外の操作は役割でも開かない（403）
@@ -79,7 +88,7 @@ async function recordParticipation(
   }
 
   // 既存行を読む。行は削除しないため「version>0なのに行が無い」は古い状態（409）
-  const existing = await c.env.DB.prepare(
+  const existing = await env.DB.prepare(
     "SELECT id, version, attendance_status, mobilized_at, arrived_at, returned_at FROM incident_participants " +
       "WHERE incident_id = ? AND member_id = ?",
   ).bind(incidentId, targetMemberId).first<ExistingRow>();
@@ -93,7 +102,7 @@ async function recordParticipation(
   // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返し」: 現在の状態では不可になる変更（旧版・遷移・
   // 重複する訂正）でも、保存済み応答のある再送はexecuteMutationが先に解決して元の応答を返す（T036と同じ）。
   // 鍵が既にある（=再送の）ときは状態前提を検査しない。新しい操作のときだけ検査してからbatchに入る
-  const knownKey = await c.env.DB.prepare(
+  const knownKey = await env.DB.prepare(
     "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
   ).bind(p.userId, OPERATION_CODE, key).first();
   if (!knownKey) {
@@ -154,7 +163,7 @@ async function recordParticipation(
     proxyFor, // 代理入力のときは対象団員（docs/04:97「代理入力者/訂正保持」。本人はNULL）
   });
 
-  const result = await executeMutation(c.env, p, {
+  const spec: MutationSpec<IncidentParticipantDto> = {
     operationCode: OPERATION_CODE,
     key,
     requestHash: await canonicalRequestHash({ method: "PUT", path: requestPath, baseVersion: body.version, body }),
@@ -166,16 +175,16 @@ async function recordParticipation(
     ],
     statements: (ctx) => [
       existing
-        ? c.env.DB.prepare(
+        ? env.DB.prepare(
             "UPDATE incident_participants SET attendance_status = ?, mobilized_at = ?, arrived_at = ?, returned_at = ?, " +
               "version = version + 1, last_mutation_token = ?, updated_at = ? WHERE id = ? AND unit_id = ? AND version = ?",
           ).bind(body.attendanceStatus, nextMobilizedAt, nextArrivedAt, nextReturnedAt, ctx.attempt, ctx.now, participantId, p.unitId, body.version)
-        : c.env.DB.prepare(
+        : env.DB.prepare(
             "INSERT INTO incident_participants (id, unit_id, incident_id, member_id, attendance_status, mobilized_at, arrived_at, returned_at, " +
               "last_mutation_token, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'human')",
           ).bind(participantId, p.unitId, incidentId, targetMemberId, body.attendanceStatus, nextMobilizedAt, nextArrivedAt, nextReturnedAt, ctx.attempt, ctx.now, ctx.now, p.userId),
       // 履歴（docs/04:97。前後の状態・時刻と代理入力の対象・理由。失敗した変更は残らない）
-      c.env.DB.prepare(
+      env.DB.prepare(
         "INSERT INTO incident_participant_events (id, unit_id, participant_id, before_json, after_json, reason, actor_user_id, actor_kind, created_at) " +
           "VALUES (?, ?, ?, ?, ?, ?, ?, 'human', ?)",
       ).bind(crypto.randomUUID(), p.unitId, participantId, beforeJson, afterJson, body.reason ?? null, p.userId, ctx.now),
@@ -194,8 +203,8 @@ async function recordParticipation(
       payload: { incidentId, attendanceStatus: body.attendanceStatus },
     },
     response: { status: existing ? 200 : 201, sql: PARTICIPANT_JSON, binds: [participantId], decode: (j) => IncidentParticipant.parse(j) },
-  });
-  return { status: result.status as 200 | 201, data: result.data };
+  };
+  return { spec, participantId };
 }
 
 export function registerParticipantRoutes(app: ApiApp): void {
@@ -203,10 +212,11 @@ export function registerParticipantRoutes(app: ApiApp): void {
   defineRoute(app, "API-23", async (c) => {
     const p = await resolvePrincipal(c);
     const { params, body, headers } = await parseApiRequest(c, "API-23");
-    const r = await recordParticipation(
-      c, p, params.id, params.memberId, body, headers["idempotency-key"],
+    const built = await buildRecordParticipation(
+      c.env, p, params.id, params.memberId, body, headers["idempotency-key"],
       `/incidents/${params.id}/participants/${params.memberId}`,
     );
-    return ok(c, r.data, {}, r.status);
+    const result = await executeMutation(c.env, p, built.spec);
+    return ok(c, result.data, {}, result.status);
   });
 }

@@ -80,6 +80,8 @@ const TABLES = new Set([
   "documents", "document_versions", "document_acl", "document_chunks",
   // PH5: 巡回計画（T071）
   "patrol_plans", "patrol_plan_stops",
+  // PH6: 同期台帳（T076）
+  "sync_operations",
 ]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 
