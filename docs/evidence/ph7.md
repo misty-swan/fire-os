@@ -1,0 +1,50 @@
+# PH7 実行証跡（2026-10-17）
+
+対象: T078〜T082（全環境のCI・migration・デプロイ/rollback手順・D1/R2のバックアップ/復元・メトリクスと課金予兆の上限停止・全APIの権限/入力/濫用試験・代表件数の性能とD1クエリ費用）。実行環境はローカル（Node v26 / workerd / wrangler 4.x / vitest / Playwright chromium）。**実Cloudflare・実GitHub Actions・実staging・実D1・実R2・実端末は使っていない（wrangler未ログイン。PH0〜PH6から継続で未接続）**。D1はwranglerのローカルシミュレータ。migrationは0032（usage_metrics/budget_state〔T080〕）を空DBから適用。**T082の索引追加はsnapshot.tsのACL判定バッチ化で代替のため0033は無し**（poll走査はUNIQUE(unit_id, sequence)の既存索引で有界＝クエリ計画監査）。データはすべて架空。実装はsubagent-driven（タスクごとに実装サブエージェント→タスクレビュー→修正ラウンド。**T079/T080/T081/T082が修正ラウンド1回ずつ、すべて1回で収束**。T078は修正不要）で遂行し、実装コミットは9本（b2d52dc〔T078〕・91d0193＋1c5c8bb〔T079＋docs修正〕・1bf2abb＋a1cf153〔T080〕・f90a2db＋6186bde〔T081〕・0ef82f4＋1abc273〔T082〕。HEAD=1abc273）。証跡文書はT079/T080/T082が各自で作成（docs/evidence/V07-restore.md・cost-estimate.md・V07-performance.md）。
+
+## 実行結果
+| 確認 | コマンド | 結果 |
+|---|---|---|
+| 型検査 | `npm run typecheck` | 成功 |
+| 契約検査 | `npm run check:contracts` | **102 API / docs/05 102行 / OpenAPI一致**（PH7でAPI契約の追加・変更なし。docs/05 §1へ429共通挙動の段落追記〔T081〕のみ。OpenAPI再生成不要をcheck:contractsで確認） |
+| 単体・結合試験 | `npx vitest --run` | **64ファイル286件成功**（workers＝実workerd＋D1/Queues、client＝jsdom。PH6最終は57ファイル266件。T078=58/269→T079=59/271→T080=61/275→修正ラウンドで277→T081=64/285→修正ラウンドで286→T082=64/286。**tests/loadは`vitest.load.config.ts`の負荷設定に分離**し正規スイートから除外〔二重実行・タイムアウト事故の防止〕） |
+| 負荷試験 | `npm run test:load` | **2ファイル3件成功**（約33秒。api-load 2件＋reconnect 1件。PH7でrunnerをplaceholderのechoから本runner化＝実workerd＋実D1エンジン＋fake AI） |
+| ブラウザ試験 | `npm run test:e2e` | **87件成功＋1件失敗＋3件スキップ**（8.1分。宣言45本×phone-360/desktop-1280＋setup project。**失敗はdocuments.spec desktopの「保存しました」トースト断言＝ph5/ph6記録の既知flap型で、単独再実行は緑（2 passed）を確認済み**。両方を正直に記録。desktopの条件スキップ3本はPH5から継続） |
+| ビルド | `npm run build` | 成功（precache 9 entries / sw.js生成） |
+| 実環境の試験 | `npm run test:live` | **未実施（実Cloudflare未接続。PH2〜PH6と同じ扱い）**: LIVE_*環境変数が揃わないためtests/live/の**9ファイル9件**がすべて「環境が未設定のため未実施」のエラーでfail（skipにはしない設計）。このharnessは実30端末測定＝V06-realtime残手順の実行体のまま |
+
+## タスク別の指定試験
+T078 `demo_binding_or_incompatible_schema_blocks_deploy`（tests/deploy-config.test.ts新規。同ファイル計3件＝正の対照 `clean_environment_and_staged_expand_backfill_contract_pass`＋workflow内容検査 `workflows_keep_required_gates_and_block_secret_inline_and_cross_env`）/ T079 `restore_does_not_resend_notifications_or_revive_old_sessions`＋検出能力ケース `verify_restore_detects_missing_object_lost_deliveries_and_unrevoked_sessions`（tests/restore-consistency.test.ts新規・2件）/ T080 `budget_exhaustion_stops_optional_inference_but_preserves_saved_records`＋`rag_and_assistant_are_metered_and_stopped_by_budget`＋`monitor_counters_are_aggregated_and_warn_but_do_not_stop`＋`metrics_reject_free_text_and_record_provider_rate_limits`（tests/budget.test.ts新規・4件）＋OperationsPanel 2件（tests/operations-panel.test.tsx新規）/ T081 `every_business_route_rejects_cross_unit_and_stale_permissions`（tests/security/authorization-matrix.test.ts新規）＋abuse 4件〔`strict_policy_limits_each_bucket_isolates_them_and_returns_429_with_retry_after`・`default_policy_is_generous_for_normal_use_and_does_not_trip_429`・`user_dimension_limits_one_user_without_punishing_others_on_the_same_ip`〔review round 1追加〕・`credential_recovery_invitation_and_mfa_abuse_is_uniform_and_breaks_nothing`〕＋input-matrix 4件＝3ファイル9件 / T082 `ordinary_api_p95_is_measured_separately_from_map_and_ai`＋`attendance_event_acl_scan_is_bounded_and_measured_for_denormalization_decision`（tests/load/api-load.test.ts新規・2件）＋`reconnect_storm_recovers_the_backlog_within_the_development_target_in_normal_and_degraded_network`（tests/load/reconnect-load.test.ts新規）＝2ファイル3件 — すべて成功。
+
+## 赤→緑の扱い（正直な記録）
+- **5タスク全報告書に実装前の赤確認記録が残る**。赤の根拠はすべて「対象機能の未実装」で、runner故障や構文エラーではない: T078は新規scripts/yamlの解決失敗＝runner由来のため**赤を取り直し**（型スケルトン後に「スタブの都合の良い戻り値へのassertion失敗」の正当な赤2段を取得。PH6のT072/T073前例どおり）、T079もモジュール不在→スケルトン後に `buildBackupManifest は未実装` の正当な赤を取り直し〔この時点でseed全体が通過することを確認〕、T080はmodule解決失敗→スケルトン＋migration 0032後に `expected +0 to be 30` の正当な赤、T081はapplySecurity未実装の `expected 200 to be 429`〔型スケルトン後に取り直し済み。matrix本体のprobeは既存防御の確認としてこの時点で通過〕、T082はrunner整備〔空ファイルでrunner動作を先にPASS確認＝裁定1。そのうえで削除〕の後にseedLoad未実装の赤を取得。
+- **正当な性能赤からのslow SQL修正**: T082の出欠drainが実装後の実測で `expected 8942 to be less than or equal to 2000`（1行ずつACL判定のp95 8,942ms）——これが次節の修正の根拠。
+- **変異確認**: T079は検出能力ケースで5種注入〔実体欠落・hash破損・孤児・既送delivery復元漏れ・失効基準改変〕→ 全項目報告で `ok: false`／T081は分類対応表から1行（API-99）を抜いて `台帳にあって分類表に無いid: expected [ 'API-99' ] to deeply equal []` で実際に落ちることを実測／T082は計画監査の強制発火変異で `plan-audit: API-80 … expected 4 to be +0` とFAIL・元に戻して緑、reconnectは初回要求の応答放棄〔喪失10件〕をやめると `failedCount=10` と再送端末の窓全体再受領の断言が落ちることを確認。
+- **実装中の往復（各報告書に実記録）**: T078（資源名の命名規則をUUIDのdatabase_idへ誤適用→idは共有検出のみに限定／yaml語彙が環境分離検査に引っかかる→検査を緩めず文言修正／wrangler rulesの`.yml`はvite transformで壊れる→`?raw`へ切替）、T079（削除フェーズのFK違反＝追記専用トリガー→「復元先は新規schemaのみ」契約へ設計変更／compound SELECT上限・`table`予約語・FTS5 export失敗を実測で解消）、T080（監査DTOのスカラー制約でAPI-93が500→理由コードをカンマ結合へ／手動停止中に評価が状態を更新→manualHoldは一切変更しない／`useCallback`が初期enabledを捕捉）、T081（**Honoの登録順の罠**: routes登録後のapplySecurityでは既存routeに挟まれない→`createApp(env, policy)`引数でroutes前に差す／`requests:0`でRetry-AfterがNaN）、T082（D1 bind上限101>100の潜在超過を自発見→文書branchを80件分割／seedのFK即時検査でINSERT順修正／RAG検索語はtrigram3字以上制限で「巡視要領」に変更）。
+
+## T082のslow SQL修正（集合取得・行単位認可）
+`src/server/events/snapshot.ts` のAPI-80走査のACL判定を **1行ずつのSQL（旧`eventVisible`。非可視行1行ごとに点ルックアップ最大1,000回/要求）→1走査バッチ1SQL（`visibleFlagsOfBatch`）** へ変更。通知・お知らせ・文書・出欠の各branchをD1 bind上限内のIN分割（90件ずつ〔文書はvisibility SQLのbindを伴うため80件〕）で集合取得し、**行単位の認可判定は行う**＝判定の語彙と結果は1行版と同一（fail-closed・他unit/未収録種別は非可視・本人の行は本人に見える＝API-07と同じ規則）。**認可核の保存をレビュアーが実ファイル読みで確認**（集合への置換は行っていない）。効果: 出欠イベント窓の30端末drain p95 **8,942→496ms**（読み取り行数は約2,100行でほぼ不変＝削れたのはSQL往復回数）。T072/T073の回帰＋正規スイート64ファイルが無変更で通る。このdrainケースがtests/loadに**恒久回帰ゲート**として残り、索引追加は不要〔UNIQUE(unit_id, sequence)で有界＝計画監査。migration 0033は無し〕。
+
+## レビューの記録（タスクレビュー。確認済みImportant計7件、すべて修正・再レビューADDRESSED）
+- **T079 1件**: ops/backup-restore.md §6.3のsqlite3検証コマンドがglob（`*.sqlite`）でwrangler管理ファイルのmetadata.sqliteまで展開し、**文書どおりに実行できない**〔**別担当（第三者サブエージェント）のrunbook再現が検出**＝完了条件「別担当が手順を再現する」が機能した実例〕。docs修正のみ（1c5c8bb。glob廃止＋想定出力を形式提示へ変更）し、変更後の手順を**文書どおりに実行して** FK違反注入→`PRAGMA foreign_key_check`検出まで再確認。
+- **T080 2件**: ①停止の効かないAI消費経路〔RAG（API-76）・アシスタント（API-77）が計上・停止の対象外〕→ job handlersと同じ`expensiveCallGate`を2経路へ接続（停止中は503 DEPENDENCY_UNAVAILABLE＝fail-closed。同キー再送の保存済み応答は停止の影響なし。`ai.calls`をsource別に計上）②監視項目の無記録省略→ job滞留・配送不明・同期拒否・スキャン不能を既存成果点からcount計上（超過はwarnのみ＝**停止に使わない**。しきい値はconfigのmonitors）＋p95レイテンシは「usage_metricsは加算合計前提で分布値を載せられない」ことを理由に**未実装として記録**。
+- **T081 2件**: ①レート制限のuser次元欠落〔IP鍵のみでは同一IPの他人を巻き込む〕→ `resolvePrincipal`内部（有効性確認の直後）を第二計上点とする2層方式（全業務routeが通るため102 routeへの手書き追加不要。同一利用者の3回目が429＋`user_default`で同じIPの別利用者は200を試験）②`unclassified=[]`断言の恒真性 → 全102行の明示対応表（`CLASSIFICATION`）を`as const satisfies`で型強制し、1行抜きで実際に落ちることを確認（前節どおり）。
+- **T082 2件**: ①計画監査のゲートがsampleキーと不一致で**13監査のうち6件が断言に接続されていなかった**〔死に回路〕→ 監査キーをsampleのAPI文字列に統一（13文→8キー）し「各キーの直接断言＋sample合計（`unboundedQueryCount=0`）」の二重ゲートへ。強制発火変異で断言が落ちることを確認②reconnectの「初回要求強制失敗」が**実際には900ms待つだけ**だった〔虚偽〕→ 要求を発射したまま応答を放棄（body cancel）する**実喪失**へ変更（クライアント側timeout＝実回線の応答ロストと同じ状態。喪失10件は失敗sampleとして劣化p95の百分位に実際に入る。再送端末はbacklog全体をもう一度受領＝at-least-once）。
+- **PH7全体のレビューサイクル**（ph0〜ph6と同じ手順）は**実施中**。証跡はdocs/evidence/ph7-review.mdとしてレビューサイクル完了時に作成（本稿執筆時点では未存在）。サイクルで高・中が出た場合はコントローラがdocs/16 T081の状態を再更新する。
+
+## 未実施・未接続（検証済みとして扱わない）
+- **実環境検証はPH0〜PH6から継続で未実施**: 実Cloudflare・実Workers・実D1・実R2・実Queues・実AI・実Vectorize・実Google Maps・実端末（T083）・**実GitHub Actions**。`npm run test:live`は**未実施**（9ファイル9件が環境変数が揃わなければ必ずfailする設計＝skip＝成功扱いにしない）。**実30端末の測定（V06-realtime残手順）とT077のT033接続〔点検訂正UI完成時のoffline capture追加〕はPH7でも未接続のまま継続**。
+- **局所完了の4タスク**:
+  - **T078**: **GitHub Actionsは実行実績なし**（yamlはコードとして試験が内容検査・変異3種でexit 1確認まで。checkout/setup-node/e2e実行時間・キャッシュ・`needs`の実挙動は未確認）。実Cloudflareへの`wrangler deploy`/`d1 migrations apply --remote`/`wrangler rollback`/Secret `put`は未検証。database_idは仮値のまま。deploy-production.ymlの`inputs.confirm`とGitHub Environment保護は実リポジトリ接続後の初回実行で確認。**「ステージングへ再現可能に配置でき」の実証が残る**。
+  - **T079**: 実D1/R2へのバックアップ・復元演習・実データ量でのRTO/RPO実測・Time Travel動作確認・R2複製の実環境手順・日次実行の組み込みは**docs/evidence/V07-restore.md「未実施」の番号付き残手順**。ローカル実測（3,305行・backup約4秒/verify約12秒）を実環境のRTO/RPOと読み替えない。NFR-06は「実運用前の復元試験」の限界を踏まえ**未達の扱い**（RG-05も未検証のまま）。
+  - **T080**: 実Cloudflareでの**実計測・実請求との照合**（画面・costSource・ops書類に「未実施」と常時明記）と**実環境での停止・復帰の演習**（手順はops/cost-alerts.md §5。復帰の検証はローカルではゲート単位）・実providerの429区分の確定（V04）は未実施。**額は実団体承認済としない**（configはapproved: false）。使用量の計上は近似〔job再実行時に重複計上され得る〕。
+  - **T082**: 実stagingへの配置とseed投入〔CLIでSQL生成可能に済み〕・実D1のrows_read実測・実30端末・実回線（RTT/帯域/ロス/電池最適化）・実AIモデルでのp95・単価は**docs/evidence/V07-performance.md「未実施」の番号付き残手順**。ローカル実測（通常API p95=178ms等）を**D18の合格・NFR-03の充足確定とは扱わない**（docs/13 RG-02はD18承認条件での実測を要求。D18承認済み合格値は存在しないため2秒/5秒は開発目標として使用）。
+- **PH6レビュー「方針で残す」のうちT082と接続する2件の決着**: outbox非正規化の判断（#6）は**V07-performanceの判断材料で解消**〔現行設計を維持＋再評価目安3条件＝実環境poll p95がD18承認値超＋最悪窓drainが常態／実rows_readでpollが月間読み取りの半分超＋予算圧迫／1unit累積outbox約10万行超。docs/14 D16に追記〕。entityId cursor正規化（#1）は**次回events routesを触る際の掃除として継続**。
+- **T081の限界**: レート上限の計数はisolate内メモリ〔実環境では合計が緩む＝厳密な全体上限はCloudflare WAF/Rate Limiting層が前提で、設定・検証はT087未実施〕。実WAF/実CDN/実Workersでのheaders・IPヘッダ信頼性・CSP未確認（T087）。実ペネトレーションは未実施〔自己防御の機械展開であり専門評価ではない〕。遮断・鍵rotation演習未実施（runbook=ops/security-response.md §7に初回手順）。既定policyの数値は開発設定（寛容値）。
+
+## prototype準拠
+実装した画面部品: **OperationsPanel（SCR-17の管理画面〔AccessPanel末尾〕へのパネル追加。prototypeに該当画面が無く共通部品で構成＝docs/03 §1.1-23に理由を記録済み。routes.tsxは変更不要＝既存のAccessPanel経由でページ構成に参加）**。**パネルの実ブラウザe2eは無くjsdom試験のみで担保〔正直に記録。T083前後のe2e整備時にtests/e2e/member-admin.spec.tsへの追加を推奨〕**。トークン（Design Systemのsurface等。AI紫・警告色は既存規約どおり）と44px押下領域（再読み込みボタン`max-lg:min-h-11`）。**「実際の請求との照合は未実施」（NOT MEASURED）の常時注記**＋Workers/D1/地図が未計上である旨の注記〔実請求照合未実施を偽装しない〕。現在の停止状態の照会APIが無いため**状態は表示せず取得できるように見せない**。しきい値表は未承認の明記つき。costUsdの無い実行を費用合計に入れない。403/二要素未設定の扱いはAuditPanelと同じ。パネルは変更操作を持たないためトースト位置は未使用。
+
+## 既知フレーキー
+- **documents.spec desktopの「保存しました」トースト断言**: 本検証のフル実行で1件再現〔87成功＋1失敗〕・**単独再実行は緑（2 passed）**。ph5/ph6-review記録の既知flap型。観察継続。
+- **auth-adapter系の時間依存試験**: PH7中に2回観測〔T078報告: `verify_totp_only_revokes_other_sessions_when_it_actually_enables_mfa`〔TOTP時間依存〕・T081報告: `measures_password_hash_cost_for_v01`〔壁時計<5000msの計測〕。いずれも単独実行・フル再実行で緑＝重いフル走行で揺れる時間感応試験〕。**本検証のフル実行では再現せず**。観察継続。
