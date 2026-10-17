@@ -13,7 +13,8 @@ import { createFixture, type Identity, type TestFixture } from "../helpers/fixtu
  * **機械展開の正本は src/shared/contracts/registry.ts の台帳（102 API）**。docs/16の「101 API分類」は
  * 陳腐な表記で、ここでは台帳の実数をapiIdsで展開する（controller裁定1）。
  *
- * 分類（試験コード内の表。全102件のどこにも黙った除外がないことをこの試験自身が断言する）:
+ * 分類（試験コード内の明示対応表CLASSIFICATION〔id→分類、全102件〕。網羅を試験自身が断言し、
+ * 台帳にAPIを足したら対応表の追加が必須になる）:
  * | 分類 | 台帳上の定義 | 件数 | 試験 |
  * |---|---|---|---|
  * | PROTECTED | permissionにPER-xxを持つ（業務権限で守るroute） | 95 | 未認証/停止/別unit団員の3主体＋権限で拒否される役割の深掘り（403）＋本人unit外対象の深掘り（404）＋失権（停止・scope取消）の観測 |
@@ -46,13 +47,49 @@ describe("T081 全APIの権限・入力・濫用matrix", () => {
   it("every_business_route_rejects_cross_unit_and_stale_permissions", async () => {
     // --- 台帳からの機械展開と分類（上の表どおり） ---
     const PER_LIKE = /PER-\d{2}/;
-    const protectedRoutes = apiIds.filter((id) => PER_LIKE.test(apiDef(id).permission));
-    const ownerRoutes = apiIds.filter((id) => !PER_LIKE.test(apiDef(id).permission) && id !== "API-36");
-    const externalRoutes = apiIds.filter((id) => id === "API-36");
-    // 分類もれの検知: 台帳にAPIが増えたとき、どの分類にも入らないidがあれば失敗させる
-    const classified = new Set([...protectedRoutes, ...ownerRoutes, ...externalRoutes]);
-    const unclassified = apiIds.filter((id) => !classified.has(id));
-    expect(unclassified).toEqual([]);
+    type Classification = "protected" | "owner" | "external";
+    /**
+     * 台帳の**全102件の明示分類表**（id→分類。docs/16の「101 API分類」は陳腐な表記のため不使用）。
+     * 新規APIはここへ明示追加するまで型検査（satisfies Record<ApiId, …>）とこの試験の両方で落ちる
+     * （分類の判断を強制する）。
+     */
+    const CLASSIFICATION = {
+      // --- PROTECTED: permissionにPER-xx（docs/10の業務権限で守るroute） ---
+      "API-01": "protected", "API-02": "protected", "API-03": "protected", "API-04": "protected", "API-05": "protected",
+      "API-06": "protected", "API-07": "protected", "API-08": "protected", "API-09": "protected", "API-10": "protected",
+      "API-11": "protected", "API-12": "protected", "API-13": "protected", "API-14": "protected", "API-15": "protected",
+      "API-16": "protected", "API-17": "protected", "API-18": "protected", "API-19": "protected", "API-20": "protected",
+      "API-21": "protected", "API-22": "protected", "API-23": "protected", "API-24": "protected", "API-25": "protected",
+      "API-26": "protected", "API-28": "protected", "API-29": "protected", "API-30": "protected", "API-31": "protected",
+      "API-32": "protected", "API-33": "protected", "API-34": "protected", "API-37": "protected", "API-38": "protected",
+      "API-39": "protected", "API-40": "protected", "API-41": "protected", "API-42": "protected", "API-43": "protected",
+      "API-44": "protected", "API-45": "protected", "API-46": "protected", "API-47": "protected", "API-48": "protected",
+      "API-49": "protected", "API-50": "protected", "API-51": "protected", "API-52": "protected", "API-53": "protected",
+      "API-54": "protected", "API-55": "protected", "API-56": "protected", "API-57": "protected", "API-58": "protected",
+      "API-59": "protected", "API-60": "protected", "API-61": "protected", "API-62": "protected", "API-63": "protected",
+      "API-64": "protected", "API-65": "protected", "API-67": "protected", "API-68": "protected", "API-69": "protected",
+      "API-70": "protected", "API-71": "protected", "API-72": "protected", "API-73": "protected", "API-74": "protected",
+      "API-75": "protected", "API-76": "protected", "API-77": "protected", "API-78": "protected", "API-79": "protected",
+      "API-80": "protected", "API-81": "protected", "API-82": "protected", "API-83": "protected", "API-84": "protected",
+      "API-85": "protected", "API-87": "protected", "API-88": "protected", "API-89": "protected", "API-90": "protected",
+      "API-91": "protected", "API-92": "protected", "API-93": "protected", "API-94": "protected", "API-95": "protected",
+      "API-96": "protected", "API-97": "protected", "API-98": "protected", "API-99": "protected", "API-102": "protected",
+      // --- OWNER: permissionがPERでない（本人/token/依頼者/元対象ACL/元対象編集権） ---
+      "API-27": "owner", "API-35": "owner", "API-66": "owner", "API-86": "owner", "API-100": "owner", "API-101": "owner",
+      // --- EXTERNAL: 認証ライブラリ（method=ALL、/api/auth/*） ---
+      "API-36": "external",
+    } as const satisfies Record<ApiId, Classification>;
+
+    // 網羅の断言（実効性のある検知）: 台帳の全idが表にあり、表の全idが台帳にある。
+    // 新規APIの追加時に対応表を更新しなければ、この断言が未分類のidを挙げて落ちる
+    expect(apiIds.filter((id) => !(id in CLASSIFICATION)), "台帳にあって分類表に無いid").toEqual([]);
+    expect((Object.keys(CLASSIFICATION) as ApiId[]).filter((id) => !apiIds.includes(id)), "分類表にあって台帳に無いid").toEqual([]);
+    // 分類と台帳の整合（表の陳腐化の検知）: protectedはPERを持ち、owner/externalは持たない
+    const protectedRoutes = apiIds.filter((id) => CLASSIFICATION[id] === "protected");
+    const ownerRoutes = apiIds.filter((id) => CLASSIFICATION[id] === "owner");
+    const externalRoutes = apiIds.filter((id) => CLASSIFICATION[id] === "external");
+    expect(protectedRoutes.every((id) => PER_LIKE.test(apiDef(id).permission)), "protectedなのにPERを持たないidがある").toBe(true);
+    expect([...ownerRoutes, ...externalRoutes].every((id) => !PER_LIKE.test(apiDef(id).permission)), "owner/externalなのにPERを持つidがある").toBe(true);
 
     // --- 対象とマーカー（漏えい検査の種。unit Aの対象をunit B主体・未認証・停止主体が絶対に見ない） ---
     const hex = () => crypto.randomUUID().replaceAll("-", "").slice(0, 8);

@@ -5,7 +5,7 @@ import { createApp } from "../../src/server/index";
 import type { SecurityPolicy } from "../../src/server/security/limits";
 import { GOOD_PASSWORD, INVITATION_HEADER, seedInvitation, uniqueEmail, workerBrowser } from "../helpers/auth";
 import { secretFromUri, totpCode } from "../helpers/totp";
-import { createFixture, type TestFixture } from "../helpers/fixture";
+import { createFixture, type Identity, type TestFixture } from "../helpers/fixture";
 
 /**
  * 濫用への耐性（T081、docs/07 §2「レート上限案はIP＋user単位」「再設定/MFA…レート制限」、docs/05 §1の429行）。
@@ -102,6 +102,37 @@ describe("T081 濫用（連続要求・総当たり）", () => {
       const res = await fx.client(fx.units.a.people.member).request("GET", "/api/v1/announcements");
       expect(res.status).toBe(200);
     }
+  });
+
+  it("user_dimension_limits_one_user_without_punishing_others_on_the_same_ip", async () => {
+    // docs/07 §2（D18「IP＋user単位」）のuser次元: 認証解決後の第二計上点。
+    // IP境界は寛容・user単位だけ厳しいpolicyで、**同じIPの別利用者は止まらない**ことを観測する
+    // （fixture経由の要求は全てcf-connecting-ip無し＝同一IPの鍵にまとまるため、違いはuser次元だけ）。
+    const policy: SecurityPolicy = {
+      rateLimit: {
+        auth: { requests: 1000, windowMs: 60_000 }, ai: { requests: 1000, windowMs: 60_000 },
+        search: { requests: 1000, windowMs: 60_000 }, upload: { requests: 1000, windowMs: 60_000 },
+        default: { requests: 1000, windowMs: 60_000 },
+      },
+      userRateLimit: {
+        auth: { requests: 1000, windowMs: 60_000 }, ai: { requests: 1000, windowMs: 60_000 },
+        search: { requests: 1000, windowMs: 60_000 }, upload: { requests: 1000, windowMs: 60_000 },
+        default: { requests: 2, windowMs: 60_000 },
+      },
+    };
+    const app = createApp(env, policy);
+    const meAs = async (who: Identity) =>
+      app.fetch(new Request("http://example.com/api/v1/me", { headers: { "x-test-identity": JSON.stringify(who) } }), env);
+    // 同一利用者の3回目はuser単位の上限（2/分）で429になる
+    expect((await meAs(fx.units.a.people.admin)).status).toBe(200);
+    expect((await meAs(fx.units.a.people.admin)).status).toBe(200);
+    const third = await meAs(fx.units.a.people.admin);
+    const thirdBody = (await third.json()) as { error?: { code: string; details?: { field: string; reason: string }[] } };
+    expect(third.status, `user単位の3回目: ${thirdBody.error?.code}`).toBe(429);
+    expect(thirdBody.error?.code).toBe("RATE_LIMITED");
+    expect(thirdBody.error?.details?.[0]?.reason, "user次元の計上であること").toBe("user_default");
+    // 同じIPでも別利用者は止まらない（user次元の鍵は利用者ごと。IP次元のカウントは3で上限1000に遠く及ばない）
+    expect((await meAs(fx.units.a.people.officer)).status).toBe(200);
   });
 
   it("credential_recovery_invitation_and_mfa_abuse_is_uniform_and_breaks_nothing", async () => {

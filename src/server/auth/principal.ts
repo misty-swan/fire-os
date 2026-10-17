@@ -1,5 +1,6 @@
 import { HttpError, type ApiContext } from "../http";
 import type { Principal } from "../mutations/execute";
+import { enforceUserRateLimit } from "../security/limits";
 import { authServiceFor } from "./adapter";
 import type { RoleCode } from "./authorize";
 
@@ -91,6 +92,10 @@ export async function resolvePrincipal(c: ApiContext): Promise<AuthzPrincipal> {
   if (sessionCreatedAt && row.session_revoked_before && sessionCreatedAt <= row.session_revoked_before) {
     throw unauthenticated("session_revoked");
   }
+
+  // user単位のレート上限（第二計上点。docs/07 §2 D18「IP＋user単位」。IP境界はroutes前のmiddleware）。
+  // 有効な利用者が確定したこの地点で計上する（停止・失権は上の401で止まり、計上されない）
+  enforceUserRateLimit(c, row.user_id);
 
   const nowIso = new Date().toISOString();
   const [roles, scopes] = await c.env.DB.batch([

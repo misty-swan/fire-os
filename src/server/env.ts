@@ -1,4 +1,5 @@
 // Workersのbinding(接続先)と環境識別子の型。wrangler.jsoncのbinding名と一致させる。
+import type { SecurityPolicy } from "./security/limits";
 
 export type AppEnvName = "local" | "demo" | "staging" | "production";
 
@@ -31,7 +32,11 @@ export interface JobMessage {
 
 export interface AppBindings {
   Bindings: AppEnv;
-  Variables: { requestId: string };
+  Variables: {
+    requestId: string;
+    /** 共通セキュリティ処理のpolicy（applySecurityが設定。user単位の第二計上点が読む。T081） */
+    securityPolicy?: SecurityPolicy;
+  };
 }
 
 const ENV_NAMES: readonly AppEnvName[] = ["local", "demo", "staging", "production"];
