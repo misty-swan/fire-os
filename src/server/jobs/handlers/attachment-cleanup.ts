@@ -5,7 +5,8 @@ import type { JobOutcome, LeasedJob } from "../store";
 /**
  * 添付の実体削除（T017、docs/07 §3.7）。
  * API-85がD1をtombstone（status='deleting'）にした後に走り、R2の実体を消して 'deleted' へ確定する。
- * 復元manifest（T079）で保護対象になったオブジェクトは、その表ができる時に削除条件へ足す（現時点では無い）。
+ * 復元（T079）への保護は「削除前にR2状態の別複製を作る」ことで満たす（docs/14 D10。manifestは
+ * 削除猶予中のready keyとhashを記録する＝ops/backup-restore.md §1。このjobが削除条件を持つ表は作らない）。
  */
 export async function cleanupAttachment(job: LeasedJob, env: AppEnv): Promise<JobOutcome> {
   const att = await env.DB.prepare("SELECT id, unit_id, status, version, staging_key, ready_key FROM attachments WHERE id = ?")

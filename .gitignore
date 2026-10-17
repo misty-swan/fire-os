@@ -13,3 +13,6 @@ test-results/
 
 # ブラウザ試験の一時状態（招待token・セッション。コミットしない）
 tests/e2e/.state/
+
+# バックアップ（実データ・ダンプ・manifest・R2複製。コミットしない。ops/backup-restore.md）
+/backup/
