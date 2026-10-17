@@ -35,7 +35,8 @@ export default defineConfig(async () => {
           test: {
             name: "workers",
             include: ["tests/**/*.test.ts"],
-            exclude: ["tests/e2e/**", "tests/live/**"],
+            // offline-store（T075の端末下書き）はjsdom＋fake-indexeddbのclient側試験なのでworkersで動かさない
+            exclude: ["tests/e2e/**", "tests/live/**", "tests/offline-store.test.ts"],
             globalSetup: ["./tests/helpers/build-client.ts"],
           },
         },
@@ -45,7 +46,8 @@ export default defineConfig(async () => {
           test: {
             name: "client",
             environment: "jsdom",
-            include: ["tests/**/*.test.tsx"],
+            // tests/offline-store.test.ts（T075 端末下書き）はReactを使わないがjsdom＋IndexedDBの試験なのでclient側で動かす
+            include: ["tests/**/*.test.tsx", "tests/offline-store.test.ts"],
             setupFiles: ["./tests/helpers/client-setup.ts"],
           },
         },

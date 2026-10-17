@@ -58,9 +58,10 @@ export async function applyPwaUpdate(): Promise<void> {
 }
 
 /**
- * ログアウト時の消去入口（T075がIndexedDB等へ拡張する）。このタスクが作る状態はService Workerの
- * precache cache（workbox既定名の workbox-precache-v2-<scope>）だけなので、それを掃除する。
- * 中身は静的shellだけで機微データは無いが、消しても次回の起動で取り直すだけなので消してよい。
+ * ログアウト時の消去の入口として用意したもの（T074）。**T075ではlogout経路には繋いでいない**: 生きた
+ * Service Workerが削除済みのprecacheを見続けるため、logout直後の完全読込が壊れる（e2eで確認。
+ * src/client/offline/lifecycle.ts の purgeForLogout のコメントに根拠を記録）。precacheは静的shellだけで
+ * 機微データは無い。設計が変わって明示的に消したいとき（shell差し替え等）のためだけに残す。
  */
 export async function purgeUserCaches(): Promise<void> {
   if (typeof caches === "undefined") return;

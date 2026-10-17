@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { clsx } from "clsx";
 import { AUTH_MESSAGES, AuthError, signOut } from "../authApi";
+import { purgeForLogout } from "../offline/lifecycle";
 import { initialOf, roleLabel, useMe } from "../me";
 import { menuTiles } from "../screens";
 import { PageTitle } from "./Page";
@@ -18,6 +19,9 @@ export function MenuPage() {
     setError(null);
     try {
       await signOut();
+      // 端末に残した下書き・写真を消す（T075・docs/07: ログアウト/ユーザー切替でデータと鍵を破棄）。
+      // 消去に失敗してもログアウト自体は止めない（sessionは既に無く、残った分は次の利用者のログイン時にも掃除される）
+      await purgeForLogout(me.profile.memberId).catch(() => undefined);
       navigate("/login", { replace: true });
     } catch (e) {
       // 通信できずログアウトを確認できなかったときは、ログアウトできたと見せない

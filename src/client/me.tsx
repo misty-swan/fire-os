@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useLocation, useNavigate } from "react-router";
 import type { ApiResponse } from "../shared/contracts/registry";
 import { ApiError, api } from "./api";
+import { purgeForeignDrafts } from "./offline/lifecycle";
 import { Banner, Button } from "./components/ui";
 
 /** API-01 の値。サイドバー・メニューの利用者表示、管理画面の出し分けに使う（権限判定そのものはサーバー） */
@@ -44,8 +45,12 @@ export function MeGate({ me: provided, children }: { me?: MeData; children: Reac
 
   const load = useCallback(async () => {
     try {
-      setMe(await api("API-01", {}));
+      const next = await api("API-01", {});
+      setMe(next);
       setFailed(false);
+      // ログアウト消去が走らずに残った他人の下書きを掃除する（T075・docs/14 D14: ユーザー切替で破棄）。
+      // 失敗しても起動は止めない（下書きの読みはscopeで分離されているので、残っても他人には見えない）
+      void purgeForeignDrafts(next.profile.memberId).catch(() => undefined);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         navigate(`/login?next=${encodeURIComponent(location.pathname + location.search)}`, { replace: true });
