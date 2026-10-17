@@ -93,6 +93,25 @@ test("incident_detail_receives_remote_updates_and_resyncs_after_role_change", as
   });
   expect(grant.status).toBe(200);
 
+  expect(grant.status).toBe(200);
+
+  // --- 再同期の表示そのものを断言する（T073）: 認可版の進行で開いていたcursorが409 RESYNC_REQUIREDになり、
+  // 同期の札はsnapshot（API-70）の取り直しの間だけ「同期をやり直しています」を示す。その窓は1応答分しか
+  // 無いため、試験では詳細取得（GET /api/v1/incidents/:id＝API-70）の応答だけを遅らせて人が見える長さにする。
+  // 409自体は実経路（役割付与→users.authz_versionの進行）で起きる。オフライン化など状態の捏造はしない ---
+  let delaying: Promise<void> | null = null;
+  await pageA.route("**/api/v1/incidents/*", async (route) => {
+    await (delaying = new Promise((resolve) => setTimeout(resolve, 600)));
+    // unrouteとの競合（待機中に外れると先にcontinue済み扱いになる）で投げるmsを拾う
+    await route.continue().catch(() => undefined);
+  });
+  try {
+    await expect(pageA.getByText("通信を確認して同期をやり直しています")).toBeVisible({ timeout: 20_000 });
+  } finally {
+    await delaying; // 遅延中のhandlerがcontinueを終えてから外す（外している最中のcontinue失敗を避ける）
+    await pageA.unroute("**/api/v1/incidents/*");
+  }
+
   // --- 端末Bがさらに「終了」へ。端末Aは再同期を挟んでも続きを受け取れる ---
   await pageB.getByRole("button", { name: "終了する" }).click();
   await pageB.getByLabel("理由（必須）").fill("訓練を終了（架空）");

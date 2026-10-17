@@ -39,8 +39,12 @@ export interface CapturePlan {
 /**
  * 保存に失敗したリクエストを、allowlistの操作に写像できるか。
  * 入力の形は各APIの契約（registry）そのもの。写像できない操作は下書きにしない（同期できないものを残さない）。
+ *
+ * meは認証済みの利用者（API-01）。参集（API-23）の**代理（params.memberId≠本人）は下書きにしない**:
+ * 同期のallowlist（T076）はAPI-23を必ず同期主体自身の記録として再生するため、代理の参集を
+ * 下書きに置くと再送時に別人の参集記録として黙って届いてしまう（allowlist.ts「代理（D08 scope）は同期しない」）。
  */
-export function planFor(id: ApiId, input: unknown): CapturePlan | null {
+export function planFor(id: ApiId, input: unknown, me: Pick<MeData, "profile"> | null): CapturePlan | null {
   const i = input as { params?: Record<string, unknown>; body?: Record<string, unknown> } | null;
   if (!i?.params || typeof i.body !== "object" || i.body === null) return null;
   const params = i.params;
@@ -69,7 +73,9 @@ export function planFor(id: ApiId, input: unknown): CapturePlan | null {
       return { operationCode: "attendance.respond", targetId: params.id, baseVersion: body.version, payload: plain(rest) };
     }
     case "API-23": {
-      // 参集の本人記録（出欠と同じく版はbaseVersionへ）
+      // 参集の本人記録（出欠と同じく版はbaseVersionへ）。代理は下書きにしない（上の注記どおり。
+      // memberIdが入力に無い・本人と一致しない場合は再生時に主体が替わってしまうため写像しない）
+      if (typeof params.memberId !== "string" || params.memberId !== me?.profile.memberId) return null;
       if (typeof params.id !== "string" || typeof body.version !== "number") return null;
       const { version: _v, ...rest } = body;
       return { operationCode: "incident.participant.record", targetId: params.id, baseVersion: body.version, payload: plain(rest) };
@@ -100,7 +106,7 @@ export async function captureOfflineDraft(
   store: IndexedDbDraftStore = getDraftStore(),
 ): Promise<boolean> {
   if (!me) return false;
-  const plan = planFor(id, input);
+  const plan = planFor(id, input, me);
   if (!plan || plan.targetId === "") return false;
   const now = new Date().toISOString();
   const draft: LocalDraft = {

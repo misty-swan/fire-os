@@ -5,7 +5,7 @@ import { Banner, Button, Card, Chip } from "../../components/ui";
 import { draftExpiryFrom } from "../../offline/lifecycle";
 import { runSyncPass } from "../../offline/sync-runner";
 import { getDraftStore } from "../../offline/store";
-import type { DraftScope, LocalDraft } from "../../offline/types";
+import { DraftStoreError, type DraftScope, type LocalDraft } from "../../offline/types";
 import { useMe } from "../../me";
 import { draftSummaryLine } from "../../offline/sync-runner";
 import { OPERATION_LABELS } from "../../offline/capture";
@@ -33,6 +33,7 @@ export function ConflictPanel({ draft, scope, onDone }: { draft: LocalDraft; sco
   const store = getDraftStore();
   const [current, setCurrent] = useState<ServerCurrent | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [storeError, setStoreError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<"resend" | "discard" | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -85,10 +86,14 @@ export function ConflictPanel({ draft, scope, onDone }: { draft: LocalDraft; sco
     };
   }, [load]);
 
-  /** 現値の版を前提にした新しい操作を作り、同期する（旧操作の鍵は使わない＝docs/05「期限後は人が新操作を作る」と同じ整理） */
+  /**
+   * 現値の版を前提にした新しい操作を作り、同期する（旧操作の鍵は使わない＝docs/05「期限後は人が新操作を作る」と同じ整理）。
+   * 端末の書き込みに失敗したときは成功と偽らない（SyncPageのremoveDraft「消せないときも一覧を実態に合わせる」と同じ方針）。
+   */
   const resendAsNew = async () => {
     if (!current) return;
     setBusy(true);
+    setStoreError(null);
     try {
       const now = new Date().toISOString();
       await store.put({
@@ -100,10 +105,24 @@ export function ConflictPanel({ draft, scope, onDone }: { draft: LocalDraft; sco
         expiresAt: draftExpiryFrom(now),
         memo: undefined,
       });
-      await store.remove(draft.clientOperationId);
+      try {
+        await store.remove(draft.clientOperationId);
+      } catch (e) {
+        // 新しい操作は作れたが、元の記録を消せない。消えたふりをせず一覧を実態に合わせて出す
+        setStoreError(
+          e instanceof DraftStoreError
+            ? `新しい操作は保存できましたが、元の記録を消せませんでした（${e.message}）`
+            : "新しい操作は保存できましたが、元の記録を消せませんでした",
+        );
+        onDone();
+        return;
+      }
       setConfirming(null);
       onDone();
       void runSyncPass(scope).catch(() => undefined);
+    } catch (e) {
+      // 端末に書けない（容量不足・IndexedDB不可など）。何も変わっていないことを出す（確認dialogは実態どおり開いたまま）
+      setStoreError(e instanceof DraftStoreError ? e.message : "端末に保存できませんでした。もう一度試してください");
     } finally {
       setBusy(false);
     }
@@ -111,10 +130,14 @@ export function ConflictPanel({ draft, scope, onDone }: { draft: LocalDraft; sco
 
   const discard = async () => {
     setBusy(true);
+    setStoreError(null);
     try {
       await store.remove(draft.clientOperationId);
       setConfirming(null);
       onDone();
+    } catch (e) {
+      // 消せないときも消えたふりをしない（SyncPageのremoveDraftと同じ）。下書きは競合のまま残り、確認dialogも実態どおり
+      setStoreError(e instanceof DraftStoreError ? e.message : "端末の下書きを消せませんでした");
     } finally {
       setBusy(false);
     }
@@ -153,6 +176,11 @@ export function ConflictPanel({ draft, scope, onDone }: { draft: LocalDraft; sco
           <span className="mt-2 block">
             <Button variant="secondary" onClick={() => void load()} className="max-lg:min-h-11 px-4">再読み込み</Button>
           </span>
+        </Banner>
+      )}
+      {storeError && (
+        <Banner tone="error" eyebrow="ERROR" role="alert" title="端末の下書きを操作できません">
+          {storeError}
         </Banner>
       )}
       <div className="flex flex-wrap gap-2">

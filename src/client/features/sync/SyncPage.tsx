@@ -105,7 +105,14 @@ export function SyncPage() {
 
   /** 拒否された下書きの明示的な再送（人の操作。自動では送らない。結果はまた正直に分類される） */
   const retryRejected = async (draft: LocalDraft) => {
-    await store.put({ ...draft, status: "pending", memo: { ...draft.memo, reason: undefined } });
+    try {
+      await store.put({ ...draft, status: "pending", memo: { ...draft.memo, reason: undefined } });
+    } catch (e) {
+      // 端末に書けないときも「送信待ちに替えた」ふりをしない（removeDraft「消せないときも一覧を実態に合わせる」と同じ）。
+      // 下書きは拒否のまま残り、失敗はrole=alertのstoreErrorで出す
+      setStoreError(e instanceof DraftStoreError ? e.message : "端末の下書きを書き換えられませんでした");
+      return;
+    }
     void syncNow();
   };
 

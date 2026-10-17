@@ -1,6 +1,8 @@
 import "fake-indexeddb/auto";
 import { IDBObjectStore } from "fake-indexeddb";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MeData } from "../src/client/me";
+import { captureOfflineDraft, planFor } from "../src/client/offline/capture";
 import { draftExpiryFrom, draftExpiryLabel, DRAFT_TTL_DAYS, purgeForeignDrafts } from "../src/client/offline/lifecycle";
 import {
   DRAFT_DB_NAME,
@@ -239,5 +241,68 @@ describe("端末下書き store (T075)", () => {
     expect(draftExpiryLabel(iso(NOW + 3 * DAY), iso(NOW))).toBe("残り3日");
     expect(draftExpiryLabel(iso(NOW + 12), iso(NOW))).toBe("今日まで");
     expect(draftExpiryLabel(iso(NOW - DAY), iso(NOW))).toBe("期限切れ（送信されません）");
+  });
+});
+
+describe("通信断下書きの写像 (T077・capture.planFor)", () => {
+  /**
+   * 参集（API-23）の下書きは**本人の記録だけ**に限る。
+   *
+   * 画面は代理で他団員の参集を記録できる（IncidentPage、D08 scope。API-23のparams.memberIdに誰の記録かが乗る）。
+   * 一方、同期のallowlist（T076・src/server/sync/allowlist.ts）はAPI-23を**同期主体自身の**記録として
+   * 再生する（memberIdはpayloadに載らず主体で決まる＝「代理（D08 scope）は同期しない」）。通信断で代理の
+   * 参集をそのまま下書きにすると、再送時に**別人の参集記録**として黙って届いてしまうため、
+   * 写像できない操作は下書きにしない（capture.tsの方針どおり。フォームの「結果を確認できません」表示が正として残る）。
+   */
+  // このjsdom環境にはlocalStorageが無く、そのままではdeviceIdOf()が呼び出しごとに新IDを発行する
+  // （store.tsのfallback「下書きの分離はuserIdで効くので安全側」）。実端末と同じ「端末に恒久の
+  // deviceIdがある」状態をメモリで再現して、captureが組み立てるscopeでlistできるようにする
+  const memoryLocalStorage = new Map<string, string>();
+  beforeEach(() => {
+    memoryLocalStorage.clear();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => memoryLocalStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => void memoryLocalStorage.set(key, value),
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** API-23の入力（契約そのもの。operations.ts API-23: params={id,memberId}、body={version,...}） */
+  const musterInput = (memberId: string) => ({
+    params: { id: "33333333-3333-4333-8333-333333333333", memberId },
+    body: { version: 3, attendanceStatus: "mobilizing" },
+  });
+  const meOf = (memberId: string): Pick<MeData, "profile" | "unitName"> => ({
+    profile: { memberId, displayName: "架空 記録", rank: null },
+    unitName: "架空市 第一分団",
+  });
+  /** captureOfflineDraftが組み立てるscopeと同じ形（deviceIdはstoreの deviceIdOf()） */
+  const liveScopeOf = (userId: string): DraftScope => ({
+    userId,
+    unitId: "架空市 第一分団",
+    deviceId: IndexedDbDraftStore.deviceIdOf(),
+  });
+
+  it("proxy_mobilization_is_never_captured_as_a_draft_but_self_mobilization_is", async () => {
+    store = newStore();
+    const me = meOf(USER_A);
+    const liveScope = liveScopeOf(USER_A); // 先に確定させる（captureとlistで同じdeviceIdを指す）
+
+    // --- 代理（他団員の参集を記録する操作）: planは作らず、下書きも置かない ---
+    expect(planFor("API-23", musterInput(USER_B), me)).toBeNull();
+    await expect(captureOfflineDraft(me, "API-23", musterInput(USER_B), "op-proxy", store)).resolves.toBe(false);
+    expect(await store.list(liveScope)).toEqual([]);
+
+    // --- 本人の参集: 従来どおり下書きになる（版はpayloadから抜いてbaseVersionへ＝assertNoVersionInPayloadと一致） ---
+    const plan = planFor("API-23", musterInput(USER_A), me);
+    expect(plan).toMatchObject({
+      operationCode: "incident.participant.record",
+      targetId: "33333333-3333-4333-8333-333333333333",
+      baseVersion: 3,
+      payload: { attendanceStatus: "mobilizing" },
+    });
+    expect(plan?.payload).not.toHaveProperty("version");
+    await expect(captureOfflineDraft(me, "API-23", musterInput(USER_A), "op-self", store)).resolves.toBe(true);
+    expect((await store.list(liveScope)).map((d) => d.clientOperationId)).toEqual(["op-self"]);
   });
 });
