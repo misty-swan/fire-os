@@ -118,13 +118,15 @@ npx tsx scripts/restore-verify.ts --manifest backup/local-20261017-1/manifest.js
    - `scripts/backup-manifest.ts`: 約4秒（manifest＋ダンプ作成＋R2複製）
    - `scripts/restore-verify.ts`: 約12秒（schema作成＋ダンプ適用＋sessions失効＋全照合＋R2実体の取得とhash照合）
    - この数字を「実環境のRTO」とは読まない（データ量・網羅が桁違い。実測はV07-restore「未実施」2）。
-3. **FK検出の裏付け（外部ツール由来の破れ。手順）**: 復元済みのscratchにsqlite3で直接参照切れを作り、`PRAGMA foreign_key_check` が報告することを確認した（2026-10-17実施）:
+3. **FK検出の裏付け（外部ツール由来の破れ。手順）**: 復元済みのscratchにsqlite3で直接参照切れを作り、`PRAGMA foreign_key_check` が報告することを確認した（2026-10-17実施）。sqlite3は**実DBファイルを直接指定する**（glob `*.sqlite` はwranglerの管理ファイル `metadata.sqlite` も展開してParse errorになる。scratchには復元したDBの実体がhash名 `.sqlite` として1つだけある）:
    ```bash
-   sqlite3 /tmp/fireos-restore-scratch/v3/d1/miniflare-D1DatabaseObject/*.sqlite \
+   DBFILE="$(find /tmp/fireos-restore-scratch/v3/d1/miniflare-D1DatabaseObject -maxdepth 1 -name '*.sqlite' ! -name 'metadata.sqlite')"
+   sqlite3 "$DBFILE" \
      "PRAGMA foreign_keys=OFF; INSERT INTO members (id, unit_id, display_name, status, created_at, updated_at, actor_kind) \
       VALUES ('demo-orphan','no-such-unit','不在の分団','active','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z','system');"
    npx wrangler d1 execute fireos-local --local --persist-to /tmp/fireos-restore-scratch --json --command "PRAGMA foreign_key_check"
-   # → {"table":"members","rowid":1,"parent":"units","fkid":2} が返る（verifyRestoreがforeignKeyErrorsへ載せる形と同じ）
+   # → {"table":"members","rowid":<環境依存の値>,"parent":"units","fkid":2} の形が返る
+   #   （rowidはデータ量で変わる。verifyRestoreがforeignKeyErrorsへ載せる形と同じ）
    ```
 
 ## 7. 未整備（正しく「未実施」として扱う）
