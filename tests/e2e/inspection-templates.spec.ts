@@ -29,8 +29,10 @@ test("template_edit_creates_new_draft_version", async ({ page }) => {
   ]));
   await card.getByRole("button", { name: "新しい下書き版を作成" }).click();
   await expect(page.getByText("新しい下書き版を作成しました")).toBeVisible();
-  const newVersionId = await page.evaluate(() => document.body.textContent!.includes("rev2"));
-  expect(newVersionId).toBe(true);
+  // 新しい版のラベル「rev2」はトーストと別同期で描画されるため、ポーリング断言で待つ
+  // （T083ラウンド4。旧断言はbody.textContentの1回きり評価で、描画が遅い実行ではトースト時に
+  // rev2が未描画のままfalseになっていた＝documents.specのトースト断言と同じ非ポーリング断言クラス）
+  await expect(card.getByText("rev2")).toBeVisible();
 
   // 旧版（rev1）は承認済みにならない＝過去の点検の表示が変わらない。申請→承認でrev2だけが承認される
   await card.getByRole("button", { name: "申請" }).last().click();
