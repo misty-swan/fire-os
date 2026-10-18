@@ -67,6 +67,10 @@
                           ],
                           "additionalProperties": false
                         },
+                        "unitId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        },
                         "unitName": {
                           "type": "string",
                           "minLength": 1,
@@ -101,6 +105,7 @@
                       },
                       "required": [
                         "profile",
+                        "unitId",
                         "unitName",
                         "roles",
                         "authzVersion",

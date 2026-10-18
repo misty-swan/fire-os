@@ -82,10 +82,10 @@ export function MeGate({ me: provided, children }: { me?: MeData; children: Reac
     if (!me) return;
     return startAutoSync(() => ({
       userId: me.profile.memberId,
-      unitId: me.unitName,
+      unitId: me.unitId,
       deviceId: IndexedDbDraftStore.deviceIdOf(),
     }));
-  }, [me?.profile.memberId, me?.unitName]);
+  }, [me?.profile.memberId, me?.unitId]);
 
   if (value) return <MeContext.Provider value={value}>{children}</MeContext.Provider>;
   return (

@@ -33,5 +33,14 @@ export default defineConfig({
       testIgnore: /auth\.setup\.ts/,
       use: { viewport: { width: 1280, height: 800 }, storageState: ADMIN_STATE },
     },
+    {
+      // タブレット（T083の実端末matrixの768幅）。既存27specの実行時間を増やさないため、
+      // T083の新規2spec（accessibility / revisit-flows）だけをこのプロジェクトで走らせる
+      name: "tablet-768",
+      dependencies: ["setup"],
+      testIgnore: /auth\.setup\.ts/,
+      testMatch: /accessibility\.spec\.ts|revisit-flows\.spec\.ts/,
+      use: { viewport: { width: 768, height: 1024 }, storageState: ADMIN_STATE },
+    },
   ],
 });

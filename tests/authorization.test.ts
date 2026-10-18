@@ -102,7 +102,7 @@ describe("認可 (T008)", () => {
     // 4) API-01 が返す列は契約どおりで、内部の列（authId/メール/hash）を含まない
     const me = await fx.client(fx.units.a.people.member).request("GET", "/api/v1/me");
     const body = (await me.json()) as { data: Record<string, unknown> };
-    const privateFieldNames = Object.keys(body.data).filter((k) => !["profile", "unitName", "roles", "authzVersion", "policyVersion", "mfaEnabled", "mfaRequired"].includes(k));
+    const privateFieldNames = Object.keys(body.data).filter((k) => !["profile", "unitId", "unitName", "roles", "authzVersion", "policyVersion", "mfaEnabled", "mfaRequired"].includes(k));
     expect(JSON.stringify(body)).not.toMatch(/authId|auth_id|email|password|token/i);
 
     // 5) ログイン後に停止すると、次の要求から 401（Cookieは有効でも業務は拒否）

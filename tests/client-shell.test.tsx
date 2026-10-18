@@ -17,6 +17,7 @@ const ID = "11111111-1111-4111-8111-111111111111";
 /** API-01 の応答の代わり（認証済みの団員）。MeGate の取得を省いてシェルを描く */
 const TEST_ME = {
   profile: { memberId: ID, displayName: "架空 団員", rank: "団員" },
+  unitId: ID,
   unitName: "架空市 第一分団",
   roles: ["member" as const],
   authzVersion: 1,

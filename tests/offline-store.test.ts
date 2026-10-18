@@ -272,14 +272,17 @@ describe("通信断下書きの写像 (T077・capture.planFor)", () => {
     params: { id: "33333333-3333-4333-8333-333333333333", memberId },
     body: { version: 3, attendanceStatus: "mobilizing" },
   });
-  const meOf = (memberId: string): Pick<MeData, "profile" | "unitName"> => ({
+  const meOf = (memberId: string): Pick<MeData, "profile" | "unitName" | "unitId"> => ({
     profile: { memberId, displayName: "架空 記録", rank: null },
     unitName: "架空市 第一分団",
+    unitId: "u1111111-1111-4111-8111-111111111111",
   });
-  /** captureOfflineDraftが組み立てるscopeと同じ形（deviceIdはstoreの deviceIdOf()） */
+  /** captureOfflineDraftが組み立てるscopeと同じ形（deviceIdはstoreの deviceIdOf()）。
+   *  unitIdは**分団識別子（units.id）**で、表示名（unitName）ではない（T083・ph6-review A低3の決着。
+   *  表示名は分団の改名で変わるため、下書きのscope識別子に使うと保存済みの下書きが一覧から消える） */
   const liveScopeOf = (userId: string): DraftScope => ({
     userId,
-    unitId: "架空市 第一分団",
+    unitId: "u1111111-1111-4111-8111-111111111111",
     deviceId: IndexedDbDraftStore.deviceIdOf(),
   });
 

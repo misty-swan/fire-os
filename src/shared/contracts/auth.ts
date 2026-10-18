@@ -38,6 +38,8 @@ export const RevocationResult = obj({
 
 export const Me = obj({
   profile: obj({ memberId: Id, displayName: ShortText, rank: ShortText.nullable() }),
+  /** 所属（units.id。offline下書きのscope識別子など）。T083で追加（ph6-review A低3の決着。表示名は改名で変わるため識別子に使わない） */
+  unitId: Id,
   /** 表示用の所属名（サイドバー/メニュー）。PH1でT008が追加（prototypeの分団カード） */
   unitName: ShortText,
   roles: z.array(z.enum(roleCodes)),

@@ -97,9 +97,12 @@ describe("OperationsPanel (T080)", () => {
     expect(fetchFn).not.toHaveBeenCalled();
     unmount();
 
-    // 403（PER-08無し）: 案内だけを出し、壊れたように見せない
+    // 403（PER-08無し）: AuditPanel前例のFORBIDDEN Bannerで示し、壊れたように見せない（T083 R3）
     stubFetch({ status: 403, body: { error: { code: "FORBIDDEN", message: "x", details: [] } } });
     render(<OperationsPanel enabled={true} />);
-    await waitFor(() => expect(screen.getByText("この情報は管理者だけが表示できます。")).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("この操作は許可されていません"));
+    expect(screen.getByText("FORBIDDEN")).toBeTruthy();
+    // 旧表示（Notice warningの案内）は403の表現として使わない（AuditPanelのFORBIDDEN Bannerへ統一）
+    expect(screen.queryByText("この情報は管理者だけが表示できます。")).toBeNull();
   });
 });

@@ -98,7 +98,7 @@ function plain(body: Record<string, unknown>): Record<string, unknown> {
  * 引数や入力値から分団・利用者を決めない）。meが取れない文脈（ログイン画面など）では作らない。
  */
 export async function captureOfflineDraft(
-  me: Pick<MeData, "profile" | "unitName"> | null,
+  me: Pick<MeData, "profile" | "unitId"> | null,
   id: ApiId,
   input: unknown,
   /** 失敗したリクエストで使った送信鍵。同じ鍵で再送できるのが下書きの要点（docs/05 §2冪等） */
@@ -110,7 +110,8 @@ export async function captureOfflineDraft(
   if (!plan || plan.targetId === "") return false;
   const now = new Date().toISOString();
   const draft: LocalDraft = {
-    scope: { userId: me.profile.memberId, unitId: me.unitName, deviceId: IndexedDbDraftStore.deviceIdOf() },
+    // unitIdは分団識別子（MeData.unitId＝units.id）。表示名（unitName）は改名で変わるためscopeに使わない（T083）
+    scope: { userId: me.profile.memberId, unitId: me.unitId, deviceId: IndexedDbDraftStore.deviceIdOf() },
     clientOperationId: idempotencyKey,
     operationCode: plan.operationCode,
     targetId: plan.targetId,

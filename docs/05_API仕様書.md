@@ -54,7 +54,7 @@ binary upload API-83はintent/attempt ID＋content hashで再送を判定し、�
 
 | API-ID | method / path | 権限 | 入力と固有検証 | 成功data |
 |---|---|---|---|---|
-| API-01 | GET /me | PER-01 | なし | Me(profile,unitName,roles,authzVersion,policyVersion,mfaEnabled,mfaRequired)。未受領/停止/失効済みは401（details.reason=account_not_linked/account_disabled/session_revoked） |
+| API-01 | GET /me | PER-01 | なし | Me(profile,unitId,unitName,roles,authzVersion,policyVersion,mfaEnabled,mfaRequired)。unitIdは所属（units.id。T083で追加＝offline下書きscopeの分団識別子。表示名のunitNameとは別列）。未受領/停止/失効済みは401（details.reason=account_not_linked/account_disabled/session_revoked） |
 | API-02 | GET /members | PER-01(一覧)/PER-06(許可列) | q/status/squad/limit/cursor（名前→IDのkeyset。絞り込み・ページングはSQL）;基本項目は全員、roleCodes/invitationはPER-07、privateFieldsは本人または担当(scope)の分だけ（他人分を返したら`member.private.view`を監査） | Page<Member>（privateFieldsは許可された行にだけ現れる） |
 | API-03 | POST /members | PER-06 | displayName,status,rank?,squad?,qualifications?,joinedOn?,privateFields?(phone/emergencyContactのみ。未知列400);管理者のみ。登録時の許可列入力は可（読み返しは別権限） | Member（応答・冪等保存にprivateFieldsを含めない） |
 | API-04 | PATCH /members/:id | PER-06/07 | version,変更列（基本項目=管理者、privateFields=本人または担当、status=管理者）,reason（status変更時は必須）;旧版409、未知列400、アカウントのある団員の休団・退団は利用停止（団員の状態＋利用者の停止＋認可版の増分＋失効job＋監査を一つのcommit、他の列との同時変更は400、再開は未提供422、最後の管理者は422 last_admin） | Member |

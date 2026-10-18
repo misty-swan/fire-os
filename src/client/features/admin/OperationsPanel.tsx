@@ -95,7 +95,11 @@ export function OperationsPanel({ enabled }: { enabled: boolean }) {
           <Icon name="monitoring" className="text-[20px] text-ink-muted" />
           運用（費用と障害）
         </h3>
-        <Notice tone="warning" icon="lock" role="status">この情報は管理者だけが表示できます。</Notice>
+        {/* 403の表現は監査ログ（AuditPanel）と同じFORBIDDEN Bannerに統一（T083・ph7-review C低4の決着。
+            prototypeに管理パネルの403表現は無いたdocs/03 §1.1-23に記録）。role="alert"で読み上げにも出る */}
+        <Banner tone="error" eyebrow="FORBIDDEN" role="alert" title="運用（費用と障害）を表示できません">
+          この操作は許可されていません。
+        </Banner>
       </Card>
     );
   }

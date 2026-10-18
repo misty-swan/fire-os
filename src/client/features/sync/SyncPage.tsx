@@ -35,10 +35,11 @@ export function SyncPage() {
   const { me } = useMe();
   const online = useOnline();
   const store = getDraftStore();
-  // scopeは認証済みme（API-01）から組み立てる（T075レビューからの持ち越し事項。単Idで絞る＝他者の行は絶対に読めない）
+  // scopeは認証済みme（API-01）から組み立てる（T075レビューからの持ち越し事項。単Idで絞る＝他者の行は絶対に読めない）。
+  // unitIdは分団識別子（units.id）。表示名（unitName）は改名で変わるためscopeに使わない（T083）
   const scope = useMemo<DraftScope>(
-    () => ({ userId: me.profile.memberId, unitId: me.unitName, deviceId: IndexedDbDraftStore.deviceIdOf() }),
-    [me.profile.memberId, me.unitName],
+    () => ({ userId: me.profile.memberId, unitId: me.unitId, deviceId: IndexedDbDraftStore.deviceIdOf() }),
+    [me.profile.memberId, me.unitId],
   );
   const [rows, setRows] = useState<LocalDraft[] | null>(null);
   const [storeError, setStoreError] = useState<string | null>(null);

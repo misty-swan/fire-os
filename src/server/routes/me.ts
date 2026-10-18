@@ -12,6 +12,7 @@ export function registerMeRoutes(app: ApiApp): void {
       c,
       project("API-01", p, {
         profile: { memberId: p.memberId, displayName: p.displayName, rank: p.rank },
+        unitId: p.unitId,
         unitName: p.unitName,
         roles: p.roles,
         authzVersion: p.authzVersion,

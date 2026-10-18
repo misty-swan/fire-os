@@ -121,7 +121,7 @@ async function seedInspectionDraft(
   page: Page,
   args: {
     userId: string;
-    unitName: string;
+    unitId: string;
     clientOperationId: string;
     facilityId: string;
     templateVersionId: string;
@@ -142,7 +142,7 @@ async function seedInspectionDraft(
   // ArrayBufferはpage.evaluateの引数で壊れるため、base64文字列として渡してブラウザ内でバイト列に戻す
   const pngB64 = png.toString("base64");
   const row = {
-    scope: { userId: args.userId, unitId: args.unitName, deviceId: DEVICE_ID },
+    scope: { userId: args.userId, unitId: args.unitId, deviceId: DEVICE_ID },
     clientOperationId: args.clientOperationId,
     operationCode: "facility_inspection.create",
     targetId: args.facilityId,
@@ -250,9 +250,9 @@ test("offline_conflict_never_uses_last_write_wins", async ({ browser, request },
   await acceptInvitationViaUi(page, emailA, memberA.token, { mfa: false });
   await expect(page.getByRole("heading", appHeading)).toBeVisible();
   await page.evaluate((deviceId) => localStorage.setItem("fireos.device-id", deviceId), DEVICE_ID);
-  const unitName = await page.evaluate(async () => {
+  const unitId = await page.evaluate(async () => {
     const res = await fetch("/api/v1/me", { credentials: "same-origin" });
-    return ((await res.json()) as { data: { unitName: string } }).data.unitName;
+    return ((await res.json()) as { data: { unitId: string } }).data.unitId;
   });
 
   // Aは様式一覧（API-94=PER-04）を扱うため幹部権を付与する（管理者API。全置換なので役割はofficerだけになる）
@@ -316,7 +316,7 @@ test("offline_conflict_never_uses_last_write_wins", async ({ browser, request },
   //     「ready前の親操作の試み」をリクエスト記録で検証できる（parentSentBeforeReady）。
   mode = "block";
   await seedInspectionDraft(page, {
-    userId: memberA.memberId, unitName, clientOperationId: seededCiOpId, facilityId,
+    userId: memberA.memberId, unitId, clientOperationId: seededCiOpId, facilityId,
     templateVersionId: template.versions[0]!.id, inspectorMemberId: memberA.memberId, note: "端末で撮影した点検（架空）",
   });
 

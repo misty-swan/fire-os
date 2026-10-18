@@ -11,7 +11,8 @@ import type { syncOperationStates } from "../../shared/states";
 export interface DraftScope {
   /** 利用者（members.id＝API-01のprofile.memberId） */
   userId: string;
-  /** 分団。現行のDTOに分団識別子が無いためT075では表示名（MeData.unitName）を使う（scope絞り込み専用。分離の本体はuserId） */
+  /** 分団。**分団識別子（MeData.unitId＝units.id）**。T083で表示名（unitName）から切替（ph6-review A低3の決着。
+   *  表示名は分団の改名で変わるため識別子に使わない。scope絞り込み専用で、分離の本体はuserId） */
   unitId: string;
   /** 端末。store.deviceIdOf()が発行・保持する推測不能なUUID（sync操作のdeviceId＝API-81と同じ値） */
   deviceId: string;

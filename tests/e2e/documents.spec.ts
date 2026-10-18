@@ -63,8 +63,14 @@ test("withdrawn_document_disappears_from_search_and_citation", async ({ page, re
   // ACL（deny優先）: 初期行は自分（許可）。seed団員の閲覧も許可する
   await page.getByRole("button", { name: "対象を追加" }).click();
   await page.getByLabel("対象の団員2").selectOption({ label: `架空 文書閲覧者 ${tag}` });
+  // 保存の応答を待ってから可視フィードバックを断言する（T083 R4。旧断言「トーストが見える」は
+  // 応答が遅いと保存成功でも落っていた＝トースト〔2.6秒で自動消失〕への固定時間依存のフレーク。
+  // 応答の確定後にrole=statusへスコープして待つため、成功の可視フィードバックの意味は保ったまま
+  // 待ち合わせを時間に依存させない）
+  const created = page.waitForResponse((r) => r.url().endsWith("/api/v1/documents") && r.request().method() === "POST");
   await page.getByRole("button", { name: "文書を作成する" }).click();
-  await expect(page.getByText("保存しました")).toBeVisible();
+  expect((await created).status()).toBe(201);
+  await expect(page.getByRole("status").filter({ hasText: "保存しました" }).first()).toBeVisible();
   await expect(page).toHaveURL(/\/app\/documents\/[0-9a-f-]{36}$/, { timeout: 15_000 });
   const documentId = new URL(page.url()).pathname.split("/").pop()!;
   await expect(page.getByText("下書き").first()).toBeVisible(); // 文書の状態ピル（承認前）
@@ -117,11 +123,14 @@ test("withdrawn_document_disappears_from_search_and_citation", async ({ page, re
   const citationsAfterApprove = await searchCitations(request, "給水活動");
   expect(citationsAfterApprove.length).toBeGreaterThan(0);
   await page.getByLabel("分類（変更後）").fill("訓練資料・改訂");
+  // ACL変更も同じく応答待ち→トーストの順（T083 R4。上の文書作成と同じ理由）
+  const accessPolicyPatched = page.waitForResponse((r) => r.url().endsWith("/access-policy") && r.request().method() === "PATCH");
   await page.getByRole("button", { name: "閲覧許可を変更する" }).click();
   const aclDialog = page.getByRole("dialog", { name: "閲覧の許可を変更しますか" });
   await expect(aclDialog.getByText(/広がる/)).toBeVisible(); // 緩和方向の注記（変更は承認として記録される）
   await aclDialog.getByRole("button", { name: "変更する" }).click();
-  await expect(page.getByText("保存しました").first()).toBeVisible();
+  expect((await accessPolicyPatched).status()).toBe(200);
+  await expect(page.getByRole("status").filter({ hasText: "保存しました" }).first()).toBeVisible();
   await expect(page.getByText("閲覧許可の改訂 第2版", { exact: true })).toBeVisible({ timeout: 15_000 }); // policy_version増分
   // ACL変更（分類のみ。緩和方向のACL変更なし）でも検索はまだhitする
   expect((await searchCitations(request, "給水活動")).length).toBeGreaterThan(0);
