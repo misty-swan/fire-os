@@ -14,6 +14,7 @@ Interfaces（docs/16 T083）どおり `flowId / steps / duration / success / err
 - flows: `attendance_answer`（出欠回答）／`inspection_photo_save`（写真つき点検の保存）／`issue_confirm`（異常の確認）／`citation_original_open`（引用〔原本〕の閲覧）／`sync_recover`（通信断→下書き→同期復旧）／`map_failure_list_alternative`（地図を使わず一覧だけで点検の導線まで）
 - steps: 各フローの手順は e2eの添付（`ux-matrix.json` / `revisit-matrix.json`。steps配列に日本語の手順と操作数が残る）
 - thresholds: 成功率0.9と操作数の上限は**docs/14 D18の開発案値（承認済み合格値ではない）**
+- Interfacesの7項目と表の対応: `flowId`/`success`/`errors`＝表の列、`operations`（stepsの操作数の内訳）と`duration`＝列、`steps`（手順の全文）＝上記のとおり添付のsteps配列、`device`＝device列、`version`＝この節冒頭の宣言＋添付JSONのappVersion
 
 | flowId | device | success | operations（実測） | duration（実測） | errors |
 | --- | --- | --- | --- | --- | --- |
@@ -23,6 +24,7 @@ Interfaces（docs/16 T083）どおり `flowId / steps / duration / success / err
 | citation_original_open | chromium-emulated-360 | 成功 | 2 | 641ms | なし |
 | sync_recover | chromium-emulated-360 | 成功 | 3 | 10,929ms | なし |
 | map_failure_list_alternative | chromium-emulated-360 | 成功 | 2 | 215ms | なし |
+| 5フロー一式（再ログイン後） | chromium-emulated-360 | 成功（1.0=5/5） | 2/6/2/2/3 | 計≈16.8秒 | なし |
 | 5フロー一式（再ログイン後） | chromium-emulated-768 | 成功（1.0=5/5） | 2/6/2/2/3 | 計≈16.8秒 | なし |
 | 5フロー一式（再ログイン後） | chromium-emulated-1280 | 成功（1.0=5/5） | 2/6/2/2/3 | 計≈16.7秒 | なし |
 
@@ -32,11 +34,11 @@ Interfaces（docs/16 T083）どおり `flowId / steps / duration / success / err
 
 | 測定 | device | 結果 | 手法 |
 | --- | --- | --- | --- |
-| criticalAccessibilityViolations（axe critical違反） | chromium-emulated-360 / 768 / 1280 | **0件**（3幅とも） | axe-core 4.14（@axe-core/playwright）。WCAG 2.1 A/AA規則セットでホーム/マップ/点検登録/同期の状況を走査 |
-| markerTextLabelsMissing（地図マーカー/一覧のテキストラベル欠落） | 〃 | **0**（3幅とも） | マーカーのaccessible name＋面上のテキスト（管理番号）、一覧の行テキストを機械断言 |
-| unreachableCoreControls（keyboardで到達できないコア操作） | 〃 | **0件**（3幅とも） | ネイティブfocusable/tabindexの構造確認＋実際のTab走査（上限80ステップ。出欠・点検・マップ・文書・同期の主要操作） |
-| 200%文字拡大で出欠が隠れず押せる | 〃 | **押せた**（3幅とも） | CDPのPage.setTextZoomFactorは本Chromiumに未実装のため rootへのCSS zoom注入で代替（文字だけでなくレイアウト全体が拡大＝文字ズームより厳しめ） |
-| 色除去（achromatopsia）で文字が読める | 〃 | **読めた**（3幅とも） | CDP Emulation.setEmulatedVisionDeficiency('achromatopsia')。種別チップと一覧の状態文字で確認 |
+| criticalAccessibilityViolations（axe critical違反） | chromium-emulated-360 / 768 / 1280 | **0件**（3幅とも） | axe-core 4.14（@axe-core/playwright）。WCAG 2.1 A/AA規則セットでホーム/マップ/点検登録/同期の状況を走査。**全SCRの走査は未実施** |
+| markerTextLabelsMissing（地図マーカーのテキストラベル欠落） | 〃 | **0**（3幅とも） | マーカーのaccessible name＋面上テキストの2点計上（一覧の行は計上せず、別断言〔achromatopsia節の状態文字・一覧代替フロー〕が担う） |
+| unreachableCoreControls（keyboardで到達できないコア操作） | 〃 | **0件**（3幅とも） | ネイティブfocusable/tabindexの構造確認（出欠・点検・マップ・文書）＋実際のTab走査は出欠「参加」の1点（上限80ステップ） |
+| 200%文字拡大で出欠が隠れず押せる | 〃 | **押せた**（3幅とも） | CDPのPage.setTextZoomFactorは本Chromiumに未実装のため rootへのCSS zoom注入で代替（文字だけでなくレイアウト全体が拡大＝文字ズームより厳しめ。注入はページ遷移の後） |
+| 色除去（achromatopsia）で文字が読める | 〃 | **読めた**（3幅とも） | CDP Emulation.setEmulatedVisionDeficiency('achromatopsia')。色除去の描画効果そのものは機械断言せず、適用の有効性は色つき要素のスクリーンショット差分で実証（2026-10-18）。種別チップと一覧の状態文字で確認 |
 | 読み上げ（アクセシブルネーム/role） | 〃 | **機械断言で代替**（axe name/role＋getByRole。全フローがnameで操作できた） | 実スクリーンリーダーの確認は§2の残手順 |
 
 ## 2. 実端末の未実施行（番号付き残手順）
@@ -80,7 +82,18 @@ Interfaces（docs/16 T083）どおり `flowId / steps / duration / success / err
 5. 同期の状況を開き「もう一度送る」をキーボードで操作できる【期待】Enterで実行できる
 6. resultsの記録: flowId=revisit-real-pc / 同様の形式
 
-### 2.4 結果の取扱い
+### 2.4 代表利用者による「説明なし再訪」計測（提案時TODO。RG-02の利用者試験）
+
+**未実施。** docs/03 §5「月1〜2回利用相当の説明なし再訪テストを各5名程度の代表利用者が完了できることを計測」に対応する残手順（brief完了条件の「団員評価は完成後提案時に追加確認」）。e2e自動測定では**「説明なしで分かるか」は測れない**（スクリプトが道を知っている）ため、人による計測を提案時に実施する。
+
+1. 対象者: 分団の団員から5名程度（年代・スマホ習熟度の異なる人を選ぶ。幹部2名・一般3名など）
+2. 準備: 実環境（staging等）に試験用の架空データを用意し、対象者には**操作の手順書を渡さない**（画面の案内だけで完出来るかが測定対象。質問には答えない約束にする）
+3. 課題（口頭で伝えることだけ伝え、やり方を示さない）: ①今週の予定に「参加」と答える ②消防水利の点検をして写真を1枚添えて保存する ③点検で見つけた異常を「確認する」 ④訓練資料の原本を開く ⑤機内モードで出欠を変え、回復後に同期できたか確認する
+4. 測定者は記録だけ行う: 各課題の所要時間・完了可否・詰まった箇所（エラー表示を読めなかった箇所）・補助の回数
+5. 合否の目安: 完了率とともに「補助なしで完出来た人数」を記録する（docs/14 D18「操作成功率90%以上案」は開発案値で承認済みではない。提案時の判定材料として提出する）
+6. resultsの記録: flowId=revisit-real-users-N（N=1〜5）/ steps=上記①〜⑤ / duration（各課題の実測）/ success（補助なしで完了した課題数/5）/ errors（詰まった箇所の記録）/ device / version
+
+### 2.5 結果の取扱い
 
 - 実施したら、この表の該当行に success/errors/device/version（iOS/AndroidのOSバージョン・ブラウザー名）を追記し、docs/evidence/V07-ux.mdの「未実施」セクションを実施済みへ更新する
 - 【期待】と違う結果が出たら、それを**合格に見せない**（docs/13の判定は実測値で行う）。fixは通常のタスクとして起票する

@@ -14,7 +14,7 @@ import {
   probeKeyboardReachable,
   seedCitableDocument,
   seedRevisitScene,
-  setVisionDeficiency,
+  startAchromatopsia,
   setTextZoomPercent,
   successRateOf,
   tabReaches,
@@ -69,23 +69,30 @@ test("returning_user_finishes_inspection_and_attendance_without_hidden_controls"
   flows.push(await timedFlow("sync_recover", (f) => flowSyncRecover(member, scene, request, f)));
   const coreTaskSuccessRate = successRateOf(flows);
   // --- axe走査（critical違反の測定源。フローで使った画面＋ホーム/マップ） ---
+  // 各ページは**データ依存のDOM（マーカー・様式・指標など）が出てから**走査する（ph8レビューA低1。
+  // #main表示直後の未取得DOMで走ると違反を取りこぼす＝false緑の方向）
   const criticalAccessibilityViolations: AxeViolationSummary[] = [];
   let seriousOrWorseTotal = 0;
-  const axePages: [string, string][] = [
-    ["ホーム", "/app"],
-    ["マップ", "/app/map"],
-    ["点検登録", `/app/facilities/${scene.facilityIds[0]}/inspections/new`],
-    ["同期の状況", "/app/sync"],
+  const markerName = new RegExp(scene.managementNumbers[0]!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const axePages: { label: string; path: string; ready: () => Promise<void> }[] = [
+    { label: "ホーム", path: "/app", ready: () => expect(member.getByText("やること")).toBeVisible({ timeout: 30_000 }) },
+    { label: "マップ", path: "/app/map", ready: () => expect(member.getByRole("button", { name: markerName }).first()).toBeVisible({ timeout: 30_000 }) },
+    { label: "点検登録", path: `/app/facilities/${scene.facilityIds[0]}/inspections/new`, ready: () => expect(member.getByRole("button", { name: scene.templateName })).toBeVisible({ timeout: 30_000 }) },
+    { label: "同期の状況", path: "/app/sync", ready: () => expect(member.getByText(/同期待ち/).first()).toBeVisible({ timeout: 30_000 }) },
   ];
-  for (const [label, path] of axePages) {
+  for (const { label, path, ready } of axePages) {
     await member.goto(path);
     await expect(member.locator("#main")).toBeVisible();
+    await ready();
     const r = await collectCriticalViolations(member, criticalAccessibilityViolations);
     seriousOrWorseTotal += r.seriousOrWorse;
-    testInfo.attach(`axe-${label}`, { body: JSON.stringify(r), contentType: "application/json" });
+    await testInfo.attach(`axe-${label}`, { body: JSON.stringify(r), contentType: "application/json" });
   }
+  // 測定の証跡（serious以下の件数を含む。criticalのみが断言対象）
+  console.log(`[axe] ${JSON.stringify({ criticalAccessibilityViolations, seriousOrWorseTotal })}`);
 
-  // --- 地図マーカー/一覧のテキストラベル（NFR-09。欠落数0が合格）と、地図障害の一覧代替 ---
+  // --- 地図マーカーのテキストラベル（NFR-09。マーカーのaccessible name＋面上テキストの2点計上で欠落数0が合格。
+  //     一覧の行ラベルはachromatopsia節と下の一覧代替フローで別途断言する）と、地図障害の一覧代替 ---
   await member.goto("/app/map");
   // 読み込み中に数えない: 地図面のマーカーが実際に描かれるまで待つ（toBeHiddenは要素がまだ無くても通るため）
   await expect(member.getByRole("button", { name: new RegExp(scene.managementNumbers[0]!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).first()).toBeVisible({ timeout: 30_000 });
@@ -150,27 +157,35 @@ test("returning_user_finishes_inspection_and_attendance_without_hidden_controls"
   await probeKeyboardReachable("文書の「原本を開く」", member.getByRole("link", { name: "原本を開く" }), unreachableCoreControls);
 
   // --- 色除去（NFR-09。achromatopsiaで全色を無彩色にしても、文字で状態が読める） ---
-  await setVisionDeficiency(member, "achromatopsia");
+  // 適用はページ遷移の**後**（注入がナビゲーションで破棄されないよう、ズームと同じ順にする）。
+  // CDPセッションは断言が終わるまで開いたままにし、全断言後に"none"を送ってからdetachする
+  // （ph8レビューA中2/要確認1。適用の有効性＝描画が実際に変わることは、色つき要素の適用前後の
+  // スクリーンショット差分で実証済み（2026-10-18・docs/evidence/V07-ux.md））
+  await member.goto("/app/map");
+  await expect(member.getByRole("button", { name: markerName }).first()).toBeVisible({ timeout: 30_000 });
+  const achromatopsia = await startAchromatopsia(member);
   let achromatopsiaTextLabelsReadable = false;
   try {
-    await member.goto("/app/map");
-    // 種別チップは色と形に加えて必ず文字を持つ（prototypeのfilters）。チップが描かれてから確かめる
-    await expect(member.getByRole("button", { name: /消火栓 \d+/ }).first()).toBeVisible({ timeout: 30_000 });
+    // 種別チップは色と形に加えて必ず文字を持つ（prototypeのfilters）
+    await expect(member.getByRole("button", { name: /消火栓 \d+/ }).first()).toBeVisible();
     // 一覧の行も状態を文字（未確認/位置確認済み）で示す。色だけの表現に頼らない
     const toggle = member.getByRole("button", { name: "一覧" });
     if (await toggle.isVisible().catch(() => false)) await toggle.click();
     await expect(member.getByText("未確認").first()).toBeVisible();
     achromatopsiaTextLabelsReadable = true;
   } finally {
-    await setVisionDeficiency(member, "none");
+    await achromatopsia.reset();
   }
 
   // --- 200%文字拡大（NFR-02。出欠の操作が拡大しても隠れず・押せる） ---
-  const zoomMethod = await setTextZoomPercent(member, 200);
+  // 注入はページ遷移の**後**。CSS zoomは旧ドキュメントのdocumentElementへ効くため、
+  // 注入の直後にgotoすると新ドキュメントで破棄され100%のまま断言することになる（ph8レビューA高1の修正）
   let coreControlUsableAt200Percent = false;
+  let zoomMethod: "css-zoom-injected" | "not-applied" = "not-applied";
   try {
     await member.goto(`/app/activities/${scene.activityId}`);
     await expect(member.getByText("あなたの出欠")).toBeVisible();
+    zoomMethod = await setTextZoomPercent(member, 200);
     const attend = member.getByRole("button", { name: "参加", exact: true });
     await expect(attend).toBeVisible();
     await expect(attend).toBeEnabled();
@@ -184,7 +199,7 @@ test("returning_user_finishes_inspection_and_attendance_without_hidden_controls"
   }
 
   // --- 測定結果の保存（Interfaces: flowId/steps/duration/success/errors/device/version） ---
-  attachMatrix(testInfo, "ux-matrix.json", {
+  await attachMatrix(testInfo, "ux-matrix.json", {
     device,
     viewport: `${viewport.width}x${viewport.height}`,
     emulation: "chromium-emulated（実端末ではない）",

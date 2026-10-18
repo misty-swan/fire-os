@@ -4,6 +4,8 @@
 
 **この文書の数字はchromiumのエミュレーション（360/768/1280）での実測であり、iOS/Androidの実端末・実スクリーンリーダー・実PWA install環境での測定は未実施**（ops/device-test-matrix.md §2の番号付き手順で実施するまで、実端末に関する合格判定には使わない。偽の完了記録は書かない）。
 
+**実装コミット: `7bb8d08`（feat: complete T083 ux）。2026-10-18のレビューround 1修正コミット（`fix: address T083 review round 1`。SHAは本ファイルの直後のgit logで確認できる）も、この文書の測定記録の版に含む。**
+
 **coreTaskSuccessRateの閾値0.9はdocs/14 D18の開発案値（操作成功率90%以上案）であって、承認済みの合格値ではない**（D18は「値未決で合格にしない」〔docs/14 D18〕。操作数の上限も現在の導線の実測に余裕を持たせた回帰ガードであり、承認値ではない）。
 
 ## 方式
@@ -18,30 +20,33 @@
 
 | 測定 | 手法 | 限界（正直な記録） |
 | --- | --- | --- |
-| criticalAccessibilityViolations | axe-core 4.14（`@axe-core/playwright`・T083でdevDependencyへ追加）。WCAG 2.1 A/AAの規則セット（`withTags(["wcag2a","wcag2aa","wcag21a","wcag21aa"])`）でホーム/マップ/点検登録/同期の状況の4画面を走査し、`impact==="critical"`のみを断言対象にする（serious以下も件数は記録） | 実スクリーンリーダーの読み上げそのものではない。代替としてアクセシブルネーム/roleの機械断言（axe＋getByRole）を行い、実機確認は残手順 |
-| 200%文字拡大 | **CDPの`Page.setTextZoomFactor`は本実行のChromium（playwright 1.64同梱）に存在しないことを確認済み**（2026-10-18・`Protocol error ... wasn't found`）。代替としてrootへCSS zoom（`document.documentElement.style.zoom = "2"`）を注入 | CSS zoomは文字だけでなくレイアウト全体を2倍にするため、文字ズームのみの拡大より**厳しめの条件**。ブラウザー本来の文字ズームとの差は実端末手順（ops/device-test-matrix.md §2.3の4）で確認する |
-| 色除去 | CDP `Emulation.setEmulatedVisionDeficiency("achromatopsia")`（全色を無彩色化）。種別チップの文字・一覧の状態文字が読めることを断言 | 色覚の多様性（1型/2型/3型）のうち全色覚欠損のみ。軽度の色覚特性は対象外 |
-| keyboard到達 | 構造確認（button/a/input/select/textarea/summaryのネイティブ要素またはtabindex≥0）＋**実際のTab走査**（blur→Tab連打で目的の操作へフォーカスが移るか・上限80ステップ） | フォーカスリングの視認性・スクリーンリーダーの仮想カーソルは未確認（実機手順） |
-| markerTextLabelsMissing | マーカーのaccessible name（種別＋管理番号）と面上のテキスト（管理番号）、一覧の行テキストを機械断言 | 「地図障害」の再現は、本アプリの地図面が実地図タイルに依存しないプレースホルダー（docs/14 V05で未接続）のため、**「地図を見ずに一覧だけで点検の導線まで進む」形**で実施した。実地図タイル障害（タイル取得失敗時に操作できるか）は実端末手順 |
+| criticalAccessibilityViolations | axe-core 4.14（`@axe-core/playwright`・T083でdevDependencyへ追加）。WCAG 2.1 A/AAの規則セット（`withTags(["wcag2a","wcag2aa","wcag21a","wcag21aa"])`）でホーム/マップ/点検登録/同期の状況の4画面を走査し、`impact==="critical"`のみを断言対象にする（serious以下も件数は記録）。**全SCRの走査は未実施**（実行時間圧迫への対処。残画面への拡大は将来改善） | 実スクリーンリーダーの読み上げそのものではない。代替としてアクセシブルネーム/roleの機械断言（axe＋getByRole）を行い、実機確認は残手順 |
+| 200%文字拡大 | **CDPの`Page.setTextZoomFactor`は本実行のChromium（playwright 1.64同梱）に存在しないことを確認済み**（2026-10-18・`Protocol error ... wasn't found`）。代替としてrootへCSS zoom（`document.documentElement.style.zoom = "2"`）を注入。注入は**ページ遷移の後**に行う（遷移前の注入はナビゲーションで破棄されることを2026-10-18の実証で確認。ph8レビューA高1の修正） | CSS zoomは文字だけでなくレイアウト全体を2倍にするため、文字ズームのみの拡大より**厳しめの条件**。ブラウザー本来の文字ズームとの差は実端末手順（ops/device-test-matrix.md §2.3の4）で確認する |
+| 色除去 | CDP `Emulation.setEmulatedVisionDeficiency("achromatopsia")`（全色を無彩色化）。**適用の有効性は機械断言していない**（断言は文字ラベルの存在確認）。有効性は色つき要素（種別チップと同じ赤・青）の適用前/適用中/解除後スクリーンショットの差分で実証（2026-10-18。sha256: 適用前`b1ba12a18f833b70`≠適用中`98adcdd307974bc3`、解除後は適用前に一致）。CDPセッションは断言中は開いたままにし、全断言後に"none"を送ってからdetachする（ph8レビューA中2/要確認1の修正） | 色覚の多様性（1型/2型/3型）のうち全色覚欠損のみ。軽度の色覚特性は対象外 |
+| keyboard到達 | 構造確認（button/a/input/select/textarea/summaryのネイティブ要素またはtabindex≥0）＋**実際のTab走査**（blur→**Tabを押してから**activeElementを判定。body/htmlの間は判定しない。上限80ステップ。ph8レビューA中1の修正。実走査の対象は出欠「参加」の1点で、点検/マップ/文書は構造確認） | フォーカスリングの視認性・スクリーンリーダーの仮想カーソルは未確認（実機手順） |
+| markerTextLabelsMissing | 地図**マーカー**のみを計上: accessible name（種別＋管理番号）と面上のテキスト（管理番号）の2点。**一覧の行は計上しない**（一覧の行ラベルは別断言〔achromatopsia節の状態文字・一覧代替フローの行名クリック〕が担う。ph8レビューD低1の記述整合）。「地図障害」の再現は、本アプリの地図面が実地図タイルに依存しないプレースホルダー（docs/14 V05で未接続）のため、**「地図を見ずに一覧だけで点検の導線まで進む」形**で実施した。実地図タイル障害は実端末手順 | 色だけに依存しない表示の担保は、この数値＋別断言（一覧の行）の組で成立する |
 | 読み上げ | axe（name/role）＋getByRole断言で代替 | VoiceOver/TalkBackでの実際の読み上げは未実施（実機手順 §2.1/§2.2） |
+| 説明なしで分かるか（NFR-02の利用者側） | **e2e自動測定では測れない**（スクリプトが道を知っているため）。docs/03 §5の「各5名程度の代表利用者による説明なし再訪計測」（提案時TODO・RG-02の利用者試験）はops/device-test-matrix.md §2.4の残手順 | 人による計測（提案時）まで、この観点は未達として扱う |
 
 ## 実測（chromiumエミュレーション。実端末ではない）
 
 ### 再訪フロー（成功・操作数・時間）
 
-- **phone-360（Pixel 5エミュレーション）の実測**（accessibility.spec〔初回フロー〕。2026-10-18・ローカルwrangler dev＋D1）:
+- **phone-360（Pixel 5エミュレーション）の実測**（accessibility.spec〔初回フロー〕。2026-10-18・ローカルwrangler dev＋D1）。手順の列は**画面操作（op）だけを順に列挙**する（画面の移動〔goto・step〕は添付のsteps配列を参照。操作数の内訳と1対1で対応させる）:
 
-| flowId | success | 操作数 | duration | 主な手順 |
+| flowId | success | 操作数 | duration | 画面操作（op。順どおり） |
 | --- | --- | --- | --- | --- |
-| attendance_answer | 成功 | 2 | 878ms | 一覧→行→「参加」（サーバー反映を検証読みで確認） |
-| inspection_photo_save | 成功 | 6 | 3,683ms | 様式→良好→写真（検査待ち含む）→確認→保存→詳細へ戻る |
-| issue_confirm | 成功 | 2 | 545ms | 異常の行→「確認する」（理由入力なしの定型操作） |
-| citation_original_open | 成功 | 2 | 641ms | 文書の行→「原本を開く」（PDFのdownloadイベント） |
-| sync_recover | 成功 | 3 | 10,929ms | 未定→「結果を確認できません」→回復→同期の状況→反映（サーバーで版=2を確認。二重適用なし） |
-| map_failure_list_alternative | 成功 | 2 | 215ms | 「一覧」ボタン→行→詳細→点検の導線まで |
+| attendance_answer | 成功 | 2 | 878ms | ①予定の行を開く ②「参加」で回答 |
+| inspection_photo_save | 成功 | 6 | 3,683ms | ①様式を選ぶ ②「良好」 ③「写真・メモへ進む」 ④写真を添える ⑤「確認へ進む」 ⑥「点検を保存」 |
+| issue_confirm | 成功 | 2 | 545ms | ①異常の行を開く ②「確認する」 |
+| citation_original_open | 成功 | 2 | 641ms | ①文書の行を開く ②「原本を開く」 |
+| sync_recover | 成功 | 3 | 10,929ms | ①「未定」 ②同期の状況を開く ③「もう一度送る」 |
+| map_failure_list_alternative | 成功 | 2 | 215ms | ①「一覧」ボタン ②施設の行を開く |
 
 - **coreTaskSuccessRate = 1.0（5/5）**。他の2幅も同様（tablet-768: 983/3,665/674/568/10,891ms・desktop-1280: 985/3,684/566/652/10,884ms。いずれも成功率1.0）。`revisit-flows.spec`（**再ログイン後**の5フロー）も3幅すべて成功率1.0（phone-360: 1,006/3,696/523/683/10,906ms。実行間の揺らぎは数十ms程度）。
 - 操作数の実測は出欠2/点検6/異常2/引用2/同期3。回帰ガードの上限（実測＋余裕・承認値ではない）は出欠4/点検10/異常4/引用3/同期5で、revisit-flows.specが毎回断言する。
+- sync_recoverの**実行ごとの経路は非決定的**: 自動同期（30秒周期・設計どおり）が先に適用した実行では「もう一度送る」のクリックは握りつぶされ（試験はクリックで待ち続けない）、手動再送が走る実行と走らない実行がある。成否の判定はサーバー検証読み（response=undecided・version=2）で確定し、手動再送経路そのものの単独カバレッジはoffline-sync.specが担う（ph8レビューA低2の決着）。
+- **「説明なしで分かるか」はe2eでは測れない**（スクリプトが操作を知っているため）。docs/03 §5の「各5名程度の代表利用者による説明なし再訪計測」（提案時TODO）はops/device-test-matrix.md §2.4に残手順として起票済み（ph8レビューB中3）。
 
 ### アクセシビリティ測定
 
@@ -53,8 +58,9 @@
 | 200%拡大で出欠が押せる | 押せた（aria-pressed断言つき） | 押せた | 押せた |
 | achromatopsiaで文字が読める | 読めた（チップ・状態文字） | 読めた | 読めた |
 
-- 走査画面はホーム/マップ/点検登録/同期の状況の4画面（WCAG 2.1 A/AA規則セット）。serious以下の違反は**断言対象外**で、件数は試験実行の添付（`ux-matrix.json`）に記録される（本タスクのゲートはcritical 0件のみ）。
+- 走査画面はホーム/マップ/点検登録/同期の状況の4画面（WCAG 2.1 A/AA規則セット。**全SCRの走査は未実施**）。serious以下の違反は**断言対象外**で、実件数はph8レビューround 1修正後の再実行（2026-10-18）の走査で **phone-360 合計7件 / tablet-768 合計7件 / desktop-1280 合計23件**（4画面の合計。主にコントラスト系。criticalは3幅とも0件で、criticalのみをゲートにした。serious以下の対応は将来改善候補）。
 - 「一覧代替」は3幅とも成功（phone 215ms/tablet 197ms/desktop 110ms。PCは右パネルの一覧が常設のため切替操作0）。
+- 200%拡大・色除去の各断言は、ph8レビューround 1の修正（zoom注入をページ遷移の後に・achromatopsiaのセッション保持）を入れた**再実行で合格した**（フローの実測・成功率・critical 0は修正前後で同一）。
 
 ## 検出・修正した欠陥（赤→緑の証跡）
 

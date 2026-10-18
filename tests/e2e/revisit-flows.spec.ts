@@ -76,7 +76,7 @@ test("revisit_core_flows_complete_in_few_operations_after_relogin", async ({ bro
     operationCaps: OPERATION_CAPS,
     appVersion: process.env.npm_package_version ?? "0.0.0",
   };
-  attachMatrix(testInfo, "revisit-matrix.json", matrix);
+  await attachMatrix(testInfo, "revisit-matrix.json", matrix);
 
   // --- 断言 ---
   // 成功率（5フローのため、4/5=0.8では足りず5/5が要る。落ちたフローはerrorsで切分けできる）

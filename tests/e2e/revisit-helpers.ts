@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { expect, type APIRequestContext, type Browser, type Locator, type Page, type TestInfo } from "@playwright/test";import { acceptInvitationViaUi, adminApiData, inviteNewMember, isPhone, newUserContext, uniqueEmail } from "./helpers";
+import { expect, type APIRequestContext, type Browser, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { acceptInvitationViaUi, adminApiData, inviteNewMember, isPhone, newUserContext, uniqueEmail } from "./helpers";
 
 /**
  * 再訪操作・アクセシビリティ測定の共通部品（T083、NFR-01/02/09）。
@@ -62,9 +63,9 @@ export async function timedFlow(flowId: string, fn: (f: FlowRecorder) => Promise
 export const successRateOf = (flows: FlowResult[]): number =>
   flows.length === 0 ? 0 : flows.filter((r) => r.success).length / flows.length;
 
-/** 測定結果を試験の添付（証跡）として残す。docs/evidence/V07-ux.md に転記する元 */
-export function attachMatrix(testInfo: TestInfo, name: string, payload: unknown): void {
-  void testInfo.attach(name, { body: JSON.stringify(payload, null, 2), contentType: "application/json" });
+/** 測定結果を試験の添付（証跡）として残す。docs/evidence/V07-ux.md に転記する元。書き出しを待ってから次へ進む */
+export async function attachMatrix(testInfo: TestInfo, name: string, payload: unknown): Promise<void> {
+  await testInfo.attach(name, { body: JSON.stringify(payload, null, 2), contentType: "application/json" });
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -333,7 +334,7 @@ export async function flowSyncRecover(page: Page, scene: RevisitScene, request: 
   await page.goto("/app/sync");
   // 自動同期（起動・online・visibility・30秒周期。docs/16「60秒以内に同期が始まる」）が適用を進めるのが設計どおりの道。
   // 未同期の行が見えたら画面の「もう一度送る」（手動再送＝同じ鍵。新しい鍵は作らない）も試すが、
-  // **自動同期が先に適用して行が消える競合がある**（その場合はクリングしない。反映のまとめで結果を見る）
+  // **自動同期が先に適用して行が消える競合がある**（そのときはクリックしない。反映のまとめで結果を見る）
   const unsynced = page.getByText(/未同期 1件/);
   const resolved = page.getByText(/反映 1件/).or(page.getByText("同期待ちの入力はありません"));
   await expect(unsynced.or(resolved.first())).toBeVisible({ timeout: 60_000 });
@@ -401,26 +402,32 @@ export async function probeKeyboardReachable(label: string, locator: Locator, un
   if (!ok) unreachable.push(`${label}（keyboardで到達できない）`);
 }
 
-/** 実際にTabを押して目的の操作へフォーカスが移るか（構造ではなく挙動で確かめる）。見つからなければfalse */
+/**
+ * 実際にTabを押して目的の操作へフォーカスが移るか（構造ではなく挙動で確かめる）。見つからなければfalse。
+ * **Tabを押してから判定する**（blur直後のactiveElementはbodyで、body.textContentはページ全体のテキストを
+ * 含むため、押す前に判定するとページ内の語で常にhitしてしまう＝ph8レビューA中1の修正）。
+ * body/htmlにフォーカスが当たっている間は判定しない。
+ */
 export async function tabReaches(page: Page, targetText: string, maxTabs = 80): Promise<boolean> {
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   for (let i = 0; i < maxTabs; i++) {
+    await page.keyboard.press("Tab");
     const hit = await page.evaluate((t) => {
       const el = document.activeElement as HTMLElement | null;
-      if (!el) return false;
+      if (!el || el === document.body || el === document.documentElement) return false;
       const text = (el.textContent ?? "").trim();
       const label = el.getAttribute("aria-label") ?? "";
       return text.includes(t) || label.includes(t);
     }, targetText);
     if (hit) return true;
-    await page.keyboard.press("Tab");
   }
   return false;
 }
 
 /**
- * 地図マーカー/一覧の行がテキストラベルを持つか（NFR-09「色だけに依存せず、ラベル・一覧代替」）。
- * マーカーはaccessible name（種別+管理番号）と面上のテキスト（管理番号）の両方を確認する。
+ * 地図**マーカー**のテキストラベルを数える（NFR-09「色だけに依存せず、ラベル・一覧代替」）。
+ * 計上は2点: ①accessible name（種別+管理番号）②面上のテキスト（管理番号）。**一覧の行は計上しない**
+ * （一覧の行ラベルは別の断言が担う: achromatopsia節の状態文字「未確認」と、一覧代替フローの行名クリック）。
  * 戻り値は欠落の数（0が合格）。
  */
 export async function countMarkerTextLabelsMissing(page: Page, managementNumbers: string[]): Promise<number> {
@@ -451,11 +458,24 @@ export async function setTextZoomPercent(page: Page, percent: number): Promise<"
   return "css-zoom-injected";
 }
 
-/** 色の除去（NFR-09の視認性確認。CDPの視覚異常エミュレーションで全色を無彩色にする） */
-export async function setVisionDeficiency(page: Page, type: "none" | "achromatopsia"): Promise<void> {
+/**
+ * 色の除去（NFR-09の視認性確認。CDPの視覚異常エミュレーションで全色を無彩色にする）。
+ * **セッションを開いたまま返し、断言が終わってから reset() を呼ぶ設計**（ph8レビューA中2/要確認1。
+ * 適用の有効性＝描画が実際に変わることは、色つき要素の適用前後スクリーンショットの差分で
+ * 実証済み（2026-10-18・docs/evidence/V07-ux.md）。
+ */
+export async function startAchromatopsia(page: Page): Promise<{ reset: () => Promise<void> }> {
   const session = await page.context().newCDPSession(page);
-  await session.send("Emulation.setEmulatedVisionDeficiency", { type });
-  await session.detach();
+  await session.send("Emulation.setEmulatedVisionDeficiency", { type: "achromatopsia" });
+  return {
+    reset: async () => {
+      try {
+        await session.send("Emulation.setEmulatedVisionDeficiency", { type: "none" });
+      } finally {
+        await session.detach().catch(() => undefined);
+      }
+    },
+  };
 }
 
 // ---------------------------------------------------------------- 共通の小部品

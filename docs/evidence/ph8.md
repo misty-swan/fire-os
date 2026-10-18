@@ -9,7 +9,7 @@
 | 型検査 | `npm run typecheck` | 成功（実装者・コントローラ両方で実行） |
 | 契約検査 | `npm run check:contracts` | **102 API / docs/05 102行 / OpenAPI一致**（API-01 MeDataへ`unitId`追加の契約3点セット〔台帳・docs/05・OpenAPI再生成〕を同一コミットで実施） |
 | 単体・結合試験 | `npx vitest --run` | **65ファイル291件成功**（PH7最終と同数＝新規jsdom試験は既存ファイル内追加。workers＝実workerd＋D1/Queues、client＝jsdom） |
-| ブラウザ試験 | `npm run test:e2e` | **フル2回とも 94 passed / 3 skipped（モバイル限定試験のdesktopスキップ）/ 0 failed**（実装サブエージェント実行・約12分/回。既存87本に新規2spec×3プロジェクト分を追加。**R4修正後のフレーク再現なし**。既知フレーキーだったdocuments.spec desktopトースト断言は本実行で2回とも緑） |
+| ブラウザ試験 | `npm run test:e2e` | **フル2回とも 94 passed / 3 skipped（モバイル限定試験のdesktopスキップ）/ 0 failed**（実装サブエージェント実行・約12分/回。内訳＝旧87 passed＋旧フレーキー1本〔documents.spec desktopトースト断言。R4修正〕が今回緑＋新規6本〔2spec×3プロジェクト〕＝94。**R4修正後のフレーク再現なし**） |
 | ビルド | `npm run build` | 成功（precache 9 entries） |
 | 負荷試験 | `npm run test:load` | **触らない**（T085/T086の範囲。ユーザー指示） |
 | カバレッジ | `npm run check:coverage` | **触らない**（T085/T086の範囲。ユーザー指示） |
