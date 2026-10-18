@@ -36,6 +36,21 @@ async function searchCitations(request: APIRequestContext, query: string): Promi
   return res.data.data.citations;
 }
 
+/**
+ * 粘着fill（sticky fill）: fillの値が背景再レンダリングで消える競合への対策
+ * （コントローラのフル走行実測: desktopで「題名を入力してください」の検証エラー＝fill値のみ消失。
+ *  playwrightのfillは再レンダリングと競合し得るため、書いて値を確認し、消えていたら書き直す。
+ *  最後は通常のexpectで締めて、最終的に値が乗っていることを保証する。このspec内だけで使う）
+ */
+async function stickyFill(page: import("@playwright/test").Page, label: string, value: string): Promise<void> {
+  const field = page.getByLabel(label);
+  for (let i = 0; i < 3; i++) {
+    await field.fill(value);
+    if ((await field.inputValue()) === value) return;
+  }
+  await expect(field).toHaveValue(value);
+}
+
 test("withdrawn_document_disappears_from_search_and_citation", async ({ page, request }) => {
   test.setTimeout(300_000);
   const tag = crypto.randomUUID().slice(0, 6);
@@ -58,16 +73,18 @@ test("withdrawn_document_disappears_from_search_and_citation", async ({ page, re
   await page.getByRole("link", { name: "文書を作成" }).click();
   await expect(page).toHaveURL(/\/app\/documents\/new$/);
 
-  await page.getByLabel("題名").fill(title);
-  await page.getByLabel("分類").fill("訓練資料");
+  // 題名・分類は粘着fill（上のヘルパー。fill値が背景再レンダリングで消える競合への対策）
+  await stickyFill(page, "題名", title);
+  await stickyFill(page, "分類", "訓練資料");
   // ACL（deny優先）: 初期行は自分（許可）。seed団員の閲覧も許可する
   await page.getByRole("button", { name: "対象を追加" }).click();
   await page.getByLabel("対象の団員2").selectOption({ label: `架空 文書閲覧者 ${tag}` });
   // 保存の応答を待ってから可視フィードバックを断言する（T083 R4。旧断言「トーストが見える」は
   // 応答が遅いと保存成功でも落っていた＝トースト〔2.6秒で自動消失〕への固定時間依存のフレーク。
   // 応答の確定後にrole=statusへスコープして待つため、成功の可視フィードバックの意味は保ったまま
-  // 待ち合わせを時間に依存させない）
-  const created = page.waitForResponse((r) => r.url().endsWith("/api/v1/documents") && r.request().method() === "POST");
+  // 待ち合わせを時間に依存させない。タイムアウト30秒＝根因〔fill値消失で送信不発〕が起きても
+  // 300秒のテストタイムアウトを継承せず、検証エラーの画面ごと早く明確に落ちる）
+  const created = page.waitForResponse((r) => r.url().endsWith("/api/v1/documents") && r.request().method() === "POST", { timeout: 30_000 });
   await page.getByRole("button", { name: "文書を作成する" }).click();
   expect((await created).status()).toBe(201);
   await expect(page.getByRole("status").filter({ hasText: "保存しました" }).first()).toBeVisible();
@@ -123,8 +140,8 @@ test("withdrawn_document_disappears_from_search_and_citation", async ({ page, re
   const citationsAfterApprove = await searchCitations(request, "給水活動");
   expect(citationsAfterApprove.length).toBeGreaterThan(0);
   await page.getByLabel("分類（変更後）").fill("訓練資料・改訂");
-  // ACL変更も同じく応答待ち→トーストの順（T083 R4。上の文書作成と同じ理由）
-  const accessPolicyPatched = page.waitForResponse((r) => r.url().endsWith("/access-policy") && r.request().method() === "PATCH");
+  // ACL変更も同じく応答待ち（タイムアウト30秒）→トーストの順（T083 R4。上の文書作成と同じ理由）
+  const accessPolicyPatched = page.waitForResponse((r) => r.url().endsWith("/access-policy") && r.request().method() === "PATCH", { timeout: 30_000 });
   await page.getByRole("button", { name: "閲覧許可を変更する" }).click();
   const aclDialog = page.getByRole("dialog", { name: "閲覧の許可を変更しますか" });
   await expect(aclDialog.getByText(/広がる/)).toBeVisible(); // 緩和方向の注記（変更は承認として記録される）
