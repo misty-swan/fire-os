@@ -9,7 +9,7 @@
 | 型検査 | `npm run typecheck` | 成功（実装者・コントローラ両方で実行） |
 | 契約検査 | `npm run check:contracts` | **102 API / docs/05 102行 / OpenAPI一致**（API-01 MeDataへ`unitId`追加の契約3点セット〔台帳・docs/05・OpenAPI再生成〕を同一コミットで実施） |
 | 単体・結合試験 | `npx vitest --run` | **65ファイル291件成功**（PH7最終と同数＝新規jsdom試験は既存ファイル内追加。workers＝実workerd＋D1/Queues、client＝jsdom） |
-| ブラウザ試験 | `npm run test:e2e` | **フル2回とも 94 passed / 3 skipped（モバイル限定試験のdesktopスキップ）/ 0 failed**（実装サブエージェント実行・約12分/回。内訳＝旧87 passed＋旧フレーキー1本〔documents.spec desktopトースト断言。R4修正〕が今回緑＋新規6本〔2spec×3プロジェクト〕＝94。**R4修正後のフレーク再現なし**） |
+| ブラウザ試験 | `npm run test:e2e` | **最終HEADでフル2回連続 94 passed / 3 skipped（モバイル限定試験のdesktopスキップ）/ 0 failed**（コントローラ実行・約10.5分/回。内訳＝旧87 passed＋旧フレーキー1本〔documents.spec desktop。R4修正〕＋新規6本〔2spec×3プロジェクト〕＝94。途中の検証経過〔フレーク再燃→根因調査→ラウンド3/4修正〕は下記「既知フレーキー」とph8-review.mdに記録） |
 | ビルド | `npm run build` | 成功（precache 9 entries） |
 | 負荷試験 | `npm run test:load` | **触らない**（T085/T086の範囲。ユーザー指示） |
 | カバレッジ | `npm run check:coverage` | **触らない**（T085/T086の範囲。ユーザー指示） |
@@ -46,3 +46,10 @@
 ## prototype準拠
 
 画面（prototype語彙・導線）への変更はR3の403表示1箇所のみ（prototypeに管理パネルの403表現が無いことをgrepで確認済み＝docs/03 §1.1-23に記録）。新規は試験・docsのみで画面追加なし。44px押下領域・トースト位置・文言語彙の既存規約は無変更。axe走査の対象4画面は既存画面の確認であり変更ではない。
+
+## 既知フレーキー（コントローラの最終検証で判明・対応済みと継続観察）
+
+- **documents.spec desktop「題名消失」— 根因ごと修正〔ラウンド3〕**: コントローラの最終検証でフル走行4回連続失敗。エラースナップショット（「題名を入力してください」の検証エラー・分類は生存）＋サーバーログ（desktopの作成POSTが到達せず）から、`fill(題名)`の入力がReact状態へ反映されずクライアント検証で送信中止になっていたことを特定。**旧来の「既知フレーキー〔トースト断言〕」（ph5/ph6/ph7）の実体はこの題名消失だった可能性が高い**。対応: 粘着fill（fill→toHaveValue→再fill計3回）＋2つの`waitForResponse`に30秒の明示タイムアウト（サーバー実測約60ms。根因再発時も300秒でなく30秒で明確に落ちる）＝**38922d4**。粘着fill導入後のフル走行12回中3回発火〔導入直後の2回＋ラウンド4後の1回〕で、最終4回連続は緑。発火時は検証エラーの画面が残るため切り分けは容易
+- **inspection-templates.spec phone — 根因ごと修正〔ラウンド4〕**: トースト直後に`body.textContent.includes("rev2")`を1回だけ評価する非ポーリング断言が、rev2ラベルの描画遅延でfalseになる（フル走行15回中5回）。`expect(card.getByText("rev2")).toBeVisible()`のポーリング断言へ置換（カードスコープ化で旧body全文検索の誤マッチ弱点も解消）＝**3b8a56a**。修正後のフル走行4回で未発火
+- **継続観察（1回off・いずれも単独実行は常に緑。次に触る際の作り直し候補）**: reports.spec desktop〔承認トースト直後の即時GET断言。1/15回〕／facility-location.spec desktop〔`page.evaluate`のnull参照。1/15回〕／notifications.spec phone〔1/15回。未調査〕。フル走行15回の観測ベース
+- 診断の副次情報: 正常系ではDocumentEditorのMOUNT→fill値反映→遷移→UNMOUNTが清楚（アプリ側一時ログで確認。診断コードは全てrevert済み・非コミット）。documents「題名消失」の稀な再発メカニズム（fill値確認後の消失＝再マウント/再レンダリング競合と推定）の引き金は未特定
