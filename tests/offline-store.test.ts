@@ -309,3 +309,50 @@ describe("通信断下書きの写像 (T077・capture.planFor)", () => {
     expect((await store.list(liveScope)).map((d) => d.clientOperationId)).toEqual(["op-self"]);
   });
 });
+
+describe("deviceIdOfのsecure context外フォールバック（T083実機確認）", () => {
+  /** UUIDv4（バージョン4・バリアント10xxのビットまで見る） */
+  const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const KEY = "fireos.device-id";
+  let originalRandomUUID: (() => string) | undefined;
+
+  // このjsdom環境にはlocalStorageが無い（capture.describeと同じ）。動く扱いのstub（Map保存）を用意する
+  beforeEach(() => {
+    originalRandomUUID = crypto.randomUUID;
+    const memory = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => memory.get(key) ?? null,
+      setItem: (key: string, value: string) => void memory.set(key, value),
+      removeItem: (key: string) => void memory.delete(key),
+    });
+  });
+  afterEach(() => {
+    // randomUUIDはcryptoのプロトタイプ実装のため、インスタンスのown propertyで退避・復元する
+    Object.defineProperty(crypto, "randomUUID", { value: originalRandomUUID, configurable: true, writable: true });
+    vi.unstubAllGlobals();
+  });
+
+  it("returns_a_uuid_without_crypto_randomuuid_insecure_contexts", () => {
+    // 平文HTTP等のsecure context外の再現: randomUUIDが提供されない
+    Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true, writable: true });
+    // 通常パス（localStorageが使える環境）: UUID形式で、保存されるため2回呼んでも同じ端末ID
+    const first = IndexedDbDraftStore.deviceIdOf();
+    expect(first).toMatch(UUID_V4);
+    expect(IndexedDbDraftStore.deviceIdOf()).toBe(first);
+  });
+
+  it("still_returns_a_new_uuid_each_call_when_localstorage_is_unavailable", () => {
+    Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true, writable: true });
+    // localStorage無効の環境でもUUID形式（呼び出しごとに新しいID。下書きの分離はuserIdで効くので安全側）
+    vi.stubGlobal("localStorage", {
+      getItem: () => { throw new Error("unavailable"); },
+      setItem: () => { throw new Error("unavailable"); },
+      removeItem: () => { throw new Error("unavailable"); },
+    });
+    const a = IndexedDbDraftStore.deviceIdOf();
+    const b = IndexedDbDraftStore.deviceIdOf();
+    expect(a).toMatch(UUID_V4);
+    expect(b).toMatch(UUID_V4);
+    expect(b).not.toBe(a);
+  });
+});
