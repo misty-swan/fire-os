@@ -14,6 +14,7 @@ import { useMutation } from "../../useMutation";
 import { fmtDay } from "../activities/time";
 import { DOCUMENT_STATUS, DocumentVersionPanel } from "./DocumentVersionPanel";
 import { AclRowsEditor, DocumentAccessPanel, rememberAcl, type AclRowInput } from "./DocumentAccessPanel";
+import { randomUuid } from "../../uuid";
 
 /**
  * 文書・規程（T069、SCR-24 /app/documents。docs/03 §2 SCR-24「許諾原本の登録/版/承認/撤回/ACL/閲覧」。
@@ -234,7 +235,7 @@ function DocumentEditor() {
   const create = useMutation("API-73");
   const [title, setTitle] = useState("");
   const [classification, setClassification] = useState("");
-  const [rows, setRows] = useState<AclRowInput[]>([{ key: crypto.randomUUID(), memberId: me.profile.memberId, effect: "allow" }]);
+  const [rows, setRows] = useState<AclRowInput[]>([{ key: randomUuid(), memberId: me.profile.memberId, effect: "allow" }]);
   const [touched, setTouched] = useState(false);
   const [completed, setCompleted] = useState(false);
 

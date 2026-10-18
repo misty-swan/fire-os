@@ -2,6 +2,7 @@ import { errorStatus, type ErrorCode } from "../shared/contracts/common";
 import {
   apiDef, safeParseRequest, type ApiId, type ApiRequest, type ApiResponse,
 } from "../shared/contracts/registry";
+import { randomUuid } from "./uuid";
 
 /** クライアント側だけで生じるエラーコード（サーバーのErrorCodeとは別） */
 export type ClientErrorCode = ErrorCode | "NETWORK_ERROR" | "RESPONSE_UNKNOWN" | "BAD_RESPONSE";
@@ -41,7 +42,8 @@ export interface ApiOptions {
 /** 認証が切れた(401)ことを画面全体へ知らせる。AppShellが購読して再ログインへ誘導する。 */
 export const authEvents = new EventTarget();
 
-export const newIdempotencyKey = (): string => crypto.randomUUID();
+/** 冪等キー（docs/05の送信キー。推測不能であることが前提。secure context外でも生成できる共有ヘルパー経由） */
+export const newIdempotencyKey = (): string => randomUuid();
 
 const API_BASE = "/api/v1";
 

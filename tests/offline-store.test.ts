@@ -10,6 +10,7 @@ import {
   IndexedDbDraftStore,
 } from "../src/client/offline/store";
 import { DraftStoreError, type DraftScope, type LocalDraft } from "../src/client/offline/types";
+import { randomUuid } from "../src/client/uuid";
 
 /**
  * 端末下書き（T075、docs/07 端末保持・docs/14 D14）。
@@ -339,6 +340,14 @@ describe("deviceIdOfのsecure context外フォールバック（T083実機確認
     const first = IndexedDbDraftStore.deviceIdOf();
     expect(first).toMatch(UUID_V4);
     expect(IndexedDbDraftStore.deviceIdOf()).toBe(first);
+  });
+
+  it("randomUuid_helper_falls_back_without_crypto_randomuuid", () => {
+    // 共有ヘルパー（src/client/uuid.ts）単体でも同じ保証（冪等キー等、store以外の呼び出し元の分）
+    Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true, writable: true });
+    const id = randomUuid();
+    expect(id).toMatch(UUID_V4);
+    expect(randomUuid()).not.toBe(id);
   });
 
   it("still_returns_a_new_uuid_each_call_when_localstorage_is_unavailable", () => {

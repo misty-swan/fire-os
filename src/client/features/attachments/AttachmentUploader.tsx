@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../api";
 import { Banner, Button, Icon } from "../../components/ui";
 import { attachmentTargetTypes, type Attachment } from "../../../shared/contracts/assets";
+import { randomUuid } from "../../uuid";
 
 /**
  * 写真・PDFのアップロード（T018、docs/03 点検/添付、docs/07 §3）。
@@ -160,7 +161,7 @@ export function AttachmentUploader({
     setError(null);
     if (!files || files.length === 0) return;
     for (const file of Array.from(files)) {
-      const key = `${file.name}:${file.size}:${crypto.randomUUID()}`;
+      const key = `${file.name}:${file.size}:${randomUuid()}`;
       const item: Item = { key, name: file.name, size: file.size, state: "waiting" };
       setItems((prev) => [...prev, item]);
       void runOne(item, file);

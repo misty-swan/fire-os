@@ -5,6 +5,7 @@ import { Banner, Button, Card, Chip } from "../../components/ui";
 import { draftExpiryFrom } from "../../offline/lifecycle";
 import { runSyncPass } from "../../offline/sync-runner";
 import { getDraftStore } from "../../offline/store";
+import { randomUuid } from "../../uuid";
 import { DraftStoreError, type DraftScope, type LocalDraft } from "../../offline/types";
 import { useMe } from "../../me";
 import { draftSummaryLine } from "../../offline/sync-runner";
@@ -98,7 +99,7 @@ export function ConflictPanel({ draft, scope, onDone }: { draft: LocalDraft; sco
       const now = new Date().toISOString();
       await store.put({
         ...draft,
-        clientOperationId: crypto.randomUUID(),
+        clientOperationId: randomUuid(),
         baseVersion: current.version,
         status: "local_draft",
         createdAt: now,

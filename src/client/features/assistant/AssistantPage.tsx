@@ -14,6 +14,7 @@ import type { NotificationDto } from "../../../shared/contracts/content";
 import { CitationPanel } from "./CitationPanel";
 import { useMemberNames } from "../notifications/names";
 import { fmtInstant } from "../activities/time";
+import { randomUuid } from "../../uuid";
 
 /**
  * AIアシスタント（T070、SCR-28 /app/assistant。docs/03 §2「権限付き横断検索/RAG、引用原文、
@@ -670,7 +671,7 @@ export function AssistantPage() {
 
   const ask = (text: string, refs: { type: AssistantReadingType; id: string }[]): void => {
     const turn: Turn = {
-      id: crypto.randomUUID(),
+      id: randomUuid(),
       question: text,
       askedAtIso: new Date().toISOString(),
       phase: "loading",

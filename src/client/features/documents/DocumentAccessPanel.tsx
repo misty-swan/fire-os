@@ -6,6 +6,7 @@ import type { DocumentDetailData } from "./DocumentVersionPanel";
 import { useMe } from "../../me";
 import { useMutation } from "../../useMutation";
 import { useMemberNames } from "../notifications/names";
+import { randomUuid } from "../../uuid";
 
 /**
  * 文書の閲覧許可（ACL）パネル（T069、SCR-24。docs/04:151「member/role片方、deny優先」、docs/05 API-99）。
@@ -87,7 +88,7 @@ export function AclRowsEditor({ rows, onChange }: { rows: AclRowInput[]; onChang
       <div>
         <button
           type="button"
-          onClick={() => onChange([...rows, { key: crypto.randomUUID(), memberId: "", effect: "allow" }])}
+          onClick={() => onChange([...rows, { key: randomUuid(), memberId: "", effect: "allow" }])}
           className="inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-white/[.08] px-4 text-[13px] font-bold text-ink"
         >
           <Icon name="add" className="text-[17px]" />
@@ -115,8 +116,8 @@ export function DocumentAccessPanel({ detail, canManage, onChanged }: { detail: 
   const knownRows = lastSubmittedAcl.get(doc.id) ?? null;
 
   const initialRows = (): AclRowInput[] =>
-    knownRows?.map((r) => ({ ...r, key: crypto.randomUUID() })) ??
-    [{ key: crypto.randomUUID(), memberId: me.profile.memberId, effect: "allow" }];
+    knownRows?.map((r) => ({ ...r, key: randomUuid() })) ??
+    [{ key: randomUuid(), memberId: me.profile.memberId, effect: "allow" }];
   const [rows, setRows] = useState<AclRowInput[]>(initialRows);
   const [classification, setClassification] = useState(doc.classification);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -147,7 +148,7 @@ export function DocumentAccessPanel({ detail, canManage, onChanged }: { detail: 
       body: { version: doc.version, classification: classification.trim(), acl: toAclEntries(rows) },
     });
     if (r) {
-      rememberAcl(doc.id, rows.map((r) => ({ key: crypto.randomUUID(), memberId: r.memberId, effect: r.effect })));
+      rememberAcl(doc.id, rows.map((r) => ({ key: randomUuid(), memberId: r.memberId, effect: r.effect })));
       setConfirmOpen(false);
       onChanged();
     }

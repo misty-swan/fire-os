@@ -1,5 +1,6 @@
 import { LIMITS } from "../../shared/contracts/common";
 import { syncOperationStates } from "../../shared/states";
+import { randomUuid } from "../uuid";
 import { DraftStoreError, type DraftScope, type DraftStore, type LocalDraft } from "./types";
 
 /**
@@ -19,21 +20,6 @@ import { DraftStoreError, type DraftScope, type DraftStore, type LocalDraft } fr
 export const DRAFT_DB_NAME = "fireos-drafts";
 export const DRAFT_DB_VERSION = 1;
 /** store名。e2e（offline-account-switch.spec.ts）がこのschema固定で読み書きするので、変えるときは一緒に直す */
-
-/**
- * UUIDv4の生成。`crypto.randomUUID` は **secure context（HTTPS/localhost）でしか提供されない**ため、
- * 平文HTTPのLANアクセス（T083実機確認で発見。`http://192.168.x.x:8787` で描画が落ちていた）では
- * TypeErrorになる。使えない環境では `crypto.getRandomValues`（secure context外でも使える）で
- * UUIDv4を自作する（バージョン4・バリアント10xxのビットを設定）。
- */
-function randomUuid(): string {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40; // バージョン4
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80; // バリアント10xx
-  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-}
 
 export const DRAFT_STORES = { drafts: "drafts", blobs: "attachment_blobs" } as const;
 
