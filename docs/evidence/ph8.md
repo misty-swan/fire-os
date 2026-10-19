@@ -67,11 +67,12 @@
 - **documents.spec desktop「題名消失」— 根因ごと修正〔ラウンド3〕**: コントローラの最終検証でフル走行4回連続失敗。エラースナップショット（「題名を入力してください」の検証エラー・分類は生存）＋サーバーログ（desktopの作成POSTが到達せず）から、`fill(題名)`の入力がReact状態へ反映されずクライアント検証で送信中止になっていたことを特定。**旧来の「既知フレーキー〔トースト断言〕」（ph5/ph6/ph7）の実体はこの題名消失だった可能性が高い**。対応: 粘着fill（fill→toHaveValue→再fill計3回）＋2つの`waitForResponse`に30秒の明示タイムアウト（サーバー実測約60ms。根因再発時も300秒でなく30秒で明確に落ちる）＝**38922d4**。粘着fill導入後のフル走行12回中3回発火〔導入直後の2回＋ラウンド4後の1回〕で、最終4回連続は緑。発火時は検証エラーの画面が残るため切り分けは容易
 - **inspection-templates.spec phone — 根因ごと修正〔ラウンド4〕**: トースト直後に`body.textContent.includes("rev2")`を1回だけ評価する非ポーリング断言が、rev2ラベルの描画遅延でfalseになる（フル走行15回中5回）。`expect(card.getByText("rev2")).toBeVisible()`のポーリング断言へ置換（カードスコープ化で旧body全文検索の誤マッチ弱点も解消）＝**3b8a56a**。修正後のフル走行4回で未発火
 - **継続観察（1回off・いずれも単独実行は常に緑。次に触る際の作り直し候補）**: reports.spec desktop〔承認トースト直後の即時GET断言。1/15回〕／facility-location.spec desktop〔`page.evaluate`のnull参照。1/15回〕／notifications.spec phone〔1/15回。未調査〕。フル走行15回の観測ベース
+- **T084最終検証での再発記録（2026-10-19）**: documents.spec desktop `withdrawn_document_disappears_from_search_and_citation` が114a32cのフル走行3回中1回、作成POSTの`waitForResponse` 30秒タイムアウトで失敗（=「題名消失」の稀な再発。30秒で明確に落ちる設計どおり）。T084の差分とは無関係・残り2回は緑。引き金は引き続き未特定＝T085（統合試験整備）の作り直し候補
 - 診断の副次情報: 正常系ではDocumentEditorのMOUNT→fill値反映→遷移→UNMOUNTが清楚（アプリ側一時ログで確認。診断コードは全てrevert済み・非コミット）。documents「題名消失」の稀な再発メカニズム（fill値確認後の消失＝再マウント/再レンダリング競合と推定）の引き金は未特定
 
 ## T084 外部障害・通信断・管理者不在の代替運用（2026-10-19。局所完了）
 
-実装コミット **a9b0d47** `feat: complete T084 failure`、レビュー第1ラウンドの修正は **9a03544** `fix: address T084 review round 1`、第2ラウンドの文書修正は `docs: address T084 review round 2`（docs/16のチェック位置の誤り〔T048に付いていた〕の訂正ほか）。実行環境はT083と同じローカル（workerd＋ローカルD1＋Playwright chromium）。実Cloudflare・staging・実Google・実provider・実在の人は使っていない。データはすべて架空。migration無し・新規endpoint無し・試験専用APIの本番登録無し。詳細は docs/evidence/V07-outage.md。
+実装コミット **a9b0d47** `feat: complete T084 failure`、レビュー第1ラウンドの修正は **9a03544** `fix: address T084 review round 1`、第2ラウンドの文書修正は **114a32c** `docs: address T084 review round 2`（docs/16のチェック位置の誤り〔T048に付いていた〕の訂正ほか）。実行環境はT083と同じローカル（workerd＋ローカルD1＋Playwright chromium）。実Cloudflare・staging・実Google・実provider・実在の人は使っていない。データはすべて架空。migration無し・新規endpoint無し・試験専用APIの本番登録無し。詳細は docs/evidence/V07-outage.md。
 
 | 確認 | コマンド | 結果 |
 |---|---|---|
@@ -95,3 +96,16 @@
 - **演習の管理者の後始末（A-M2）**: afterEach＋自前のrequest contextで全員分を試行してまとめて報告。dependency-outages＋member-adminを同じ実行で 12 passed / 1 skipped。
 - **runbookの訂正**: `--yes-i-know` はwranglerのフラグではない（`npm run migrate` 専用のガード）→ ops/outage-runbook.md・ops/security-response.md §7・ops/cost-alerts.md・docs/evidence/V07-performance.md から wrangler の行の分を削除。手順が無い箇所は「手順未整備（未実施・担当T086/T088）」と明記（管理者全員喪失・代理参集の担当付与・Googleキー・Cloudflareアカウント回復）。復帰照合は前提（出動記録の登録・実績の入力）と必要な役割を書き足し、点検の訂正はUI未実装（T033残作業）のため管理者へ申告に。
 - **docs/16**: 手順3を未チェックに戻した（切替・復帰照合の架空演習は机上の表だけ）。残作業①〜⑩に担当（T086/T088）を付け、T086節・T088節に引き受けた残手順を1行ずつ追記。
+
+### T084 最終検証（コントローラ実行・114a32c時点。2026-10-19）
+
+| 確認 | コマンド | 結果 |
+|---|---|---|
+| 型検査 | `npm run typecheck` | 成功 |
+| 契約検査 | `npm run check:contracts` | 102 API / docs/05 102行 / OpenAPI一致 |
+| 単体・結合試験 | `npx vitest --run` | **66ファイル297件成功**（T084のR10で `tests/notification-delivery-label.test.tsx` 3件を追加） |
+| ビルド | `npm run build` | 成功（precache 9 entries） |
+| ブラウザ試験（フル×3） | `npm run test:e2e` | 1回目 104 passed / 3 skipped / 1 failed（既知フレーキーのdocuments.spec desktop「題名消失」の再発＝上の「既知フレーキー」節）→ **2回目・3回目は連続で 105 passed / 3 skipped / 0 failed**（12.9〜13.7分/回。105＝基準103＋T084新規spec×2サイズ） |
+
+- 受入基準: T083と同じ「最終HEADでフル2回連続緑」を満たす（2・3回目）。test:load・check:coverageはT085/T086の範囲で未実施
+- レビューサイクル: docs/evidence/ph8-review.md「T084」節（4体並行→修正2ラウンド→再レビュー3回。確認済みの高・中の未解消0件）
