@@ -1,4 +1,5 @@
 # 個人用の設定（コミットしない）
+.claude/
 .claude/settings.local.json
 settings.local.json
 
