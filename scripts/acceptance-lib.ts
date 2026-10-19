@@ -60,6 +60,8 @@ export interface LegacyEntry {
   id: string;
   reqIds: string[];
   tests: TestRefString[];
+  /** 実外部・実端末・人の残手順（externalのid）。合格に数えない */
+  external?: string[];
   note?: string;
 }
 
@@ -243,14 +245,20 @@ export function staticRefProblems(ref: ParsedRef): string[] {
 /** 参照ファイル本文の正規化（正規表現リテラル中の `\/` を `/` に戻す） */
 const normalized = (src: string) => src.replace(/\\\//g, "/");
 
-/** パスのパラメータ部分にマッチする表現（テンプレート式・実値・正規表現の文字クラス） */
-const PARAM = String.raw`(?:\$\{[^}]*\}|\[[^\]]*\][+*]|\.\+|\.\*|\(\[\^/\]\+\)|\[\^/\]\+|[A-Za-z0-9_\-.%]+)`;
+/**
+ * パスのパラメータ部分にマッチする表現（テンプレート式・正規表現の文字クラス・実値）。
+ * 実値は「UUID」か、:type の列挙値（facility/vehicle/equipment）だけを認める。任意の英数字を認めると
+ * `/facilities/:id` が固定段の `/facilities/imports` にも当たり、叩いていないrouteを叩いたことにしてしまう（T085レビューB-m2）
+ */
+const PARAM_ANY = String.raw`\$\{[^}]*\}|\[[^\]]*\][+*]|\.\+|\.\*|\(\[\^/\]\+\)|(?:\(\?![^)]*\))?\[\^/\]\+`;
+const UUID_LITERAL = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
+const paramPattern = (name: string) => `(?:${PARAM_ANY}|${UUID_LITERAL}${name === "type" ? "|facility|vehicle|equipment" : ""})`;
 
 export function routePattern(apiPath: string): RegExp {
   const full = apiPath.startsWith("/api/") ? apiPath : `/api/v1${apiPath}`;
   const body = full
     .split("/")
-    .map((seg) => (seg.startsWith(":") ? PARAM : seg === "*" ? "[A-Za-z0-9_\\-/]+" : esc(seg)))
+    .map((seg) => (seg.startsWith(":") ? paramPattern(seg.slice(1)) : seg === "*" ? "[A-Za-z0-9_\\-/]+" : esc(seg)))
     .join("/");
   // 直後が別の段（/x）や英数字に続かないこと（/facilities が /facilities/imports に当たらないように）
   return new RegExp(`${body}(?![A-Za-z0-9_\\-]|/[A-Za-z0-9_$])`);
@@ -282,7 +290,7 @@ export function fileVisitsScreen(file: string, paths: string[]): boolean {
   return paths.some((p) => {
     const body = p
       .split("/")
-      .map((seg) => (seg.startsWith(":") ? PARAM : esc(seg)))
+      .map((seg) => (seg.startsWith(":") ? paramPattern(seg.slice(1)) : esc(seg)))
       .join("/");
     return new RegExp(`${body}(?![A-Za-z0-9_\\-]|/[A-Za-z0-9_$])`).test(text);
   });
@@ -333,6 +341,17 @@ export function checkCoverage(manifest: AcceptanceManifest, ids: DocIds = extrac
     return probs.length === 0;
   };
   const externalIds = new Set((manifest.external ?? []).map((e) => e.id));
+
+  // 抽出の空振りの検出（表の書式が変わってパーサが0件を返すと、何も検査せずに緑になるため。T085レビューB-m1）
+  for (const [label, n] of [["docs/12の要件", ids.requirements.length], ["docs/08のAT", ids.acceptance.length], ["docs/08のCT", ids.commonTests.length], ["docs/08の継続TC", ids.legacy.length], ["契約台帳のAPI", ids.apis.length], ["画面台帳のSCR", ids.screens.length]] as const) {
+    if (n === 0) structureProblems.push(`${label}を1件も抽出できない（正本の表の書式を確認）`);
+  }
+  // 継続TCは TC-01 から欠番なく連番（docs/08 §4「既存シナリオは削除しない」）
+  ids.legacy.forEach((tc, i) => {
+    if (tc.id !== `TC-${String(i + 1).padStart(2, "0")}`) structureProblems.push(`docs/08 §4のTCが連番でない: ${tc.id}（期待 TC-${String(i + 1).padStart(2, "0")}）`);
+  });
+  const legacyReqOk = ids.legacy.flatMap((tc) => tc.reqIds).filter((r) => !r.startsWith("RG-") && !ids.requirements.includes(r));
+  if (legacyReqOk.length) structureProblems.push(`TCの対応要件がdocs/12に無い: ${legacyReqOk.join(",")}`);
 
   // 正本どうしの突合（件数ずれの自己検出）
   const reqSet = new Set(ids.requirements);
@@ -392,6 +411,7 @@ export function checkCoverage(manifest: AcceptanceManifest, ids: DocIds = extrac
     if (entry.reqIds.join(",") !== tc.reqIds.join(",")) structureProblems.push(`${tc.id}: 対応要件が正本(${tc.reqIds})と違う(${entry.reqIds})`);
     const ok = (entry.tests ?? []).filter((t) => validRef(t, tc.id));
     if (ok.length === 0) missingRequirementIds.push(`${tc.id}（実テスト無し）`);
+    for (const x of entry.external ?? []) if (!externalIds.has(x)) structureProblems.push(`${tc.id}: 未定義のexternal ${x}`);
   }
 
   // 横断journey（T085本文の4動線）
@@ -433,8 +453,13 @@ export function checkCoverage(manifest: AcceptanceManifest, ids: DocIds = extrac
     if (ok.length === 0) missingScreenIds.push(`${scr.id} ${scr.path}`);
   }
 
+  const referencedExternal = new Set([
+    ...(manifest.acceptance ?? []).flatMap((a) => [...(a.external ?? []), ...Object.values(a.ct ?? {}).flatMap((m) => m.external ?? [])]),
+    ...(manifest.legacy ?? []).flatMap((l) => l.external ?? []),
+  ]);
   for (const e of manifest.external ?? []) {
     if (!e.source || !e.owner) structureProblems.push(`external ${e.id}: 根拠文書と担当が必要`);
+    if (!referencedExternal.has(e.id)) structureProblems.push(`external ${e.id}: どのAT/CT/TCからも参照されていない`);
   }
   for (const i of manifest.issues ?? []) {
     if (!i.basis) structureProblems.push(`issue ${i.id}: 重大度の根拠が必要`);
@@ -561,6 +586,12 @@ export function refStatus(raw: string, byKey: Map<string, EvidenceEntry[]>): str
     const bad = ref.projects.filter((p) => !entries.some((e) => e.project === p && e.result === "passed"));
     return bad.length ? `${raw}: ${bad.join(",")} で合格していない（${entries.map((e) => `${e.project}=${e.result}`).join(" ")}）` : null;
   }
+  // project指定の無いe2eは phone-360 と desktop-1280 の両方で合格の記録が必須（片方だけの記録では足りない。裁定R14）。
+  // tablet-768 は記録があれば合格必須（下のnotPassed）
+  if (ref.kind === "e2e") {
+    const missing = ["phone-360", "desktop-1280"].filter((p) => !entries.some((e) => e.project === p && e.result === "passed"));
+    if (missing.length) return `${raw}: ${missing.join(",")} の合格記録が無い（${entries.map((e) => `${e.project}=${e.result}`).join(" ")}）`;
+  }
   const notPassed = entries.filter((e) => e.result !== "passed");
   if (notPassed.length) return `${raw}: ${notPassed.map((e) => `${e.project || e.kind}=${e.result}`).join(" ")}`;
   return null;
@@ -589,8 +620,13 @@ export function evaluateGate(manifest: AcceptanceManifest, index: EvidenceIndex 
   } else if (index.codeHash !== currentHash) {
     indexState = `証跡indexが古い（collect時のcodeHash ${index.codeHash.slice(0, 12)} ≠ 現在 ${currentHash.slice(0, 12)}。コードが変わったので全件未実行扱い）`;
   } else {
-    const missingSuites = (["vitest", "load", "e2e"] as const).filter((s) => !index.suites.some((r) => r.suite === s && r.status !== "notRun"));
-    if (missingSuites.length) indexState = `証跡indexに未実行のスイートがある: ${missingSuites.join(",")}`;
+    // 数える実行は各スイートの最新1回で、合格（status=passed・failed=0）であること。失敗した実行は
+    // discardedRunsに証跡として残すが、合格の根拠に数えない（T085レビューB-I1）
+    const badSuites = (["vitest", "load", "e2e"] as const).filter((s) => {
+      const run = index.suites.filter((r) => r.suite === s).at(-1);
+      return !run || run.status !== "passed" || run.totals.failed > 0;
+    });
+    if (badSuites.length) indexState = `証跡indexのスイートが合格していない（未実行または失敗）: ${badSuites.join(",")}`;
     for (const e of index.entries) {
       const k = entryKey(e.kind, e.file, e.title);
       if (!byKey.has(k)) byKey.set(k, []);

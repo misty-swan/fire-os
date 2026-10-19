@@ -356,12 +356,13 @@ export function renderResults(index: EvidenceIndex | null, manifest: AcceptanceM
   L.push("");
   L.push("## 継続シナリオ（TC-01〜18）");
   L.push("");
-  L.push("| TC | 対応要件 | 開発版の判定 | 実テスト |");
-  L.push("|---|---|---|---|");
+  L.push("| TC | 対応要件 | 開発版の判定 | 実テスト | 未実施（実外部・実端末・人） |");
+  L.push("|---|---|---|---|---|");
   for (const tc of ids.legacy) {
     const e = manifest.legacy.find((l) => l.id === tc.id);
     const probs = gate.perCase.get(tc.id) ?? ["manifestに無い"];
-    L.push(`| ${tc.id} | ${tc.reqIds.join(",")} | ${probs.length === 0 ? "合格（局所）" : `**不合格/未実行**（${probs.length}件）`} | ${(e?.tests ?? []).map((t) => cell(t)).join("<br>")} |`);
+    const exts = e?.external ?? [];
+    L.push(`| ${tc.id} | ${tc.reqIds.join(",")} | ${probs.length === 0 ? "合格（局所）" : `**不合格/未実行**（${probs.length}件）`} | ${(e?.tests ?? []).map((t) => cell(t)).join("<br>")} | ${exts.length ? exts.map((x) => `${x}（${cell(ext.get(x)?.summary ?? "")}・${ext.get(x)?.owner ?? ""}）`).join("<br>") : "-"} |`);
   }
   L.push("");
   L.push("## 横断journey");

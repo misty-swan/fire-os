@@ -38,8 +38,8 @@ export async function buildInspectionCorrection(
   const table = type === "facility" ? "facility_inspections" : "asset_inspections";
 
   // 元の原本（訂正対象）の存在と所属。seriesの現在版がこの原本であることをbuildの中で確かめる
-  const original = await env.DB.prepare(`SELECT id, series_id, unit_id, supersedes_id FROM ${table} WHERE id = ?`).bind(originalId)
-    .first<{ id: string; series_id: string; unit_id: string; supersedes_id: string | null }>();
+  const original = await env.DB.prepare(`SELECT id, series_id, unit_id, supersedes_id, inspector_member_id FROM ${table} WHERE id = ?`).bind(originalId)
+    .first<{ id: string; series_id: string; unit_id: string; supersedes_id: string | null; inspector_member_id: string }>();
   if (!original || original.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
 
   // 対象のID（seriesから引く。訂正は同対象・同seriesのみ）
@@ -49,6 +49,10 @@ export async function buildInspectionCorrection(
   const targetId = type === "facility" ? series.facility_id : type === "vehicle" ? series.vehicle_id : series.equipment_id;
   if (!targetId) throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "type", reason: "target_mismatch" }]);
 
+  // 訂正の権限は「元の原本の実施者」で判定する（T085レビューA-I3で発見したT031の欠陥: 旧実装はクライアントが送る
+  // body.inspectorMemberIdで判定しており、一般団員が自分を実施者に書いて他人の点検を訂正・実施者を差し替えできた）。
+  // 加えて新しい原本の実施者（body）にも同じ権限を要求し、本人分しか持たない主体が実施者を他人へ移せないようにする
+  requirePermission(p, "PER-04", { unitId: p.unitId, type, id: targetId, ownerMemberId: original.inspector_member_id });
   requirePermission(p, "PER-04", { unitId: p.unitId, type, id: targetId, ownerMemberId: body.inspectorMemberId });
 
   return buildInspectionMutation(env, p, {

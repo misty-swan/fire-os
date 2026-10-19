@@ -319,11 +319,19 @@ async function diagnose<T>(
   const winner = await findRecord(env, p, spec);
   if (winner) return resolveExisting(env, p, spec, winner, nowIso);
 
+  // 未作成の行を作るPUT（expectedVersion=0）で行が無いのは前提どおり。ただし前提条件（対象など）が満たされない
+  // ときは従来どおり404（存在を明かさない）とし、全て満たされているのに失敗したときだけ内部障害にする
+  // （T085レビューB-I3の読取境界試験で発見: 出欠の初回回答で途中の文が失敗すると「対象が見つかりません」の404になっていた）
+  let missingNewRoot = false;
   for (const r of spec.roots) {
     const stateCol = r.allowedStates ? `, ${r.allowedStates.column} AS state` : "";
     const row = await env.DB.prepare(`SELECT unit_id, version${stateCol} FROM ${assertIdent(r.table, "root.table")} WHERE id = ?`)
       .bind(r.id)
       .first<{ unit_id: string; version: number; state?: string }>();
+    if (!row && r.expectedVersion === 0) {
+      missingNewRoot = true;
+      continue;
+    }
     // 存在しない/別unit: 存在を明かさないため同じ404
     if (!row || row.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
     if (row.version !== r.expectedVersion) throw new HttpError("VERSION_CONFLICT");
@@ -331,7 +339,7 @@ async function diagnose<T>(
   }
   for (const c of spec.conditions ?? []) {
     const ok = await env.DB.prepare(c.existsSql).bind(...c.binds).first();
-    if (!ok) throw new HttpError(c.failCode ?? "VERSION_CONFLICT");
+    if (!ok) throw new HttpError(missingNewRoot ? "NOT_FOUND" : (c.failCode ?? "VERSION_CONFLICT"));
   }
 
   const message = String(err);

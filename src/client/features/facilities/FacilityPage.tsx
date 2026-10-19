@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { api, ApiError } from "../../api";
+import { api, apiCall, ApiError } from "../../api";
+import { INSPECTION_RESULT_LABELS, InspectionHistoryList, jstDay, type InspectionHistoryRow } from "../inspections/InspectionHistory";
 import { SubHeader } from "../../components/Page";
 import { Notice } from "../../components/ui";
 import { Banner, Button, Card, Chip, Icon } from "../../components/ui";
@@ -25,13 +26,6 @@ const ISSUE_STATUS_LABELS: Record<string, string> = {
   closed: "確認終了",
 };
 
-/** 点検結果の日本語ラベル（点検登録画面と同じ語彙。docs/11 点検結果） */
-const INSPECTION_RESULT_LABELS: Record<string, { label: string; tone: "ok" | "alert" | "neutral" }> = {
-  ok: { label: "良好", tone: "ok" },
-  needs_review: { label: "異常あり", tone: "alert" },
-  unknown: { label: "未確認", tone: "neutral" },
-};
-
 /** 現在版の点検結果（API-44の先頭1件。loading=取得中、none=記録0件、error=取得失敗） */
 type LastInspection =
   | { state: "loading" }
@@ -49,8 +43,10 @@ export function FacilityPage() {
   const [facility, setFacility] = useState<FacilityDetail | "loading" | "notfound">("loading");
   const [openIssues, setOpenIssues] = useState<{ id: string; title: string; status: string }[] | null>(null);
   const [lastInspection, setLastInspection] = useState<LastInspection>({ state: "loading" });
-  /** 点検の記録（API-44の新しい順・最大20件。訂正前の原本も残る＝MAP-06「施設詳細に履歴が時系列表示される」。T085で接続） */
-  const [history, setHistory] = useState<{ id: string; result: string; inspectedAt: string; note: string; supersedesId: string | null; isCurrent?: boolean }[]>([]);
+  /** 点検の記録（API-44の新しい順。訂正前の原本も残る＝MAP-06「施設詳細に履歴が時系列表示される」。T085で接続） */
+  const [history, setHistory] = useState<InspectionHistoryRow[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<string | undefined>(undefined);
+  const [historyLoading, setHistoryLoading] = useState(false);
   // 位置確認の結果。409(競合)・403(権限)・404(所在)・結果不明(通信断/5xx)を同じ「失敗」にしない（docs/03 §1.1）
   const [reviewState, setReviewState] = useState<"idle" | "busy" | "conflict" | "forbidden" | "missing" | "unknown">("idle");
 
@@ -72,20 +68,18 @@ export function FacilityPage() {
       } catch {
         if (alive) setOpenIssues([]); // 一覧の取得に失敗しても詳細自体は見せる
       }
-      // 現在版の点検結果（API-44のisCurrent。訂正は元の実施日時のまま新しい原本を作るため、新しい順の先頭が
-      // 訂正前の原本になり得る＝T085で現在版の印を見るよう修正。記録が0件のときだけ「まだありません」）
+      // 現在版の点検結果（API-44 current=true＝系列の現在版。訂正は元の実施日時のまま新しい原本を作るため、
+      // 新しい順の先頭が現在版とは限らない＝T085で現在版を明示的に読む。記録が0件のときだけ「まだありません」）
       try {
-        const inspections = (await api("API-44", { params: { id }, query: { limit: 20 } })) as unknown as {
-          id: string; result: string; inspectedAt: string; isCurrent?: boolean; note: string; supersedesId: string | null;
-        }[];
-        const current = inspections.find((r) => r.isCurrent) ?? inspections[0];
-        if (alive) setHistory(inspections as unknown as typeof history);
+        const [current, firstPage] = await Promise.all([
+          api("API-44", { params: { id }, query: { current: "true", limit: 1 } }),
+          apiCall("API-44", { params: { id }, query: { limit: 20 } }),
+        ]);
+        const row = (current as unknown as InspectionHistoryRow[])[0];
         if (alive) {
-          setLastInspection(
-            current
-              ? { state: "found", id: current.id, result: current.result, inspectedAt: current.inspectedAt }
-              : { state: "none" },
-          );
+          setHistory(firstPage.data as unknown as InspectionHistoryRow[]);
+          setHistoryCursor(firstPage.nextCursor);
+          setLastInspection(row ? { state: "found", id: row.id, result: row.result, inspectedAt: row.inspectedAt } : { state: "none" });
         }
       } catch {
         if (alive) setLastInspection({ state: "error" }); // 通信断・5xxは記録0件と区別する（docs/03 §1.1）
@@ -223,7 +217,7 @@ export function FacilityPage() {
           )}
           {lastInspection.state === "found" && (
             <span className="flex flex-wrap items-center justify-end gap-2 text-[12px] text-ink-sub">
-              <span className="font-mono">{lastInspection.inspectedAt.slice(0, 10)}</span>
+              <span className="font-mono">{jstDay(lastInspection.inspectedAt)}</span>
               <Chip tone={INSPECTION_RESULT_LABELS[lastInspection.result]?.tone ?? "neutral"}>
                 {INSPECTION_RESULT_LABELS[lastInspection.result]?.label ?? "結果を確認中"}
               </Chip>
@@ -253,17 +247,26 @@ export function FacilityPage() {
         // 点検の記録（新しい順。訂正前の原本も残る。訂正は上の「点検を訂正する」から現在の記録だけ＝docs/03 §1.1-27）
         <Card className="flex flex-col gap-2">
           <span className="text-[14px] font-bold">点検の記録</span>
-          <ul aria-label="点検の記録" className="flex flex-col divide-y divide-white/[.06]">
-            {history.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-2 py-2 text-[13px]">
-                <span className="font-mono text-[12px] text-ink-sub">{r.inspectedAt.slice(0, 10)}</span>
-                <Chip tone={INSPECTION_RESULT_LABELS[r.result]?.tone ?? "neutral"}>{INSPECTION_RESULT_LABELS[r.result]?.label ?? "結果を確認中"}</Chip>
-                {r.supersedesId && <span className="text-[11px] text-ink-muted">訂正後の記録</span>}
-                {r.isCurrent === false && <span className="text-[11px] text-ink-muted">訂正済み</span>}
-                <span className="min-w-0 flex-1 truncate text-ink-sub">{r.note}</span>
-              </li>
-            ))}
-          </ul>
+          <InspectionHistoryList rows={history} />
+          {historyCursor && (
+            <Button
+              variant="secondary"
+              busy={historyLoading}
+              className="max-lg:min-h-11 self-start !w-auto px-4"
+              onClick={() => void (async () => {
+                setHistoryLoading(true);
+                try {
+                  const next = await apiCall("API-44", { params: { id }, query: { limit: 20, cursor: historyCursor } });
+                  setHistory((prev) => [...prev, ...(next.data as unknown as InspectionHistoryRow[])]);
+                  setHistoryCursor(next.nextCursor);
+                } finally {
+                  setHistoryLoading(false);
+                }
+              })()}
+            >
+              さらに古い記録を表示
+            </Button>
+          )}
         </Card>
       )}
 

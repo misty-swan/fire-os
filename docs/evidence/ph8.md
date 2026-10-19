@@ -128,7 +128,7 @@
 
 ### 赤→緑
 
-- **赤（手順2）**: 空のmanifestで `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` → `expect(missingRequirementIds).toEqual([])` が78件（AT54＋TC18＋journey4＋…の「manifestに無い」）でFAIL。runnerの故障・構文エラーではない。
+- **赤（手順2）**: 空のmanifestで `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` → `expect(missingRequirementIds).toEqual([])` が**76件**（AT54＋TC18＋journey4の「manifestに無い」）でFAIL（初版の記録の「78」はdiff表示の行数＝配列の括弧2行を含めた数の読み違い。T085レビューB-m4で訂正）。runnerの故障・構文エラーではない。
 - **静的検査の途中の赤**: check:coverageが「API-58の参照ファイルがGET /reports/:idを叩かない」「J1がSCR-18のパスへ行く記述が無い」を検出 → 参照を差し替え／J1にURL断言を追加。
 - **緑**: 下の「最終検証」。
 
@@ -164,4 +164,37 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 - 受入ゲートのspecは project `acceptance`（ブラウザ不使用）だが、Playwrightの仕様でwebServer（D1再作成＋build）が毎回起動する。ゲート単独の実行も約1分かかる＝ゲートをPlaywright外（tsx/vitest）で回す選択肢がある（T085本文がPlaywrightのコマンドを指定しているため今回は変えていない）。
 - 共有D1にデータが溜まるほど結果が変わる試験があった（D4・D5は製品側の欠陥として修正済み）。試験ごとのデータ分離（T085bの候補③）で、データ量依存の欠陥を「たまたま緑」にしないこと（D4/D5は分離すると再現しなくなる）＝狭幅・一覧の上限は意図して多件データで試す試験を別に持つのが望ましい。
 - workers試験は背景のQueue consumerが走るため、「まだreadyでない添付」は完了確定前の状態で作ること（T085で2試験を修正）。
-- 既知フレーキー: documents.spec desktop「題名消失」は今回のフル走行2/2回で発火（以前より高頻度）。単独実行は緑。
+- 既知フレーキー: documents.spec desktop「題名消失」はT085のcollect:evidenceのe2eフル走行**3回中2回**で発火（T084最終検証は3回中1回。以前より高頻度の可能性）。単独実行は緑。
+
+### T085 レビュー第1ラウンドの修正（2026-10-20）
+
+4体並行レビュー（a855bc3）の Important 11・Minor 19 を全件修正（コントローラ裁定R12〜R16）。主なもの:
+
+- **既存の権限欠陥（T031。A-I3）**: API-46の訂正の権限判定がクライアントの送る実施者で行われ、一般団員が他人の点検を訂正し実施者を差し替えられた → 元の原本の実施者と新しい実施者の両方で判定（修正前201＝赤→403）。
+- **訂正画面の誤り（T033。A-I1/A-I2/A-m1/A-m2）**: 「訂正済み」を「現在版でない」で判定していた（新しい点検があるだけで訂正済み表示）→ supersededById（API-44/51に追加）で判定。異常ありの記録の訂正で異常を二重起票 → 良好→異常ありのときだけ起票。訂正は現在版だけ・元の様式版が承認版でなければ訂正させない・元の実施者を引き継ぐ。施設の点検結果はAPI-44 current=true（契約3点）で読み、履歴は20件ずつ続きを表示。日付は日本時間（C3）。いずれもe2eで旧ロジックに戻すと落ちることを確認（異常2件／訂正済み2件）。
+- **D4/D5の回帰試験（A-I4・R13）**: API-15に order=newest（契約3点。cursorは並びに束縛）を足し、アシスタントは新しい順の5件を1回で取る（クライアントの逐次取得は撤去）。サーバー試験（7件で新しい順・続きの重複欠落なし・並び違いcursorは400）とjsdom試験。狭幅はaccessibility.specで長い名前の団員を作って決定的に再現（旧画面で743px>240＝赤）。
+- **ゲート（B-I1/B-I2/B-m1/B-m2）**: 失敗したスイートは合格の根拠に数えない（最新の実行がpassed・failed=0必須）、@project無しのe2e参照はphone-360とdesktop-1280の両方の合格記録が必須、正本の抽出が0件や継続TCの欠番を構成エラーに、routeの実値パラメータはUUIDと:typeの列挙値だけ（/facilities/:idが/facilities/importsに当たらない）。陽性対照を追加。
+- **CT-05の空洞（B-I3/B-I4・R15）**: 試験用のトリガーで各機能の実routeのbatchを途中の文で失敗させ、原本・履歴・監査・outbox・冪等記録が1行も残らないことを断言（予定の作成・中止／実績の作成・訂正／お知らせの作成・改版／使用履歴／出動と活動の関連付け／AI提案の承認）。AT-DASH-01×CT-05のnotApplicableを外し、出欠の途中失敗でホームの数値が変わらない読取境界の試験に置換。これで**欠陥D6**（未作成の行を作るPUTの途中失敗が404「対象が見つかりません」に誤分類。T004/T036）を発見・修正（前提条件を満たさない場合の404は従来どおり）。**DOC-01**: R2へ書いた後にD1が失敗したstaging実体（孤児）の回収処理が無かった＝**欠陥D7（T017）**→ `sweepOrphanStagingObjects` を追加し試験で回収を確認。
+- **地図（B-I5）**: 格納箱を含む3種をseedし、マーカー/行のaccessible name・種別チップの文字で識別できることを断言（map.spec）。
+- **TC-14（B-m3）**: 承認の監査（report.approve。行為者・対象・日時・本文非複製）を断言する試験を参照に追加。**A-m3**: 「完了確定済み・検査前」の添付の422を決定的に作る試験を追加。
+- **再収集で見つけた欠陥D10（T013ほか）**: 1回目のフル走行で、長い名前の団員（上のD4試験のseed）により管理画面の「団員を選ぶ」が725pxに広がり、member-admin・audit・dependency-outagesのスマホ試験が連鎖して失敗 → 列をlg:だけで定義したgrid 9箇所に grid-cols-1。同じDBで745→360を実測、accessibility.specに360pxの管理画面の確認を追加（旧gridで747＝赤）。モバイルのエミュレーションではinnerWidthが内容に合わせて広がるため、幅の比較は設定した画面幅で行うよう同試験を修正。
+- 記録の訂正: 赤の件数は76件（初版の78は表示行数の読み違い。B-m4）。FLAKE-1の根拠と頻度（3回中2回）を更新（B-m5・D-m3）。
+
+### T085 最終検証（2026-10-20。レビュー第1ラウンドの修正後）
+
+| 確認 | コマンド | 結果 |
+|---|---|---|
+| 型検査 | `npm run typecheck` | 成功 |
+| 契約検査 | `npm run check:contracts` | 102 API / docs/05 102行 / OpenAPI一致（API-15 order・API-44 current・API-51 inspections〔supersededById〕） |
+| 網羅（静的） | `npm run check:coverage` | 成功。要件54 / AT54 / AT×CT220（notApplicable 0） / TC18 / API102 / SCR28 / journey4 / 実外部の残手順29 / 参照テスト268件 |
+| ビルド | `npm run build` | 成功 |
+| 証跡の収集 | `npm run collect:evidence` | vitest **67ファイル318件** passed／test:load **3件** passed／e2e **119 passed・3 skipped（スマホ専用試験のdesktop）・0 failed**（13.3分）／test:live **未実施**（Secret未設定）。修正後の1回目の収集は e2e 7 failed（上のD10の連鎖5件・地図のseed座標・documents題名消失）→修正して再収集＝失敗0 |
+| ゲート | `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` | 1 passed（受入spec全体 74 passed） |
+
+### T085 未実施（局所の理由）— これは RG-03（正式な受入合格）ではない
+
+ゲートの緑は「架空データ・ローカル（workerd＋ローカルD1・Playwright chromium・fake AI）で、参照先の実テストが今のコードで全部合格した」ことだけを意味する。docs/13 RG-03 の合格ではない。次の29件（acceptance-results.md「実外部・実端末・人の残手順」）はこの環境で行えず未実施で、合格に数えていない:
+
+- 実Cloudflare/R2/Queues/AI/Maps: V01（認証）・V02（実R2）・V04-jev/llm/retrieval・AI評価の実モデル・V05（実Google Maps）・V06（実配送・実30端末）・V07（性能・復元・帳票の実表示）・費用の実測照合・公開デモの実環境（X-DEMO）。担当T086/T087/T088。
+- 実端末・人: ops/device-test-matrix.md §2（iOS/Android/PCの実機・実スクリーンリーダー・PWA install・代表利用者の再訪計測）、V07-outage「未実施」1〜10（staging演習・実キー停止・実provider・実在の正副担当・別担当の再現・紙/電話の実地演習ほか）。担当T086/T088。
+- `npm run test:live`（Secret未設定）。

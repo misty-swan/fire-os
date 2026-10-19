@@ -5547,6 +5547,14 @@
             }
           },
           {
+            "name": "current",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -5736,6 +5744,19 @@
             "schema": {
               "type": "string",
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "oldest",
+              "type": "string",
+              "enum": [
+                "oldest",
+                "newest"
+              ]
             }
           },
           {
@@ -14441,6 +14462,17 @@
                               },
                               "isCurrent": {
                                 "type": "boolean"
+                              },
+                              "supersededById": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -14455,7 +14487,8 @@
                               "items",
                               "supersedesId",
                               "correctionReason",
-                              "isCurrent"
+                              "isCurrent",
+                              "supersededById"
                             ],
                             "additionalProperties": false
                           }

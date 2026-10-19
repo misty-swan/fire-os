@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { api } from "../../api";
+import { InspectionHistoryList } from "../inspections/InspectionHistory";
 import { ConfirmDialog } from "../../components/Overlay";
 import { MutationStatus } from "../../components/MutationStatus";
 import { PageTitle } from "../../components/Page";
@@ -124,28 +125,11 @@ export function AssetPage() {
             この{type === "vehicle" ? "車両" : "資機材"}の点検記録はまだありません。
           </p>
         ) : (
-          // 点検の記録（新しい順。訂正前の原本も残る。訂正できるのは現在の記録だけ＝T085でT033の残作業を接続）
-          <ul aria-label="点検の記録" className="flex flex-col divide-y divide-white/[.06]">
-            {detail.inspections.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-2 py-2 text-[13px]">
-                <span className="font-mono text-[12px] text-ink-sub">{r.inspectedAt.slice(0, 10)}</span>
-                <Chip tone={r.result === "ok" ? "ok" : r.result === "needs_review" ? "alert" : "neutral"}>
-                  {r.result === "ok" ? "良好" : r.result === "needs_review" ? "異常あり" : "未確認"}
-                </Chip>
-                {r.supersedesId && <span className="text-[11px] text-ink-muted">訂正後の記録</span>}
-                {!r.isCurrent && <span className="text-[11px] text-ink-muted">訂正済み</span>}
-                <span className="min-w-0 flex-1 truncate text-ink-sub">{r.note}</span>
-                {r.isCurrent && (
-                  <Link
-                    to={`/app/assets/${type}/${id}/inspection?correct=${r.id}`}
-                    className="inline-flex min-h-11 items-center rounded-pill bg-white/[.08] px-3 text-[12px] font-bold text-ink lg:min-h-9"
-                  >
-                    訂正する
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
+          // 点検の記録（新しい順。訂正前の原本も残る。訂正できるのは現在の記録だけ＝T085でT033の残作業を接続。docs/03 §1.1-27）
+          <>
+            <InspectionHistoryList rows={detail.inspections} correctTo={(r) => `/app/assets/${type}/${id}/inspection?correct=${r.id}`} />
+            {detail.inspections.length >= 100 && <p className="text-[12px] text-ink-muted">新しい100件まで表示しています。</p>}
+          </>
         )}
         <Link
           to={type === "vehicle" ? `/app/assets/vehicle/${id}/inspection` : `/app/assets/equipment/${id}/inspection`}

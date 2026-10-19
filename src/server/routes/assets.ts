@@ -311,7 +311,8 @@ export function registerAssetRoutes(app: ApiApp): void {
 
 /**
  * 資産の点検履歴（T085でT030の残作業を接続。docs/05 API-51 inspections）。新しい順に最大100件。
- * 訂正前の原本も返す（追記型。過去版を開ける）。isCurrentは系列の現在版ポインタ（訂正はこれだけに許す）。
+ * 訂正前の原本も返す（追記型。過去版を開ける）。isCurrentは系列（対象ごとに1本）の現在版ポインタ＝最新の有効な点検
+ * （新しい点検でも移るので「訂正された」の意味ではない。訂正はこれだけに許す）。訂正済みの判定はsupersededById。
  */
 async function assetInspections(
   c: ApiContext, unitId: string, type: "vehicle" | "equipment", id: string,
@@ -323,6 +324,7 @@ async function assetInspections(
       "'inspectorMemberId', i.inspector_member_id, 'inspectedAt', i.inspected_at, 'result', i.result, 'note', i.note, " +
       "'items', json((SELECT json_group_array(json_object('code', m.item_code, 'result', m.result, 'value', json(m.value_json), 'note', m.note)) FROM inspection_items m WHERE m.asset_inspection_id = i.id)), " +
       "'supersedesId', i.supersedes_id, 'correctionReason', i.correction_reason, " +
+      "'supersededById', (SELECT x.id FROM asset_inspections x WHERE x.supersedes_id = i.id), " +
       "'isCurrent', json(CASE WHEN s.current_asset_inspection_id = i.id THEN 'true' ELSE 'false' END)) AS j " +
       `FROM asset_inspections i JOIN inspection_series s ON s.id = i.series_id AND s.unit_id = i.unit_id WHERE i.${col} = ? AND i.unit_id = ? ` +
       "ORDER BY i.inspected_at DESC, i.created_at DESC, i.id DESC LIMIT 100",

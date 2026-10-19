@@ -1,4 +1,5 @@
 import type { AppEnv } from "../../env";
+import { ATTACHMENT_LIMITS } from "../../attachments/sizes";
 import { registerJobHandler } from "../runner";
 import type { JobOutcome, LeasedJob } from "../store";
 
@@ -45,10 +46,12 @@ registerJobHandler("attachment.cleanup", cleanupAttachment);
 /**
  * 期限切れ・孤児の回収（Cronから。docs/07 §3.7）。
  * - intentの期限が過ぎた pending_upload を expired へ（転送も完了もできない）
- * - 選ばれず期限が過ぎた転送試行のstaging実体を消す（D1が失敗して台帳に残らない孤児は、
- *   鍵の前置きごとのR2一覧での照合が必要。T079のバックアップ/復元の照合と一緒に実装する）
+ * - 選ばれず期限が過ぎた転送試行のstaging実体を消す
+ * - R2へ書いた後にD1が失敗して台帳に残らなかったstaging実体（孤児）を、R2の staging/ 一覧と台帳の照合で消す
+ *   （API-83はR2→D1の順で書く。T085レビューB-I4/DOC-01で未実装を発見して追加）。転送の窓（intent期限）を
+ *   過ぎたものだけを対象にし、転送中・完了確定前の実体には触れない
  */
-export async function sweepAttachments(env: AppEnv, nowIso: string): Promise<{ expired: number; collected: number }> {
+export async function sweepAttachments(env: AppEnv, nowIso: string): Promise<{ expired: number; collected: number; orphans: number }> {
   const expired = await env.DB.prepare(
     "UPDATE attachments SET status = 'expired', version = version + 1, updated_at = ? WHERE status = 'pending_upload' AND expires_at <= ?",
   ).bind(nowIso, nowIso).run();
@@ -69,5 +72,38 @@ export async function sweepAttachments(env: AppEnv, nowIso: string): Promise<{ e
       // 次のCronで再試行（状態はuploadedのまま）
     }
   }
-  return { expired: expired.meta.changes ?? 0, collected };
+  const orphans = await sweepOrphanStagingObjects(env, nowIso);
+  return { expired: expired.meta.changes ?? 0, collected, orphans };
+}
+
+/** 台帳（upload_attempts／attachments）のどこからも参照されないstaging実体を消す。1回のCronで最大1,000件を見る */
+export async function sweepOrphanStagingObjects(env: AppEnv, nowIso: string): Promise<number> {
+  const cutoff = new Date(new Date(nowIso).getTime() - ATTACHMENT_LIMITS.intentTtlMs);
+  let removed = 0;
+  let cursor: string | undefined;
+  for (let page = 0; page < 10; page++) {
+    const listed = await env.FILES.list({ prefix: "staging/", cursor, limit: 100 });
+    const old = listed.objects.filter((o) => o.uploaded <= cutoff).map((o) => o.key);
+    for (let i = 0; i < old.length; i += 45) {
+      const chunk = old.slice(i, i + 45);
+      const marks = chunk.map(() => "?").join(", ");
+      const referenced = new Set(
+        (await env.DB.prepare(
+          `SELECT staging_key AS k FROM upload_attempts WHERE staging_key IN (${marks}) UNION SELECT staging_key AS k FROM attachments WHERE staging_key IN (${marks})`,
+        ).bind(...chunk, ...chunk).all<{ k: string }>()).results.map((r) => r.k),
+      );
+      for (const key of chunk) {
+        if (referenced.has(key)) continue;
+        try {
+          await env.FILES.delete(key);
+          removed++;
+        } catch {
+          // 次のCronで再試行
+        }
+      }
+    }
+    if (!listed.truncated) break;
+    cursor = listed.cursor;
+  }
+  return removed;
 }

@@ -5,6 +5,7 @@ import type { AppEnv } from "../src/server/env";
 import { runDueJobs } from "../src/server/jobs/runner";
 import "../src/server/jobs/handlers/classification"; // 分類job handlerの登録（Cron/Queueと同じ登録点。jev.test.tsと同じ）
 import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
+import { COMMON_EFFECT_TABLES, rowCounts, withFailingInsert } from "./helpers/fail-insert";
 
 /**
  * AI提案の確認・修正・却下と一回限りの業務反映（T054、docs/06 §3、docs/11 AI提案、
@@ -491,5 +492,24 @@ describe("AI提案の決定 (T054)", () => {
     expect(((await json(resend)).data! as { decisionId: string }).decisionId).toBe(saved.decisionId);
     // 再送で通知draftは増えない（同じ源の通知は初回の1件のまま）
     expect(await fx.rows("notifications", { source_type: "activity", source_id: activityId })).toHaveLength(1);
+  });
+  // --- T085レビューB-I4（CT-05）: AI提案の承認を効果（タスク）の文で失敗させても、決定・確定分類・タスク・通知・監査・outboxは残らない ---
+  it("approval_leaves_no_decision_or_effect_when_a_statement_fails_midway (T085 CT-05)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const member = a.people.member;
+    const issueId = await createIssue(admin, "承認の途中失敗（架空）");
+    const c1 = await requestCandidate(admin, "issue", issueId, 1);
+    const tables = ["review_decisions", "tasks", "notifications", "issue_events", ...COMMON_EFFECT_TABLES];
+    const before = { counts: await rowCounts(tables), issue: (await fx.rows("issues", { id: issueId }))[0]!, evaluation: (await fx.rows("ai_evaluations", { id: c1.id }))[0]! };
+    const approve = () => decision(admin, c1.id, {
+      version: 1, sourceVersion: 1, decision: "approve",
+      confirmedPayload: { confirmedCategory: "equipment_issue", task: { title: "途中失敗の確認（架空）", assigneeMemberId: member.memberId } },
+      reviewNote: "途中失敗の確認",
+    });
+    const failed = await withFailingInsert("tasks", approve);
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect({ counts: await rowCounts(tables), issue: (await fx.rows("issues", { id: issueId }))[0]!, evaluation: (await fx.rows("ai_evaluations", { id: c1.id }))[0]! }).toEqual(before);
+    expect((await approve()).status).toBe(200);
   });
 });

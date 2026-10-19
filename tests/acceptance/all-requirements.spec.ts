@@ -69,8 +69,26 @@ test("gate_detects_injected_skip_missing_title_routeless_api_stale_index_and_ope
     const stale = evaluateGate(manifest, index, "0".repeat(64));
     expect(stale.indexState).not.toBe("ok");
     expect(stale.perCase.get("AT-AUTH-01")!.length).toBeGreaterThan(0);
+    // 以下は判定ロジックの陽性対照。収集済みindexを「今のコードの証跡」とみなした複製で行う（indexの鮮度に依存させない）
+    expect(index, "証跡indexが無い（npm run collect:evidence）").toBeTruthy();
+    const base: EvidenceIndex = { ...index!, codeHash: hash };
+    // 証跡: スイートが失敗している（またはfailed>0）なら、参照先が全部合格でも赤（失敗した実行は数えない。B-I1）
+    {
+      const index = base;
+      const failedSuite: EvidenceIndex = { ...index, suites: index.suites.map((r) => (r.suite === "load" ? { ...r, status: "failed" as const, totals: { ...r.totals, failed: 1 } } : r)) };
+      const rf = evaluateGate(manifest, failedSuite, hash);
+      expect(rf.indexState).toContain("load");
+      expect(rf.skippedOrUnexecutedCases.some((x) => x.includes("合格していない"))).toBe(true);
+      // project指定の無いe2e参照は、片方のprojectの記録だけでは合格にしない（phone-360とdesktop-1280の両方が必須。R14/B-I2）
+      const e2eRef = manifest.acceptance.flatMap((a) => a.tests).find((t) => t.includes("tests/e2e/") && !/@[a-z]/.test(t.split("::")[1]!))!;
+      const pr = parseRef(e2eRef);
+      const onlyPhone: EvidenceIndex = { ...index, entries: index.entries.filter((e) => !(e.file === pr.file && e.title === pr.title && e.project === "desktop-1280")) };
+      const rp = evaluateGate(manifest, onlyPhone, hash);
+      expect(rp.skippedOrUnexecutedCases.some((x) => x.includes(pr.title) && x.includes("desktop-1280"))).toBe(true);
+    }
     // 証跡: 参照先がskipped/failedの記録なら不合格（skipを証拠にしない）
-    if (index && index.codeHash === hash) {
+    {
+      const index = base;
       const ref = parseRef(manifest.acceptance[0]!.tests[0]!);
       const tampered: EvidenceIndex = { ...index, entries: index.entries.map((e) => (e.file === ref.file && e.title === ref.title ? { ...e, result: "skipped" as const } : e)) };
       const r2 = evaluateGate(manifest, tampered, hash);

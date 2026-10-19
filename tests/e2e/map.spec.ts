@@ -8,7 +8,7 @@ import { adminApi, BASE, apiHeaders } from "./helpers";
 const isPhone = (viewport: { width: number } | null) => (viewport?.width ?? 0) < 1024;
 
 test.beforeEach(async ({ request }) => {
-  // 種別の異なる施設を3件（API-11。管理番号は試験ごとに一意）。座標も実行ごとにずらす
+  // 種別の異なる施設を4件（消火栓2・防火水槽1・格納箱1。API-11。管理番号は試験ごとに一意。格納箱はT085レビューB-I5で追加）。座標も実行ごとにずらす
   // （D1は1実行中に共有されるため、同じ座標のマーカーが重なって押せなくならないようにする）
   const tag = crypto.randomUUID().slice(0, 6);
   const jitter = [...tag].reduce((n, c) => n + c.charCodeAt(0), 0) % 30;
@@ -16,6 +16,7 @@ test.beforeEach(async ({ request }) => {
     { type: "hydrant", managementNumber: `E2E-H-${tag}`, latitude: 35.05 + jitter * 0.01, longitude: 139.05 + jitter * 0.012 },
     { type: "hydrant", managementNumber: `E2E-H2-${tag}`, latitude: 35.55 + jitter * 0.01, longitude: 139.25 + jitter * 0.012 },
     { type: "cistern", managementNumber: `E2E-S-${tag}`, latitude: 35.3 + jitter * 0.01, longitude: 139.65 + jitter * 0.012 },
+    { type: "box", managementNumber: `E2E-B-${tag}`, latitude: 35.75 + jitter * 0.01, longitude: 139.45 + jitter * 0.012 }, // CITY_BBOX（東端140.1）の内側に収める
   ] as const;
   for (const f of facilities) {
     const res = await adminApi(request, "POST", "/api/v1/facilities", {
@@ -26,7 +27,7 @@ test.beforeEach(async ({ request }) => {
   (test as unknown as { tag: string }).tag = tag;
 });
 
-async function seedOf(page: import("@playwright/test").Page): Promise<{ hydrant: string[]; cistern: string[] }> {
+async function seedOf(page: import("@playwright/test").Page): Promise<{ hydrant: string[]; cistern: string[]; box: string[] }> {
   const res = await page.request.fetch(`${BASE}/api/v1/facilities?limit=200`, { headers: apiHeaders() });
   const body = (await res.json()) as { data: { id: string; type: string; managementNumber: string }[] };
   const tag = (test as unknown as { tag: string }).tag;
@@ -34,6 +35,7 @@ async function seedOf(page: import("@playwright/test").Page): Promise<{ hydrant:
   return {
     hydrant: mine.filter((f) => f.type === "hydrant").map((f) => f.managementNumber),
     cistern: mine.filter((f) => f.type === "cistern").map((f) => f.managementNumber),
+    box: mine.filter((f) => f.type === "box").map((f) => f.managementNumber),
   };
 }
 
@@ -133,4 +135,30 @@ test("map_selection_sheet_matches_prototype_and_opens_detail", async ({ page }) 
     await page.getByRole("button", { name: "一覧に戻る" }).click();
     await expect(page.getByText("施設一覧")).toBeVisible();
   }
+});
+
+/**
+ * 3種の施設（消火栓・防火水槽・格納箱）を色だけでなく文字で識別できる（AT-MAP-02・TC-05。T085レビューB-I5）。
+ * 各施設のマーカー（スマホ）・一覧の行（PC）は「種別名＋番号」のaccessible nameを持ち、種別チップ（凡例を兼ねる絞り込み）は
+ * 3種とも文字ラベルで出る。地図面はプレースホルダー（実Google Mapsは未接続＝X-V05）。
+ */
+test("three_facility_types_are_identified_by_text_not_color_only", async ({ page }) => {
+  test.setTimeout(90_000);
+  const seed = await seedOf(page);
+  expect([seed.hydrant.length, seed.cistern.length, seed.box.length]).toEqual([2, 1, 1]);
+  await page.goto("/app/map");
+  await expect(page.getByText("施設一覧を取得中…")).toBeHidden({ timeout: 20_000 });
+  for (const label of ["消火栓", "防火水槽", "格納箱"]) {
+    await expect(page.getByRole("button", { name: new RegExp(`^${label}`) }).first()).toBeVisible(); // 種別チップ（文字ラベル）
+  }
+  for (const [label, number] of [["消火栓", seed.hydrant[0]!], ["防火水槽", seed.cistern[0]!], ["格納箱", seed.box[0]!]] as const) {
+    const named = page.getByRole("button", { name: `${label} ${number}` });
+    await expect(named.first()).toBeAttached();
+    expect(await named.count()).toBeGreaterThan(0);
+  }
+  // スマホは一覧へ切り替えても、行の文字で種別が読める（地図を見られない場合の代替）
+  if (isPhone(page.viewportSize())) {
+    await page.getByRole("button", { name: "一覧" }).first().click();
+  }
+  await expect(page.getByText(`格納箱 ${seed.box[0]}`).first()).toBeVisible();
 });

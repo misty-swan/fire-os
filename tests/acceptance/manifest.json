@@ -223,10 +223,9 @@
     },
     "CT-05": {
      "tests": [
-      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
-      "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience"
-     ],
-     "note": "途中失敗は共通のexecuteMutation（全業務mutationが同じ1 batch経路）を各SQL位置で失敗させる試験と、機能固有の失敗時に履歴・監査が残らない断言で確認する"
+      "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_create_and_cancel_leave_nothing_when_a_statement_fails_midway (T085 CT-05)",
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything"
+     ]
     }
    }
   },
@@ -298,10 +297,8 @@
     },
     "CT-05": {
      "tests": [
-      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
-      "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance"
-     ],
-     "note": "途中失敗は共通のexecuteMutation（全業務mutationが同じ1 batch経路）を各SQL位置で失敗させる試験と、機能固有の失敗時に履歴・監査が残らない断言で確認する"
+      "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_result_create_and_correction_leave_nothing_when_a_statement_fails_midway (T085 CT-05)"
+     ]
     }
    }
   },
@@ -447,6 +444,7 @@
    "id": "AT-MAP-02",
    "reqId": "MAP-02",
    "tests": [
+    "tests/e2e/map.spec.ts::three_facility_types_are_identified_by_text_not_color_only",
     "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail",
     "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls"
    ],
@@ -590,6 +588,7 @@
    "ct": {
     "CT-01": {
      "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > member_cannot_correct_another_members_inspection_or_reassign_the_inspector (T085 A-I3)",
       "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > manual_issue_records_only_matching_origin_inspection",
       "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)",
       "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
@@ -616,6 +615,7 @@
     "CT-16": {
      "tests": [
       "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_links_ready_attachments_and_rejects_uninspected_ones",
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > completed_but_not_yet_scanned_attachment_is_rejected (T085 A-m3)",
       "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_autolinked_photo_moves_to_inspection_on_save"
      ]
     }
@@ -813,7 +813,7 @@
     "CT-01": {
      "tests": [
       "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target",
-      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)"
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > member_cannot_correct_another_members_inspection_or_reassign_the_inspector (T085 A-I3)"
      ]
     },
     "CT-02": {
@@ -947,8 +947,8 @@
     },
     "CT-05": {
      "tests": [
-      "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages",
-      "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock"
+      "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_leaves_nothing_when_a_statement_fails_midway (T085 CT-05)",
+      "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages"
      ]
     }
    }
@@ -1052,7 +1052,7 @@
     },
     "CT-05": {
      "tests": [
-      "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages"
+      "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_leaves_nothing_when_a_statement_fails_midway (T085 CT-05)"
      ]
     }
    }
@@ -1180,10 +1180,8 @@
     },
     "CT-05": {
      "tests": [
-      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
-      "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision"
-     ],
-     "note": "途中失敗は共通のexecuteMutation（全業務mutationが同じ1 batch経路）を各SQL位置で失敗させる試験と、機能固有の失敗時に履歴・監査が残らない断言で確認する"
+      "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > announcement_create_and_revision_leave_nothing_when_a_statement_fails_midway (T085 CT-05)"
+     ]
     }
    }
   },
@@ -1264,8 +1262,8 @@
     },
     "CT-05": {
      "tests": [
-      "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads",
-      "tests/file-inspection.test.ts::ファイル検査とready確定 (T016) > forged_mime_or_scanner_failure_never_becomes_ready"
+      "tests/upload.test.ts::添付の予約とアップロード (T015) > staging_object_left_by_a_failed_ledger_write_is_reclaimed (T085 CT-05)",
+      "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads"
      ]
     },
     "CT-08": {
@@ -1361,7 +1359,10 @@
      ]
     },
     "CT-05": {
-     "notApplicable": "docs/08 §2「read-onlyや純粋な表示要件に不要なmutation試験を実施したことにしない」: ホーム（API-28）はGETだけの集計表示で、途中失敗させる書込が無い。数値の源（予定・出欠・異常・点検期限・タスク・通知）の原子性は各要件のCT-05（AT-ACT-01/02・AT-MAP-06・AT-AST-03/04・AT-AI-04）で検証する"
+     "tests": [
+      "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > home_numbers_do_not_change_when_a_source_mutation_fails_midway (T085 CT-05)"
+     ],
+     "note": "読取境界: 数値の源（出欠）のmutationを途中で失敗させ、ホームの数値が変わらないこと"
     },
     "CT-14": {
      "tests": [
@@ -1545,8 +1546,8 @@
     },
     "CT-05": {
      "tests": [
-      "tests/tasks.test.ts::業務タスク (T049) > pending_ai_proposal_cannot_create_business_task",
-      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything"
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_leaves_no_decision_or_effect_when_a_statement_fails_midway (T085 CT-05)",
+      "tests/tasks.test.ts::業務タスク (T049) > pending_ai_proposal_cannot_create_business_task"
      ]
     },
     "CT-06": {
@@ -1658,6 +1659,7 @@
    "tests": [
     "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > prompt_injection_cannot_write_or_send_notification",
     "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > assistant_proposal_approves_through_api_31_and_stale_references_are_rejected",
+    "tests/assistant-context-chips.test.tsx::AssistantPage 記録を添える (T085 D5) > newest_reported_issue_is_offered_when_more_than_five_are_waiting",
     "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects"
    ],
    "ct": {
@@ -2108,8 +2110,12 @@
     "MAP-02"
    ],
    "tests": [
+    "tests/e2e/map.spec.ts::three_facility_types_are_identified_by_text_not_color_only",
     "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail",
     "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls"
+   ],
+   "external": [
+    "X-V05"
    ],
    "note": "地図面はプレースホルダー（実Google Mapsは未接続＝X-V05）。種別の識別はマーカーの文字・形と一覧で確認"
   },
@@ -2207,8 +2213,10 @@
    ],
    "tests": [
     "tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered",
+    "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > second_approval_supersedes_previous_approved_version",
     "tests/e2e/audit.spec.ts::audit_panel_shows_who_changed_what_without_bodies"
-   ]
+   ],
+   "note": "台帳更新・権限変更はaudit.test、承認はreport-approvalのreport.approve監査（行為者・対象・日時・本文非複製）"
   },
   {
    "id": "TC-15",
@@ -2250,6 +2258,9 @@
    "tests": [
     "tests/deploy-config.test.ts::deploy-config (T078) > demo_binding_or_incompatible_schema_blocks_deploy",
     "tests/schema.test.ts::core schema (T003) > fixture_has_two_units_four_roles_suspended_and_scopes_with_fictional_names"
+   ],
+   "external": [
+    "X-DEMO"
    ],
    "note": "公開デモの実環境（分離した実Cloudflare）での確認はT086（X-DEMO）"
   }
@@ -2309,6 +2320,7 @@
    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original"
   ],
   "API-15": [
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_list_newest_order_returns_recent_reports_first_and_pages_without_gaps (T085 D5)",
    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason"
   ],
   "API-16": [
@@ -2424,7 +2436,8 @@
   ],
   "API-46": [
    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original",
-   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_conflict_is_detected_by_declared_series_version"
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_conflict_is_detected_by_declared_series_version",
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > member_cannot_correct_another_members_inspection_or_reassign_the_inspector (T085 A-I3)"
   ],
   "API-47": [
    "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
@@ -3002,7 +3015,7 @@
    "summary": "fill値の消失で文書作成のPOSTが送られず30秒で落ちる（稀。引き金未特定）",
    "severity": "medium",
    "status": "open",
-   "basis": "試験の不安定さ。製品の再レンダリング競合の可能性は残る（データ破壊なし・単独実行は緑）。ph8.md T084最終検証で3回中1回",
+   "basis": "試験の不安定さ。R8の調査（ph8.md）: 検証エラー「題名を入力してください」が残る＝fillの値が背景の再レンダリングで消えて作成POSTが出ない（データ破壊なし・単独実行は緑・引き金は未特定）。T085のcollect:evidenceではe2eのフル走行3回中2回発火（T084は3回中1回）",
    "owner": "T085b"
   },
   {
@@ -3022,6 +3035,60 @@
    "status": "resolved",
    "basis": "collect-evidence 1回目でvitest 1件failed。完了確定前の添付（makeNotYetCompleted）へ変更し同型の2箇所も修正",
    "owner": "T029/T032（試験）"
+  },
+  {
+   "id": "T031-I3",
+   "source": "T085レビューA-I3（src/server/routes/inspection-corrections.ts）",
+   "summary": "API-46の権限判定がクライアントの送るbody.inspectorMemberIdで行われ、一般団員が他人の点検を訂正し実施者を差し替えられた（T031の既存欠陥。T085の訂正画面で到達可能になった）",
+   "severity": "high",
+   "status": "resolved",
+   "basis": "権限欠陥（Review Focus 1）。修正前は他人の点検の訂正が201（赤）→元の原本の実施者と新しい実施者の両方で判定して403（緑）",
+   "owner": "T031"
+  },
+  {
+   "id": "T085-D8",
+   "source": "T085レビューA-I1",
+   "summary": "点検の記録の「訂正済み」を系列の現在版でないこと（isCurrent=false）で判定しており、新しい点検があるだけの古い記録まで訂正済みと表示した",
+   "severity": "medium",
+   "status": "resolved",
+   "basis": "表示の誤り（記録の意味を取り違える）。supersededByIdで判定し、2件以上の資産でe2eの赤（訂正済み2件）→緑",
+   "owner": "T033"
+  },
+  {
+   "id": "T085-D9",
+   "source": "T085レビューA-I2",
+   "summary": "異常ありの点検を訂正すると、異常が二重に起票された（訂正モードでcreateIssueを常に有効にしていた）",
+   "severity": "medium",
+   "status": "resolved",
+   "basis": "docs/11 §3（既存異常と二重にしない）違反。良好→異常ありの訂正のときだけ起票に変更し、e2eの赤（異常2件）→緑",
+   "owner": "T033"
+  },
+  {
+   "id": "T085-D6",
+   "source": "T085レビューB-I3の読取境界試験（tests/dashboard.test.ts）",
+   "summary": "未作成の行を作るPUT（出欠の初回回答など）の途中の文が失敗すると、内部障害が「対象が見つかりません」の404に誤分類された",
+   "severity": "low",
+   "status": "resolved",
+   "basis": "効果は0（全取消）だが理由の誤表示。前提条件を満たしているときは内部障害にする（前提を満たさない場合の404は従来どおり＝ph3-review A5の方針）",
+   "owner": "T004/T036"
+  },
+  {
+   "id": "T085-D7",
+   "source": "T085レビューB-I4（AT-DOC-01×CT-05）",
+   "summary": "R2へ書いた後にD1の台帳が失敗した転送の実体（staging孤児）を回収する処理が無かった",
+   "severity": "medium",
+   "status": "resolved",
+   "basis": "docs/07 §3.2「孤児は回収対象」が未実装（ストレージの残留）。sweepOrphanStagingObjectsを追加し試験で回収を確認",
+   "owner": "T017"
+  },
+  {
+   "id": "T085-D10",
+   "source": "T085レビュー第1ラウンドのcollect:evidence（audit/member-admin/dependency-outagesのスマホ試験）",
+   "summary": "管理画面の「団員を選ぶ」ほか、列をlg:だけで定義したgrid 9箇所がスマホで単一auto列になり、長い団員名で画面より広がった（725px）",
+   "severity": "medium",
+   "status": "resolved",
+   "basis": "D4と同型の狭幅欠陥。長い名前の団員がいると管理画面が横にはみ出し、操作が隠れた。grid-cols-1で同じデータで745→360を実測し、accessibility.specに360pxの管理画面の確認を追加（旧gridで747＝赤）",
+   "owner": "T013（ほかT039/T042/T044/T047の同型箇所）"
   },
   {
    "id": "T085-D4",
@@ -3066,7 +3133,7 @@
    "severity": "medium",
    "status": "open",
    "basis": "ph1-review表の重大度「中〜低」。scripts/mutate*.shを追加済みで記録のまま",
-   "owner": "-"
+   "owner": "T088（正式判定前に再確認）"
   },
   {
    "id": "PH0-BF07",
@@ -3075,7 +3142,7 @@
    "severity": "medium",
    "status": "open",
    "basis": "ph0-review表の重大度「中」。外部効果はhandlerの責務と明記",
-   "owner": "-"
+   "owner": "T088（正式判定前に再確認）"
   },
   {
    "id": "PH2-B12",
@@ -3084,7 +3151,7 @@
    "severity": "medium",
    "status": "open",
    "basis": "ph2-review表の重大度「中」。履歴の書換えはしない（docs/16 §1に記録）",
-   "owner": "-"
+   "owner": "T088（正式判定前に再確認。製品欠陥ではなく工程記録）"
   },
   {
    "id": "PH2-C15",
@@ -3102,7 +3169,7 @@
    "severity": "medium",
    "status": "open",
    "basis": "ph4-review表の重大度「中」。未送信・対象者非表示に害が限定",
-   "owner": "未割当（画面改善）"
+   "owner": "T086（画面改善。T088で再確認）"
   },
   {
    "id": "PH4-B3",

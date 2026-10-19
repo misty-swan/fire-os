@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createFixture, type TestFixture } from "./helpers/fixture";
+import { COMMON_EFFECT_TABLES, rowCounts, withFailingInsert } from "./helpers/fail-insert";
 
 let fx: TestFixture;
 beforeAll(async () => {
@@ -416,5 +417,25 @@ describe("お知らせの公開対象・版・本人既読 (T045)", () => {
     const foreign = await fx.client(admin).request("POST", "/api/v1/announcements", { ...valid, audienceMemberIds: [fx.units.b.people.member.memberId!] }, idem());
     expect([404, 422]).toContain(foreign.status);
     expect(await count()).toBe(before);
+  });
+  // --- T085レビューB-I4（CT-05）: お知らせの作成・改版を途中で失敗させても、原本・版・対象・監査・outboxは残らない ---
+  it("announcement_create_and_revision_leave_nothing_when_a_statement_fails_midway (T085 CT-05)", async () => {
+    const admin = fx.units.a.people.admin;
+    const member = fx.units.a.people.member;
+    const tables = ["announcements", "announcement_revisions", "announcement_audience", ...COMMON_EFFECT_TABLES];
+    const body = { title: "途中失敗の確認（架空）", body: "架空の本文", audienceMemberIds: [member.memberId!] };
+    const before = await rowCounts(tables);
+    const failed = await withFailingInsert("announcement_audience", () => fx.client(admin).request("POST", "/api/v1/announcements", body, idem()));
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect(await rowCounts(tables)).toEqual(before);
+    const ok = await fx.client(admin).request("POST", "/api/v1/announcements", body, idem());
+    expect(ok.status).toBe(201);
+    const created = (await json(ok)).data! as { id: string; version: number; revisionNo: number };
+    // 改版（本文の変更＝新revision）: 新しい版の文で失敗 → 版・本文・対象は元のまま
+    const mid = await rowCounts(tables);
+    const revFail = await withFailingInsert("announcement_revisions", () => fx.client(admin).request("PATCH", `/api/v1/announcements/${created.id}`, { version: created.version, body: "改版した本文（架空）" }, idem()));
+    expect(revFail.status).toBeGreaterThanOrEqual(500);
+    expect(await rowCounts(tables)).toEqual(mid);
+    expect((await fx.rows("announcements", { id: created.id }))[0]!.version).toBe(created.version);
   });
 });

@@ -120,19 +120,22 @@ export function registerIssueRoutes(app: ApiApp): void {
     }
     if (query.status) { where.push("status = ?"); binds.push(query.status); }
     if (query.assigneeMemberId) { where.push("assignee_member_id = ?"); binds.push(query.assigneeMemberId); }
+    // 並び: oldest（既定）=作成の古い順、newest=新しい順（T085レビューA-I4/D5: 最近の異常を先頭n件で取れるように）
+    const newest = query.order === "newest";
     if (query.cursor) {
-      const [at, id] = decodeCursor(query.cursor);
-      where.push("(created_at > ? OR (created_at = ? AND id > ?))");
+      const [at, id, order] = decodeCursor(query.cursor);
+      if (order !== query.order) throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "cursor", reason: "order_mismatch" }]);
+      where.push(newest ? "(created_at < ? OR (created_at = ? AND id < ?))" : "(created_at > ? OR (created_at = ? AND id > ?))");
       binds.push(at, at, id);
     }
     const rows = (
       await c.env.DB.prepare(
-        `SELECT * FROM issues WHERE ${where.join(" AND ")} ORDER BY created_at, id LIMIT ?`,
+        `SELECT * FROM issues WHERE ${where.join(" AND ")} ORDER BY ${newest ? "created_at DESC, id DESC" : "created_at, id"} LIMIT ?`,
       ).bind(...binds, query.limit + 1).all<Record<string, unknown>>()
     ).results;
     const page = rows.slice(0, query.limit);
     const nextCursor = rows.length > query.limit
-      ? encodeCursor(page[page.length - 1]!.created_at as string, page[page.length - 1]!.id as string)
+      ? encodeCursor(page[page.length - 1]!.created_at as string, page[page.length - 1]!.id as string, query.order)
       : undefined;
     const data = page.map((r) =>
       Issue.parse({
@@ -216,12 +219,16 @@ export function registerIssueRoutes(app: ApiApp): void {
   });
 }
 
-const encodeCursor = (at: string, id: string) =>
-  btoa(unescape(encodeURIComponent(JSON.stringify([at, id])))).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-function decodeCursor(cursor: string): [string, string] {
+const encodeCursor = (at: string, id: string, order: string) =>
+  btoa(unescape(encodeURIComponent(JSON.stringify([at, id, order])))).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+/** cursorは[作成時刻, id, 並び]。T085以前の[作成時刻, id]（古い順）も読めるようにする */
+function decodeCursor(cursor: string): [string, string, string] {
   try {
     const v = JSON.parse(decodeURIComponent(escape(atob(cursor.replaceAll("-", "+").replaceAll("_", "/"))))) as unknown;
-    if (Array.isArray(v) && v.length === 2 && typeof v[0] === "string" && typeof v[1] === "string") return [v[0], v[1]];
+    if (Array.isArray(v) && (v.length === 2 || v.length === 3) && typeof v[0] === "string" && typeof v[1] === "string") {
+      const order = v.length === 3 ? v[2] : "oldest";
+      if (order === "oldest" || order === "newest") return [v[0], v[1], order];
+    }
   } catch {
     /* 下で400 */
   }

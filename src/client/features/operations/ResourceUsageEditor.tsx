@@ -292,7 +292,7 @@ export function ResourceUsageEditor(props: EditorProps) {
                     ))}
                   </select>
                 </label>
-                <div className="grid gap-2.5 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
                   <TextField
                     name={`usage-${n}-quantity`}
                     label={`使用履歴 ${n}行目の数量`}

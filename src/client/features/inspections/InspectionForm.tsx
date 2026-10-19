@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
-import { api, apiCall } from "../../api";
+import { api } from "../../api";
 import { AttachmentUploader } from "../attachments/AttachmentUploader";
 import { FormErrors } from "../../components/FormErrors";
 import { LeaveConfirm } from "../../components/LeaveConfirm";
@@ -9,6 +9,7 @@ import { SubHeader } from "../../components/Page";
 import { Banner, Button, Card, Chip, Icon, Notice, TextArea } from "../../components/ui";
 import { useMutation } from "../../useMutation";
 import { useMe } from "../../me";
+import { jstDay, type InspectionHistoryRow } from "./InspectionHistory";
 
 /**
  * 点検登録（T033、SCR-06。prototype 点検登録の3ステップ: チェック→写真・メモ→確認）。
@@ -25,16 +26,8 @@ import { useMe } from "../../me";
 
 type InspectionTarget = { type: "facility" | "vehicle" | "equipment"; id: string };
 
-/** 訂正の元（API-44／API-51の点検履歴の1行） */
-interface OriginalInspection {
-  id: string;
-  seriesVersion: number;
-  templateVersionId: string;
-  inspectedAt: string;
-  note: string;
-  items: { code: string; result: string }[];
-  isCurrent: boolean;
-}
+/** 訂正の元（API-44／API-51の点検履歴の1行。実施者は元の記録のまま引き継ぐ） */
+type OriginalInspection = InspectionHistoryRow & { inspectorMemberId: string };
 
 interface TemplateVersion {
   id: string;
@@ -75,7 +68,8 @@ export function InspectionFormPage() {
   /** 保存が完了したら離脱確認を外す（保存後の自動遷移を確認ダイアログで止めない） */
   const [completed, setCompleted] = useState(false);
   const [reason, setReason] = useState("");
-  const [original, setOriginal] = useState<OriginalInspection | "loading" | "missing" | null>(correctId ? "loading" : null);
+  /** 訂正の元。notCurrent=より新しい記録がある（訂正は現在版だけ）、missing=見つからない */
+  const [original, setOriginal] = useState<OriginalInspection | "loading" | "missing" | "notCurrent" | null>(correctId ? "loading" : null);
   /** 最初の送信で固定する実施日時（送り直しで内容を変えない＝同じ送信鍵） */
   const inspectedAtRef = useRef<string | null>(null);
   const saveFacility = useMutation("API-14");
@@ -98,7 +92,8 @@ export function InspectionFormPage() {
     })();
   }, [target.type]);
 
-  // 訂正の元を読み、結果・メモを入れた状態で始める（施設=API-44の履歴、資産=API-51の点検履歴）
+  // 訂正の元を読み、結果・メモを入れた状態で始める。訂正できるのは系列の現在版だけ（API-46の版ガード）なので、
+  // 施設はAPI-44 current=true（現在版1件）、資産はAPI-51の点検履歴から読む（T085レビューA-m1）
   useEffect(() => {
     if (!correctId) return;
     void (async () => {
@@ -108,16 +103,19 @@ export function InspectionFormPage() {
           const detail = (await api("API-51", { params: { type: target.type as "vehicle" | "equipment", id: target.id }, query: {} })) as unknown as { inspections: OriginalInspection[] };
           found = detail.inspections.find((r) => r.id === correctId);
         } else {
-          let cursor: string | undefined;
-          for (let page = 0; page < 20 && !found; page++) {
-            const res = await apiCall("API-44", { params: { id: target.id }, query: { limit: 200, ...(cursor ? { cursor } : {}) } });
-            found = (res.data as unknown as OriginalInspection[]).find((r) => r.id === correctId);
-            cursor = res.nextCursor;
-            if (!cursor) break;
+          const current = (await api("API-44", { params: { id: target.id }, query: { current: "true", limit: 1 } })) as unknown as OriginalInspection[];
+          found = current[0]?.id === correctId ? current[0] : undefined;
+          if (!found) {
+            setOriginal(current[0] ? "notCurrent" : "missing");
+            return;
           }
         }
         if (!found) {
           setOriginal("missing");
+          return;
+        }
+        if (!found.isCurrent) {
+          setOriginal("notCurrent");
           return;
         }
         setOriginal(found);
@@ -130,12 +128,14 @@ export function InspectionFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [correctId]);
 
-  // 訂正では元の点検で使った様式を選んだ状態にする（承認済みの候補にあれば）
+  // 訂正では元の点検で使った様式版を選ぶ。その版が今の承認版の候補に無い（様式が改版された等）ときは訂正させない
+  // （明細のcodeが様式と合わず、別の様式で上書きすることになるため。T085レビューA-m2。docs/03 §1.1-27）
+  const correctionTemplateIndex = Array.isArray(templates) && original && typeof original !== "string"
+    ? templates.findIndex((t) => t.currentVersion.id === original.templateVersionId)
+    : -1;
   useEffect(() => {
-    if (!Array.isArray(templates) || !original || typeof original === "string") return;
-    const idx = templates.findIndex((t) => t.currentVersion.id === original.templateVersionId);
-    if (idx >= 0) setChosen(idx);
-  }, [templates, original]);
+    if (correctionTemplateIndex >= 0) setChosen(correctionTemplateIndex);
+  }, [correctionTemplateIndex]);
 
   const schema = Array.isArray(templates) ? templates[chosen]?.currentVersion.itemSchema ?? [] : [];
   const missingRequired = schema.filter((s) => s.required && !results[s.code]);
@@ -147,14 +147,20 @@ export function InspectionFormPage() {
     if (correctId && (!correcting || !reason.trim())) return;
     // 実施日時: 訂正は元の点検の日時のまま。新規は最初の送信の時刻で固定し、送り直しでは変えない
     inspectedAtRef.current ??= correcting ? correcting.inspectedAt : new Date().toISOString();
+    const hasReview = Object.values(results).some((r) => r === "needs_review");
+    // 訂正で異常を起票するのは「元の記録に異常が無く、訂正で異常ありになった」ときだけ。元から異常ありの記録を
+    // 訂正しても既存の異常があるので新しく起票しない（docs/11 §3「既存異常の自動削除/再開を禁止」と同じく二重起票しない。
+    // T085レビューA-I2。docs/03 §1.1-27）
+    const originalHadReview = correcting ? correcting.result === "needs_review" || correcting.items.some((i) => i.result === "needs_review") : false;
     const shape = {
       templateVersionId: (Array.isArray(templates) ? templates[chosen]?.currentVersion.id : "") ?? "",
       inspectedAt: inspectedAtRef.current,
-      inspectorMemberId: myMemberId,
-      result: Object.values(results).some((r) => r === "needs_review") ? "needs_review" : "ok",
+      // 実施者: 訂正は元の記録の実施者のまま（訂正した人は監査に残る）。新規は自分
+      inspectorMemberId: correcting ? correcting.inspectorMemberId : myMemberId,
+      result: hasReview ? "needs_review" : "ok",
       checkItems: schema.map((s) => ({ code: s.code, result: results[s.code] ?? "unknown" })),
       note: note.trim() || "特記事項なし",
-      createIssue: Object.values(results).some((r) => r === "needs_review"),
+      createIssue: hasReview && !originalHadReview,
       attachmentIds: readyIds,
     };
     const res = correcting
@@ -179,6 +185,26 @@ export function InspectionFormPage() {
       <div className="flex flex-col gap-3">
         <div className="h-10 w-1/2 animate-pulse rounded bg-white/[.05]" />
         <div className="h-40 animate-pulse rounded-card bg-white/[.05]" />
+      </div>
+    );
+  }
+  if (original === "notCurrent") {
+    return (
+      <div className="flex max-w-[720px] flex-col gap-4">
+        <SubHeader title={title} closeIcon backTo={backTo} />
+        <Banner tone="warning" eyebrow="NOT LATEST" title="この記録は最新ではないため訂正できません">
+          訂正できるのは、この対象のいちばん新しい点検の記録だけです。詳細の画面から最新の記録を開き直してください。
+        </Banner>
+      </div>
+    );
+  }
+  if (correctId && Array.isArray(templates) && original && typeof original !== "string" && correctionTemplateIndex < 0) {
+    return (
+      <div className="flex max-w-[720px] flex-col gap-4">
+        <SubHeader title={title} closeIcon backTo={backTo} />
+        <Banner tone="warning" eyebrow="TEMPLATE CHANGED" title="元の点検の様式が現在の承認版ではないため訂正できません">
+          様式が改版された後は、この画面では訂正できません。必要なら新しい点検として記録してください。
+        </Banner>
       </div>
     );
   }
@@ -228,8 +254,7 @@ export function InspectionFormPage() {
 
       {correcting && (
         <Notice tone="info" icon="history" role="status">
-          {correcting.inspectedAt.slice(0, 10)}の点検を訂正します。元の記録は書き換えず、訂正した記録を新しく残します。
-          {!correcting.isCurrent && "（この記録はすでに訂正されています。保存すると競合として止まります）"}
+          {jstDay(correcting.inspectedAt)}の点検を訂正します。元の記録は書き換えず、訂正した記録を新しく残します。
         </Notice>
       )}
 
@@ -365,7 +390,7 @@ export function InspectionFormPage() {
           )}
           {save.state.kind === "conflict" && (
             <Banner tone="warning" eyebrow="CONFLICT" title="他の操作で更新されています">
-              {correctId ? "この点検はすでに訂正されています。詳細の画面から最新の記録を開き直して訂正してください。" : "内容を確認して再度保存してください。"}
+              {correctId ? "この対象の点検の記録が他の操作で更新されています（訂正された、または新しい点検が記録された）。詳細の画面から最新の記録を開き直して訂正してください。" : "内容を確認して再度保存してください。"}
             </Banner>
           )}
           {save.state.kind === "unknown" && (

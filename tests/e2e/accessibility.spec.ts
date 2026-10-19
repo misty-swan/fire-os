@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { acceptInvitationViaUi, adminApiData, inviteNewMember, isPhone, newUserContext, uniqueEmail } from "./helpers";
+import { acceptInvitationViaUi, adminApi, adminApiData, inviteNewMember, isPhone, newUserContext, uniqueEmail } from "./helpers";
 import {
   adminSeedPage,
   collectCriticalViolations,
@@ -246,21 +246,43 @@ test("inputs_stay_inside_the_search_card_at_narrow_widths", async ({ page }) => 
       return { scroll: document.documentElement.scrollWidth, inner: window.innerWidth, max: Math.max(...rights) };
     });
 
+  // T085レビューA-I4/D4: 参加者の選択肢に長い名前の団員がいても、検索カードは画面幅より広がらない
+  // （旧実装は単一auto列のgridで、selectの最長の選択肢より狭くなれず、フル走行で団員が増えると200pxで横スクロールした）。
+  // データ量に頼らず決定的に再現するため、ここで長い名前の架空団員を1人作る
+  const longName = `架空 ${"長".repeat(40)}${crypto.randomUUID().slice(0, 6)}`;
+  expect((await adminApi(page.request, "POST", "/api/v1/members", { displayName: longName, status: "active", rank: "団員", squad: "1班" })).status).toBe(201);
   await page.setViewportSize({ width: 240, height: 800 });
   await page.goto("/app/activities");
+  await expect(page.locator('[aria-label="予定の検索"] select').first().locator("option", { hasText: longName })).toHaveCount(1);
   await expect(page.locator('[aria-label="予定の検索"]')).toBeVisible();
   await expect(page.locator('[aria-label="予定の検索"] input').first()).toBeVisible();
 
   // ①240px: ページが横スクロールしない ②カード内の全入力欄・ラベルがカードの右端に収まる（+1pxは丸め許容）
   const at240 = await overshootOf();
-  expect(at240.scroll).toBeLessThanOrEqual(at240.inner);
+  // innerWidthはモバイルのエミュレーションで内容に合わせて広がり得るため、設定した幅（240）とも比べる（T085レビュー第1ラウンド）
+  expect(at240.scroll).toBeLessThanOrEqual(Math.min(at240.inner, 240));
   expect(at240.max).toBeLessThanOrEqual(1);
 
   // 200px（iPhone 390pxでページズーム200%相当）でもページが横スクロールしない
   await page.setViewportSize({ width: 200, height: 800 });
   await expect(page.locator('[aria-label="予定の検索"] input').first()).toBeVisible();
   const at200 = await overshootOf();
-  expect(at200.scroll).toBeLessThanOrEqual(at200.inner);
+  expect(at200.scroll).toBeLessThanOrEqual(Math.min(at200.inner, 200));
+
+  // 出動一覧の検索カード（同じ作りのgrid。T085で同時に修正）も200pxで横スクロールしない
+  await page.goto("/app/incidents");
+  await expect(page.locator('[aria-label="出動記録の検索"]')).toBeVisible();
+  const incidentsScroll = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(incidentsScroll).toBeLessThanOrEqual(200);
+
+  // 管理画面（SCR-17）の「団員を選ぶ」も、長い名前の団員で画面より広がらない（360px。T085レビュー第1ラウンドのフル走行で発見:
+  // 単一auto列のgridで一覧カードが725pxに広がり、member-admin/audit/dependency-outagesのスマホ試験が連鎖して失敗した）
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/app/admin");
+  await expect(page.getByRole("list", { name: "管理する団員" }).getByText(longName).first()).toBeAttached();
+  // モバイルのエミュレーションでは内容が広いとinnerWidthも広がるため、比較は設定した画面幅（360）で行う
+  const adminScroll = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(adminScroll).toBeLessThanOrEqual(360);
 });
 
 /**

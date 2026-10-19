@@ -150,7 +150,8 @@ export const gisApis = {
     method: "GET", path: "/facilities/:id/inspections", permission: "PER-01", kind: "list", success: [200],
     request: obj({
       params: P_ID,
-      query: listQuery({ from: Instant.optional(), to: Instant.optional(), result: z.enum(inspectionResults).optional() }),
+      // current=true: 系列の現在版（その施設の最新の有効な点検）だけを返す（0件か1件。T085レビューA-m1）
+      query: listQuery({ from: Instant.optional(), to: Instant.optional(), result: z.enum(inspectionResults).optional(), current: z.stringbool().optional() }),
     }),
     response: Page(provisionalDto()), provisional: true,
   }),

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createFixture, type TestFixture } from "./helpers/fixture";
+import { COMMON_EFFECT_TABLES, rowCounts, withFailingInsert } from "./helpers/fail-insert";
 
 let fx: TestFixture;
 beforeAll(async () => {
@@ -297,5 +298,22 @@ describe("車両/機材の使用履歴と訂正 (T042)", () => {
     expect(page2Data.usages).toHaveLength(1);
     // cancelledも行として残る（docs/04:100「物理削除しない」。docs/11 §3「集計は無効なoperationを除く」の使用履歴版）
     expect([...page1Data.usages, ...page2Data.usages].map((u) => u.status).sort()).toEqual(["active", "cancelled"]);
+  });
+  // --- T085レビューB-I4（CT-05）: 使用履歴の全集合PUTを途中で失敗させても、行・履歴・出来事の版・監査・outboxは変わらない ---
+  it("usage_replacement_leaves_nothing_when_a_statement_fails_midway (T085 CT-05)", async () => {
+    const admin = fx.units.a.people.admin;
+    const vehicle = (await json(await fx.client(admin).request("POST", "/api/v1/vehicles", { assetCode: `T85-U-${crypto.randomUUID().slice(0, 4)}`, name: "架空の積載車", status: "運用" }, idem()))).data! as { id: string };
+    const inc = (await json(await fx.client(admin).request("POST", "/api/v1/incidents", { kind: "training", occurredAt: "2026-10-12T01:00:00.000Z", summary: "途中失敗の確認（架空）" }, idem()))).data! as { operationId: string };
+    const tables = ["resource_usages", "resource_usage_events", "operations", ...COMMON_EFFECT_TABLES];
+    const opBefore = (await fx.rows("operations", { id: inc.operationId }))[0]!.version as number;
+    const before = await rowCounts(tables);
+    const put = () => fx.client(admin).request("PUT", `/api/v1/operations/${inc.operationId}/resource-usages`, {
+      version: opBefore, reason: "使用の記録（架空）", usages: [{ target: { type: "vehicle", id: vehicle.id }, quantity: 1 }],
+    }, idem());
+    const failed = await withFailingInsert("resource_usage_events", put);
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect(await rowCounts(tables)).toEqual(before);
+    expect((await fx.rows("operations", { id: inc.operationId }))[0]!.version).toBe(opBefore); // 版も進まない
+    expect((await put()).status).toBe(200);
   });
 });

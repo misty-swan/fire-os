@@ -966,7 +966,7 @@ function TimeFields({
   labels?: { mobilizedAt: string; arrivedAt: string; returnedAt: string };
 }) {
   return (
-    <div className="grid gap-2.5 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
       <TextField name="time-mobilized" label={labels.mobilizedAt} type="datetime-local" value={value.mobilizedAt} onChange={(e) => onChange({ ...value, mobilizedAt: e.target.value })} />
       <TextField name="time-arrived" label={labels.arrivedAt} type="datetime-local" value={value.arrivedAt} onChange={(e) => onChange({ ...value, arrivedAt: e.target.value })} />
       <TextField name="time-returned" label={labels.returnedAt} type="datetime-local" value={value.returnedAt} onChange={(e) => onChange({ ...value, returnedAt: e.target.value })} />

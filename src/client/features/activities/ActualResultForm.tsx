@@ -175,7 +175,7 @@ export function ActualResultForm({
           }}
           placeholder="例: ポンプ車操法を実施。放水訓練と整備点検も実施"
         />
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <TextField
             name="actualStartsAt"
             label="実施（開始）"
@@ -223,7 +223,7 @@ export function ActualResultForm({
                   </select>
                 </div>
                 {status[m.memberId] !== "unconfirmed" && (
-                  <div className="grid gap-2 lg:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
                     <TextField
                       name={`ind-start-${m.memberId}`}
                       label={`${m.displayName}さんの個人開始（任意）`}

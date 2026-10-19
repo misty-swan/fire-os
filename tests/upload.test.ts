@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
+import { withFailingInsert } from "./helpers/fail-insert";
+import { sweepOrphanStagingObjects } from "../src/server/jobs/handlers/attachment-cleanup";
 
 let fx: TestFixture;
 beforeAll(async () => {
@@ -288,5 +290,28 @@ describe("添付の予約とアップロード (T015)", () => {
     const completed = (await json(cRes)).data! as { attachment: { status: string }; job: { status: string } };
     expect(completed.attachment.status).toBe("uploaded");
     expect(completed.job.status).toBe("queued");
+  });
+  // --- T085レビューB-I4（AT-DOC-01×CT-05）: R2へ書いた後にD1の台帳が失敗した転送の実体（孤児）は、転送の窓を過ぎたら回収される。
+  //     台帳に残っている実体は消さない ---
+  it("staging_object_left_by_a_failed_ledger_write_is_reclaimed (T085 CT-05)", async () => {
+    const admin = fx.units.a.people.admin;
+    const failedIntent = { intent: (await makeDraftAndIntent(admin, "facility")).intent! };
+    const failed = await withFailingInsert("upload_attempts", () => rawUpload(admin, failedIntent.intent.id, failedIntent.intent.uploadToken, pngBytes(7)));
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    const orphanKeys = (await env.FILES.list({ prefix: `staging/${fx.units.a.id}/${failedIntent.intent.id}/` })).objects.map((o) => o.key);
+    expect(orphanKeys).toHaveLength(1); // R2には実体があり、台帳には試行が無い（孤児）
+    expect(await fx.rows("upload_attempts", { attachment_id: failedIntent.intent.id })).toHaveLength(0);
+    // 正常に記録された転送（台帳あり）
+    const okIntent = { intent: (await makeDraftAndIntent(admin, "facility")).intent! };
+    expect((await rawUpload(admin, okIntent.intent.id, okIntent.intent.uploadToken, pngBytes(8))).status).toBe(200);
+    const okKeys = (await env.FILES.list({ prefix: `staging/${fx.units.a.id}/${okIntent.intent.id}/` })).objects.map((o) => o.key);
+    expect(okKeys).toHaveLength(1);
+    // 転送の窓の内は消さない（まだ転送中かもしれない）
+    expect(await sweepOrphanStagingObjects(env, new Date().toISOString())).toBe(0);
+    // 窓を過ぎた回収: 孤児だけが消え、台帳のある実体は残る
+    const later = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    expect(await sweepOrphanStagingObjects(env, later)).toBeGreaterThanOrEqual(1);
+    expect(await env.FILES.head(orphanKeys[0]!)).toBeNull();
+    expect(await env.FILES.head(okKeys[0]!)).not.toBeNull();
   });
 });

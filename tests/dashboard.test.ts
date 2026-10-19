@@ -2,6 +2,7 @@ import { applyD1Migrations } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createFixture, type TestClient, type TestFixture } from "./helpers/fixture";
+import { rowCounts, withFailingInsert } from "./helpers/fail-insert";
 
 let fx: TestFixture;
 beforeAll(async () => {
@@ -351,5 +352,29 @@ describe("ホームの指標と同じ条件の一覧への遷移 (T047)", () => 
     const doneList = ((await json(await fx.client(member).request("GET", "/api/v1/tasks/me?status=done&limit=200")))
       .data ?? []) as unknown as { id: string }[];
     expect(doneList.map((r) => r.id)).toEqual([doneTask.id]);
+  });
+  // --- T085レビューB-I3（AT-DASH-01×CT-05の読取境界）: 数値の源のmutationが途中で失敗したとき、ホームの数値は変わらない
+  //     （半端に書かれた出欠行で「未回答」が減ったりしない）。成功すれば同じ条件で1件減る ---
+  it("home_numbers_do_not_change_when_a_source_mutation_fails_midway (T085 CT-05)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const member = a.people.member;
+    const startsAt = new Date(Date.now() + 5 * 864e5).toISOString();
+    const act = (await json(await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "読取境界の確認（架空）", kind: "訓練", plannedStartsAt: startsAt, locationText: "架空市", ownerMemberId: admin.memberId!, audienceMemberIds: [member.memberId!],
+    }, { "idempotency-key": crypto.randomUUID() }))).data! as { id: string };
+    const pub = await fx.client(admin).request("PATCH", `/api/v1/activities/${act.id}`, { version: 1, status: "scheduled", reason: "公開" }, { "idempotency-key": crypto.randomUUID() });
+    expect(pub.status, JSON.stringify(await pub.clone().json())).toBe(200);
+    const home = async () => ((await json(await fx.client(member).request("GET", "/api/v1/dashboard"))).data! as unknown as DashboardData).myUnanswered.count;
+    const before = await home();
+    const countsBefore = await rowCounts(["activity_attendance", "attendance_events", "audit_logs", "domain_events"]);
+    const answer = () => fx.client(member).request("PUT", `/api/v1/activities/${act.id}/attendance/me`, { version: 0, response: "attending" }, { "idempotency-key": crypto.randomUUID() });
+    // 出欠行の後、出欠の履歴の文で失敗
+    const failed = await withFailingInsert("attendance_events", answer);
+    expect(failed.status, JSON.stringify(await failed.clone().json())).toBeGreaterThanOrEqual(500);
+    expect(await rowCounts(["activity_attendance", "attendance_events", "audit_logs", "domain_events"])).toEqual(countsBefore);
+    expect(await home()).toBe(before);
+    expect((await answer()).status).toBe(201);
+    expect(await home()).toBe(before - 1);
   });
 });

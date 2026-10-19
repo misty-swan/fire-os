@@ -847,6 +847,15 @@ describe("点検と異常 (T029〜T032)", () => {
     expect(seen.find((r) => r.id === latest.id)).toMatchObject({ result: "ok", note: "三回目", supersedesId: null, isCurrent: false });
     expect(seen.find((r) => r.id === correctedId)).toMatchObject({ result: "needs_review", supersedesId: latest.id, isCurrent: true });
     expect(seen.filter((r) => (r as unknown as { isCurrent: boolean }).isCurrent)).toHaveLength(1); // 系列の現在版はちょうど1件
+    // 訂正済みはsupersededByIdで判定する（T085レビューA-I1）: 訂正していない古い点検はisCurrent=falseでも訂正済みではない
+    const byId = new Map(seen.map((r) => [r.id, r as unknown as { supersededById: string | null; isCurrent: boolean }]));
+    expect(byId.get(made[0]!.id)).toMatchObject({ isCurrent: false, supersededById: null });
+    expect(byId.get(made[1]!.id)).toMatchObject({ isCurrent: false, supersededById: null });
+    expect(byId.get(latest.id)).toMatchObject({ isCurrent: false, supersededById: correctedId });
+    expect(byId.get(correctedId)).toMatchObject({ isCurrent: true, supersededById: null });
+    // current=true は系列の現在版の1件だけ
+    const currentOnly = (await (await fx.client(admin).request("GET", `/api/v1/facilities/${facilityId}/inspections?current=true`)).json()) as { data: { id: string }[] };
+    expect(currentOnly.data.map((r) => r.id)).toEqual([correctedId]);
     // 結果での絞り込み・期間（from包含/to排他）
     const onlyReview = (await (await fx.client(admin).request("GET", `/api/v1/facilities/${facilityId}/inspections?result=needs_review`)).json()) as { data: { id: string }[] };
     expect(onlyReview.data.map((r) => r.id)).toEqual([correctedId]);
@@ -908,7 +917,7 @@ describe("点検と異常 (T029〜T032)", () => {
     const detail = (await (await fx.client(admin).request("GET", `/api/v1/assets/vehicle/${vehicle.data.id}`)).json()) as { data: { inspections: { id: string; isCurrent: boolean; supersedesId: string | null; result: string; items: { code: string; result: string }[] }[] } };
     expect(detail.data.inspections.map((r) => [r.id, r.isCurrent])).toEqual([[fixedId, true], [firstId, false]]);
     expect(detail.data.inspections[0]).toMatchObject({ supersedesId: firstId, result: "needs_review", items: [{ code: "lights", result: "needs_review" }] });
-    expect(detail.data.inspections[1]).toMatchObject({ supersedesId: null, result: "ok" }); // 原本は不変
+    expect(detail.data.inspections[1]).toMatchObject({ supersedesId: null, result: "ok", supersededById: fixedId }); // 原本は不変・訂正済み
     // 別分団には存在を明かさない
     expect((await fx.client(fx.units.b.people.admin).request("GET", `/api/v1/assets/vehicle/${vehicle.data.id}`)).status).toBe(404);
   });
@@ -937,5 +946,79 @@ describe("点検と異常 (T029〜T032)", () => {
     expect((await eventsOf()) - before).toBe(1); // 再送で履歴は増えない
     // 同じ鍵で別の遷移は409
     expect((await fx.client(admin).request("PATCH", `/api/v1/issues/${issue.id}`, { ...move, status: "in_progress" }, moveKey)).status).toBe(409);
+  });
+  // --- T085レビューA-I3（T031の既存欠陥）: 訂正の権限は元の原本の実施者で判定する ---
+  it("member_cannot_correct_another_members_inspection_or_reassign_the_inspector (T085 A-I3)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const member = a.people.member;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+    const countRows = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections WHERE facility_id = ?").bind(facilityId).first<{ n: number }>())!.n;
+    // 管理者が実施者の点検（他人の点検）
+    const others = (await json(await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { note: "管理者が実施した点検" }), idem()))).data! as { id: string; seriesVersion: number };
+    const before = await countRows();
+    // 一般団員が実施者欄に自分を書いて他人の点検を訂正しようとする → 403、何も書かれない
+    const hijack = await fx.client(member).request("POST", `/api/v1/inspections/facility/${others.id}/corrections`,
+      { seriesVersion: others.seriesVersion, supersedesId: others.id, reason: "他人の点検の書換え", ...facilityInput(t.facilityVersionId, member.memberId!, { note: "書換え" }) }, idem());
+    expect(hijack.status).toBe(403);
+    expect(await countRows()).toBe(before);
+    expect((await fx.rows("inspection_series", { facility_id: facilityId }))[0]!.current_facility_inspection_id).toBe(others.id);
+    // 本人の点検は本人が訂正できる
+    const mine = (await json(await fx.client(member).request("POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, member.memberId!, { note: "団員が実施した点検" }), idem()))).data! as { id: string; seriesVersion: number };
+    expect(mine).toBeTruthy();
+    // 本人の点検でも、実施者を他人に差し替える訂正は403
+    const reassign = await fx.client(member).request("POST", `/api/v1/inspections/facility/${mine.id}/corrections`,
+      { seriesVersion: mine.seriesVersion, supersedesId: mine.id, reason: "実施者の差替え", ...facilityInput(t.facilityVersionId, admin.memberId!) }, idem());
+    expect(reassign.status).toBe(403);
+    const own = await fx.client(member).request("POST", `/api/v1/inspections/facility/${mine.id}/corrections`,
+      { seriesVersion: mine.seriesVersion, supersedesId: mine.id, reason: "本人の記入誤り", ...facilityInput(t.facilityVersionId, member.memberId!, { note: "訂正後" }) }, idem());
+    expect(own.status).toBe(201);
+  });
+  // --- T085レビューA-I4/D5: 最近の異常を先頭n件で取れる（API-15 order=newest）。AIアシスタントの「記録を添える」が使う ---
+  it("issue_list_newest_order_returns_recent_reports_first_and_pages_without_gaps (T085 D5)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const facilityId = await seedFacility(a.id, admin.userId);
+    const ids: string[] = [];
+    for (let n = 0; n < 7; n++) {
+      const r = await fx.client(admin).request("POST", "/api/v1/issues", { target: { type: "facility", id: facilityId }, title: `並び確認 ${n}`, description: "架空", attachmentIds: [] }, idem());
+      ids.push(((await json(r)).data! as { id: string }).id);
+      await new Promise((res) => setTimeout(res, 5)); // 作成時刻をずらす
+    }
+    const q = `targetType=facility&targetId=${facilityId}&status=reported`;
+    const first = (await (await fx.client(admin).request("GET", `/api/v1/issues?${q}&order=newest&limit=5`)).json()) as { data: { id: string }[]; meta: { nextCursor?: string } };
+    expect(first.data.map((r) => r.id)).toEqual([...ids].reverse().slice(0, 5)); // 最新が先頭（古い順だと最新は5件に入らない）
+    const second = (await (await fx.client(admin).request("GET", `/api/v1/issues?${q}&order=newest&limit=5&cursor=${first.meta.nextCursor}`)).json()) as { data: { id: string }[]; meta: { nextCursor?: string } };
+    expect(second.data.map((r) => r.id)).toEqual([...ids].reverse().slice(5)); // 続きは重複・欠落なし
+    expect(second.meta.nextCursor).toBeUndefined();
+    // 既定（oldest）は従来どおり古い順
+    const oldest = (await (await fx.client(admin).request("GET", `/api/v1/issues?${q}&limit=5`)).json()) as { data: { id: string }[]; meta: { nextCursor: string } };
+    expect(oldest.data.map((r) => r.id)).toEqual(ids.slice(0, 5));
+    // 並びの違うcursorは400（取り違えた続きを返さない）
+    expect((await fx.client(admin).request("GET", `/api/v1/issues?${q}&order=newest&cursor=${oldest.meta.nextCursor}`)).status).toBe(400);
+  });
+  // --- T085レビューA-m3: 「転送と完了確定は済んだが検査がまだ」の添付も422（決定的に作る: 完了確定の後、
+  //     検査jobを取り消して状態をuploaded／checkingへ戻す。背景のQueue consumerにreadyへ進められない） ---
+  it("completed_but_not_yet_scanned_attachment_is_rejected (T085 A-m3)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+    for (const state of ["uploaded", "checking"] as const) {
+      const id = await makeUploaded(admin, "inspection"); // 転送＋完了確定（検査jobが登録される）
+      await env.DB.prepare("UPDATE jobs SET status = 'cancelled' WHERE source_id = ? AND status IN ('queued', 'running', 'retry_wait')").bind(id).run();
+      // 版も進める（既に走り出した検査jobが後から確定しようとしても元版不一致でstaleになり、readyへ進めない）
+      await env.DB.prepare("UPDATE attachments SET status = ?, ready_key = NULL, version = version + 1 WHERE id = ?").bind(state, id).run();
+      const before = (await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections").first<{ n: number }>())!.n;
+      const res = await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/inspections`,
+        facilityInput(t.facilityVersionId, admin.memberId!, { attachmentIds: [id] }), idem());
+      expect(res.status, state).toBe(422);
+      expect((await json(res)).error?.code, state).toBe("ATTACHMENT_NOT_READY");
+      expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections").first<{ n: number }>())!.n).toBe(before);
+      expect(await fx.rows("attachment_links", { attachment_id: id })).toHaveLength(0);
+    }
   });
 });

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createFixture, type TestFixture } from "./helpers/fixture";
+import { COMMON_EFFECT_TABLES, rowCounts, withFailingInsert } from "./helpers/fail-insert";
 
 let fx: TestFixture;
 beforeAll(async () => {
@@ -314,5 +315,31 @@ describe("出動と活動を一つの出来事へ関連付け (T043)", () => {
       activity: { id: string } | null;
     };
     expect(createdDetail.activity).toMatchObject({ id: activityC.id });
+  });
+  // --- T085レビューB-I4（CT-05）: 関連付けを途中で失敗させても、出動・活動・出来事・使用履歴・履歴・監査・outboxは変わらない ---
+  it("link_leaves_nothing_when_a_statement_fails_midway (T085 CT-05)", async () => {
+    const admin = fx.units.a.people.admin;
+    const act = (await json(await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "関連付けの途中失敗（架空）", kind: "訓練", plannedStartsAt: "2026-10-22T01:00:00.000Z", locationText: "架空市", ownerMemberId: admin.memberId!, audienceMemberIds: [admin.memberId!],
+    }, idem()))).data! as { id: string; version: number; operationId: string };
+    const inc = (await json(await fx.client(admin).request("POST", "/api/v1/incidents", { kind: "training", occurredAt: "2026-10-22T01:30:00.000Z", summary: "関連付けの途中失敗（架空）" }, idem()))).data! as { id: string; version: number; operationId: string };
+    const tables = ["incidents", "activities", "operations", "resource_usages", "incident_events", "activity_events", ...COMMON_EFFECT_TABLES];
+    const snapshot = async () => ({
+      counts: await rowCounts(tables),
+      inc: (await fx.rows("incidents", { id: inc.id }))[0]!,
+      opA: (await fx.rows("operations", { id: act.operationId }))[0]!,
+      opI: (await fx.rows("operations", { id: inc.operationId }))[0]!,
+    });
+    const before = await snapshot();
+    const link = () => fx.client(admin).request("PUT", `/api/v1/incidents/${inc.id}/activity`, {
+      version: inc.version, activityId: act.id, activityVersion: act.version,
+      operationVersions: { [act.operationId]: before.opA.version as number, [inc.operationId]: before.opI.version as number },
+      reason: "途中失敗の確認（架空）",
+    }, idem());
+    // 出動・出来事の付替えの後、活動側の履歴の文で失敗
+    const failed = await withFailingInsert("activity_events", link);
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect(await snapshot()).toEqual(before);
+    expect((await link()).status).toBe(200);
   });
 });

@@ -41,6 +41,7 @@ export function registerFacilityInspectionRoutes(app: ApiApp): void {
     if (query.from) { where.push("i.inspected_at >= ?"); binds.push(query.from); }
     if (query.to) { where.push("i.inspected_at < ?"); binds.push(query.to); }
     if (query.result) { where.push("i.result = ?"); binds.push(query.result); }
+    if (query.current) where.push("i.id = (SELECT s2.current_facility_inspection_id FROM inspection_series s2 WHERE s2.id = i.series_id)");
     if (query.cursor) {
       // from/to/resultで絞った安定keyset（inspected_at, id）。cursorはその最後の組。
       // 並びは新しい順（DESC）なので、続きは「最後の組より古い」側（T085で発見: 旧実装は > で2頁目以降が欠落していた）
@@ -74,8 +75,11 @@ const FACILITY_INSPECTION_JSON =
   "'id', i.id, 'seriesId', i.series_id, 'seriesVersion', s.version, 'target', json_object('type', 'facility', 'id', i.facility_id), " +
   "'templateVersionId', i.template_version_id, 'inspectorMemberId', i.inspector_member_id, 'inspectedAt', i.inspected_at, " +
   "'result', i.result, 'note', i.note, 'supersedesId', i.supersedes_id, 'correctionReason', i.correction_reason, 'createdAt', i.created_at, " +
-  // 系列の現在版か（訂正前の原本はfalse。訂正〔API-46〕は現在版だけに許す。T085で画面の「現在版」表示と訂正導線のため追加）
+  // isCurrent: 系列（対象ごとに1本）の現在版＝その対象の最新の有効な点検か。新しい点検でもポインタは移るので、
+  // falseは「訂正された」ではなく「より新しい記録がある」（訂正〔API-46〕は現在版だけに許す）。
+  // supersededById: この原本を訂正した記録のID（訂正済みの判定はこちら。T085レビューA-I1）
   "'isCurrent', json(CASE WHEN s.current_facility_inspection_id = i.id THEN 'true' ELSE 'false' END), " +
+  "'supersededById', (SELECT x.id FROM facility_inspections x WHERE x.supersedes_id = i.id), " +
   "'items', (SELECT json_group_array(json_object('code', m.item_code, 'result', m.result, 'value', json(m.value_json), 'note', m.note)) FROM inspection_items m WHERE m.facility_inspection_id = i.id)) " +
   "FROM facility_inspections i JOIN inspection_series s ON s.id = i.series_id WHERE i.id = ?";
 

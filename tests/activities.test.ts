@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createFixture, type TestFixture } from "./helpers/fixture";
+import { COMMON_EFFECT_TABLES, rowCounts, withFailingInsert } from "./helpers/fail-insert";
 
 let fx: TestFixture;
 beforeAll(async () => {
@@ -223,5 +224,32 @@ describe("活動（予定）の公開・変更・中止 (T035)", () => {
     }, { "idempotency-key": cancelKey });
     expect(mismatch.status).toBe(409);
     expect((await json(mismatch)).error?.code).toBe("IDEMPOTENCY_MISMATCH");
+  });
+  // --- T085レビューB-I4（CT-05）: 予定の作成・中止を途中の文で失敗させても、原本・対象・履歴・監査・outboxは1行も残らない ---
+  it("activity_create_and_cancel_leave_nothing_when_a_statement_fails_midway (T085 CT-05)", async () => {
+    const admin = fx.units.a.people.admin;
+    const member = fx.units.a.people.member;
+    const tables = ["activities", "operations", "activity_audience", "activity_events", ...COMMON_EFFECT_TABLES];
+    const body = { title: "途中失敗の確認（架空）", kind: "訓練", plannedStartsAt: "2026-11-20T01:00:00.000Z", locationText: "架空市中央公園", ownerMemberId: admin.memberId!, audienceMemberIds: [member.memberId!] };
+    const before = await rowCounts(tables);
+    // 作成: 予定・出来事の後、対象者snapshotの文で失敗
+    const failed = await withFailingInsert("activity_audience", () => fx.client(admin).request("POST", "/api/v1/activities", body, idem()));
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect(await rowCounts(tables)).toEqual(before);
+    // 同じ内容は失敗注入なしなら成功する（注入のせいで落ちたことの対照）
+    const ok = await fx.client(admin).request("POST", "/api/v1/activities", body, idem());
+    expect(ok.status).toBe(201);
+    const created = (await json(ok)).data! as { id: string; version: number };
+    const pub = await fx.client(admin).request("PATCH", `/api/v1/activities/${created.id}`, { version: created.version, status: "scheduled" }, idem());
+    const published = (await json(pub)).data! as { version: number };
+    // 中止: 状態と出来事の非計数化の後、履歴の文で失敗 → 予定はscheduledのまま・出来事は計数のまま
+    const mid = await rowCounts(tables);
+    const cancelFail = await withFailingInsert("activity_events", () =>
+      fx.client(admin).request("POST", `/api/v1/activities/${created.id}/cancellation`, { version: published.version, reason: "途中失敗の確認" }, idem()));
+    expect(cancelFail.status).toBeGreaterThanOrEqual(500);
+    expect(await rowCounts(tables)).toEqual(mid);
+    const row = (await fx.rows("activities", { id: created.id }))[0]!;
+    expect(row).toMatchObject({ status: "scheduled", version: published.version });
+    expect((await fx.rows("operations", { id: row.operation_id as string }))[0]!.countable).toBe(1);
   });
 });

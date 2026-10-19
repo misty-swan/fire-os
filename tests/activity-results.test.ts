@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createFixture, type TestFixture } from "./helpers/fixture";
+import { COMMON_EFFECT_TABLES, rowCounts, withFailingInsert } from "./helpers/fail-insert";
 
 let fx: TestFixture;
 beforeAll(async () => {
@@ -366,5 +367,33 @@ describe("活動実績・実参加・訂正版 (T037)", () => {
     expect(await fx.rows("activity_results", { activity_id: activityId })).toHaveLength(1);
     const resultId = (createdResult as { id: string }).id;
     expect(await fx.rows("domain_events", { entity_type: "activity_result", entity_id: resultId })).toHaveLength(1);
+  });
+  // --- T085レビューB-I4（CT-05）: 実績の作成・訂正を途中で失敗させても原本・版・実参加・監査・outboxは残らない ---
+  it("actual_result_create_and_correction_leave_nothing_when_a_statement_fails_midway (T085 CT-05)", async () => {
+    const admin = fx.units.a.people.admin;
+    const member = fx.units.a.people.member;
+    const tables = ["activity_results", "activity_result_revisions", "activity_actual_participants", "activities", ...COMMON_EFFECT_TABLES];
+    const created = (await json(await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "実績の途中失敗（架空）", kind: "訓練", plannedStartsAt: "2026-10-21T01:00:00.000Z", locationText: "架空市堤防",
+      ownerMemberId: admin.memberId!, audienceMemberIds: [member.memberId!],
+    }, idem()))).data! as { id: string };
+    await fx.client(admin).request("PATCH", `/api/v1/activities/${created.id}`, { version: 1, status: "scheduled", reason: "公開" }, idem());
+    const body = { activityVersion: 2, content: "実施（架空）", actualStartsAt: "2026-10-21T01:00:00.000Z", participants: [{ memberId: member.memberId!, actualStatus: "participated" }], attachmentIds: [] };
+    const before = await rowCounts(tables);
+    const failed = await withFailingInsert("activity_actual_participants", () => fx.client(admin).request("POST", `/api/v1/activities/${created.id}/actual-results`, body, idem()));
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    expect(await rowCounts(tables)).toEqual(before);
+    expect((await fx.client(admin).request("POST", `/api/v1/activities/${created.id}/actual-results`, body, idem())).status).toBe(201);
+    // 訂正: 新しい版の実参加の文で失敗 → 版・現在版ポインタ・実参加は変わらない
+    const mid = await rowCounts(tables);
+    const rootBefore = (await fx.rows("activity_results", { activity_id: created.id }))[0]!;
+    const fix = await withFailingInsert("activity_actual_participants", () => fx.client(admin).request("POST", `/api/v1/activities/${created.id}/actual-results/corrections`, {
+      resultVersion: 1, content: "訂正（架空）", actualStartsAt: "2026-10-21T01:00:00.000Z", actualEndsAt: "2026-10-21T03:00:00.000Z",
+      participants: [{ memberId: member.memberId!, actualStatus: "absent" }], attachmentIds: [], reason: "途中失敗の確認",
+    }, idem()));
+    expect(fix.status).toBeGreaterThanOrEqual(500);
+    expect(await rowCounts(tables)).toEqual(mid);
+    const rootAfter = (await fx.rows("activity_results", { activity_id: created.id }))[0]!;
+    expect({ v: rootAfter.version, cur: rootAfter.current_revision_id }).toEqual({ v: rootBefore.version, cur: rootBefore.current_revision_id });
   });
 });

@@ -90,6 +90,19 @@ test("inspection_retry_after_lost_response_registers_once_and_correction_keeps_t
   await expect(facilityHistory.getByRole("listitem")).toHaveCount(2);
   await expect(facilityHistory.getByText("訂正済み")).toBeVisible();
   await expect(facilityHistory.getByText("訂正後の記録")).toBeVisible();
+
+  // --- 3) 異常ありの記録をもう一度訂正（メモだけ直す）しても、異常は二重に起票されない（T085レビューA-I2。docs/11 §3） ---
+  const issuesOf = async () => (await adminApiData<{ id: string }[]>(page.request, "GET", `/api/v1/issues?targetType=facility&targetId=${facilityId}`)).data.data.length;
+  expect(await issuesOf()).toBe(1); // 良好→異常ありの訂正で起点の異常が1件
+  await page.getByRole("link", { name: "点検を訂正する" }).click();
+  await expect(page.getByRole("button", { name: "異常あり" })).toHaveAttribute("aria-pressed", "true"); // 現在の記録（異常あり）から始まる
+  await page.getByRole("button", { name: /写真・メモへ進む/ }).click();
+  await page.getByLabel("メモ・特記事項").fill(`蓋の開閉が重い（追記） ${tag}`);
+  await page.getByRole("button", { name: /確認へ進む/ }).click();
+  await page.getByLabel("訂正の理由（必須）").fill("メモの追記（架空）");
+  await page.getByRole("button", { name: "訂正を保存" }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/facilities/${facilityId}$`), { timeout: 20_000 });
+  expect(await issuesOf()).toBe(1);
 });
 
 test("asset_inspection_records_photo_and_corrects_from_history_without_overwriting", async ({ page }, info) => {
@@ -97,7 +110,7 @@ test("asset_inspection_records_photo_and_corrects_from_history_without_overwriti
   const vehicle = await adminApiData<{ id: string }>(page.request, "POST", "/api/v1/vehicles", { assetCode: `V-${tag}`, name: `架空ポンプ車 ${tag}`, status: "運用" });
   expect(vehicle.status).toBe(201);
   const vehicleId = vehicle.data.data.id;
-  await approvedTemplate(page.request, "vehicle", `車両様式 ${tag}`, "lights", "灯火類");
+  const vehicleTemplate = await approvedTemplate(page.request, "vehicle", `車両様式 ${tag}`, "lights", "灯火類");
 
   // --- 1) 資産の詳細（SCR-14）から点検登録（SCR-23）へ ---
   await page.goto(`/app/assets/vehicle/${vehicleId}`);
@@ -154,5 +167,20 @@ test("asset_inspection_records_photo_and_corrects_from_history_without_overwriti
   await expect(history.getByRole("listitem")).toHaveCount(2);
   await expect(history.getByText("訂正済み")).toBeVisible();
   await expect(history.getByRole("link", { name: "訂正する" })).toHaveCount(1); // 訂正済みの原本には訂正の導線を出さない
+
+  // --- 4) 訂正していない記録は、新しい点検が後から記録されても「訂正済み」と表示しない（T085レビューA-I1） ---
+  const vehicleTemplateVersionId = vehicleTemplate.versions[0]!.id;
+  const me = await adminApiData<{ profile: { memberId: string } }>(page.request, "GET", "/api/v1/me");
+  const later = await adminApiData(page.request, "POST", "/api/v1/asset-inspections", {
+    target: { type: "vehicle", id: vehicleId }, templateVersionId: vehicleTemplateVersionId, inspectedAt: new Date().toISOString(),
+    inspectorMemberId: me.data.data.profile.memberId, result: "ok", checkItems: [{ code: "lights", result: "ok" }], note: `翌月の点検（架空） ${tag}`, createIssue: false, attachmentIds: [],
+  });
+  expect(later.status).toBe(201);
+  await page.reload();
+  await expect(history.getByRole("listitem")).toHaveCount(3);
+  await expect(history.getByText("訂正済み")).toHaveCount(1); // 訂正された原本だけ（訂正後の記録は新しい点検があっても訂正済みではない）
+  await expect(history.getByRole("listitem").filter({ hasText: "訂正後の記録" }).getByText("訂正済み")).toHaveCount(0);
+  await expect(history.getByRole("link", { name: "訂正する" })).toHaveCount(1); // 現在の記録（翌月の点検）だけ
+  await expect(history.getByRole("listitem").filter({ hasText: `翌月の点検（架空） ${tag}` }).getByRole("link", { name: "訂正する" })).toBeVisible();
   void info;
 });

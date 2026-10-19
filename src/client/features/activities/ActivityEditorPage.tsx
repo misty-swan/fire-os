@@ -226,7 +226,7 @@ export function ActivityEditorPage() {
             ))}
           </select>
         </label>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <TextField name="plannedStartsAt" label="開始日時" type="datetime-local" value={startsAt} onChange={(e) => { setTouched(true); setStartsAt(e.target.value); }} />
           <TextField name="plannedEndsAt" label="終了日時（わからなければ空欄）" type="datetime-local" value={endsAt} onChange={(e) => { setTouched(true); setEndsAt(e.target.value); }} />
         </div>

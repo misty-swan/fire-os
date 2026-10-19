@@ -91,7 +91,7 @@ function DashboardBody({ data, notices }: { data: DashboardDto; notices: Announc
   return (
     <>
       {/* 次回予定のダイヤル（prototypeホーム）。押すと同じ条件（これからの予定）の一覧へ＝数値と一覧が一致する導線 */}
-      <div className="grid gap-4 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center">
         {next.count > 0 && next.href ? (
           <Link
             to={next.href}

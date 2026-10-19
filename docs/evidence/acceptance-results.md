@@ -8,9 +8,9 @@
 
 | 項目 | 値 |
 |---|---|
-| 収集日時 | 2026-10-19T11:26:53.564Z |
-| commit | ceea8b545e9787820a941624e825895999b3534e（未コミットのコード変更 32件を含む作業木で実行。内容はcodeHashで固定） |
-| codeHash | 70dceb2c3aa47138fc1b41924a59f37ba84333678b5e582ad02d17578f48d501 |
+| 収集日時 | 2026-10-19T16:58:27.383Z |
+| commit | a855bc3783474f3720af0b343688d876bde6bbf0（未コミットのコード変更 41件を含む作業木で実行。内容はcodeHashで固定） |
+| codeHash | 94f2de04633f76f6f75a7e39099a57acbf2737d59c0d05dcef560633b55d9070 |
 | 設計版 | 08:v0.3 / 2026-10-13 12:v0.3 / 2026-10-15 |
 | 実行環境 | node v26.8.2 / linux-x64 / Playwright 1.64.0 / vitest/4.1.11 linux-x64 node-v26.8.2 / wrangler 4.150.0 |
 | ゲート判定 | **緑**（開発版の範囲） |
@@ -19,14 +19,10 @@
 
 | スイート | 結果 | passed | failed | skipped | 開始 | 終了 | コマンド |
 |---|---|---|---|---|---|---|---|
-| vitest | passed | 306 | 0 | 0 | 2026-10-19T10:56:42.222Z | 2026-10-19T10:57:30.354Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-19T10-56-41-664Z/vitest.json` |
-| load | passed | 3 | 0 | 0 | 2026-10-19T10:57:30.354Z | 2026-10-19T10:58:01.461Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-19T10-56-41-664Z/load.json` |
-| e2e | passed | 117 | 0 | 3 | 2026-10-19T11:12:15.072Z | 2026-10-19T11:26:53.533Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
-| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-19T11:26:53.533Z | 2026-10-19T11:26:53.533Z | `npm run test:live` |
-
-差し替えた過去の実行（同じコードでスイート全体を再実行した。フレーキーの記録として残す）:
-
-- e2e 2026-10-19T10:58:01.461Z: failed（passed 116 / failed 1 / skipped 3）
+| vitest | passed | 318 | 0 | 0 | 2026-10-19T16:43:51.551Z | 2026-10-19T16:44:37.273Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-19T16-43-51-053Z/vitest.json` |
+| load | passed | 3 | 0 | 0 | 2026-10-19T16:44:37.273Z | 2026-10-19T16:45:07.939Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-19T16-43-51-053Z/load.json` |
+| e2e | passed | 119 | 0 | 3 | 2026-10-19T16:45:07.939Z | 2026-10-19T16:58:27.359Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
+| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-19T16:58:27.359Z | 2026-10-19T16:58:27.359Z | `npm run test:live` |
 
 skipされた試験 3件（いずれも証拠に使わない。manifest.knownSkips の分類）:
 
@@ -36,7 +32,7 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 
 ## 件数（正本から機械抽出）
 
-要件54 / AT54 / CT17（AT×CTの組220、うち notApplicable 1） / 継続TC18 / API102 / SCR28 / 横断journey4 / 実外部の残手順29。参照している実テスト 255件。
+要件54 / AT54 / CT17（AT×CTの組220、うち notApplicable 0） / 継続TC18 / API102 / SCR28 / 横断journey4 / 実外部の残手順29。参照している実テスト 268件。
 
 ## 受入（AT）
 
@@ -54,7 +50,7 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 | AT-ACT-05 | ACT-05 | 合格（局所） | 3 | 5 | X-V06-DELIVERY（実チャネル（Web Push/email。D13）での到達・不明・再送・T088） |
 | AT-ACT-06 | ACT-06 | 合格（局所） | 5 | 4 | X-V07-RENDER（PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render）・T086） |
 | AT-MAP-01 | MAP-01 | 合格（局所） | 3 | 3 | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
-| AT-MAP-02 | MAP-02 | 合格（局所） | 2 | 2 | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
+| AT-MAP-02 | MAP-02 | 合格（局所） | 3 | 2 | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
 | AT-MAP-03 | MAP-03 | 合格（局所） | 2 | 5 | - |
 | AT-MAP-04 | MAP-04 | 合格（局所） | 3 | 4 | X-V07-PERF（実staging・実D1 rows_read・実回線での通常API p95（D18承認材料）・T086） |
 | AT-MAP-05 | MAP-05 | 合格（局所） | 3 | 4 | - |
@@ -77,7 +73,7 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 | AT-COM-02 | COM-02 | 合格（局所） | 5 | 5 | X-V06-DELIVERY（実チャネル（Web Push/email。D13）での到達・不明・再送・T088）<br>X-OUT-3（実providerの到達不明（D13の了承後）・T088） |
 | AT-DOC-01 | DOC-01 | 合格（局所） | 3 | 6 | X-V02（実R2での検査・EXIF除去・ready不変（test:live file-inspection）・T086）<br>X-V07-RESTORE（実D1/R2での復元演習（別担当による実行を含む）・T087/T088） |
 | AT-DOC-02 | DOC-02 | 合格（局所） | 4 | 6 | X-V07-RENDER（PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render）・T086）<br>X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）・T086/T088） |
-| AT-DASH-01 | DASH-01 | 合格（局所） | 4 | 4／CT-05 | - |
+| AT-DASH-01 | DASH-01 | 合格（局所） | 4 | 4 | - |
 | AT-DASH-02 | DASH-02 | 合格（局所） | 3 | 3 | - |
 | AT-AI-01 | AI-01 | 合格（局所） | 4 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）・T086/T088） |
 | AT-AI-02 | AI-02 | 合格（局所） | 2 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）・T086/T088） |
@@ -85,7 +81,7 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 | AT-AI-04 | AI-04 | 合格（局所） | 5 | 7 | - |
 | AT-AI-05 | AI-05 | 合格（局所） | 3 | 2 | X-AIEVAL（実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）・T086/T088） |
 | AT-AI-06 | AI-06 | 合格（局所） | 6 | 5 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価・T086/T088） |
-| AT-AI-07 | AI-07 | 合格（局所） | 3 | 6 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価・T086/T088） |
+| AT-AI-07 | AI-07 | 合格（局所） | 4 | 6 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価・T086/T088） |
 | AT-NFR-01 | NFR-01 | 合格（局所） | 6 | 3 | X-DEV-1（iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線・T086）<br>X-DEV-2（VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認・T086）<br>X-DEV-3（axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施）・T086） |
 | AT-NFR-02 | NFR-02 | 合格（局所） | 3 | 1 | X-DEV-4（代表利用者（5名程度）による説明なし再訪の計測（D18の承認材料）・T087/T088） |
 | AT-NFR-03 | NFR-03 | 合格（局所） | 3 | 2 | X-V07-PERF（実staging・実D1 rows_read・実回線での通常API p95（D18承認材料）・T086） |
@@ -99,26 +95,26 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 
 ## 継続シナリオ（TC-01〜18）
 
-| TC | 対応要件 | 開発版の判定 | 実テスト |
-|---|---|---|---|
-| TC-01 | AUTH-01 | 合格（局所） | tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions<br>tests/authorization.test.ts::認可 (T008) > unlinked_identity_and_forged_test_header_never_get_business_access<br>tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login |
-| TC-02 | AUTH-02 | 合格（局所） | tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > role_replacement_bumps_authz_version_and_rejects_unsafe_changes<br>tests/members.test.ts::名簿 (T011) > who_may_change_what_is_enforced_by_the_server |
-| TC-03 | ACT-01,ACT-02 | 合格（局所） | tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer<br>tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels |
-| TC-04 | ACT-03 | 合格（局所） | tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance<br>tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels |
-| TC-05 | MAP-01,MAP-02 | 合格（局所） | tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail<br>tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls |
-| TC-06 | MAP-03 | 合格（局所） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation<br>tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking |
-| TC-07 | MAP-03 | 合格（局所） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation<br>tests/gis-query.test.ts::施設の全件取得 (T020) > invalid_list_conditions_are_rejected_without_partial_results (T085) |
-| TC-08 | MAP-04 | 合格（局所） | tests/gis-query.test.ts::施設の全件取得 (T020) > filters_by_latest_inspection_result_and_open_issues<br>tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport |
-| TC-09 | MAP-05,MAP-06 | 合格（局所） | tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_links_ready_attachments_and_rejects_uninspected_ones<br>tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)<br>tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission |
-| TC-10 | MAP-07 | 合格（局所） | tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified<br>tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation |
-| TC-11 | AST-01,AST-02 | 合格（局所） | tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity<br>tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target<br>tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting |
-| TC-12 | DSP-01,DSP-02 | 合格（局所） | tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches<br>tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time<br>tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment |
-| TC-13 | DOC-01 | 合格（局所） | tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads<br>tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload |
-| TC-14 | NFR-07 | 合格（局所） | tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered<br>tests/e2e/audit.spec.ts::audit_panel_shows_who_changed_what_without_bodies |
-| TC-15 | NFR-05 | 合格（局所） | tests/mutation.test.ts::executeMutation (T004) > same_key_concurrent_requests_apply_the_effect_once<br>tests/client-shell.test.tsx::client shell (T005) > double_tap_while_saving_sends_one_request<br>tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original |
-| TC-16 | NFR-05 | 合格（局所） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)<br>tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown |
-| TC-17 | NFR-04 | 合格（局所） | tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success<br>tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls |
-| TC-18 | RG-09 | 合格（局所） | tests/deploy-config.test.ts::deploy-config (T078) > demo_binding_or_incompatible_schema_blocks_deploy<br>tests/schema.test.ts::core schema (T003) > fixture_has_two_units_four_roles_suspended_and_scopes_with_fictional_names |
+| TC | 対応要件 | 開発版の判定 | 実テスト | 未実施（実外部・実端末・人） |
+|---|---|---|---|---|
+| TC-01 | AUTH-01 | 合格（局所） | tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions<br>tests/authorization.test.ts::認可 (T008) > unlinked_identity_and_forged_test_header_never_get_business_access<br>tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login | - |
+| TC-02 | AUTH-02 | 合格（局所） | tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > role_replacement_bumps_authz_version_and_rejects_unsafe_changes<br>tests/members.test.ts::名簿 (T011) > who_may_change_what_is_enforced_by_the_server | - |
+| TC-03 | ACT-01,ACT-02 | 合格（局所） | tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer<br>tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels | - |
+| TC-04 | ACT-03 | 合格（局所） | tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance<br>tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels | - |
+| TC-05 | MAP-01,MAP-02 | 合格（局所） | tests/e2e/map.spec.ts::three_facility_types_are_identified_by_text_not_color_only<br>tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail<br>tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
+| TC-06 | MAP-03 | 合格（局所） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation<br>tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking | - |
+| TC-07 | MAP-03 | 合格（局所） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation<br>tests/gis-query.test.ts::施設の全件取得 (T020) > invalid_list_conditions_are_rejected_without_partial_results (T085) | - |
+| TC-08 | MAP-04 | 合格（局所） | tests/gis-query.test.ts::施設の全件取得 (T020) > filters_by_latest_inspection_result_and_open_issues<br>tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport | - |
+| TC-09 | MAP-05,MAP-06 | 合格（局所） | tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_links_ready_attachments_and_rejects_uninspected_ones<br>tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)<br>tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission | - |
+| TC-10 | MAP-07 | 合格（局所） | tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified<br>tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation | - |
+| TC-11 | AST-01,AST-02 | 合格（局所） | tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity<br>tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target<br>tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting | - |
+| TC-12 | DSP-01,DSP-02 | 合格（局所） | tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches<br>tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time<br>tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment | - |
+| TC-13 | DOC-01 | 合格（局所） | tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads<br>tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload | - |
+| TC-14 | NFR-07 | 合格（局所） | tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered<br>tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > second_approval_supersedes_previous_approved_version<br>tests/e2e/audit.spec.ts::audit_panel_shows_who_changed_what_without_bodies | - |
+| TC-15 | NFR-05 | 合格（局所） | tests/mutation.test.ts::executeMutation (T004) > same_key_concurrent_requests_apply_the_effect_once<br>tests/client-shell.test.tsx::client shell (T005) > double_tap_while_saving_sends_one_request<br>tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original | - |
+| TC-16 | NFR-05 | 合格（局所） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)<br>tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown | - |
+| TC-17 | NFR-04 | 合格（局所） | tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success<br>tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls | - |
+| TC-18 | RG-09 | 合格（局所） | tests/deploy-config.test.ts::deploy-config (T078) > demo_binding_or_incompatible_schema_blocks_deploy<br>tests/schema.test.ts::core schema (T003) > fixture_has_two_units_four_roles_suspended_and_scopes_with_fictional_names | X-DEMO（公開デモ（分離した実環境）の構築と本番データとの完全分離の実地確認（RG-09）・T086） |
 
 ## 横断journey
 
@@ -131,7 +127,7 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 
 ## notApplicable（docs/08 §2: 読取専用・純表示に不要なmutation試験を実施したことにしない）
 
-- AT-DASH-01×CT-05: docs/08 §2「read-onlyや純粋な表示要件に不要なmutation試験を実施したことにしない」: ホーム（API-28）はGETだけの集計表示で、途中失敗させる書込が無い。数値の源（予定・出欠・異常・点検期限・タスク・通知）の原子性は各要件のCT-05（AT-ACT-01/02・AT-MAP-06・AT-AST-03/04・AT-AI-04）で検証する
+なし
 
 ## 実外部・実端末・人の残手順（未実施。合格に数えない）
 
@@ -174,18 +170,24 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 | T085-D1 | high | resolved | 施設の点検履歴（API-44）の続き取得が新しい順なのに cursor条件が > で、2頁目以降が欠落していた | T085のAPI-44網羅試験（tests/inspections-issues.test.ts T085） | 履歴の欠落（AT-MAP-05/06「過去版を開く」）。limit=1の全cursor完走で4件中1件しか返らない赤を確認→ < へ修正し緑 | T029 |
 | T085-D2 | high | resolved | 点検保存の応答が失われた後、画面の案内どおり送り直すと二重登録になっていた（実施日時を送信ごとに作り直し、送信鍵が変わる） | T085のe2e（tests/e2e/asset-inspection.spec.ts） | NFR-05/TC-15の二重登録。修正前の実行で同一点検2件（inspectedAt差130ms）の赤を確認→最初の送信で固定して緑 | T033 |
 | T085-D3 | medium | resolved | SCR-23（資産点検）と点検訂正の画面が未実装、施設詳細の点検結果が現在版でなく最新日時の行 | docs/16 T033状態欄・ph2-review 第3回「点検結果表示が現在版でない」 | T033の残作業（画面の欠落）。T085でSCR-23・訂正モード・API-51点検履歴・API-44 isCurrentを接続しe2eで確認 | T033/T030 |
-| FLAKE-1 | medium | open | fill値の消失で文書作成のPOSTが送られず30秒で落ちる（稀。引き金未特定） | docs/evidence/ph8.md「既知フレーキー」documents.spec desktop「題名消失」 | 試験の不安定さ。製品の再レンダリング競合の可能性は残る（データ破壊なし・単独実行は緑）。ph8.md T084最終検証で3回中1回 | T085b |
+| FLAKE-1 | medium | open | fill値の消失で文書作成のPOSTが送られず30秒で落ちる（稀。引き金未特定） | docs/evidence/ph8.md「既知フレーキー」documents.spec desktop「題名消失」 | 試験の不安定さ。R8の調査（ph8.md）: 検証エラー「題名を入力してください」が残る＝fillの値が背景の再レンダリングで消えて作成POSTが出ない（データ破壊なし・単独実行は緑・引き金は未特定）。T085のcollect:evidenceではe2eのフル走行3回中2回発火（T084は3回中1回） | T085b |
 | FLAKE-2 | low | open | reports.spec desktop／facility-location.spec desktop／notifications.spec phone の1回off | docs/evidence/ph8.md「既知フレーキー」継続観察 | フル走行15回で各1回。単独実行は常に緑 | T085b |
 | FLAKE-3 | low | resolved | 完了確定済みの添付を背景のQueue consumerがreadyへ進め、「未検査は422」の断言が201で落ちた（試験側の競合） | T085の全スイート実行（tests/inspections-issues.test.ts manual_issue_links_ready_attachments_and_rejects_uninspected_ones） | collect-evidence 1回目でvitest 1件failed。完了確定前の添付（makeNotYetCompleted）へ変更し同型の2箇所も修正 | T029/T032（試験） |
+| T031-I3 | high | resolved | API-46の権限判定がクライアントの送るbody.inspectorMemberIdで行われ、一般団員が他人の点検を訂正し実施者を差し替えられた（T031の既存欠陥。T085の訂正画面で到達可能になった） | T085レビューA-I3（src/server/routes/inspection-corrections.ts） | 権限欠陥（Review Focus 1）。修正前は他人の点検の訂正が201（赤）→元の原本の実施者と新しい実施者の両方で判定して403（緑） | T031 |
+| T085-D8 | medium | resolved | 点検の記録の「訂正済み」を系列の現在版でないこと（isCurrent=false）で判定しており、新しい点検があるだけの古い記録まで訂正済みと表示した | T085レビューA-I1 | 表示の誤り（記録の意味を取り違える）。supersededByIdで判定し、2件以上の資産でe2eの赤（訂正済み2件）→緑 | T033 |
+| T085-D9 | medium | resolved | 異常ありの点検を訂正すると、異常が二重に起票された（訂正モードでcreateIssueを常に有効にしていた） | T085レビューA-I2 | docs/11 §3（既存異常と二重にしない）違反。良好→異常ありの訂正のときだけ起票に変更し、e2eの赤（異常2件）→緑 | T033 |
+| T085-D6 | low | resolved | 未作成の行を作るPUT（出欠の初回回答など）の途中の文が失敗すると、内部障害が「対象が見つかりません」の404に誤分類された | T085レビューB-I3の読取境界試験（tests/dashboard.test.ts） | 効果は0（全取消）だが理由の誤表示。前提条件を満たしているときは内部障害にする（前提を満たさない場合の404は従来どおり＝ph3-review A5の方針） | T004/T036 |
+| T085-D7 | medium | resolved | R2へ書いた後にD1の台帳が失敗した転送の実体（staging孤児）を回収する処理が無かった | T085レビューB-I4（AT-DOC-01×CT-05） | docs/07 §3.2「孤児は回収対象」が未実装（ストレージの残留）。sweepOrphanStagingObjectsを追加し試験で回収を確認 | T017 |
+| T085-D10 | medium | resolved | 管理画面の「団員を選ぶ」ほか、列をlg:だけで定義したgrid 9箇所がスマホで単一auto列になり、長い団員名で画面より広がった（725px） | T085レビュー第1ラウンドのcollect:evidence（audit/member-admin/dependency-outagesのスマホ試験） | D4と同型の狭幅欠陥。長い名前の団員がいると管理画面が横にはみ出し、操作が隠れた。grid-cols-1で同じデータで745→360を実測し、accessibility.specに360pxの管理画面の確認を追加（旧gridで747＝赤） | T013（ほかT039/T042/T044/T047の同型箇所） |
 | T085-D4 | medium | resolved | 予定・出動の検索カードが単一のauto列のgridで、参加者selectの最長の団員名より狭くなれず200px幅で横スクロールが出た（データ量で再現） | T085の全スイート実行（accessibility.spec desktop inputs_stay_inside_the_search_card_at_narrow_widths） | フル走行の共有D1で団員が増えると発火（scrollWidth 269/202）。grid-cols-1＋min-w-0で同じデータで200に収まることを実測 | T039/T044（T083の狭幅修正の系） |
 | T085-D5 | medium | resolved | AIアシスタントの「記録を添える」チップが確認待ちの異常を古い順に5件だけ出し、新しい異常を添えられなかった | T085の全スイート実行（assistant.spec desktop） | 確認待ちが5件を超えると再現（実行時14件）。全件を読み新しい順に5件へ修正し、同じデータでチップが出ることを確認 | T070 |
 | PH1-A1 | medium | open | 管理者がAPI-03で他人の許可列に初期値を書ける／担当付与で連絡先を読む迂回 | docs/evidence/ph1-review.md A（中・方針で残す） | ph1-review表の重大度「中」。設計（docs/10）。D03承認待ち・担当付与は監査とMFAで抑止 | T088（D03） |
 | PH1-A2 | medium | open | 認証イベントが監査に残らない／アカウント単位の回数制限が無い | docs/evidence/ph1-review.md A（低〜中・方針で残す） | ph1-review表の重大度「低〜中」。D18計測前の案 | T086 |
-| PH1-B1 | medium | open | 実装先行タスクの赤の証跡・変異の再現手順が無い | docs/evidence/ph1-review.md B（中〜低・方針で残す） | ph1-review表の重大度「中〜低」。scripts/mutate*.shを追加済みで記録のまま | - |
-| PH0-BF07 | medium | open | 試験名「効果が二重にならない」とhandler副作用の不一致（確定の一回性のみ保証） | docs/evidence/ph0-review.md B-F07（中・方針で残す） | ph0-review表の重大度「中」。外部効果はhandlerの責務と明記 | - |
-| PH2-B12 | medium | open | PH2のコミット境界が1タスク1コミットに従わない | docs/evidence/ph2-review.md B12（中・方針で残す） | ph2-review表の重大度「中」。履歴の書換えはしない（docs/16 §1に記録） | - |
+| PH1-B1 | medium | open | 実装先行タスクの赤の証跡・変異の再現手順が無い | docs/evidence/ph1-review.md B（中〜低・方針で残す） | ph1-review表の重大度「中〜低」。scripts/mutate*.shを追加済みで記録のまま | T088（正式判定前に再確認） |
+| PH0-BF07 | medium | open | 試験名「効果が二重にならない」とhandler副作用の不一致（確定の一回性のみ保証） | docs/evidence/ph0-review.md B-F07（中・方針で残す） | ph0-review表の重大度「中」。外部効果はhandlerの責務と明記 | T088（正式判定前に再確認） |
+| PH2-B12 | medium | open | PH2のコミット境界が1タスク1コミットに従わない | docs/evidence/ph2-review.md B12（中・方針で残す） | ph2-review表の重大度「中」。履歴の書換えはしない（docs/16 §1に記録） | T088（正式判定前に再確認。製品欠陥ではなく工程記録） |
 | PH2-C15 | medium | open | 地図の種別チップのトグルで全件再取得し一覧が点滅する | docs/evidence/ph2-review.md C15（中・方針で残す） | ph2-review表の重大度「中」。件数を最新にする意図（docs/03 SCR-03） | T086 |
-| PH4-B2 | medium | open | 承認待ち通知draftが送信者の一覧に現れない（送信者一覧APIが契約に無い） | docs/evidence/ph4-review.md B2（中・方針で残す） | ph4-review表の重大度「中」。未送信・対象者非表示に害が限定 | 未割当（画面改善） |
+| PH4-B2 | medium | open | 承認待ち通知draftが送信者の一覧に現れない（送信者一覧APIが契約に無い） | docs/evidence/ph4-review.md B2（中・方針で残す） | ph4-review表の重大度「中」。未送信・対象者非表示に害が限定 | T086（画面改善。T088で再確認） |
 | PH4-B3 | medium | open | 点検源のAI候補は原文表示・版比較・再生成がUIから不可（点検の単一件GET契約が無い） | docs/evidence/ph4-review.md B3（中・方針で残す） | ph4-review表の重大度「中」。stale検知と承認409は機能中。T085で点検履歴（API-44 isCurrent・API-51）は接続したが単一件GETは未提供 | T033/T055 |
 | PH0-AF7 | low | open | タイムアウト後もhandlerが動き外部効果が二重になり得る | docs/evidence/ph0-review.md A-F7 | ph0-review表「低・方針で残す」 | - |
 | PH0-L | low | open | allowedStates二重管理ほか軽微5件 | docs/evidence/ph0-review.md L-2/L-3/L-5/L-7/L-8 | ph0-review表「方針で残す」（低） | - |

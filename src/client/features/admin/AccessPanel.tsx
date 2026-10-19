@@ -400,7 +400,7 @@ export function AccessPanel() {
         </Banner>
       )}
       {state.kind === "ready" && (
-        <div className="grid gap-5 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
           <Card className="flex flex-col gap-2 p-3.5">
             <h3 className="px-1 pb-1 text-[13px] font-bold text-ink-sub">団員を選ぶ</h3>
             <ul aria-label="管理する団員" className="fo-scroll flex max-h-[420px] flex-col gap-1 overflow-y-auto lg:max-h-[640px]">

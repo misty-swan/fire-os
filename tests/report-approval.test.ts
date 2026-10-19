@@ -441,5 +441,15 @@ describe("報告書の申請・承認・差戻し・承認版出力 (T058)", () 
     expect((await fx.rows("content_version_events", { report_version_id: v1, action: "superseded" }))).toHaveLength(1);
     // 承認済pointerは新承認版を指すため、出力（API-61）は引き続き可能
     expect((await fx.client(admin).request("GET", `/api/v1/reports/${report.report.id}/content?format=csv`)).status).toBe(200);
+    // TC-14（T085レビューB-m3）: 承認は監査に「誰が・いつ・どの対象を・どの版を」承認したかが一回ずつ残り、本文は複製しない
+    const approvals = (await env.DB.prepare(
+      "SELECT actor_user_id, entity_type, entity_id, occurred_at, metadata_json FROM audit_logs WHERE action = 'report.approve' AND entity_id = ? ORDER BY occurred_at",
+    ).bind(report.report.id).all<{ actor_user_id: string; entity_type: string; entity_id: string; occurred_at: string; metadata_json: string }>()).results;
+    expect(approvals).toHaveLength(2); // 1回目・2回目の承認がそれぞれ一回
+    for (const row of approvals) {
+      expect(row).toMatchObject({ actor_user_id: admin.userId, entity_type: "report", entity_id: report.report.id });
+      expect(row.occurred_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(row.metadata_json).not.toContain("訂正"); // 本文・理由の本文を監査に複製しない
+    }
   });
 });

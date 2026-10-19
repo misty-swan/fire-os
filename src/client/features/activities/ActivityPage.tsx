@@ -282,7 +282,7 @@ export function ActivityPage() {
       </section>
 
       {/* 参加予定（出欠）と実参加（実績）は別の枠で必ず並べて示す（docs/11:34 固定語彙） */}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card className="flex flex-col gap-2">
           <h3 className="text-[14px] font-bold">参加予定</h3>
           {canManage ? (
@@ -782,7 +782,7 @@ function RevisionView({
       </div>
       {revision.correctionReason && <p className="text-[12px] leading-[1.6] text-ink-sub">訂正理由：{revision.correctionReason}</p>}
       <p className="whitespace-pre-wrap text-[14px] font-medium leading-[1.7]">{revision.content}</p>
-      <div className="grid gap-px overflow-hidden rounded-[12px] bg-white/[.07] lg:grid-cols-2" aria-label="実施時間">
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[12px] bg-white/[.07] lg:grid-cols-2" aria-label="実施時間">
         <div className="bg-[#0d1626] p-3">
           <span className="text-[11px] text-ink-muted">実施（開始）</span>
           <p className="font-mono text-[14px] font-semibold">{revision.actualStartsAt ? fmtInstant(revision.actualStartsAt) : "未記載"}</p>

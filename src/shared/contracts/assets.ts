@@ -47,7 +47,7 @@ export const AssetInspectionDue = obj({
 });
 /**
  * 資産の点検履歴の1行（T085でT030の残作業「点検履歴」を接続。docs/05 API-51）。
- * 訂正前の原本も残る（追記型）。isCurrentは系列の現在版（訂正できるのは現在版だけ＝API-46の版ガード）。
+ * 訂正前の原本も残る（追記型）。isCurrentは系列の現在版（訂正できるのは現在版だけ＝API-46の版ガード）。訂正済みはsupersededById。
  */
 export const AssetInspectionRow = obj({
   id: Id, seriesId: Id, seriesVersion: Version, templateVersionId: Id, inspectorMemberId: Id,
@@ -56,7 +56,11 @@ export const AssetInspectionRow = obj({
     code: z.string(), result: z.string(),
     value: z.union([z.string(), z.number(), z.boolean()]).nullable(), note: z.string().nullable(),
   })).max(LIMITS.arrayMax),
-  supersedesId: Id.nullable(), correctionReason: z.string().nullable(), isCurrent: z.boolean(),
+  supersedesId: Id.nullable(), correctionReason: z.string().nullable(),
+  /** 系列（対象ごとに1本）の現在版＝その対象の最新の有効な点検か。falseは「より新しい記録がある」で、訂正済みの意味ではない */
+  isCurrent: z.boolean(),
+  /** この原本を訂正した記録のID（訂正済みならその記録。未訂正はnull） */
+  supersededById: Id.nullable(),
 });
 export type AssetInspectionRowDto = z.infer<typeof AssetInspectionRow>;
 
@@ -116,6 +120,9 @@ export const assetsApis = {
       query: listQuery({
         targetType: z.enum(["facility", "vehicle", "equipment"]).optional(), targetId: Id.optional(),
         status: z.enum(issueStates).optional(), assigneeMemberId: Id.optional(),
+        // 並び（T085レビューA-I4/D5）: oldest=作成の古い順（既定・点検管理の一覧）、newest=新しい順（最近の異常を先に出す画面用）。
+        // cursorは発行時の並びに束縛する（違う並びで続きを読むと400）
+        order: z.enum(["oldest", "newest"]).default("oldest"),
       }),
     }),
     response: Page(provisionalDto()), provisional: true,
