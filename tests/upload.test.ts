@@ -3,7 +3,7 @@ import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
 import { withFailingInsert } from "./helpers/fail-insert";
-import { sweepOrphanStagingObjects } from "../src/server/jobs/handlers/attachment-cleanup";
+import { STAGING_SWEEP_CURSOR_KEY, STAGING_SWEEP_LIMITS, sweepOrphanStagingObjects } from "../src/server/jobs/handlers/attachment-cleanup";
 
 let fx: TestFixture;
 beforeAll(async () => {
@@ -314,4 +314,38 @@ describe("添付の予約とアップロード (T015)", () => {
     expect(await env.FILES.head(orphanKeys[0]!)).toBeNull();
     expect(await env.FILES.head(okKeys[0]!)).not.toBeNull();
   });
+  // --- T085レビューN1: 台帳のある（消さない）staging実体が先頭に1,000件を超えて並んでいても、続き位置（cursor）を保存して巡回し、
+  //     その後ろの孤児に届く（旧実装は毎回先頭から最大1,000件だけ見るため、永遠に届かなかった）。台帳のある実体は残る ---
+  it("orphan_sweep_resumes_from_its_cursor_and_reaches_orphans_beyond_the_first_thousand_keys (T085 N1)", async () => {
+    const admin = fx.units.a.people.admin;
+    const unitId = fx.units.a.id;
+    const okIntent = { intent: (await makeDraftAndIntent(admin, "facility")).intent! };
+    const attId = okIntent.intent.id;
+    // 台帳のある実体を1,010件（同じ添付の転送試行として記録。並びは孤児より前）
+    const now = new Date().toISOString();
+    const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const refKeys = Array.from({ length: 1010 }, (_, i) => `staging/${unitId}/${attId}/ref-${String(i).padStart(4, "0")}`);
+    for (let i = 0; i < refKeys.length; i += 50) {
+      await env.DB.batch(refKeys.slice(i, i + 50).map((k) => env.DB.prepare(
+        "INSERT INTO upload_attempts (id, unit_id, attachment_id, staging_key, byte_size, sha256, status, expires_at, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, ?, 1, ?, 'uploaded', ?, ?, ?, ?, 'human')",
+      ).bind(crypto.randomUUID(), unitId, attId, k, "0".repeat(64), expires, now, now, admin.userId)));
+    }
+    for (const k of refKeys) await env.FILES.put(k, "x");
+    const lastOrphan = "staging/zzzz-last-orphan/x"; // 一覧の並びで最後（台帳のある1,010件より後ろ）
+    await env.FILES.put(lastOrphan, "x");
+    await env.FILES.delete(STAGING_SWEEP_CURSOR_KEY);
+    const later = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const perRun = STAGING_SWEEP_LIMITS.pagesPerRun * STAGING_SWEEP_LIMITS.pageSize;
+    // 1回の巡回は見る量に上限がある。届かない間は続き位置が保存される
+    expect(await sweepOrphanStagingObjects(env, later)).toBe(0);
+    expect(await env.FILES.head(lastOrphan)).not.toBeNull();
+    expect(await env.FILES.get(STAGING_SWEEP_CURSOR_KEY)).not.toBeNull();
+    // 続きから巡回を重ねると、最後の孤児まで届く（1,011件÷1回perRun件＝最大3回）
+    let runs = 1;
+    for (; runs < 6 && (await env.FILES.head(lastOrphan)); runs++) await sweepOrphanStagingObjects(env, later);
+    expect(await env.FILES.head(lastOrphan)).toBeNull();
+    expect(runs).toBeLessThanOrEqual(Math.ceil((refKeys.length + 1) / perRun) + 1);
+    // 台帳のある実体は1件も消えない
+    for (const k of [refKeys[0]!, refKeys[999]!, refKeys[1009]!]) expect(await env.FILES.head(k)).not.toBeNull();
+  }, 180_000);
 });

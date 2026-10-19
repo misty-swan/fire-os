@@ -198,3 +198,22 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 - 実Cloudflare/R2/Queues/AI/Maps: V01（認証）・V02（実R2）・V04-jev/llm/retrieval・AI評価の実モデル・V05（実Google Maps）・V06（実配送・実30端末）・V07（性能・復元・帳票の実表示）・費用の実測照合・公開デモの実環境（X-DEMO）。担当T086/T087/T088。
 - 実端末・人: ops/device-test-matrix.md §2（iOS/Android/PCの実機・実スクリーンリーダー・PWA install・代表利用者の再訪計測）、V07-outage「未実施」1〜10（staging演習・実キー停止・実provider・実在の正副担当・別担当の再現・紙/電話の実地演習ほか）。担当T086/T088。
 - `npm run test:live`（Secret未設定）。
+
+### T085 レビュー第2ラウンドの修正（2026-10-20）
+
+再レビュー（b4f4271）の Important 3・Minor 5 を修正（裁定R17〜R19）:
+
+- **訂正での異常の二重起票をサーバーでも防ぐ（R17）**: 訂正元の系譜（訂正元とその前の原本）に異常ありの結果・明細か、そこから起票された異常があるとき、`createIssue=true` を422（createIssue/issue_already_raised）で拒否。API-46の直接呼出し・同期API-81も同じ組立て関数。修正前201（赤）→422。
+- **休団・退団の元実施者のままの訂正（R18）**: 元の実施者を保つ訂正だけ通す（訂正した人は監査に記録）。修正前422（赤）→201。
+- **staging孤児の回収の巡回（N1）**: 続き位置をR2に保存して巡回（最後で先頭へ・失効cursorは先頭から）、1回5頁×100件、15分ごと。台帳のある1,010件の後ろの孤児が回収され、台帳のある実体は残ることを試験（続き位置を読まない変異で失敗）。
+- 画面: 確認画面の「保存すると異常の報告が作成されます」を実際の起票判定に従わせ、サーバーの拒否理由には専用の文言。施設の点検の記録の「さらに古い記録を表示」の失敗表示。
+- ゲート: collect-evidenceの未コミットファイル名の先頭1文字が欠けていた（出力のtrim）→ `git status --porcelain -z` の解析関数と単体確認。
+- 記録: 欠陥D6/D7/D10を所有タスク（T004/T036・T017・T039/T042/T047）の行に追記、T030/T033の旧文を「当時」と明示。
+- **e2eのポート（R19）**: 利用者が別プロジェクトを8787番で並行して動かすため、e2eの待受を `scripts/e2e-port.ts`（既定8797・`FIREOS_E2E_PORT`。inspectorは9239固定）へ移した（別コミット f4288f7。demoは8787のまま）。第2ラウンドの最初の収集はe2eの直前で8787使用中のため止まっていた。
+
+| 確認 | 結果 |
+|---|---|
+| typecheck／check:contracts／check:coverage／build | 成功／102一致／成功（参照271・notApplicable 0）／成功 |
+| `npx vitest --run` | 67ファイル321件 passed |
+| `npm run collect:evidence`（ポート8797） | vitest 321・load 3・**e2e 119 passed／3 skipped／0 failed（15.4分）**・live未実施 |
+| ゲート | `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` 1 passed（受入spec全体75 passed） |

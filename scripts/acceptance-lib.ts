@@ -549,6 +549,27 @@ export function git(args: string[]): string {
   return execFileSync("git", args, { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).trim();
 }
 
+/**
+ * `git status --porcelain -z` の出力からパスを取り出す（"XY path\0"。名前変更は "R  new\0old\0"）。
+ * 行頭の状態欄（先頭が空白のことがある）を壊さないよう、出力をtrimしない（T085レビュー: trimで先頭1文字が欠けていた）
+ */
+export function parsePorcelainZ(out: string): string[] {
+  const parts = out.split("\0");
+  const paths: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i]!;
+    if (entry.length < 4) continue;
+    paths.push(entry.slice(3));
+    if (entry[0] === "R" || entry[0] === "C") i++; // 名前変更・複写は元のパスが続く
+  }
+  return paths;
+}
+
+export function dirtyCodeFilesNow(): string[] {
+  const out = execFileSync("git", ["status", "--porcelain", "-z", "--", ...CODE_PATHS], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return parsePorcelainZ(out);
+}
+
 export function codeFiles(): string[] {
   // -z: 非ASCIIのパス（docs/03_…）を引用符・8進エスケープなしで受け取る（既定の出力だと存在しないパスに化けて黙って落ちる）
   const out = execFileSync("git", ["ls-files", "-z", "-co", "--exclude-standard", "--", ...CODE_PATHS], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });

@@ -22,6 +22,7 @@ import {
   ROOT,
   checkCoverage,
   computeCodeHash,
+  dirtyCodeFilesNow,
   entryKey,
   evaluateGate,
   extractDocIds,
@@ -241,7 +242,7 @@ export async function collectEvidence(input: EvidenceInput): Promise<EvidenceInd
   const keptRuns = base ? base.suites.filter((s) => !replaced.has(s.suite as never) && s.suite !== "live") : [];
   const keptEntries = base ? base.entries.filter((e) => !replaced.has(e.kind)) : [];
   const discarded = [...(base?.discardedRuns ?? []), ...(base ? base.suites.filter((s) => replaced.has(s.suite as never)) : [])];
-  const dirty = git(["-c", "core.quotepath=off", "status", "--porcelain", "--", ...CODE_PATHS]).split("\n").filter(Boolean).map((l) => l.slice(3));
+  const dirty = dirtyCodeFilesNow();
   const ids = extractDocIds();
   const index: EvidenceIndex = {
     schema: 1,

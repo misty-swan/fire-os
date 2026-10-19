@@ -47,6 +47,7 @@ export function FacilityPage() {
   const [history, setHistory] = useState<InspectionHistoryRow[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | undefined>(undefined);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
   // 位置確認の結果。409(競合)・403(権限)・404(所在)・結果不明(通信断/5xx)を同じ「失敗」にしない（docs/03 §1.1）
   const [reviewState, setReviewState] = useState<"idle" | "busy" | "conflict" | "forbidden" | "missing" | "unknown">("idle");
 
@@ -255,10 +256,14 @@ export function FacilityPage() {
               className="max-lg:min-h-11 self-start !w-auto px-4"
               onClick={() => void (async () => {
                 setHistoryLoading(true);
+                setHistoryError(false);
                 try {
                   const next = await apiCall("API-44", { params: { id }, query: { limit: 20, cursor: historyCursor } });
                   setHistory((prev) => [...prev, ...(next.data as unknown as InspectionHistoryRow[])]);
                   setHistoryCursor(next.nextCursor);
+                } catch {
+                  // 通信断・5xx・cursorの失効は「取得できなかった」と示す（記録が無いとは言わない。docs/03 §1.1）
+                  setHistoryError(true);
                 } finally {
                   setHistoryLoading(false);
                 }
@@ -266,6 +271,11 @@ export function FacilityPage() {
             >
               さらに古い記録を表示
             </Button>
+          )}
+          {historyError && (
+            <Banner tone="warning" eyebrow="UNKNOWN" title="続きの記録を取得できませんでした">
+              通信を確認して、もう一度「さらに古い記録を表示」を押してください。
+            </Banner>
           )}
         </Card>
       )}

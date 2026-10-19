@@ -579,6 +579,8 @@
    "id": "AT-MAP-06",
    "reqId": "MAP-06",
    "tests": [
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_cannot_raise_a_second_issue_for_a_finding_already_raised (T085 R17)",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_keeps_an_inactive_original_inspector (T085 R18)",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_issue_and_photo_link_commit_together",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)",
@@ -1263,6 +1265,7 @@
     "CT-05": {
      "tests": [
       "tests/upload.test.ts::添付の予約とアップロード (T015) > staging_object_left_by_a_failed_ledger_write_is_reclaimed (T085 CT-05)",
+      "tests/upload.test.ts::添付の予約とアップロード (T015) > orphan_sweep_resumes_from_its_cursor_and_reaches_orphans_beyond_the_first_thousand_keys (T085 N1)",
       "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads"
      ]
     },
@@ -2437,7 +2440,8 @@
   "API-46": [
    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original",
    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_conflict_is_detected_by_declared_series_version",
-   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > member_cannot_correct_another_members_inspection_or_reassign_the_inspector (T085 A-I3)"
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > member_cannot_correct_another_members_inspection_or_reassign_the_inspector (T085 A-I3)",
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_cannot_raise_a_second_issue_for_a_finding_already_raised (T085 R17)"
   ],
   "API-47": [
    "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
@@ -3062,6 +3066,33 @@
    "status": "resolved",
    "basis": "docs/11 §3（既存異常と二重にしない）違反。良好→異常ありの訂正のときだけ起票に変更し、e2eの赤（異常2件）→緑",
    "owner": "T033"
+  },
+  {
+   "id": "T085-N3",
+   "source": "T085再レビューN3（裁定R17）",
+   "summary": "訂正のcreateIssueをサーバーが受け付け、API-46直接・同期API-81で同じ所見の異常を二重に起票できた（画面だけの防止だった）",
+   "severity": "medium",
+   "status": "resolved",
+   "basis": "docs/11 §3の二重起票防止。訂正元の系譜に異常あり・起票済みがあれば422 issue_already_raised。試験は修正前201（赤）",
+   "owner": "T031/T033"
+  },
+  {
+   "id": "T085-N1",
+   "source": "T085再レビューN1",
+   "summary": "staging孤児の回収が毎分先頭から最大1,000件だけを見て続きを保存せず、台帳のある実体が先頭に溜まると後ろの孤児に永遠に届かなかった（毎分のR2一覧費用も）",
+   "severity": "medium",
+   "status": "resolved",
+   "basis": "続き位置をR2に保存して巡回・1回500件・15分ごと。試験（台帳のある1,010件の後ろの孤児）は続き位置を使わないと失敗",
+   "owner": "T017"
+  },
+  {
+   "id": "T085-R18",
+   "source": "T085再レビュー（裁定R18）",
+   "summary": "訂正で元の実施者を保つと、その団員が休団・退団のとき管理者の訂正が422 inspector_not_activeで行き止まりになった",
+   "severity": "low",
+   "status": "resolved",
+   "basis": "元の実施者を保つ訂正に限り通す（訂正した人は監査）。試験は修正前422（赤）",
+   "owner": "T031"
   },
   {
    "id": "T085-D6",

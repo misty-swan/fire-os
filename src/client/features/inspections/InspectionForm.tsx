@@ -141,6 +141,10 @@ export function InspectionFormPage() {
   const missingRequired = schema.filter((s) => s.required && !results[s.code]);
 
   const correcting = original !== null && typeof original !== "string" ? original : null;
+  // 異常を起票するか（新規は異常ありのとき。訂正は「元の記録に異常ありが無く、訂正で異常ありになった」ときだけ＝
+  // サーバーも同じ規則で拒否する。T085レビューA-I2・裁定R17）
+  const originalHadReview = correcting ? correcting.result === "needs_review" || correcting.items.some((i) => i.result === "needs_review") : false;
+  const willCreateIssue = Object.values(results).some((r) => r === "needs_review") && !originalHadReview;
   const submit = useCallback(async () => {
     setTouched(true);
     if (missingRequired.length > 0 || busyAttachments) return;
@@ -148,10 +152,6 @@ export function InspectionFormPage() {
     // 実施日時: 訂正は元の点検の日時のまま。新規は最初の送信の時刻で固定し、送り直しでは変えない
     inspectedAtRef.current ??= correcting ? correcting.inspectedAt : new Date().toISOString();
     const hasReview = Object.values(results).some((r) => r === "needs_review");
-    // 訂正で異常を起票するのは「元の記録に異常が無く、訂正で異常ありになった」ときだけ。元から異常ありの記録を
-    // 訂正しても既存の異常があるので新しく起票しない（docs/11 §3「既存異常の自動削除/再開を禁止」と同じく二重起票しない。
-    // T085レビューA-I2。docs/03 §1.1-27）
-    const originalHadReview = correcting ? correcting.result === "needs_review" || correcting.items.some((i) => i.result === "needs_review") : false;
     const shape = {
       templateVersionId: (Array.isArray(templates) ? templates[chosen]?.currentVersion.id : "") ?? "",
       inspectedAt: inspectedAtRef.current,
@@ -160,7 +160,7 @@ export function InspectionFormPage() {
       result: hasReview ? "needs_review" : "ok",
       checkItems: schema.map((s) => ({ code: s.code, result: results[s.code] ?? "unknown" })),
       note: note.trim() || "特記事項なし",
-      createIssue: hasReview && !originalHadReview,
+      createIssue: willCreateIssue,
       attachmentIds: readyIds,
     };
     const res = correcting
@@ -383,9 +383,15 @@ export function InspectionFormPage() {
             </div>
             {note.trim() && <p className="text-[12px] text-ink-muted">{note}</p>}
           </Card>
-          {Object.values(results).some((r) => r === "needs_review") && (
+          {willCreateIssue && (
             <Notice tone="warning" icon="report" role="status">
               異常ありの項目があります。保存すると異常の報告が作成されます。
+            </Notice>
+          )}
+          {/* 訂正で元から異常ありの記録は、既にある異常の報告をそのまま使う（新しく起票しない。T085裁定R17・docs/11 §3） */}
+          {!willCreateIssue && correcting && Object.values(results).some((r) => r === "needs_review") && (
+            <Notice tone="info" icon="report" role="status">
+              元の記録の異常の報告がすでにあるため、新しい異常の報告は作りません。
             </Notice>
           )}
           {save.state.kind === "conflict" && (
@@ -402,7 +408,11 @@ export function InspectionFormPage() {
             <TextArea name="correction-reason" label="訂正の理由（必須）" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例: 結果の記入を誤った" />
           )}
           {save.state.kind === "rejected" && (
-            <Banner tone="warning" eyebrow="REJECTED" title="この内容では保存できません">写真の検査が終わっているか、様式が承認済みかを確認してください。</Banner>
+            <Banner tone="warning" eyebrow="REJECTED" title="この内容では保存できません">
+              {save.state.details.some((d) => d.reason === "issue_already_raised")
+                ? "この所見の異常の報告は以前の記録ですでに作られています。異常ありのまま訂正するときは、新しい異常の報告は作られません。"
+                : "写真の検査が終わっているか、様式が承認済みかを確認してください。"}
+            </Banner>
           )}
           <FormErrors issues={save.state.kind === "invalid" ? save.state.details : []} />
           <div className="flex gap-2">

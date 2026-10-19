@@ -72,17 +72,37 @@ export async function sweepAttachments(env: AppEnv, nowIso: string): Promise<{ e
       // 次のCronで再試行（状態はuploadedのまま）
     }
   }
-  const orphans = await sweepOrphanStagingObjects(env, nowIso);
+  // 孤児の回収は15分ごと（毎分のCronで毎回R2を一覧しない。T085レビューN1）
+  const orphans = new Date(nowIso).getUTCMinutes() % STAGING_SWEEP_LIMITS.everyMinutes === 0 ? await sweepOrphanStagingObjects(env, nowIso) : 0;
   return { expired: expired.meta.changes ?? 0, collected, orphans };
 }
 
-/** 台帳（upload_attempts／attachments）のどこからも参照されないstaging実体を消す。1回のCronで最大1,000件を見る */
+/** 孤児回収の続き位置（R2の一覧cursor）。staging/ の外に置く小さなオブジェクト（migration不要。T085レビューN1） */
+export const STAGING_SWEEP_CURSOR_KEY = "_system/staging-orphan-sweep-cursor";
+/** 1回の回収で見る量（ページ数×1ページの件数）。全体はcursorで続きから回り、最後まで行ったら先頭へ戻る */
+export const STAGING_SWEEP_LIMITS = { pagesPerRun: 5, pageSize: 100, everyMinutes: 15 } as const;
+
+/**
+ * 台帳（upload_attempts／attachments）のどこからも参照されないstaging実体を消す（T085レビューB-I4/DOC-01、N1）。
+ * - 前回の続き（R2に保存したcursor）から最大 pagesPerRun×pageSize 件を見る。最後まで行ったらcursorを消して次回は先頭から
+ *   （staging/が1,000件を超えても、後ろの孤児にいずれ届く。毎回先頭からだと届かなかった）
+ * - 転送の窓（intent期限）を過ぎたものだけを対象にし、転送中・完了確定前の実体には触れない
+ * - cursorが失効していたら先頭からやり直す
+ */
 export async function sweepOrphanStagingObjects(env: AppEnv, nowIso: string): Promise<number> {
   const cutoff = new Date(new Date(nowIso).getTime() - ATTACHMENT_LIMITS.intentTtlMs);
   let removed = 0;
-  let cursor: string | undefined;
-  for (let page = 0; page < 10; page++) {
-    const listed = await env.FILES.list({ prefix: "staging/", cursor, limit: 100 });
+  const saved = await env.FILES.get(STAGING_SWEEP_CURSOR_KEY);
+  let cursor: string | undefined = saved ? (await saved.text()) || undefined : undefined;
+  for (let page = 0; page < STAGING_SWEEP_LIMITS.pagesPerRun; page++) {
+    let listed: R2Objects;
+    try {
+      listed = await env.FILES.list({ prefix: "staging/", cursor, limit: STAGING_SWEEP_LIMITS.pageSize });
+    } catch {
+      if (!cursor) throw new Error("staging list failed");
+      cursor = undefined; // 失効したcursor。先頭から
+      continue;
+    }
     const old = listed.objects.filter((o) => o.uploaded <= cutoff).map((o) => o.key);
     for (let i = 0; i < old.length; i += 45) {
       const chunk = old.slice(i, i + 45);
@@ -98,12 +118,14 @@ export async function sweepOrphanStagingObjects(env: AppEnv, nowIso: string): Pr
           await env.FILES.delete(key);
           removed++;
         } catch {
-          // 次のCronで再試行
+          // 次の巡回で再試行
         }
       }
     }
-    if (!listed.truncated) break;
-    cursor = listed.cursor;
+    cursor = listed.truncated ? listed.cursor : undefined;
+    if (!cursor) break;
   }
+  if (cursor) await env.FILES.put(STAGING_SWEEP_CURSOR_KEY, cursor);
+  else await env.FILES.delete(STAGING_SWEEP_CURSOR_KEY);
   return removed;
 }

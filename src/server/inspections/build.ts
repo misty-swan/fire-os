@@ -89,7 +89,7 @@ export async function buildInspectionMutation(
     idempotencyKey: string;
     requestHashPath: string;
     /** 訂正（T031）のときだけ。元の原本のIDと訂正理由、クライアントが宣言したseries版（docs/05 API-46のseries版ガード） */
-    correction?: { supersedesId: string; reason: string; seriesVersion: number };
+    correction?: { supersedesId: string; reason: string; seriesVersion: number; originalInspectorMemberId?: string };
   },
 ): Promise<BuiltInspection> {
   const { target, input, correction } = opts;
@@ -131,7 +131,10 @@ export async function buildInspectionMutation(
   const inspector = await env.DB.prepare("SELECT unit_id, status FROM members WHERE id = ?").bind(input.inspectorMemberId)
     .first<{ unit_id: string; status: string }>();
   if (!inspector || inspector.unit_id !== principal.unitId) throw new HttpError("NOT_FOUND");
-  if (inspector.status !== "active") {
+  // 例外（T085裁定R18）: 訂正で元の記録の実施者をそのまま保つときは、その団員が休団・退団でも通す
+  // （訂正は記録の修正で新たな実施ではない。訂正した人は監査に別に残る。管理者が訂正できない行き止まりを避ける）
+  const keepsOriginalInspector = !!correction && correction.originalInspectorMemberId === input.inspectorMemberId;
+  if (inspector.status !== "active" && !keepsOriginalInspector) {
     throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "inspectorMemberId", reason: "inspector_not_active" }]);
   }
 
@@ -167,6 +170,28 @@ export async function buildInspectionMutation(
   }
   if (correction) {
     if (!existingSeries) throw new HttpError("NOT_FOUND");
+    // 訂正での異常の起票（T085裁定R17・docs/11 §3「既存異常と二重にしない」）: 訂正元の系譜（訂正元とその前の原本）に
+    // 異常ありの結果があるか、そこから起票された異常があるときは、createIssueを422で拒否する（画面だけでなく
+    // API-46の直接呼出し・同期API-81でも二重に起票させない）。良好→異常ありの訂正だけが起票できる
+    if (input.createIssue) {
+      const lineage: string[] = [];
+      let cursor: string | null = correction.supersedesId;
+      for (let i = 0; i < 50 && cursor; i++) {
+        lineage.push(cursor);
+        const prev: { supersedes_id: string | null } | null = await env.DB.prepare(`SELECT supersedes_id FROM ${inspectionTable} WHERE id = ? AND unit_id = ?`)
+          .bind(cursor, principal.unitId).first<{ supersedes_id: string | null }>();
+        cursor = prev?.supersedes_id ?? null;
+      }
+      const marks = lineage.map(() => "?").join(", ");
+      const itemCol = target.type === "facility" ? "facility_inspection_id" : "asset_inspection_id";
+      const sourceCol = target.type === "facility" ? "source_facility_inspection_id" : "source_asset_inspection_id";
+      const raised = await env.DB.prepare(
+        `SELECT 1 FROM ${inspectionTable} WHERE unit_id = ? AND id IN (${marks}) AND result = 'needs_review' ` +
+          `UNION ALL SELECT 1 FROM inspection_items WHERE unit_id = ? AND ${itemCol} IN (${marks}) AND result = 'needs_review' ` +
+          `UNION ALL SELECT 1 FROM issues WHERE unit_id = ? AND ${sourceCol} IN (${marks}) LIMIT 1`,
+      ).bind(principal.unitId, ...lineage, principal.unitId, ...lineage, principal.unitId, ...lineage).first();
+      if (raised) throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "createIssue", reason: "issue_already_raised" }]);
+    }
     // 訂正対象（supersedesId）がseriesの現在版であること。現在版以外から枝分かれする訂正は作れない
     const pointerCol = target.type === "facility" ? "current_facility_inspection_id" : "current_asset_inspection_id";
     // 訂正元が現在版でなくなったのは「他の訂正で更新された」こと。docs/16どおり409にする

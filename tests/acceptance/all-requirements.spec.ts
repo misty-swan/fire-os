@@ -9,6 +9,7 @@ import {
   loadIndex,
   loadManifest,
   parseRef,
+  parsePorcelainZ,
   type AcceptanceManifest,
   type EvidenceIndex,
   type GateResult,
@@ -97,6 +98,12 @@ test("gate_detects_injected_skip_missing_title_routeless_api_stale_index_and_ope
   } finally {
     rmSync(probeDir, { recursive: true, force: true });
   }
+});
+
+// collect-evidenceが記録する未コミットのコードファイル名を壊さない（先頭が空白の状態欄・非ASCII・名前変更。T085レビュー第2ラウンド）
+test("porcelain_paths_keep_the_first_character_and_non_ascii_names", () => {
+  const out = " M docs/03_画面設計・遷移.md\0M  src/a.ts\0?? tests/new.test.ts\0R  scripts/new.ts\0scripts/old.ts\0";
+  expect(parsePorcelainZ(out)).toEqual(["docs/03_画面設計・遷移.md", "src/a.ts", "tests/new.test.ts", "scripts/new.ts"]);
 });
 
 // 各AT（docs/08 §3）を独立タイトルで。ATのシナリオとCT列の各組の参照先が全部合格していること

@@ -61,7 +61,7 @@ export async function buildInspectionCorrection(
     operationCode: "inspection.correction",
     idempotencyKey,
     requestHashPath: `/inspections/${type}/${originalId}/corrections`,
-    correction: { supersedesId: originalId, reason: body.reason, seriesVersion: body.seriesVersion },
+    correction: { supersedesId: originalId, reason: body.reason, seriesVersion: body.seriesVersion, originalInspectorMemberId: original.inspector_member_id },
   });
 }
 
