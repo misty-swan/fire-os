@@ -185,9 +185,14 @@ interface FieldBase {
 }
 
 /** 入力欄。idは `field-<name>`：FormErrorsが最初の誤り欄へフォーカスを移すために使う。 */
-export function TextField({ name, label, error, hint, className, ...rest }: FieldBase & Omit<ComponentProps<"input">, "name">) {
+export function TextField({ name, label, error, hint, className, type, ...rest }: FieldBase & Omit<ComponentProps<"input">, "name">) {
   const hintId = useId();
   const errorId = `field-${name}-error`;
+  // iOS Safariは appearance:auto のdate入力でauthorのbox-sizing（box-border）を無視してcontent-boxにするため、
+  // ネイティブ描画のままでは幅がはみ出す（T083実機確認。w=357/コンテナ325）。dateのときだけネイティブ描画を
+  // やめて幅を制御できるようにする。appearance-noneでiOSは日付が中央寄せ・シェブロン消失になるため
+  // text-left を同時に付ける（PC/Chromiumの見た目は不変。docs/03 §1.1-24に逸脱として記録）。
+  const iosDateFix = type === "date" ? "appearance-none text-left" : undefined;
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={`field-${name}`} className="text-[12px] font-bold text-ink-sub">
@@ -195,12 +200,14 @@ export function TextField({ name, label, error, hint, className, ...rest }: Fiel
       </label>
       <input
         {...rest}
+        type={type}
         id={`field-${name}`}
         name={name}
         aria-invalid={error ? true : undefined}
         aria-describedby={clsx(error && errorId, hint && hintId) || undefined}
         className={clsx(
-          "h-[54px] w-full min-w-0 rounded-field border-0 bg-white/[.06] px-4 text-[16px] font-medium text-ink placeholder:text-ink-dim",
+          "h-[54px] w-full min-w-0 box-border rounded-field border-0 bg-white/[.06] px-4 text-[16px] font-medium text-ink placeholder:text-ink-dim",
+          iosDateFix,
           error ? "shadow-[inset_0_0_0_1px_var(--color-alert)]" : "shadow-[inset_0_0_0_1px_rgba(255,255,255,.1)]",
           className,
         )}

@@ -262,3 +262,22 @@ test("inputs_stay_inside_the_search_card_at_narrow_widths", async ({ page }) => 
   const at200 = await overshootOf();
   expect(at200.scroll).toBeLessThanOrEqual(at200.inner);
 });
+
+/**
+ * 実機（iPhone Safari）で発見されたWebKit Bug 301648（未修正・iOSのみ）の回帰（T083実機確認）:
+ * date/time系inputはネイティブ描画（appearance:auto）のままだとauthorのbox-sizing（box-border）が
+ * 無効になり、padding込みの幅計算が誤ってカードからはみ出す。アプリ共通のフィールド様式で描画させる
+ * ため、date入力はappearance: noneになる（docs/03 §1.1-24）。修正前はappearance=autoで落ちる。
+ */
+test("date_inputs_render_with_the_app_field_style_on_ios_browsers", async ({ page }) => {
+  await page.goto("/app/activities");
+  const from = page.locator('input[name="filter-from"]');
+  await expect(from).toBeVisible();
+  const style = await from.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { appearance: cs.appearance, boxSizing: cs.boxSizing };
+  });
+  // ネイティブ描画をやめて、アプリ共通のフィールド様式（box-border・幅の制御可能）で描く
+  expect(style.appearance).toBe("none");
+  expect(style.boxSizing).toBe("border-box");
+});

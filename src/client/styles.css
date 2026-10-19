@@ -83,6 +83,16 @@ body {
   outline-offset: 2px;
 }
 
+/* iOS Safariのdate/time系inputはネイティブ描画のままだとpadding+width:100%の幅計算が誤り、
+   insetの枠も消える（WebKit Bug 301648・未修正）。アプリ共通のフィールド様式で描画させる。
+   空値の高さ崩れは::-webkit-date-and-time-valueで防ぐ（WebKit Bug 198959の定番対処）。 */
+input[type="date"], input[type="time"], input[type="datetime-local"], input[type="week"], input[type="month"] {
+  appearance: none;
+  text-align: left;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value { height: 1.5em; }
+
 /* prototype: 罫線は box-shadow の 1px inset で表現する */
 .hairline {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
