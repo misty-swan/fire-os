@@ -94,4 +94,4 @@ npx vitest --run tests/jobs.test.ts -t queue_send_failure_does_not_lose_the_job_
 
 ## 4. 未実施（実環境）
 
-docs/evidence/V07-outage.md「未実施」の番号付き残手順を正本とする。実Cloudflare/staging/実キーが要るもの（staging演習・実Googleキー停止・ops/security-response.md §7の遮断/rotation演習・実Queuesの送信失敗観測・管理者全員喪失時のCloudflare側復旧手順の整備）は**T086**、消防団の人・了承・D13決定が要るもの（実providerの到達不明・実在の正副担当の交代・別担当〔人〕による再現・紙/電話の切替と復帰照合の実地演習）は**T088**が引き受ける。
+docs/evidence/V07-outage.md「未実施」の番号付き残手順を正本とする。実Cloudflare/staging/実キーが要るもの（staging演習・実Googleキー停止・ops/security-response.md §7の遮断/rotation演習・実Queuesの送信失敗観測・管理者全員喪失時のCloudflare側復旧手順の整備）は**T086**、消防団の人・了承・D13決定が要るもの（実providerの到達不明・実在の正副担当の交代・別担当〔人〕による再現・紙/電話の切替と復帰照合の実地演習・代理の参集記録の担当を付ける画面）は**T088**が引き受ける（V07-outage.md「未実施」1〜10。T086=1,2,7,8,9／T088=3,4,5,6,10）。

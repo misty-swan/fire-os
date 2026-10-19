@@ -50,7 +50,7 @@ e2e（`tests/e2e/realtime.spec.ts`）: 実ブラウザの2端末で、片方の�
 **実30端末・実回線での測定は未実施。** 理由: ①この環境の`wrangler`は未ログインで実Workersに配置できない、②実端末・実ネットワーク（モバイル回線・電池最適化）がこの環境にない。ローカルworkerdでの30接続実測を「実30端末での合格」とは扱わない。
 
 残作業と手順（ユーザーの操作が必要）:
-1. `npx wrangler deploy --env staging` でWorkerを配置し、`npm run migrate -- --env staging --yes-i-know` まで済ませる（V01/V02の手順と共通）。
+1. `npx wrangler deploy --env staging` でWorkerを配置し、`npm run migrate -- --env staging --remote --yes-i-know` まで済ませる（V01/V02の手順と共通）。
 2. 団員30人分を招待し（API-03→API-33）、実端末（実ブラウザ。実機が揃わない場合は別ネットワークの実ブラウザ30セッションで代用し条件を明記）で招待を受領する。すべて架空データで行う。
 3. 30端末で同じ出動記録（SCR-12）を開き、`npm run test:live -- tests/live/realtime-load.test.ts`（`LIVE_BASE_URL`/`LIVE_BOOTSTRAP_EMAIL`/`LIVE_BOOTSTRAP_TOKEN`）の手順に沿って、①更新反映遅延のp95実測（D18の正式合格値の承認材料）②切断/復帰・バックグラウンド復帰での取りこぼし0③失権後の409→snapshot再同期の動作④D1読み取り費用の概算、を記録する。
 4. 実測結果をこの文書の「未実施」に上書きし、docs/14 D16の暫定固定を実測で確定する（pollのままか、SSE/DOへ再評価するか）。D1費用が支配的になった場合はT082の代表件数測定と合わせてDO（unit単位hub）を再評価する。

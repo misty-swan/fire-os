@@ -71,7 +71,7 @@
 
 ## T084 外部障害・通信断・管理者不在の代替運用（2026-10-19。局所完了）
 
-実装コミット **a9b0d47** `feat: complete T084 failure`、レビュー第1ラウンドの修正は `fix: address T084 review round 1`。実行環境はT083と同じローカル（workerd＋ローカルD1＋Playwright chromium）。実Cloudflare・staging・実Google・実provider・実在の人は使っていない。データはすべて架空。migration無し・新規endpoint無し・試験専用APIの本番登録無し。詳細は docs/evidence/V07-outage.md。
+実装コミット **a9b0d47** `feat: complete T084 failure`、レビュー第1ラウンドの修正は **9a03544** `fix: address T084 review round 1`、第2ラウンドの文書修正は `docs: address T084 review round 2`（docs/16のチェック位置の誤り〔T048に付いていた〕の訂正ほか）。実行環境はT083と同じローカル（workerd＋ローカルD1＋Playwright chromium）。実Cloudflare・staging・実Google・実provider・実在の人は使っていない。データはすべて架空。migration無し・新規endpoint無し・試験専用APIの本番登録無し。詳細は docs/evidence/V07-outage.md。
 
 | 確認 | コマンド | 結果 |
 |---|---|---|
@@ -88,7 +88,7 @@
 - **試験の不安定さ（試験側の問題を修正）**: ①スマホの一覧代替の観測が待たない`isVisible()`で一度だけ揺れた → 待つ断言の成否で判定するよう変更。②**1回目のフルe2eで71件失敗**: scenario 6で作った架空の管理者2名が共有のD1に残り、member-admin.specの「最後の管理者は停止できない」の前提が崩れて初期管理者が実際に停止された → 以降の試験が連鎖して失敗。演習の管理者を `finally` で一般の団員へ戻すように修正し、dependency-outages＋map＋member-adminの3specを続けて実行して 16 passed / 1 skipped を確認してからフルを再実行した。
 - **未実施（局所の理由）**: V07-outage.md「未実施」1〜10。実Cloudflare/staging/実キーが要るもの（1 staging演習・2 実Googleキー停止・7 ops/security-response.md §7の遮断/rotation演習・8 実Queues・9 管理者全員喪失時の復旧手順）はT086、消防団の人・了承・D13が要るもの（3 実provider・4 実在の正副担当の交代・5 別担当〔人〕による再現・6 紙/電話の実地演習・10 代理参集の担当付与画面）はT088が引き受ける。docs/evidence/security.md の予約欄も事実に合わせて訂正した。
 
-### T084 レビュー第1ラウンドの修正（2026-10-19）
+### T084 レビュー第1ラウンドの修正（2026-10-19。9a03544）
 
 - **陽性対照（B-I1）**: 誤成功の検出器が窓の外で「保存しました」（手動帳票の保存）を拾えたことを断言。さらに配送結果の修正をstashした状態で、窓の中の緑の「配送の処理を終えました」を誤成功1件として検出し赤になることを実証（Received: 1）。
 - **配送結果の終端表示（R10）**: 到達不明・失敗があるときは attention＋「要確認」の併記（docs/03 意図変更26）。jsdom試験 `tests/notification-delivery-label.test.tsx` で赤（2 failed / 1 passed）→緑（3 passed）。
