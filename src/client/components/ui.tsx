@@ -81,7 +81,9 @@ export function Chip({ tone = "neutral", icon, size = "sm", children }: { tone?:
   return (
     <span
       className={clsx(
-        "inline-flex flex-none items-center rounded-pill font-bold",
+        // max-w-full: 親幅を超えるチップ（単位の長い説明など）を親幅に収めて折り返す。
+        // flex-noneのままではコンテンツ幅で固定され、実機（390幅）でページ横スクロールになった（T083実機確認）
+        "inline-flex max-w-full flex-none items-center rounded-pill font-bold",
         size === "lg" ? "h-[34px] gap-1.5 px-3.5 text-[13px]" : "gap-1 px-[9px] py-1 text-[11px]",
         tones[tone],
       )}

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { isPhone } from "./helpers";
+import { acceptInvitationViaUi, adminApiData, inviteNewMember, isPhone, newUserContext, uniqueEmail } from "./helpers";
 import {
   adminSeedPage,
   collectCriticalViolations,
@@ -280,4 +280,56 @@ test("date_inputs_render_with_the_app_field_style_on_ios_browsers", async ({ pag
   // ネイティブ描画をやめて、アプリ共通のフィールド様式（box-border・幅の制御可能）で描く
   expect(style.appearance).toBe("none");
   expect(style.boxSizing).toBe("border-box");
+});
+
+/**
+ * 実機（iPhone・390幅）で発見された欠陥の回帰（T083実機確認）:
+ * 活動分析の条件チップはChipが inline-flex flex-none で幅の上限を持たないため、長い日本語の
+ * チップ（単位の説明）がコンテンツ幅（406px）のまま縮まず、画面幅を超えてページ全体が
+ * 横スクロールになる（実機390幅でdocument.scrollWidth=426）。Chipに max-w-full を付けて
+ * 親幅を超えなくする。はみ出すチップだけが日本語の既定の折り返し（文字単位）で複数行のpillになり、
+ * 短いチップは1行のまま（prototypeどおりの見た目は不変）。
+ */
+test("analytics_conditions_stay_inside_the_screen_at_phone_width", async ({ browser, request }, testInfo) => {
+  test.setTimeout(300_000);
+  const viewport = testInfo.project.use.viewport!;
+  const tag = crypto.randomUUID().slice(0, 6);
+  const iso = (s: string) => new Date(s).toISOString();
+
+  // --- analytics.spec.tsと同じ準備: 招待受領で一般団員を作り、集計の実データ（出来事1件）をseedする ---
+  const email = uniqueEmail(`e2e-analytics-width-${tag}`);
+  const { memberId, token } = await inviteNewMember(request, `架空 幅確認 ${tag}`, email);
+  const ctx = await newUserContext(browser, viewport);
+  const page = await ctx.newPage();
+  await acceptInvitationViaUi(page, email, token, { mfa: false });
+  await expect(page).toHaveURL(/\/app$/);
+
+  const act = await adminApiData<{ id: string }>(request, "POST", "/api/v1/activities", {
+    title: `幅確認の巡回点呼 ${tag}`, kind: `analytics-width-${tag}`, plannedStartsAt: iso("2026-05-20T01:00:00.000Z"),
+    locationText: "架空市堤防", ownerMemberId: memberId, audienceMemberIds: [memberId],
+  });
+  expect(act.status).toBe(201);
+  expect((await adminApiData(request, "PATCH", `/api/v1/activities/${act.data.data.id}`, {
+    version: 1, status: "scheduled", reason: "対象を確定して公開",
+  })).status).toBe(200);
+  expect((await adminApiData(request, "POST", `/api/v1/activities/${act.data.data.id}/actual-results`, {
+    activityVersion: 2, content: "巡回を実施（架空）。",
+    actualStartsAt: iso("2026-05-20T01:00:00.000Z"), actualEndsAt: iso("2026-05-20T02:00:00.000Z"),
+    participants: [{ memberId, actualStatus: "participated" }], attachmentIds: [],
+  })).status).toBe(201);
+
+  // --- 活動分析（SCR-26）。条件チップが実際に描かれてから画面幅を測る（読み込み中の寸法を数えない） ---
+  await page.goto("/app/analytics");
+  await expect(page.getByText("単位: 出来事（同じ出来事の活動と出動は1件）・延べ参加（出来事×団員）")).toBeVisible();
+  const measured = await page.evaluate(() => ({
+    // clientWidthはレイアウトビューポート（width=device-widthなら画面幅）で、内容がはみ出しても変わらない。
+    // window.innerWidthはこのエミュレーションでは内容幅に膨らむため（はみ出し時の実測421）、比較に使えない
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  // 切分け用の証跡（修正前は421>360=実機の横スクロール（390幅で426>390）と同じ欠陥。この試験はphone-360の360幅）
+  console.log(`[analytics-width] ${JSON.stringify({ ...measured, project: testInfo.project.name })}`);
+  expect(measured.scroll).toBeLessThanOrEqual(measured.client);
+
+  await ctx.close();
 });
