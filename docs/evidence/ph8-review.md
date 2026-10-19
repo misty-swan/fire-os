@@ -58,6 +58,22 @@ ph0〜ph7と同じ手順。対象はT083「実端末・アクセシビリティ�
 
 **修正**: **38922d4** `fix: harden T083 documents spec fill race (review round 3)`（documents.specのみ: 粘着fill〔fill→toHaveValue→再fill計3回〕＋`waitForResponse`への30秒明示タイムアウト＋根因コメント）／**3b8a56a** `fix: poll inspection-template version label (review round 4)`（inspection-templates.specのみ: ポーリング断言への置換＋カードスコープ化）。再レビュー2体とも**APPROVE**（round 3: アプリにtitleを空へ戻すコードパスが無いことを実検＝UI欠陥の隠蔽ではなく自動化の注入競合への対策・断言の実質性維持／round 4: rev2ラベルの実DOM照合・誤マッチ弱点の解消）。いずれも赤は負荷依存フレークのため取得不可＝実観測（エラースナップショット・サーバーログ・件数）を根拠に、修正後の単独実行で緑を確認
 
+## ラウンド5〜9＋仕上げ波（ユーザーの実機確認から相次いだ実欠陥の修正。2026-10-19）
+
+最終検証を**ユーザー自身のiPhone実機（Safari・LAN平文http）**で実施したところ、実欠陥が相次いで発見された。各ラウンドとも赤→緑（または実機実測データを根拠とした修正）＋スコープ付き再レビューAPPROVEで収束:
+
+| ラウンド | コミット | 発見と修正 | 再レビュー |
+|---|---|---|---|
+| 5＋仕上げ波 | e6d1301・af0426d | 平文http（secure context外）で `crypto.randomUUID` が存在せず `deviceIdOf` がTypeError → `src/client/uuid.ts` 共有ヘルパー（getRandomValuesフォールバック）＋クライアント全9箇所置換 | APPROVE（122bitエントロピー維持・冪等キー契約維持を rg 実検） |
+| 6→7 | 16be223 | 「予定・活動」の検索カードで全入力欄がカードからはみ出す（日付入力の固有幅約192pxがグリッド最小幅を引きずる。240pxで+53px） → `TextField`/`TextArea`へ `w-full min-w-0` ＋240/200px幅の回帰テスト | APPROVE（デスクトップ不変・既存断言で担保） |
+| 8＋9 | 1d4d10d・06f8840 | iOS Safariのdate入力だけ残るはみ出し。実機のcomputed style実測で `box=content-box`（authorのborder-box無視）→ **WebKit Bug 301648**（公認P2・iOS 26.5でも未修正）と確定 → date/time系inputへ `appearance:none`＋`::-webkit-date-and-time-value` 高さ対策（datetime-local拡張は再レビューの指摘で追加） | APPROVE（docs/03 §1.1-24記録・副作用許容） |
+| 仕上げ波2 | 89e3978 | 「活動分析」（SCR-26）の「単位：出来事…」チップ（406px）でページ横スクロール → `Chip`へ `max-w-full`（赤: scroll421>client360 → 緑: 360=360） | APPROVE（`scrollWidth <= clientWidth` 断言への変更はエミュレーションで innerWidth が膨らむ件への正当な対処） |
+
+- **capの扱い（Ruling）**: ループ上限（5）を超えたが、いずれも**ユーザーの実機確認が発見した相異なる実欠陥**であり、各修正が確実に収束して次の発見に進む＝T083の本体業務（「検証修正」）として継続を裁定。各ラウンドでスコープ付き再レビューを省略していない
+- **一次情報の確認**（ユーザーの指摘により実施）: iOS date入力の幅計算問題は **WebKit Bugzilla #301648**（公認P2・iOS 26.5でも未修正）として裏付け。`appearance:none` は nuxt/ui #4712・Ionic PR#28495・actualbudget PR#6145 など複数フレームワークの定番対処。あわせてBug #198959（appearance:none時の空値の高さ崩れ）の定番対処も適用
+- **診断手法**: 実機のcomputed styleを画面表示する一時オーバーレイ（ ActivitiesPage・撤去済み）＋ローカル計測プローブ（.superpowers配下・非コミット）。修正確認は実機の再読み込みで実施（修正後の実測: `filter-from w=325 over=-14 appear=none box=border-box`）
+- **ローカル環境の変更（Git管理外）**: 実機アクセスのため `.dev.vars` の `AUTH_BASE_URL` をPCのLAN IPへ上書き（authのtrustedOriginsがlocalhostのみのため実機のログイン系が403になるため）。staging/productionはHTTPS単一URLのため影響なし
+
 ## 方針で残す（Rulingつきの全リスト）
 
 1. **A低2 sync_recoverの手動再送クリックが握りつぶされ得る**（低）— Ruling: 自動同期が先に適用するのは設計どおりの競合（起動時即時・30秒周期）で、成否判定はサーバー検証読み（version=2・二重適用は検出可能）で確定している。手動再送導線の単独カバレッジはoffline-sync.spec（T077）が担う。コスト: 手動再送経路のe2eカバレッジが実行ごとに揺れる。実行ごとの経路の非決定性はV07-uxに記録済み
@@ -66,14 +82,18 @@ ph0〜ph7と同じ手順。対象はT083「実端末・アクセシビリティ�
 4. **再レビュー範囲外2 V07-ux:7の「SHAは本ファイルの直後のgit logで確認できる」の読みにくさ**（低）— Ruling: コミット自身のSHAをそのコミット内のファイルに書けない（自己参照問題）ための回避表現。次にV07-uxへ触る際に言い直し。コスト: なし（F9の要件＝実装コミット7bb8d08の併記は満たす）
 5. **最終検証の受入基準と残存フレーク**（ラウンド4後のRuling）— Ruling: ①最終HEADでフルe2e2回連続緑、または②失敗が記録済み既知フレーククラス（documents題名消失〔稀・30秒で明確に落ちる・単独緑〕／reports・facility-location・notificationsの1回off）に限られる場合、PH7前例（87成功＋既知flap型1件の正直記録）どおり受入とする。結果は①＝**2回連続94 passed / 3 skipped / 0 failed**。documents題名消失の稀な再発（粘着fill導入後12回中3回）の引き金は未特定〔再マウント/再レンダリング競合と推定〕で、発火時は検証エラー画面が残るため切り分け易い。次にdocuments.specまたは当該画面へ触る際の調査継続を推奨。コスト: フル走行で稀な赤が残る（単独緑での切り分け手順はph8.md「既知フレーキー」節）
 6. **未触specの1回off（reports・facility-location・notifications）はT083では修正しない**（低）— Ruling: T083の割当はdocuments.spec（ph7-review #9）であり、inspection-templatesは最多頻度（約40%）のため例外的に同時修正した。残り3specは発火1回ずつで、次に触る担当（T085の統合試験整備が妥当）へ記録。コスト: フル走行で約1回/7実行の1-offフレークが残る
+7. **実機確認（LAN平文http）で見つかった欠陥の修正をループ上限を超えて継続**（ラウンド5〜9＋仕上げ波）— Ruling: いずれもユーザーの実機確認が発見した相異なる実欠陥（auth拒否・UUID クラッシュ・入力欄はみ出し×2・iOS日付入力）で、各修正が収束して次の発見に進む＝T083の本体業務（「検証修正」）。各ラウンドでスコープ付き再レビュー実施。コスト: 実機確認が続く限りラウンドが増え得る（収束は確認済み）
+8. **iOS日付入力の`appearance:none`**（ラウンド8・ユーザー承認済み）— iOS Safariのネイティブ描画がauthorのbox-sizingを無効にするWebKit Bug 301648（未修正）のため、date/time系inputをアプリ共通のフィールド様式で描画。docs/03 §1.1-24に記録。コスト: iOSでのネイティブ装飾（シェブロン等）が消える（タップ時のピッカーは従来どおり）
+9. **検証用の `.dev.vars` 上書きと.ufw許可**（ローカル限定・Git管理外）— 実機確認のためAUTH_BASE_URLを実機アクセスURLへ上書き（authはtrustedOriginsで単一オリジンのみ信頼する設計のため）。コスト: ネットワーク構成が変わるたびにIP更新＋サーバー再起動が必要
+10. **e2eのwebServerに `--var AUTH_BASE_URL` を固定**（ラウンド7）— ユーザーの.dev.vars（LAN IP）がe2eのsame-origin検査を壊すため、ローカルe2e限定でlocalhostへ固定（--var > .dev.vars > wrangler.jsonc）。コスト: なし（e2eの再現性はむしろ向上）
 
 ## 誤り・対象外
 A担当のR1検証（principal.ts:112の`unitId: row.unit_id`・purgeのuserId単位・scope切替3箇所の網羅・authorization allowlistの目的不変）は**誤りなし**で合格。C報告はprototype本体の実grepで「管理パネルの403表現・費用語彙は無し」を再確認（docs/03 §1.1-23の記録と一字違わず）・新規specの断言语彙を全量照合（捏造なし）。D報告はdocs/05 API-01×DTO・docs/03 §1.1-22/23×実コードを文単位で一致判定、docs/12は対応表のみでT083記載済み＝更新不要と根拠つき判定。
 
 ## 最終状態
 
-- 確認済みの高・中の未解消: **0件**（修正ラウンド4回・再レビュー4回で収束。上限5回に対し4回）
-- 指摘総数: 高1 / 中5 / 低10 / 要確認7＝**修正したのは高1＋中5＋低10＋要確認4**（残りは方針で残すまたはサイクル完了で解消。範囲外の観察2件は報告書・文言のみ）＋**最終検証で発覚した既知フレーキーの根因修正2件**（documents.spec題名消失〔ラウンド3〕・inspection-templates非ポーリング断言〔ラウンド4〕）
-- 産出物: docs/evidence/ph8-review.md（本書。サイクル正本）＋docs/16:40のPH8要約文確定＋docs/16:177 T083状態欄（実数・局所の理由）。コミット **45ebc33**・**9dd61ad**・**38922d4**・**3b8a56a**
-- 最終全検証（コントローラ実行・3b8a56a時点）: `npm run typecheck` 成功／`npm run check:contracts` **102 API / docs/05 102行 / OpenAPI一致**／`npx vitest --run` **65ファイル291件成功**／`npm run build` 成功（precache 9 entries）／`npm run test:e2e` **最終HEADでフル2回連続 94 passed / 3 skipped / 0 failed**（約10.5分/回）。`npm run test:load`・`npm run check:coverage`はT085/T086の範囲のため未実施（ユーザー指示）
-- 局所完了の残手順（実端末〔iOS Safari/Android Chrome実機・VoiceOver/TalkBack・実PWA install・quota〕・全SCRのaxe走査・人による5名再訪計測）は **ops/device-test-matrix.md §2**の番号付き手順。docs/16:177に局所の理由として明記済み。NFR-01/02/09の実機部分・RG-02/RG-07を実機部分を含め合格とは扱わない
+- 確認済みの高・中の未解消: **0件**（修正ラウンド9＋仕上げ波2・再レビュー9回。うちラウンド5〜9＋波はユーザー実機確認で発見した実欠陥の修正）
+- 指摘総数: 高1 / 中5 / 低10 / 要確認7＝**修正したのは高1＋中5＋低10＋要確認4**（残りは方針で残すまたはサイクル完了で解消）＋**最終検証で発覚した既知フレーキーの根因修正2件**（documents.spec題名消失〔ラウンド3〕・inspection-templates非ポーリング断言〔ラウンド4〕）＋**実機確認で発見した実欠陥修正6件**（UUID〔ラウンド5＋波〕・狹幅はみ出し〔ラウンド7〕・iOS日付入力〔ラウンド8＋9〕・活動分析チップ〔仕上げ波2〕）
+- 産出物: docs/evidence/ph8-review.md（本書。サイクル正本）＋docs/16:40のPH8要約文確定＋docs/16:177 T083状態欄（実数・局所の理由）＋docs/03 §1.1-24（iOS date入力の逸脱記録）。コミット **45ebc33**・**9dd61ad**・**38922d4**・**3b8a56a**・**e6d1301**・**af0426d**・**16be223**・**1d4d10d**・**06f8840**・**89e3978**
+- 最終全検証（コントローラ実行・89e3978時点）: `npm run typecheck` 成功／`npm run check:contracts` **102 API / docs/05 102行 / OpenAPI一致**／`npx vitest --run` **65ファイル294件成功**／`npm run build` 成功（precache 9 entries）／`npm run test:e2e` **最終HEADでフル2回連続 103 passed / 3 skipped / 0 failed**（約12分/回。94→103はラウンド5〜仕上げ波2で追加した回帰試験の分）。`npm run test:load`・`npm run check:coverage`はT085/T086の範囲のため未実施（ユーザー指示）
+- 局所完了の残手順（実端末〔VoiceOver/TalkBack・実PWA install〔HTTPS要〕・quota・実回線〕・全SCRのaxe走査・人による5名再訪計測）は **ops/device-test-matrix.md §2**の番号付き手順。docs/16:177に局所の理由として明記済み。NFR-01/02/09の実機部分・RG-02/RG-07を実機部分を含め合格とは扱わない。なお**実機確認（LAN平文http・iPhone Safari）は実施済み**で実欠陥6件を修正（上記ラウンド5〜9＋波。ph8.md「実機確認」節参照）

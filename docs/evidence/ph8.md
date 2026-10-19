@@ -8,8 +8,8 @@
 |---|---|---|
 | 型検査 | `npm run typecheck` | 成功（実装者・コントローラ両方で実行） |
 | 契約検査 | `npm run check:contracts` | **102 API / docs/05 102行 / OpenAPI一致**（API-01 MeDataへ`unitId`追加の契約3点セット〔台帳・docs/05・OpenAPI再生成〕を同一コミットで実施） |
-| 単体・結合試験 | `npx vitest --run` | **65ファイル291件成功**（PH7最終と同数＝新規jsdom試験は既存ファイル内追加。workers＝実workerd＋D1/Queues、client＝jsdom） |
-| ブラウザ試験 | `npm run test:e2e` | **最終HEADでフル2回連続 94 passed / 3 skipped（モバイル限定試験のdesktopスキップ）/ 0 failed**（コントローラ実行・約10.5分/回。内訳＝旧87 passed＋旧フレーキー1本〔documents.spec desktop。R4修正〕＋新規6本〔2spec×3プロジェクト〕＝94。途中の検証経過〔フレーク再燃→根因調査→ラウンド3/4修正〕は下記「既知フレーキー」とph8-review.mdに記録） |
+| 単体・結合試験 | `npx vitest --run` | **65ファイル294件成功**（PH7最終291件＋実機確認の修正で+3〔UUIDフォールバック2件・共有ヘルパー1件〕。workers＝実workerd＋D1/Queues、client＝jsdom） |
+| ブラウザ試験 | `npm run test:e2e` | **最終HEAD（89e3978）でフル2回連続 103 passed / 3 skipped（モバイル限定試験のdesktopスキップ）/ 0 failed**（コントローラ実行・約12分/回。94→103は追加した回帰試験〔狭幅はみ出し240/200px・iOS date appearance・活動分析チップ〕の分。実機確認で発見した不具合の修正すべて込み。途中の検証経過は下記「実機確認」とph8-review.mdに記録） |
 | ビルド | `npm run build` | 成功（precache 9 entries） |
 | 負荷試験 | `npm run test:load` | **触らない**（T085/T086の範囲。ユーザー指示） |
 | カバレッジ | `npm run check:coverage` | **触らない**（T085/T086の範囲。ユーザー指示） |
@@ -42,6 +42,21 @@
 - **実端末の残手順（本タスクの核心的な未確認）**: iOS Safari／Android Chrome実機・VoiceOver/TalkBack/NVDA実スクリーンリーダー・実PWA install・quota・実端末GPS/カメラ・実回線は**未実施**。**ops/device-test-matrix.md §2に番号付き残手順**（共通準備3＋iPhone 8＋Android 8＋PC 6＋記録形式。利用者が自身の端末で実施できる手順書の形）
 - **docs/16 T083状態欄は局所完了**（T073/T079/T082前例どおり）。NFR-01/02/09の実機部分を合格とは扱わない。docs/13のRG-02/RG-07は未達のまま（D18承認条件での実環境実測が別途必要）
 - エミュレーション証跡（chromium実ブラウザ・3viewport・keyboard・200%代替・色除去・地図障害代替）と実端末証跡はV07-ux.md内で厳格に区別
+
+## 実機確認（2026-10-19・ユーザーのiPhone＋Safari。LAN平文httpで実施）
+
+実Cloudflareではなくローカルサーバー（`wrangler dev --ip 0.0.0.0`＋`.wrangler/demo`の架空データ）をLAN公開し、ユーザーのiPhone実機（Safari・393幅・ズーム100%）で確認。**実機確認は6件の実欠陥を発見し、すべて同サイクルで修正済み**（各ラウンドともスコープ付き再レビューAPPROVE。詳細はph8-review.md「ラウンド5〜9＋実機確認の追加修正」）:
+
+1. **LAN URLからのログイン系が拒否される**: authの信頼オリジンがlocalhost固定のため（エラー「処理に失敗しました」の実体）。`.dev.vars`（Git管理外・ローカル限定）でAUTH_BASE_URLを実機アクセス用URLへ上書きして解消。staging/productionはHTTPS単一URLのため影響なし
+2. **平文httpでアプリが落ちる**: `crypto.randomUUID`はsecure context外に存在せず、端末ID生成（`deviceIdOf`）がTypeError → `src/client/uuid.ts`共有ヘルパー（`getRandomValues`フォールバック）＋クライアント全9箇所を置換（e6d1301＋af0426d。赤→緑・冪等キー契約の維持を実検）
+3. **狭幅で入力欄がカードからはみ出す**: 日付入力の固有幅（約192px）がグリッド最小幅を引きずる。`TextField`/`TextArea`へ`w-full min-w-0`＋240px/200px幅の回帰テスト（16be223。赤+53px→緑）
+4. **iOS Safariの日付入力だけさらに治らない**: 実機のcomputed style実測で `box=content-box`（authorのborder-box無視）→ **WebKit Bug 301648**（公認P2・iOS 26.5でも未修正）と確定 → date/time系inputへ`appearance:none`＋空値の高さ対策（1d4d10d＋06f8840〔datetime-local拡張〕。赤→緑）。iOSでの見た目変更（ネイティブ装飾の消失・値の左寄せ）はdocs/03 §1.1-24に記録
+5. **活動分析（SCR-26）の「単位」チップで横スクロール**: 406pxのchipが縮まないため → `Chip`へ`max-w-full`（89e3978。赤〔scroll421>client360〕→緑）
+6. **点検様式の編集で新しい版の表示断言が1回きり評価**: ポーリング断言へ置換（3b8a56a。フル走行の約40%で失敗していた既知フレーキー）
+
+- 検証方法: 実機のcomputed styleを画面に表示する診断オーバーレイ（一時実装・撤去済み）で実測→修正→実機の再読み込みで確認（修正後の実測: `filter-from w=325 over=-14 appear=none box=border-box`）
+- **残る実機未確認**（ops/device-test-matrix.md §2のまま）: VoiceOver/TalkBackでの読み上げ・PWA install（LAN平文では不可＝HTTPS要でstaging後）・quota・実回線・代表利用者5名の説明なし再訪計測（提案時）
+- LAN公開の運用上の注意（ローカル限定・Git管理外）: 実機確認には都度①`.dev.vars`のAUTH_BASE_URLをその時のPC IPへ更新②`--ip 0.0.0.0`で起動③ufwのsubnet許可、の3点が必要
 
 ## prototype準拠
 
