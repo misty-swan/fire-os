@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+import { BASE } from "./helpers";
 
 /**
  * CSV取り込み（T024、SCR-20）。プレビュー→確定→結果。プレビューでは台帳は変わらない。
@@ -15,7 +16,7 @@ function csvFile(rows: string[]): Buffer {
 test("csv_import_preview_then_commit_updates_master", async ({ page }) => {
   test.setTimeout(120_000);
   const tag = crypto.randomUUID().slice(0, 6);
-  const before = await page.request.fetch("http://localhost:8787/api/v1/facilities?limit=200", { headers: { "cf-connecting-ip": "10.1.1.1" } });
+  const before = await page.request.fetch(`${BASE}/api/v1/facilities?limit=200`, { headers: { "cf-connecting-ip": "10.1.1.1" } });
   const beforeBody = (await before.json()) as { data: unknown[] };
 
   await page.goto("/app/facilities/import");
@@ -35,7 +36,7 @@ test("csv_import_preview_then_commit_updates_master", async ({ page }) => {
   await expect(page.getByText(/^1$/)).toBeVisible();
 
   // プレビューで台帳は変わらない
-  const mid = await page.request.fetch("http://localhost:8787/api/v1/facilities?limit=200");
+  const mid = await page.request.fetch(`${BASE}/api/v1/facilities?limit=200`);
   const midBody = (await mid.json()) as { data: unknown[] };
   expect(midBody.data.length).toBe(beforeBody.data.length);
 
@@ -44,10 +45,10 @@ test("csv_import_preview_then_commit_updates_master", async ({ page }) => {
   await expect(page.getByText("取り込みました")).toBeVisible({ timeout: 90_000 });
 
   // 台帳が増えている（2件）。書き出しで式セルがescapeされている
-  const after = await page.request.fetch("http://localhost:8787/api/v1/facilities?limit=200");
+  const after = await page.request.fetch(`${BASE}/api/v1/facilities?limit=200`);
   const afterBody = (await after.json()) as { data: { managementNumber: string | null }[] };
   expect(afterBody.data.length).toBe(beforeBody.data.length + 2);
-  const exportRes = await page.request.fetch("http://localhost:8787/api/v1/facilities/export?type=hydrant");
+  const exportRes = await page.request.fetch(`${BASE}/api/v1/facilities/export?type=hydrant`);
   const csv = await exportRes.text();
   const formulaCellsEscaped = csv.includes(`'=${tag}`);
   expect(formulaCellsEscaped).toBe(true);

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { E2E_BASE, E2E_INSPECTOR_PORT, E2E_PORT } from "./scripts/e2e-port";
 
 // 360px(スマホ)と1280px(PC)の2サイズで確認する。実体は wrangler dev(ローカルのWorkers＋ローカルD1)。
 // 起動前に scripts/e2e-prepare.ts がD1を作り直し、初期管理者の招待tokenを発行する。
@@ -15,14 +16,16 @@ export default defineConfig({
   // vitestの *.test.ts を拾わないよう、Playwrightの対象は e2e の spec/setup と受入ゲートだけ
   testMatch: [/e2e\/.*\.spec\.ts$/, /e2e\/auth\.setup\.ts$/, /acceptance\/.*\.spec\.ts$/],
   workers: 1,
-  use: { baseURL: "http://localhost:8787" },
+  use: { baseURL: E2E_BASE },
   webServer: {
     // TEST_AI_FAKE=1 は試験専用のfake AI（src/server/ai/local-fake.ts）。localにはAI bindingが無いため、
     // e2eの間だけ分類jobが決定的な候補を作れるようにする（--varはこの webServer にしか付かない。実AIがあれば常に優先）
     // AUTH_BASE_URL は実機のLAN検証で .dev.vars がLAN originに向いていることがあるため、
     // e2eのサーバーだけはlocalhostへ固定する（--varは.dev.varsより強い。auth.setupのsame-origin検査のため）
-    command: "tsx scripts/e2e-prepare.ts && npm run build && npx wrangler dev --port 8787 --persist-to .wrangler/e2e --var TEST_AI_FAKE:1 --var AUTH_BASE_URL:http://localhost:8787",
-    url: "http://localhost:8787/app",
+    // ポートは scripts/e2e-port.ts（既定8797・FIREOS_E2E_PORTで変更。別プロジェクトの8787と並行できる＝T085裁定R19）。
+    // AUTH_BASE_URLは同じoriginへ合わせる（auth.setupのsame-origin検査）。inspectorも固定番号にして他のwrangler devと衝突させない
+    command: `tsx scripts/e2e-prepare.ts && npm run build && npx wrangler dev --port ${E2E_PORT} --inspector-port ${E2E_INSPECTOR_PORT} --persist-to .wrangler/e2e --var TEST_AI_FAKE:1 --var AUTH_BASE_URL:${E2E_BASE}`,
+    url: `${E2E_BASE}/app`,
     reuseExistingServer: false,
     timeout: 180_000,
     stdout: "ignore",

@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
 import { expect, type APIRequestContext, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { secretFromUri, totpCode } from "../helpers/totp";
+import { E2E_BASE } from "../../scripts/e2e-port";
 
-export const BASE = "http://localhost:8787";
+/** e2eサーバーのorigin（scripts/e2e-port.ts。既定8797・FIREOS_E2E_PORT） */
+export const BASE = E2E_BASE;
 export const PASSWORD = "e2e-correct-horse-9";
 export const STATE_DIR = "tests/e2e/.state";
 

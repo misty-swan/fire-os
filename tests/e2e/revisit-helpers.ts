@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, type APIRequestContext, type Browser, type Locator, type Page, type TestInfo } from "@playwright/test";
-import { acceptInvitationViaUi, adminApiData, inviteNewMember, isPhone, newUserContext, uniqueEmail } from "./helpers";
+import { BASE, acceptInvitationViaUi, adminApiData, inviteNewMember, isPhone, newUserContext, uniqueEmail } from "./helpers";
 
 /**
  * 再訪操作・アクセシビリティ測定の共通部品（T083、NFR-01/02/09）。
@@ -482,7 +482,7 @@ export async function startAchromatopsia(page: Page): Promise<{ reset: () => Pro
 
 /** ローカル開発用のCron手動トリガ（本番は毎分のCron。documents.specと同じ流儀） */
 export async function runLocalCron(request: APIRequestContext): Promise<void> {
-  await request.fetch("http://localhost:8787/cdn-cgi/local/scheduled");
+  await request.fetch(`${BASE}/cdn-cgi/local/scheduled`);
 }
 
 /** 最小のPNG（1px。CRCを計算した実在形式。offline-sync.specと同じ作り方） */

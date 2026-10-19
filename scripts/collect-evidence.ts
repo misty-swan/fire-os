@@ -14,6 +14,7 @@ import { spawnSync, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
+import { E2E_PORT } from "./e2e-port";
 import {
   CODE_PATHS,
   INDEX_PATH,
@@ -54,11 +55,11 @@ function run(cmd: string, args: string[], env: Record<string, string> = {}): num
   return r.status ?? 1;
 }
 
-/** 8787番が使用中なら止めない（利用者のdemoサーバーかもしれない）。e2eは自分でサーバーを立てる */
-function port8787Busy(): boolean {
+/** e2eのポート（scripts/e2e-port.ts。既定8797）が使用中なら止めない（利用者の別のサーバーかもしれない）。e2eは自分でサーバーを立てる */
+function e2ePortBusy(): boolean {
   try {
     const out = execFileSync("ss", ["-ltn"], { encoding: "utf8" });
-    return /:8787\s/.test(out);
+    return new RegExp(`:${E2E_PORT}\\s`).test(out);
   } catch {
     return false;
   }
@@ -70,7 +71,7 @@ function describeEntry(kind: string, file: string, project: string) {
   if (kind === "e2e") {
     return {
       browser: `chromium (Playwright ${PW_VERSION}) project=${project}`,
-      network: "loopback（wrangler dev :8787・ローカルD1。実回線ではない）",
+      network: `loopback（wrangler dev :${E2E_PORT}・ローカルD1。実回線ではない）`,
       fixture: "架空データ（scripts/e2e-prepare.tsでD1再作成＋各specが画面/APIで作る架空名簿・施設・活動）",
       model: isAi ? "試験専用fake AI（TEST_AI_FAKE=1・src/server/ai/local-fake.ts。実モデルではない）" : "AI不使用",
       question: isAi ? "サーバー固定の質問版（src/server/ai/questions.ts QUESTION_VERSION等）" : "-",
@@ -200,7 +201,7 @@ export async function collectEvidence(input: EvidenceInput): Promise<EvidenceInd
       code = run("npx", ["vitest", "--run", "--config", "vitest.load.config.ts", "--reporter=default", "--reporter=json", `--outputFile.json=${report}`]);
       if (existsSync(report)) got = vitestEntries("load", report);
     } else {
-      if (port8787Busy()) throw new Error("8787番が使用中です。e2eは自分でサーバーを起動するため、使用中のサーバー（demo等）を止めてから再実行してください（このscriptは止めません）");
+      if (e2ePortBusy()) throw new Error(`${E2E_PORT}番が使用中です。e2eは自分でサーバーを起動するため、使用中のサーバーを止めるか、FIREOS_E2E_PORTで別の番号を指定して再実行してください（このscriptは止めません）`);
       report = join(outDir, "e2e.json");
       command = `npx playwright test ${E2E_PROJECT_ARGS.join(" ")} --reporter=list,json`;
       code = run("npx", ["playwright", "test", ...E2E_PROJECT_ARGS, "--reporter=list,json"], { PLAYWRIGHT_JSON_OUTPUT_NAME: report });

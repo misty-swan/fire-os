@@ -84,7 +84,7 @@
 
 ```bash
 # 6つの障害を順に注入する演習（phone-360とdesktop-1280の2サイズ。webServerがD1再作成→migration→初期管理者→wrangler dev まで自動で行う。
-# 手動の wrangler dev を先に起動しておくと「already used」で止まる＝ポート8787を空けてから実行する）
+# 手動の wrangler dev を同じ番号で先に起動しておくと「already used」で止まる＝e2eのポート〔既定8797・FIREOS_E2E_PORT〕を空けてから実行する）
 npm run test:e2e -- tests/e2e/dependency-outages.spec.ts --grep outage_never_claims_dispatch_or_saved_success
 # Queue送信失敗の観測（workers試験。e2eでは本番に試験経路を足さないと注入できないため）
 npx vitest --run tests/jobs.test.ts -t queue_send_failure_does_not_lose_the_job_and_cron_recovers_it

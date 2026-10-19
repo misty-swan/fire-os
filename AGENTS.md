@@ -28,12 +28,12 @@ npx vitest --run        # workers（実workerd＋D1/Queues）と client（jsdom�
 npm run test:e2e -- --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768  # 業務のe2e（CIと同じ。要: npx playwright install chromium）
 ```
 
-- 受入ゲート（T085）: `npm run collect:evidence` が vitest・`test:load`・業務e2eを実行して証跡index（docs/evidence/acceptance-index.json）と docs/evidence/acceptance-results.md を作る（約20分。8787番を使う。`test:live` はSecret無しなら「未実施」と記録）。ゲートは `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case`。**index作成後にコード（src/・tests/・drizzle/・scripts/・public/・config/・.github/・openapi/・docs/03・ルートの設定ファイル。受入ゲート自身のmanifest・spec・3scriptは除く）を変えると全件「未実行」で赤**＝変えたら collect:evidence をやり直す。フレーキーで1スイートだけ落ちたときは `npm run collect:evidence -- --only=e2e`（スイート全体を同じコードで再実行し、旧実行は記録に残す）。`--project` を付けない `npm run test:e2e` は受入ゲート（project acceptance）も流す
+- 受入ゲート（T085）: `npm run collect:evidence` が vitest・`test:load`・業務e2eを実行して証跡index（docs/evidence/acceptance-index.json）と docs/evidence/acceptance-results.md を作る（約20分。e2eのポート〔既定8797〕を使う。`test:live` はSecret無しなら「未実施」と記録）。ゲートは `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case`。**index作成後にコード（src/・tests/・drizzle/・scripts/・public/・config/・.github/・openapi/・docs/03・ルートの設定ファイル。受入ゲート自身のmanifest・spec・3scriptは除く）を変えると全件「未実行」で赤**＝変えたら collect:evidence をやり直す。フレーキーで1スイートだけ落ちたときは `npm run collect:evidence -- --only=e2e`（スイート全体を同じコードで再実行し、旧実行は記録に残す）。`--project` を付けない `npm run test:e2e` は受入ゲート（project acceptance）も流す
 - manifestを直したら `npm run check:coverage` → `npx tsx scripts/collect-evidence.ts --report-only`（acceptance-results.mdの作り直し。manifestはhashの対象外なので再収集は不要）
 
 - 単一テスト: `npx vitest --run tests/members.test.ts -t "ケース名"` / e2e単独: `npm run test:e2e -- tests/e2e/auth.spec.ts --grep ケース名`
 - API/DTOを変えたら `npm run generate:contracts` で `openapi/fireos.json` を再生成（check:contractsが古い生成物を検出する）
-- `npm run test:e2e` の webServer は D1再作成→migration→初期管理者作成→`wrangler dev`(:8787) まで自動で行う。手動のwrangler devを先に上げない。workers=1固定。phone-360 / desktop-1280 の両プロジェクトで画面を確認する
+- `npm run test:e2e` の webServer は D1再作成→migration→初期管理者作成→`wrangler dev`（**:8797**。inspectorは9239）まで自動で行う。ポートは `scripts/e2e-port.ts` が正本で、環境変数 `FIREOS_E2E_PORT`（inspectorは `FIREOS_E2E_INSPECTOR_PORT`）で変えられる。demo（`npm run demo`）は従来どおり8787で、別プロジェクトの8787と並行できるようe2eは別番号にしている。e2eの前にそのポートが空いていることを確かめ、手動のwrangler devを同じ番号で先に上げない。workers=1固定。phone-360 / desktop-1280 の両プロジェクトで画面を確認する
 - `npm run test:live` は実Cloudflare(staging)向け。`LIVE_BASE_URL` `LIVE_BOOTSTRAP_TOKEN` `LIVE_BOOTSTRAP_EMAIL` が必要
 - `npm run migrate` はローカルD1のみ。`--remote` には `--env <名前> --yes-i-know` が必須（本番誤適用ガード）
 - `npm run demo` / `demo:reset` で手元の画面確認。初回の管理者招待リンクは一度しか表示されない。デモのログイン情報はGit管理外の `.env.demo-login`
