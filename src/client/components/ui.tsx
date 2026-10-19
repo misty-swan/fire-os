@@ -200,7 +200,7 @@ export function TextField({ name, label, error, hint, className, ...rest }: Fiel
         aria-invalid={error ? true : undefined}
         aria-describedby={clsx(error && errorId, hint && hintId) || undefined}
         className={clsx(
-          "h-[54px] rounded-field border-0 bg-white/[.06] px-4 text-[16px] font-medium text-ink placeholder:text-ink-dim",
+          "h-[54px] w-full min-w-0 rounded-field border-0 bg-white/[.06] px-4 text-[16px] font-medium text-ink placeholder:text-ink-dim",
           error ? "shadow-[inset_0_0_0_1px_var(--color-alert)]" : "shadow-[inset_0_0_0_1px_rgba(255,255,255,.1)]",
           className,
         )}
@@ -234,7 +234,7 @@ export function TextArea({ name, label, error, hint, className, ...rest }: Field
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         className={clsx(
-          "min-h-24 resize-none rounded-[18px] border-0 bg-white/5 px-4 py-3.5 text-[14px] font-medium leading-[1.7] text-ink",
+          "min-h-24 w-full min-w-0 resize-none rounded-[18px] border-0 bg-white/5 px-4 py-3.5 text-[14px] font-medium leading-[1.7] text-ink",
           error ? "shadow-[inset_0_0_0_1px_var(--color-alert)]" : "shadow-[inset_0_0_0_1px_rgba(255,255,255,.1)]",
           className,
         )}

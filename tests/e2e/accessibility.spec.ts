@@ -228,3 +228,37 @@ test("returning_user_finishes_inspection_and_attendance_without_hidden_controls"
   await member.context().close();
   await admin.close();
 });
+
+/**
+ * 実機（iPhone・Safariページズーム200%相当の狭幅）で発見された欠陥の回帰（T083実機確認）:
+ * 日付入力（input type=date）はブラウザ既定の固有幅（約192px）を持ち、TextFieldのinputに幅の
+ * 制約クラス（w-full min-w-0）が無いとグリッドの最小幅が固有幅に引きずられ、検索カードから
+ * はみ出す（240pxで+6px）。200pxまで狭めるとページ全体が横スクロールになる。
+ */
+test("inputs_stay_inside_the_search_card_at_narrow_widths", async ({ page }) => {
+  const overshootOf = () =>
+    page.evaluate(() => {
+      const card = document.querySelector('[aria-label="予定の検索"]')!;
+      const cardRect = card.getBoundingClientRect();
+      const rights = [...card.querySelectorAll("input, select, label")]
+        .filter((el) => el.getBoundingClientRect().width > 0)
+        .map((el) => el.getBoundingClientRect().right - cardRect.right);
+      return { scroll: document.documentElement.scrollWidth, inner: window.innerWidth, max: Math.max(...rights) };
+    });
+
+  await page.setViewportSize({ width: 240, height: 800 });
+  await page.goto("/app/activities");
+  await expect(page.locator('[aria-label="予定の検索"]')).toBeVisible();
+  await expect(page.locator('[aria-label="予定の検索"] input').first()).toBeVisible();
+
+  // ①240px: ページが横スクロールしない ②カード内の全入力欄・ラベルがカードの右端に収まる（+1pxは丸め許容）
+  const at240 = await overshootOf();
+  expect(at240.scroll).toBeLessThanOrEqual(at240.inner);
+  expect(at240.max).toBeLessThanOrEqual(1);
+
+  // 200px（iPhone 390pxでページズーム200%相当）でもページが横スクロールしない
+  await page.setViewportSize({ width: 200, height: 800 });
+  await expect(page.locator('[aria-label="予定の検索"] input').first()).toBeVisible();
+  const at200 = await overshootOf();
+  expect(at200.scroll).toBeLessThanOrEqual(at200.inner);
+});
