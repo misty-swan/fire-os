@@ -78,7 +78,7 @@
 
 ## 7. 演習（未実施。初回の手順）
 
-1. staging環境（`--env staging --remote --yes-i-know`）で架空の事象（テスト用利用者の不正アクセス想定）を作り、§1→§3.1→§5を通しで実施して記録する（実データを使わない）。
+1. staging環境（`wrangler`の `--env staging --remote`。`--yes-i-know` はwranglerのフラグではなく `npm run migrate` 専用のガード）で架空の事象（テスト用利用者の不正アクセス想定）を作り、§1→§3.1→§5を通しで実施して記録する（実データを使わない）。
 2. `BETTER_AUTH_SECRET`のrotation演習（staging限定。全セッション無効→再ログインを確認）。
-3. Cloudflare WAF/Rate Limitingの設定と、アプリ内レート上限との役割分担をT086の公開設定とT084の障害演習で確認し、docs/evidence/security.mdと本書を実測で更新する。
+3. Cloudflare WAF/Rate Limitingの設定と、アプリ内レート上限との役割分担をT086の公開設定で確認し、docs/evidence/security.mdと本書を実測で更新する（T084の障害演習はローカルのみで、この節の演習は含まない＝docs/evidence/V07-outage.md「未実施」7。担当T086）。
 4. 演習の結果はこの節を「実施済み」に更新して残す（実施日・発見・修正）。

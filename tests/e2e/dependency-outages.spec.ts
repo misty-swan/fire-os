@@ -1,5 +1,5 @@
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
-import { acceptInvitationViaUi, adminApiData, BASE, inviteNewMember, isPhone, newUserContext, uniqueEmail } from "./helpers";
+import { expect, request as playwrightRequest, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
+import { acceptInvitationViaUi, adminApiData, apiHeaders, BASE, inviteNewMember, isPhone, newUserContext, uniqueEmail } from "./helpers";
 
 /**
  * 外部障害・通信断・管理者不在の代替運用の演習（T084、NFR-04。docs/08 AT-NFR-04・CT-07・TC-17、docs/07 §1/§5/§7、D08/D17）。
@@ -38,7 +38,9 @@ import { acceptInvitationViaUi, adminApiData, BASE, inviteNewMember, isPhone, ne
 test.setTimeout(600_000); // 6scenario＋招待受領2名（二要素あり）＋Cron待ち
 
 /** 成功の文言（誤成功の検出）。「完了ではありません」等の否定形には当たらない形にする */
-const SUCCESS_PATTERN = "保存しました|送信しました|送信済み|届きました|到達しました|配信しました|配送しました|完了しました|連絡が完了|全員に届";
+// 「配送の処理を終えました」「配送処理済み」は、要確認の併記（「（」が続く）が無い＝緑の完了表示のときだけ数える
+// （到達不明・失敗があるのに緑で「終えた」と出すことを誤成功として検出する。レビュー裁定R10）
+const SUCCESS_PATTERN = "保存しました|送信しました|送信済み|届きました|到達しました|配信しました|配送しました|完了しました|連絡が完了|全員に届|配送の処理を終えました(?!（)|配送処理済み(?!（)";
 /** アプリが正式な指令/連絡の手段であると主張する文言（出てはいけない） */
 const DISPATCH_CLAIM = /出動指令を送信|指令を送信しました|全員に(届|連絡)|連絡が完了|安否.{0,6}確認済/;
 
@@ -108,6 +110,44 @@ async function formalContactNoteShown(page: Page): Promise<{ note: boolean; clai
   return { note: /正式な(指令|連絡)/.test(text) && /補助/.test(text), claim: DISPATCH_CLAIM.test(text) };
 }
 
+/**
+ * scenario 6で作った架空の管理者を、試験の成否・タイムアウトにかかわらず一般の団員へ戻す（レビューA-M2）。
+ * 共有のD1に管理者が残ると、member-admin.specの「最後の管理者は停止できない」等の前提が崩れ、
+ * 初期管理者が実際に停止されて後続の試験が連鎖して落ちる（T084初回のフルe2eで71件失敗した原因）。
+ * - 試験本体のfixtureの`request`はタイムアウト時に先に破棄されるため、管理者のstorageStateで自前のcontextを作る
+ * - 全員分を試行してから失敗をまとめて報告する（1人目の失敗で2人目が残らないように）
+ */
+const ADMIN_STATE = "tests/e2e/.state/admin-storage.json";
+const drillAdminIds: string[] = [];
+test.afterEach(async () => {
+  if (drillAdminIds.length === 0) return;
+  const api = await playwrightRequest.newContext({ baseURL: BASE, storageState: ADMIN_STATE });
+  const failures: string[] = [];
+  try {
+    for (const memberId of drillAdminIds.splice(0)) {
+      try {
+        const list = await api.get(`${BASE}/api/v1/members?limit=200`, { headers: apiHeaders() });
+        const rows = ((await list.json()) as { data: { id: string; version: number; roleCodes?: string[]; account: { authzVersion: number } | null }[] }).data;
+        const row = rows.find((r) => r.id === memberId);
+        if (!row || !(row.roleCodes ?? []).includes("admin")) continue; // 管理者になっていない（役割付与の前に落ちた）
+        const res = await api.put(`${BASE}/api/v1/members/${memberId}/roles`, {
+          headers: apiHeaders({ "idempotency-key": crypto.randomUUID() }),
+          data: JSON.stringify({
+            version: row.version, expectedAuthzVersion: row.account?.authzVersion ?? 1, roleCodes: ["member"], scopes: [],
+            reason: "e2e: 障害演習の終了（架空の管理者を一般の団員へ戻す）",
+          }),
+        });
+        if (res.status() !== 200) failures.push(`${memberId}: ${res.status()} ${await res.text()}`);
+      } catch (e) {
+        failures.push(`${memberId}: ${String(e)}`);
+      }
+    }
+  } finally {
+    await api.dispose();
+  }
+  expect(failures, "演習の管理者を一般の団員へ戻せなかった（共有D1に管理者が残る）").toEqual([]);
+});
+
 test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, request }, testInfo) => {
   const viewport = testInfo.project.use.viewport!;
   const phone = isPhone(viewport);
@@ -117,7 +157,20 @@ test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, re
   // --- 誤成功の監視（障害窓の間だけ数える） ---
   const fault: { label: string | null } = { label: null };
   const falseHits: string[] = [];
-  const onSeen = (snippet: string) => { if (fault.label) falseHits.push(`${fault.label}: ${snippet}`); };
+  // 陽性対照（レビューB-I1）: 障害窓の外で拾った成功表示も、そのときの段階名つきで別に記録する。
+  // 障害解除後の通常の保存（手動帳票の「保存しました」）をこの記録で拾えたことを断言し、検出器が実際に
+  // 動いている（恒真の0ではない）ことを示す
+  const outsideHits: string[] = [];
+  const phase: { label: string } = { label: "seed" };
+  const onSeen = (snippet: string) => {
+    if (fault.label) falseHits.push(`${fault.label}: ${snippet}`);
+    else outsideHits.push(`${phase.label}: ${snippet}`);
+  };
+  // 窓を閉じる前に少し待つ（exposeBindingの呼出しは非同期で、閉じた直後に届く検出を取りこぼさない。レビューA-M3）
+  const closeFaultWindow = async (p: Page = page) => {
+    await p.waitForTimeout(1_500);
+    fault.label = null;
+  };
   await watchSuccessMessages(page.context(), onSeen);
   const dispatchChecks: { screen: string; note: boolean; claim: boolean }[] = [];
 
@@ -172,7 +225,7 @@ test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, re
     .toBeVisible({ timeout: 10_000 })
     .then(() => (phone ? new URL(page.url()).pathname === `/app/facilities/${facilityId}` : true))
     .catch(() => false);
-  fault.label = null;
+  await closeFaultWindow();
   await page.unroute(/(^https?:\/\/([a-z0-9-]+\.)*(google\.com|googleapis\.com|gstatic\.com)\/)/);
   testInfo.annotations.push({ type: "google-blocked-requests", description: String(googleRequests) });
 
@@ -198,7 +251,7 @@ test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, re
   await page.getByRole("button", { name: "点検を保存" }).click();
   await expect(page.getByText(/結果を確認できません/)).toBeVisible({ timeout: 20_000 });
   await page.waitForTimeout(3_000); // 遅れて出る成功表示（トースト）が無いことも窓の中で見る
-  fault.label = null;
+  await closeFaultWindow();
   await page.unroute("**/api/v1/facilities/*/inspections");
   expect(forwarded).toBe(1);
   // サーバーには1件ある（応答が失われただけ）。画面は保存済みと言っていない
@@ -251,14 +304,16 @@ test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, re
     await expect(page.getByText("保留（AIだけで決めない）")).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 120_000 });
   await expect(page.getByText(/この環境ではAIを使えないため/)).toBeVisible();
-  fault.label = null;
-  // 手動作成（AIが止まったままでも人の入力で作れる。API-62）
+  await closeFaultWindow();
+  // 手動作成（AIが止まったままでも人の入力で作れる。API-62）。障害窓の外の正当な保存＝陽性対照の段階
+  phase.label = "control:manual-report";
   await page.getByRole("button", { name: "手動で作成" }).click();
   await page.getByLabel("実施内容").fill(`放水訓練を実施した（手動作成・架空） ${tag}`);
   await page.getByRole("button", { name: "下書きを作成" }).click();
   await expect(page).toHaveURL(/\/app\/reports\/[^/]+\/draft$/, { timeout: 15_000 });
   const reportId = new URL(page.url()).pathname.split("/")[3]!;
   const report = await adminApiData<{ report: { id: string }; versions: { text: string; modelId?: string | null }[] }>(page.request, "GET", `/api/v1/reports/${reportId}`);
+  phase.label = "after-manual-report";
   const manualReportAvailable = report.status === 200 && report.data.data.versions.some((v) => v.text.includes(`手動作成・架空） ${tag}`));
 
   // =====================================================================================
@@ -299,7 +354,7 @@ test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, re
   await expect(results.getByText(`架空 連絡不明 ${tag}`).first()).toBeVisible();
   await expect(results.getByText(/対象者に直接確認してください/)).toBeVisible();
   await page.waitForTimeout(3_000);
-  fault.label = null;
+  await closeFaultWindow();
   dispatchChecks.push({ screen: "通知の配送結果", ...(await formalContactNoteShown(page)) });
 
   // 出動の画面（一覧・詳細）にも「正式な指令ではない・補助」の注記があり、指令送信を主張しない
@@ -331,6 +386,7 @@ test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, re
     await acceptInvitationViaUi(p, email, invited.token, { mfa: true }); // 管理操作は二要素必須
     const rows = (await adminApiData<{ id: string; version: number; account: { authzVersion: number } | null }[]>(request, "GET", "/api/v1/members?limit=200")).data.data;
     const row = rows.find((r) => r.id === invited.memberId)!;
+    drillAdminIds.push(invited.memberId); // 付与の前に登録（付与後に落ちても afterEach が戻す）
     const roles = await adminApiData(request, "PUT", `/api/v1/members/${invited.memberId}/roles`, {
       version: row.version, expectedAuthzVersion: row.account?.authzVersion ?? 1, roleCodes: ["admin"], scopes: [],
       reason: `e2e: 障害演習の${label === "primary" ? "正担当" : "副担当"}管理者（架空）`,
@@ -338,76 +394,59 @@ test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, re
     expect(roles.status).toBe(200);
     return { ctx, page: p, name, memberId: invited.memberId };
   };
-  // 演習で作った管理者は、成否にかかわらず最後に一般の団員へ戻す（共有のD1に管理者を残すと、
-  // member-admin.specの「最後の管理者は停止できない」等、管理者が1人である前提の試験を壊すため）
-  const drillAdminIds: string[] = [];
-  const demoteDrillAdmins = async () => {
-    for (const memberId of drillAdminIds) {
-      const rows = (await adminApiData<{ id: string; version: number; account: { authzVersion: number } | null }[]>(request, "GET", "/api/v1/members?limit=200")).data.data;
-      const row = rows.find((r) => r.id === memberId);
-      if (!row) continue;
-      const res = await adminApiData(request, "PUT", `/api/v1/members/${memberId}/roles`, {
-        version: row.version, expectedAuthzVersion: row.account?.authzVersion ?? 1, roleCodes: ["member"], scopes: [],
-        reason: "e2e: 障害演習の終了（架空の管理者を一般の団員へ戻す）",
-      });
-      expect(res.status).toBe(200);
-    }
-  };
-  try {
-    const primary = await makeAdmin("primary");
-    drillAdminIds.push(primary.memberId);
-    const deputy = await makeAdmin("deputy");
-    drillAdminIds.push(deputy.memberId);
-    // 正担当は管理画面を開いている（この後、不在＝端末紛失の申告）
-    await primary.page.goto("/app/admin");
-    await expect(primary.page.getByRole("list", { name: "管理する団員" })).toBeVisible();
+  const primary = await makeAdmin("primary");
+  const deputy = await makeAdmin("deputy");
+  // 正担当は管理画面を開いている（この後、不在＝端末紛失の申告）
+  await primary.page.goto("/app/admin");
+  await expect(primary.page.getByRole("list", { name: "管理する団員" })).toBeVisible();
 
-    // 副担当が管理画面で正担当を選び、全セッションを失効させる（ops/admin-handover.md の手順）
-    await deputy.page.goto("/app/admin");
-    await deputy.page.getByRole("list", { name: "管理する団員" }).getByRole("button", { name: new RegExp(primary.name) }).click();
-    await expect(deputy.page.getByRole("heading", { name: new RegExp(`${primary.name}.*の管理`) })).toBeVisible();
-    await deputy.page.getByRole("button", { name: "全セッションを失効させる" }).click();
-    const revoke = deputy.page.getByRole("dialog", { name: "全セッションの失効" });
-    await revoke.getByLabel("理由").fill("正担当の不在・端末紛失の申告（架空の演習）");
-    await revoke.getByRole("button", { name: "失効させる" }).click();
-    await expect(deputy.page.getByText("全端末のログインを解除しました")).toBeVisible();
+  // 副担当が管理画面で正担当を選び、全セッションを失効させる（ops/admin-handover.md の手順）
+  await deputy.page.goto("/app/admin");
+  await deputy.page.getByRole("list", { name: "管理する団員" }).getByRole("button", { name: new RegExp(primary.name) }).click();
+  await expect(deputy.page.getByRole("heading", { name: new RegExp(`${primary.name}.*の管理`) })).toBeVisible();
+  await deputy.page.getByRole("button", { name: "全セッションを失効させる" }).click();
+  const revoke = deputy.page.getByRole("dialog", { name: "全セッションの失効" });
+  await revoke.getByLabel("理由").fill("正担当の不在・端末紛失の申告（架空の演習）");
+  await revoke.getByRole("button", { name: "失効させる" }).click();
+  await expect(deputy.page.getByText("全端末のログインを解除しました")).toBeVisible();
 
-    // 正担当の開いていた画面は、次の操作でログインへ戻る（失効が次の要求で効く）
-    fault.label = "primary-admin-absent";
-    await primary.page.goto("/app/admin");
-    await expect(primary.page).toHaveURL(/\/login/, { timeout: 15_000 });
-    fault.label = null;
+  // 正担当の開いていた画面は、次の操作でログインへ戻る（失効が次の要求で効く）
+  fault.label = "primary-admin-absent";
+  await primary.page.goto("/app/admin");
+  await expect(primary.page).toHaveURL(/\/login/, { timeout: 15_000 });
+  await closeFaultWindow(primary.page);
 
-    // 副担当だけで業務を続ける: 団員を追加し、その団員へ招待を発行する
-    const newcomer = `架空 新入団員 ${tag}`;
-    await deputy.page.goto("/app/members");
-    await deputy.page.getByRole("button", { name: "団員を追加" }).click();
-    const add = deputy.page.getByRole("dialog", { name: "団員を追加" });
-    await add.getByLabel("氏名").fill(newcomer);
-    await add.getByLabel("役職").fill("団員");
-    await add.getByLabel("班").fill("2班");
-    await add.getByRole("button", { name: "団員を登録" }).click();
-    await expect(deputy.page.getByRole("list", { name: "団員一覧" }).getByText(newcomer)).toBeVisible();
-    await deputy.page.goto("/app/admin");
-    await deputy.page.getByRole("list", { name: "管理する団員" }).getByRole("button", { name: new RegExp(newcomer) }).click();
-    await deputy.page.getByLabel("招待先のメールアドレス").fill(uniqueEmail(`e2e-out-new-${tag}`));
-    await deputy.page.getByRole("button", { name: "招待を発行する" }).click();
-    await expect(deputy.page.getByLabel("招待リンク")).toContainText("/login#invite=");
-    const deputyContinued = await deputy.page.getByLabel("招待リンク").isVisible();
-    expect(deputyContinued).toBe(true);
-    await primary.ctx.close();
-    await deputy.ctx.close();
-  } finally {
-    await demoteDrillAdmins();
-  }
+  // 副担当だけで業務を続ける: 団員を追加し、その団員へ招待を発行する
+  const newcomer = `架空 新入団員 ${tag}`;
+  await deputy.page.goto("/app/members");
+  await deputy.page.getByRole("button", { name: "団員を追加" }).click();
+  const add = deputy.page.getByRole("dialog", { name: "団員を追加" });
+  await add.getByLabel("氏名").fill(newcomer);
+  await add.getByLabel("役職").fill("団員");
+  await add.getByLabel("班").fill("2班");
+  await add.getByRole("button", { name: "団員を登録" }).click();
+  await expect(deputy.page.getByRole("list", { name: "団員一覧" }).getByText(newcomer)).toBeVisible();
+  await deputy.page.goto("/app/admin");
+  await deputy.page.getByRole("list", { name: "管理する団員" }).getByRole("button", { name: new RegExp(newcomer) }).click();
+  await deputy.page.getByLabel("招待先のメールアドレス").fill(uniqueEmail(`e2e-out-new-${tag}`));
+  await deputy.page.getByRole("button", { name: "招待を発行する" }).click();
+  await expect(deputy.page.getByLabel("招待リンク")).toContainText("/login#invite=");
+  const deputyContinued = await deputy.page.getByLabel("招待リンク").isVisible();
+  expect(deputyContinued).toBe(true);
+  await primary.ctx.close();
+  await deputy.ctx.close();
 
   // --- まとめ（ブリーフの4断言） ---
   const falseSavedOrDeliveredMessages = falseHits.length;
+  // 陽性対照: 障害解除後の手動帳票の保存（「保存しました」トースト）を同じ検出器が拾っている
+  const detectorCaughtKnownSuccess = outsideHits.some((h) => h.startsWith("control:manual-report:") && h.includes("保存しました"));
+  testInfo.annotations.push({ type: "outside-window-hits", description: JSON.stringify(outsideHits) });
   const applicationAsOnlyDispatchChannel = dispatchChecks.some((c) => !c.note || c.claim);
   testInfo.annotations.push({ type: "false-success-hits", description: JSON.stringify(falseHits) });
   testInfo.annotations.push({ type: "dispatch-checks", description: JSON.stringify(dispatchChecks) });
-  console.log(`[T084] falseHits=${JSON.stringify(falseHits)} dispatchChecks=${JSON.stringify(dispatchChecks)} googleBlocked=${googleRequests}`);
+  console.log(`[T084] falseHits=${JSON.stringify(falseHits)} outsideHits=${JSON.stringify(outsideHits)} dispatchChecks=${JSON.stringify(dispatchChecks)} googleBlocked=${googleRequests}`);
 
+  expect(detectorCaughtKnownSuccess, "誤成功の検出器が既知の成功表示を拾えていない（検出器の故障＝0件が恒真になる）").toBe(true);
   expect(mapFailureListStillUsable).toBe(true);
   expect(manualReportAvailable).toBe(true);
   expect(falseSavedOrDeliveredMessages).toBe(0);

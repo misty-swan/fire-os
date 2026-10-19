@@ -105,7 +105,7 @@ apiごとの内訳（p95、遅い順。CT-14の「operation単位」の証跡）
 残作業と手順（ユーザーの操作が必要）:
 
 1. `npx wrangler deploy --env staging` でWorkerを配置し、`npm run migrate -- --env staging --yes-i-know` まで済ませる（V01/V02の手順と共通）。
-2. stagingへ代表件数のseedを投入する: `npx tsx scripts/seed-load.ts --out /tmp/seed-load.sql` で生成し、`npx wrangler d1 execute fireos-staging --remote --file /tmp/seed-load.sql --yes-i-know`（**架空データのみ**であることを確認してから。リモートへの適用はユーザーが実行する）。投入後、`SELECT COUNT(*) FROM domain_events` が13,410前後であることを確認する。
+2. stagingへ代表件数のseedを投入する: `npx tsx scripts/seed-load.ts --out /tmp/seed-load.sql` で生成し、`npx wrangler d1 execute fireos-staging --remote --file /tmp/seed-load.sql`（`--yes-i-know` はwranglerのフラグではないため付けない＝T084レビューで訂正）（**架空データのみ**であることを確認してから。リモートへの適用はユーザーが実行する）。投入後、`SELECT COUNT(*) FROM domain_events` が13,410前後であることを確認する。
 3. 団員30人分（または実ブラウザ30セッション。条件を明記）でログインし、`tests/live/realtime-load.test.ts`（V06残手順のharness）と同じ手順で: ①通常API p95の実測（D18の正式合格値の承認材料。**測定条件〔回線・端末・時刻帯〕をここに追記する**）②30端末の再接続・backlog回収の実測 ③**実D1のrows_read実測**（CloudflareのD1 metrics／`wrangler d1 insights`〔またはdashboardのMetrics〕でAPI別・期間別のrows_readを記録し、上の概算表と突き合わせる）④AI（API-76）の実モデルでのp95・単価、を記録する。
 4. 実測結果をこの文書に追記し、docs/14 D16の暫定固定（poll）とD18の承認材料を確定する。D1費用が支配的になった場合・poll p95が承認値を超えた場合は、上の「再評価の目安」に従ってSSE/DO（unit単位hub）とoutbox非正規化を再評価する。
 

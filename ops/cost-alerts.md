@@ -53,7 +53,7 @@
 2. パネルの常時注記どおり、**表示は実請求ではない**。Cloudflareダッシュボード（Workers・D1・R2・Billing）で実使用量を目視し、パネルの試算と桁が揃っているかだけ確かめる（詳細は §5 月次）。
 3. 急増・停止の記録があったら: 監査で理由コードを確認（管理画面に日本語で表示。生の値は `SELECT * FROM audit_logs WHERE entity_type = 'budget' ORDER BY occurred_at DESC`）。
 
-コマンドで確認する場合（ローカルの例。実環境は `--env staging --remote --yes-i-know` を付ける）:
+コマンドで確認する場合（ローカルの例。実環境は `--env staging --remote` を付ける。`--yes-i-know` はwranglerのフラグではなく `npm run migrate` 専用のガード＝T084レビューで訂正）:
 
 ```bash
 npx wrangler d1 execute DB --local --command "SELECT status, source, reasons_json, updated_at FROM budget_state WHERE id='global'"
@@ -70,12 +70,12 @@ npx wrangler d1 execute DB --local --command "SELECT day, metric, SUM(amount) AS
 4. **解除が必要なとき（手動解除。手順）**:
    ```bash
    # 現状確認（status/source/reasonsを記録してから）
-   npx wrangler d1 execute DB --env staging --remote --yes-i-know --command "SELECT * FROM budget_state WHERE id='global'"
+   npx wrangler d1 execute DB --env staging --remote --command "SELECT * FROM budget_state WHERE id='global'"
    # 解除（source='auto'へ戻す。評価が超過判定を出せば直ちに再停止する＝保護。当日の使用量が枠内に
    #  戻っていない解除は無効になることを意味する。短期に上げたい場合は config の引き上げ（§1の規律）を先に）
-   npx wrangler d1 execute DB --env staging --remote --yes-i-know --command "UPDATE budget_state SET status='normal', source='auto', reasons_json='[]', updated_by='ops-unstop', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id='global'"
+   npx wrangler d1 execute DB --env staging --remote --command "UPDATE budget_state SET status='normal', source='auto', reasons_json='[]', updated_by='ops-unstop', updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id='global'"
    # 監査への記録（解除の証跡。unit_idは実行者の分団を指定）
-   npx wrangler d1 execute DB --env staging --remote --yes-i-know --command "INSERT INTO audit_logs (id, unit_id, actor_kind, actor_user_id, action, entity_type, entity_id, mutation_id, occurred_at, metadata_json) VALUES (lower(hex(randomblob(16))), '<実行者のunit_id>', 'system', NULL, 'budget.resume', 'budget', 'budget-dev-v1', lower(hex(randomblob(16))), strftime('%Y-%m-%dT%H:%M:%fZ','now'), json_object('from','stopped','to','normal','source','manual','note','ops-unstop'))"
+   npx wrangler d1 execute DB --env staging --remote --command "INSERT INTO audit_logs (id, unit_id, actor_kind, actor_user_id, action, entity_type, entity_id, mutation_id, occurred_at, metadata_json) VALUES (lower(hex(randomblob(16))), '<実行者のunit_id>', 'system', NULL, 'budget.resume', 'budget', 'budget-dev-v1', lower(hex(randomblob(16))), strftime('%Y-%m-%dT%H:%M:%fZ','now'), json_object('from','stopped','to','normal','source','manual','note','ops-unstop'))"
    ```
 5. **解除後の確認**: 管理画面で「費用・停止の記録」に解除が現れること、保留になっていた分類・報告書生成を依頼し直して進むことを確認する（停止中に保留になったjobは終端のため、**同じ元版への再依頼は新しいjobとして受付し直す**。dedupe_keyが同じ既存jobを返す場合は元版の版が進んでから再依頼するか、人が手動で作成する）。
 6. **手動停止（事前に止める場合）**: 大量配信やデモの前に先に止めておくときは、上のUPDATEで `status='stopped', source='manual', updated_by='ops-manual-stop'` にする。**手動停止は評価が正常になっても自動解除しない**（解除は必ずこの手順）。
@@ -91,6 +91,6 @@ npx wrangler d1 execute DB --local --command "SELECT day, metric, SUM(amount) AS
 
 ## 5. 未実施の手順（実Cloudflare接続後）
 
-1. staging（`--env staging --remote --yes-i-know`）で §2/§3 のコマンドが実環境のD1に対して動くことを確認する（ローカル実行済みの同一手順）。
+1. staging（`--env staging --remote`）で §2/§3 のコマンドが実環境のD1に対して動くことを確認する（ローカル実行済みの同一手順）。
 2. 停止→解除の演習を実環境で1回行い、監査・管理画面・保留表示（budget_stopped）の3点を確認して記録する（docs/evidence/cost-estimate.md の「実測」節へ）。
 3. 実請求との月次照合（§4）を1か月分行い、しきい値をD11の実測として確定させる。**額は実団体の承認済みとしない**（了承は完成後の提案時）。

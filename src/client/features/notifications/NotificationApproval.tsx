@@ -51,7 +51,7 @@ const DELIVERY_PENDING = { label: "送信待ち", tone: "neutral" as const };
  */
 export function FormalContactNotice() {
   return (
-    <Notice tone="info" icon="info">
+    <Notice tone="info" icon="info" role="status">
       災害時の正式な連絡は、既存の連絡網（電話・無線など）で行ってください。この通知は補助であり、受付や既読は連絡の完了・安否の確認を意味しません。
     </Notice>
   );
@@ -514,6 +514,7 @@ export function DeliveryResultsSection({ draft, names }: { draft: NotificationDt
   const readCount = recipients.filter((r) => r.readAt !== null).length;
   const unknownRecipients = recipients.filter((r) => r.deliveryStatus === "unknown");
   const unsentCount = waiting;
+  const attentionNote = deliveryAttentionNote(recipients);
 
   return (
     <section aria-label="配送結果" className="flex flex-col gap-3">
@@ -526,7 +527,11 @@ export function DeliveryResultsSection({ draft, names }: { draft: NotificationDt
           {(live.status === "approved" || live.status === "dispatching") && (
             <Chip tone="attention" icon="hourglass_top">配送を準備しています…</Chip>
           )}
-          {live.status === "finished" && <Chip tone="ok" icon="check_circle">配送の処理を終えました</Chip>}
+          {live.status === "finished" && (attentionNote ? (
+            <Chip tone="attention" icon="help">配送の処理を終えました（{attentionNote}）</Chip>
+          ) : (
+            <Chip tone="ok" icon="check_circle">配送の処理を終えました</Chip>
+          ))}
           {live.status === "failed" && <Chip tone="alert" icon="report">配送できなかった宛先があります</Chip>}
         </div>
         {/* 受付・到達・既読は別の行（混同しない。docs/11）。承認だけで到達したとは表示しない */}
@@ -640,6 +645,21 @@ export function DeliveryResultsSection({ draft, names }: { draft: NotificationDt
   );
 }
 
+/**
+ * 終端の札に添える注意（T084レビュー裁定R10。docs/03 意図変更26）。到達不明・失敗の宛先が1人以上あるときは
+ * 「処理を終えた」を緑・check_circleで出さず、attentionトーンで要確認を併記する（受付≠到達。docs/11）。
+ * 該当が無ければnull（全員受付済みは従来どおり緑）。
+ */
+export function deliveryAttentionNote(recipients: NotificationDto["recipients"]): string | null {
+  const list = recipients ?? [];
+  const unknown = list.some((r) => r.deliveryStatus === "unknown");
+  const failed = list.some((r) => r.deliveryStatus === "failed" || r.deliveryStatus === "retry_wait");
+  if (unknown && failed) return "到達不明・失敗あり・要確認";
+  if (unknown) return "到達不明あり・要確認";
+  if (failed) return "失敗あり・要確認";
+  return null;
+}
+
 /** 通知の承認状態の表示（docs/11 通知承認。送信者に見える6状態。下書きは中立＝紫はAI由来だけに使う） */
 export const APPROVAL_LABEL: Record<NotificationDto["status"], { label: string; tone: "neutral" | "ai" | "ok" | "alert" | "attention" }> = {
   draft: { label: "下書き", tone: "neutral" },
@@ -655,7 +675,10 @@ export function SenderNotificationDetail({ initial }: { initial: NotificationDto
   const names = useMemberNames();
   const audienceIds = useMemo(() => initial.audienceMemberIds ?? [], [initial]);
   const terminal = initial.status === "cancelled" || initial.status === "draft";
-  const meta = APPROVAL_LABEL[initial.status];
+  const base = APPROVAL_LABEL[initial.status];
+  const note = initial.status === "finished" ? deliveryAttentionNote(initial.recipients) : null;
+  // 到達不明・失敗が残る終端は緑にしない（R10。状態の正本は変えず、表示だけ要確認を併記）
+  const meta = note ? { label: `${base.label}（${note}）`, tone: "attention" as const } : base;
   return (
     <div className="flex max-w-[720px] flex-col gap-4">
       <SubHeader

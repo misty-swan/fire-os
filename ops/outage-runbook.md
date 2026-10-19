@@ -19,8 +19,8 @@
 | 副担当管理者 | 正担当の代行（ops/admin-handover.md）。正担当のセッション失効・業務継続 |
 | 分団長（管理主体） | 正式連絡の責任者（ops/contact-flow.md）。管理者が全員不在のときの立会い |
 | 幹部（通知の承認者） | 通知の承認と、到達不明の宛先への直接確認 |
-| 記録係 | 紙帳票（手動帳票）の記入と、復旧後の入力・照合 |
-| 環境管理者 | Cloudflare/Googleの管理画面での確認・キー/Secretの操作（staging/production） |
+| 記録係 | 紙帳票（手動帳票）の記入と、復旧後の入力・照合。アプリでは役割「幹部」（または「管理者」）が要る（出動記録の登録・実績の入力・報告書の手動作成。ops/contact-flow.md §5） |
+| 環境管理者 | Cloudflare/Googleの管理画面での確認・キー/Secretの操作、`wrangler d1 execute` による読み取り確認（staging/production。Cloudflareの資格情報が要る） |
 
 ## 2. 障害ごとの手順（trigger / detection / fallback / recovery / 担当）
 
@@ -39,7 +39,7 @@
 
 - **trigger**: Workers AIの障害、日次/月次上限での自動停止（ops/cost-alerts.md）、モデル応答が契約外。
 - **detection**: 報告書（`/app/reports?activity=<活動ID>`）で「AIで下書き生成」→「AIが下書きを作成しています（処理中であり完了ではありません）」→ しばらくして「**保留（AIだけで決めない）**」と理由（例:「この環境ではAIを使えないため…手動で作成できます」）。管理画面（`/app/admin`）の運用パネル「AI利用の費用と失敗」「費用・停止の記録（監査）」。
-- **fallback**: 同じパネルの「**手動で作成**」→「実施内容」を入力 →「下書きを作成」→ 報告書の下書き画面（`/app/reports/<id>/draft`）へ。AIの分類候補（点検の異常）は人が分類を決める（AIレビューの承認を待たない）。AIアシスタントは「手動で探す」の導線（文書・規程の一覧）を使う。
+- **fallback**: 報告書の画面（`/app/reports?activity=<活動ID>`。辿り方: 予定・活動 → 対象の活動 → 「報告書を作る」。**幹部または管理者の役割**で、**活動に実績の記録がある**ときだけ作れる＝実績が無いと作成は拒否される）の「この活動の報告書」で、「AIで下書き生成」の隣の「**手動で作成**」→「実施内容」を入力 →「下書きを作成」→ 報告書の下書き画面（`/app/reports/<id>/draft`）へ。AIの分類候補（点検の異常）は人が分類を決める（AIレビューの承認を待たない）。AIアシスタントは「手動で探す」の導線（文書・規程の一覧）を使う。
 - **recovery**: 上限停止なら ops/cost-alerts.md §3 の順で原因→解除判断。保留になったjobは終端なので、復旧後に必要なら**依頼し直す**（自動で再実行はしない）。
 - **担当**: 帳票の手動作成=幹部/記録係、停止の解除判断=正担当管理者。
 
@@ -48,26 +48,30 @@
 - **trigger**: 送信中の回線断・タイムアウト。サーバーには届いて保存されたが、応答だけが失われる。
 - **detection**: 保存操作の直後に「**結果を確認できません**」（点検登録の場合「同じ内容で再送しても二重登録にはなりません。」）。「保存しました」は出ない。
 - **fallback（同期結果照会）**: メニューの「**同期の状況**」（`/app/sync`）を開く。結果不明だった操作（点検の保存・本人出欠・参集の記録）は同じ送信鍵のまま「同期待ちの入力」に入っている → 「**今すぐ同期**」→ 一覧が「同期待ちの入力はありません。」になれば照会・再送が済んでいる（反映はサーバーが確認できたものだけを数える）。競合・拒否が出たら画面の案内（「現値の版で送り直す」等）に従い、自動上書きはしない。
-- **recovery**: 対象の記録（例: 施設詳細の点検履歴）を開き、**1件だけ**であることを確認する。ローカル演習ではAPIで1件を確認した（`GET /api/v1/facilities/<id>/inspections`）。
-- **担当**: 入力者本人。同期できない（拒否が続く）ときは正担当管理者。
+- **recovery**: 施設詳細（`/app/facilities/<id>`）の「最新の点検」が今回の内容であることを確認する。**画面には点検の履歴一覧が無い**（最新1件だけを表示）ため、二重になっていないか（件数）の確認は環境管理者がD1を読み取りで確認する（ローカル演習ではAPI `GET /api/v1/facilities/<id>/inspections` で1件を確認した）:
+  ```bash
+  # 読み取り（SELECT）だけ。施設IDは施設詳細のURLの末尾
+  npx wrangler d1 execute DB --env staging --remote --command "SELECT COUNT(*) AS n, MAX(inspected_at) AS latest FROM facility_inspections WHERE facility_id = '<施設ID>'"
+  ```
+- **担当**: 入力者本人。同期できない（拒否が続く）ときは正担当管理者。件数の確認（D1の読み取り）は環境管理者。
 
 ### 2.4 Queues障害（jobの送信失敗・配達遅延）
 
 - **trigger**: Queueへの送信失敗、consumerの停止。
 - **detection**: 依頼した処理（AI生成・添付検査・通知配送）が「処理中です／受け付けました。処理が終わるまで完了ではありません」のまま進まない。運用の監視項目 `jobs.lease_expired`（ops/cost-alerts.md §2のコマンド）。
 - **fallback**: 何もしない（**待つ**）。jobはD1に `queued` で残り、毎分のCron（`handleScheduled`）が回収して実行する（Queue送信に失敗してもjobは失われない＝workers試験 `tests/jobs.test.ts` の `queue_send_failure_does_not_lose_the_job_and_cron_recovers_it`）。急ぐ帳票は2.2の手動作成。
-- **recovery**: 滞留jobの確認（staging/production。`--remote` には `--env <名前> --yes-i-know` が必須）:
+- **recovery**: 滞留jobの確認（staging/production。Cloudflareの資格情報が要るため**環境管理者**が行う。**`--yes-i-know` はwranglerのフラグではない**＝本番誤適用ガードは `npm run migrate`〔scripts/migrate.ts〕専用。ここでの `wrangler d1 execute` は**読み取りのSELECTに限る**）:
   ```bash
   # 終わっていないjobの件数（種類・状態ごと）。queued/retry_waitが減っていけば回収されている
-  npx wrangler d1 execute DB --env staging --remote --yes-i-know --command "SELECT kind, status, COUNT(*) AS n, MIN(created_at) AS oldest FROM jobs WHERE status IN ('queued','running','retry_wait','manual_review') GROUP BY kind, status"
+  npx wrangler d1 execute DB --env staging --remote --command "SELECT kind, status, COUNT(*) AS n, MIN(created_at) AS oldest FROM jobs WHERE status IN ('queued','running','retry_wait','manual_review') GROUP BY kind, status"
   ```
   `manual_review`（上限回数で止まったjob）は自動では再実行しない。内容を見て、必要なら元の画面から依頼し直す。
-- **担当**: 正担当管理者（滞留確認）、環境管理者（Queue/consumerの状態確認）。
+- **担当**: 環境管理者（滞留確認のSELECT・Queue/consumerの状態確認）、正担当管理者（manual_reviewの依頼し直しの判断）。
 
 ### 2.5 通知の到達不明（provider障害・宛先不明）
 
 - **trigger**: providerの応答タイムアウト、宛先が解決できない。
-- **detection**: 通知の配送結果（承認後の画面、または「タスク・通知」から送信者として開いた通知）で「**到達不明**」が1人以上 → 「**結果を確認**」で対象者の氏名と「宛先の結果が確認できていません。無条件の再送は行われないため、対象者に直接確認してください。」。受付済み・到達不明・既読は別の行で数える（受付≠到達≠既読）。監視項目 `notification.delivery_unknown`。
+- **detection**: 通知の配送結果（承認した直後の同じ画面。**送信した通知の一覧画面は無い**〔docs/03 §1.1-14の既知の制限〕ため、後から開くには通知のURL `/app/tasks-notifications/notifications/<id>` を控えておく）で「**到達不明**」が1人以上（終端の札も「配送の処理を終えました（到達不明あり・要確認）」と黄色で出る） → 「**結果を確認**」で対象者の氏名と「宛先の結果が確認できていません。無条件の再送は行われないため、対象者に直接確認してください。」。受付済み・到達不明・既読は別の行で数える（受付≠到達≠既読）。監視項目 `notification.delivery_unknown`。
 - **fallback**: 幹部が対象者へ**既存の連絡手段（電話・対面・既存連絡網）で直接確認**する（ops/contact-flow.md §2）。アプリから同じ通知を作り直して再送しない（同じ人に二重に届く恐れ）。
 - **recovery**: 直接確認の結果は紙/連絡記録に残す。アプリの「到達不明」表示は直接確認後も**そのまま残る**（到達したことにしない）。
 - **担当**: 幹部（通知の承認者）。
@@ -90,4 +94,4 @@ npx vitest --run tests/jobs.test.ts -t queue_send_failure_does_not_lose_the_job_
 
 ## 4. 未実施（実環境）
 
-docs/evidence/V07-outage.md「未実施」の番号付き残手順を正本とする（staging演習、実Googleキー停止、実provider、実在の正副担当の交代、紙/電話への切替の実地演習、ops/security-response.md §7の遮断・rotation演習）。
+docs/evidence/V07-outage.md「未実施」の番号付き残手順を正本とする。実Cloudflare/staging/実キーが要るもの（staging演習・実Googleキー停止・ops/security-response.md §7の遮断/rotation演習・実Queuesの送信失敗観測・管理者全員喪失時のCloudflare側復旧手順の整備）は**T086**、消防団の人・了承・D13決定が要るもの（実providerの到達不明・実在の正副担当の交代・別担当〔人〕による再現・紙/電話の切替と復帰照合の実地演習）は**T088**が引き受ける。
