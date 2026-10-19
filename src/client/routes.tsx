@@ -76,6 +76,8 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-09": <ActivityPage />,
   "SCR-13": <AssetsPage />,
   "SCR-14": <AssetPage />,
+  // 資産の点検登録・訂正（T033の残作業をT085で接続。SCR-06と同じ3ステップの部品）
+  "SCR-23": <InspectionFormPage />,
   "SCR-11": <IncidentsPage />,
   "SCR-22": <IncidentEditorPage />,
   "SCR-12": <IncidentPage />,

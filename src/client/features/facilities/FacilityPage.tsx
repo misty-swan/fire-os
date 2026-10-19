@@ -37,7 +37,7 @@ type LastInspection =
   | { state: "loading" }
   | { state: "none" }
   | { state: "error" }
-  | { state: "found"; result: string; inspectedAt: string };
+  | { state: "found"; id: string; result: string; inspectedAt: string };
 
 /**
  * 施設の詳細（T022/T034、SCR-04）。台帳・写真・位置（出典/確認対象版）・点検と異常の状態を
@@ -49,6 +49,8 @@ export function FacilityPage() {
   const [facility, setFacility] = useState<FacilityDetail | "loading" | "notfound">("loading");
   const [openIssues, setOpenIssues] = useState<{ id: string; title: string; status: string }[] | null>(null);
   const [lastInspection, setLastInspection] = useState<LastInspection>({ state: "loading" });
+  /** 点検の記録（API-44の新しい順・最大20件。訂正前の原本も残る＝MAP-06「施設詳細に履歴が時系列表示される」。T085で接続） */
+  const [history, setHistory] = useState<{ id: string; result: string; inspectedAt: string; note: string; supersedesId: string | null; isCurrent?: boolean }[]>([]);
   // 位置確認の結果。409(競合)・403(権限)・404(所在)・結果不明(通信断/5xx)を同じ「失敗」にしない（docs/03 §1.1）
   const [reviewState, setReviewState] = useState<"idle" | "busy" | "conflict" | "forbidden" | "missing" | "unknown">("idle");
 
@@ -70,15 +72,18 @@ export function FacilityPage() {
       } catch {
         if (alive) setOpenIssues([]); // 一覧の取得に失敗しても詳細自体は見せる
       }
-      // 現在版の点検結果（API-44の先頭1件。記録が0件のときだけ「まだありません」を空表示にしない）
+      // 現在版の点検結果（API-44のisCurrent。訂正は元の実施日時のまま新しい原本を作るため、新しい順の先頭が
+      // 訂正前の原本になり得る＝T085で現在版の印を見るよう修正。記録が0件のときだけ「まだありません」）
       try {
-        const inspections = (await api("API-44", { params: { id }, query: { limit: 1 } })) as unknown as {
-          result: string; inspectedAt: string;
+        const inspections = (await api("API-44", { params: { id }, query: { limit: 20 } })) as unknown as {
+          id: string; result: string; inspectedAt: string; isCurrent?: boolean; note: string; supersedesId: string | null;
         }[];
+        const current = inspections.find((r) => r.isCurrent) ?? inspections[0];
+        if (alive) setHistory(inspections as unknown as typeof history);
         if (alive) {
           setLastInspection(
-            inspections.length > 0
-              ? { state: "found", result: inspections[0]!.result, inspectedAt: inspections[0]!.inspectedAt }
+            current
+              ? { state: "found", id: current.id, result: current.result, inspectedAt: current.inspectedAt }
               : { state: "none" },
           );
         }
@@ -225,6 +230,17 @@ export function FacilityPage() {
             </span>
           )}
         </div>
+        {lastInspection.state === "found" && (
+          // 現在の点検の訂正（SCR-06の訂正モード。元の記録は書き換えない。T085でT033の残作業を接続）
+          <div className="flex justify-end">
+            <Link
+              to={`/app/facilities/${id}/inspections/new?correct=${lastInspection.id}`}
+              className="inline-flex min-h-11 items-center rounded-pill bg-white/[.08] px-3 text-[12px] font-bold text-ink lg:min-h-9"
+            >
+              点検を訂正する
+            </Link>
+          </div>
+        )}
         <div className="flex items-center justify-between text-[13px]">
           <span className="text-ink-sub">異常対応</span>
           <Link to="/app/issues" className="inline-flex min-h-11 items-center gap-1 rounded-pill bg-white/[.08] px-2.5 text-[12px] font-bold text-ink lg:min-h-9">
@@ -232,6 +248,24 @@ export function FacilityPage() {
           </Link>
         </div>
       </Card>
+
+      {history.length > 0 && (
+        // 点検の記録（新しい順。訂正前の原本も残る。訂正は上の「点検を訂正する」から現在の記録だけ＝docs/03 §1.1-27）
+        <Card className="flex flex-col gap-2">
+          <span className="text-[14px] font-bold">点検の記録</span>
+          <ul aria-label="点検の記録" className="flex flex-col divide-y divide-white/[.06]">
+            {history.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-2 py-2 text-[13px]">
+                <span className="font-mono text-[12px] text-ink-sub">{r.inspectedAt.slice(0, 10)}</span>
+                <Chip tone={INSPECTION_RESULT_LABELS[r.result]?.tone ?? "neutral"}>{INSPECTION_RESULT_LABELS[r.result]?.label ?? "結果を確認中"}</Chip>
+                {r.supersedesId && <span className="text-[11px] text-ink-muted">訂正後の記録</span>}
+                {r.isCurrent === false && <span className="text-[11px] text-ink-muted">訂正済み</span>}
+                <span className="min-w-0 flex-1 truncate text-ink-sub">{r.note}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Card className="grid grid-cols-2 gap-px overflow-hidden bg-white/[.07] p-0">
         <InfoCell label="管理番号" value={facility.managementNumber ?? "—"} mono />

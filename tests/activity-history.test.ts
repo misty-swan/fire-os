@@ -237,4 +237,21 @@ describe("活動履歴の検索 (T038)", () => {
     expect(tamperedRes.status).toBe(409);
     expect((await json(tamperedRes)).error?.code).toBe("SNAPSHOT_CHANGED");
   });
+  // --- T085の網羅で見つけた欠落（履歴検索の入力拒否。AT-ACT-04のCT-02） ---
+  it("invalid_history_conditions_are_rejected (T085)", async () => {
+    const admin = fx.units.a.people.admin;
+    for (const q of [
+      "from=2026-10-01", // 日付だけ（UTC瞬間でない）
+      "memberId=NOT-A-UUID",
+      "status=unknown_status",
+      "actual=maybe",
+      "limit=0",
+      "unknownParam=1",
+    ]) {
+      const res = await fx.client(admin).request("GET", `/api/v1/activities?${q}`);
+      expect(res.status, q).toBe(400);
+    }
+    // 壊れたcursorは条件変更と同じ409（署名不一致。上のit「改変cursorも409」と同じ設計）
+    expect((await fx.client(admin).request("GET", "/api/v1/activities?cursor=not-a-cursor")).status).toBe(409);
+  });
 });

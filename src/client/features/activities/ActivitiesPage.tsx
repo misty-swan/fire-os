@@ -187,10 +187,10 @@ export function ActivitiesPage() {
       </div>
 
       {/* 検索（docs/03 SCR-08: 日付/種別/参加者/状態。actualは実参加の記録がある活動） */}
-      <Card className="grid gap-3 lg:grid-cols-2" aria-label="予定の検索">
+      <Card className="grid grid-cols-1 gap-3 lg:grid-cols-2" aria-label="予定の検索">
         <TextField name="filter-from" label="この日から" type="date" value={from} onChange={(e) => setParam({ from: e.target.value })} />
         <TextField name="filter-to" label="この日まで" type="date" value={to} onChange={(e) => setParam({ to: e.target.value })} />
-        <label className="hairline flex h-[54px] items-center gap-2 rounded-field bg-white/[.06] px-4">
+        <label className="hairline flex h-[54px] min-w-0 items-center gap-2 rounded-field bg-white/[.06] px-4">
           <span className="text-[12px] font-bold text-ink-sub">参加者</span>
           <select
             aria-label="参加者で絞る"
@@ -206,7 +206,7 @@ export function ActivitiesPage() {
             ))}
           </select>
         </label>
-        <label className="hairline flex h-[54px] items-center gap-2 rounded-field bg-white/[.06] px-4">
+        <label className="hairline flex h-[54px] min-w-0 items-center gap-2 rounded-field bg-white/[.06] px-4">
           <span className="text-[12px] font-bold text-ink-sub">状態</span>
           <select
             aria-label="状態で絞る"

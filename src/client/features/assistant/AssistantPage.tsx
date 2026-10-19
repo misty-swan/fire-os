@@ -634,6 +634,23 @@ function TurnView({ turn, onRegenerate }: { turn: Turn; onRegenerate: (turn: Tur
   );
 }
 
+/**
+ * 確認待ちの異常のうち新しい順にn件（記録を添えるチップ用）。API-15は作成の古い順のkeysetなので、
+ * 先頭n件だけ取ると古い異常しか出ず、新しく報告された異常を添えられなかった（T085の統合試験で発見。
+ * 確認待ちが5件を超えると再現）。続きを最後まで読み（200件×最大10頁）、作成の新しい順に並べ替える。
+ */
+async function newestReportedIssues(n: number): Promise<{ id: string; title: string }[]> {
+  const rows: { id: string; title: string; createdAt: string }[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 10; page++) {
+    const res = await apiCall("API-15", { query: { status: "reported", limit: 200, ...(cursor ? { cursor } : {}) } as ApiInput<"API-15">["query"] });
+    rows.push(...(res.data as unknown as { id: string; title: string; createdAt: string }[]));
+    cursor = res.nextCursor;
+    if (!cursor) break;
+  }
+  return rows.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0)).slice(0, n);
+}
+
 /** SCR-28の本体。質問欄・提案チップ（記録を添える）・応答の繰り返し（prototypeのAI画面と同じ構成） */
 export function AssistantPage() {
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -648,7 +665,7 @@ export function AssistantPage() {
     void (async () => {
       const [acts, issues] = await Promise.allSettled([
         api("API-05", { query: { status: "scheduled", from: new Date().toISOString(), limit: 5 } as ApiInput<"API-05">["query"] }),
-        api("API-15", { query: { status: "reported", limit: 5 } as ApiInput<"API-15">["query"] }),
+        newestReportedIssues(5),
       ]);
       if (!alive) return;
       const next: ContextOption[] = [];

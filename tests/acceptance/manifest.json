@@ -1,0 +1,3299 @@
+{
+ "version": "T085-1",
+ "note": "T085の受入manifest。ID集合は正本（docs/08・docs/12・契約台帳・画面台帳）から機械抽出し、ここではその対応先の実テストだけを書く。参照の形式は scripts/acceptance-lib.ts の TestRefString。CT列のnotApplicableはdocs/08 §2の読取専用・純表示に当たる組合せだけ。externalは実外部・実端末・人の残手順で合格に数えない。",
+ "acceptance": [
+  {
+   "id": "AT-AUTH-01",
+   "reqId": "AUTH-01",
+   "tests": [
+    "tests/invitations.test.ts::招待 (T009) > invitation_has_one_consumer_and_bound_identity",
+    "tests/invitations.test.ts::招待 (T009) > expired_cancelled_and_reissued_invitations_cannot_be_used",
+    "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > auth_works_in_workers_without_public_signup",
+    "tests/e2e/auth.spec.ts::invitation_that_cannot_be_used_explains_why_without_leaking_state",
+    "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/invitations.test.ts::招待 (T009) > invite_api_enforces_permission_unit_and_member_state",
+      "tests/authorization.test.ts::認可 (T008) > unlinked_identity_and_forged_test_header_never_get_business_access",
+      "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/invitations.test.ts::招待 (T009) > invitation_has_one_consumer_and_bound_identity",
+      "tests/invitations.test.ts::招待 (T009) > expired_cancelled_and_reissued_invitations_cannot_be_used",
+      "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > password_policy_and_hashed_storage"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/invitations.test.ts::招待 (T009) > invitation_has_one_consumer_and_bound_identity",
+      "tests/invitations.test.ts::招待 (T009) > invite_api_enforces_permission_unit_and_member_state"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/invitations.test.ts::招待 (T009) > orphan_identities_without_a_business_user_are_reaped_after_the_grace_period",
+      "tests/invitations.test.ts::招待 (T009) > bootstrap_admin_is_one_time_and_leaves_no_public_signup",
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything"
+     ],
+     "note": "identityだけ作られて業務利用者に結び付かない途中状態は猶予後に回収（INV5）。受領のbatchはexecuteMutation"
+    }
+   },
+   "external": [
+    "X-V01"
+   ]
+  },
+  {
+   "id": "AT-AUTH-02",
+   "reqId": "AUTH-02",
+   "tests": [
+    "tests/authorization.test.ts::認可 (T008) > admin_role_does_not_bypass_sensitive_scope",
+    "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions",
+    "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > role_replacement_bumps_authz_version_and_rejects_unsafe_changes",
+    "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions",
+      "tests/authorization.test.ts::認可 (T008) > admin_role_does_not_bypass_sensitive_scope",
+      "tests/members.test.ts::名簿 (T011) > private_fields_never_leak_to_roster"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > role_replacement_bumps_authz_version_and_rejects_unsafe_changes",
+      "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > last_admin_guard_also_holds_inside_the_commit_batch",
+      "tests/mutation.test.ts::executeMutation (T004) > changed_authz_version_or_suspended_user_is_forbidden_without_effects"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/authorization.test.ts::認可 (T008) > revoked_role_scope_and_status_changes_apply_on_the_next_request_without_version_bump",
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect"
+     ]
+    },
+    "CT-13": {
+     "tests": [
+      "tests/document-policy.test.ts::文書の承認・撤回・ACL変更と即時検索遮断 (T063) > principal_without_roles_is_never_document_visible",
+      "tests/rag.test.ts::出典付きRAG回答・原文一致・根拠不足保留 (T067) > answer_citations_remain_authorized_and_exact"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-AUTH-03",
+   "reqId": "AUTH-03",
+   "tests": [
+    "tests/members.test.ts::名簿 (T011) > private_fields_never_leak_to_roster",
+    "tests/members.test.ts::名簿 (T011) > who_may_change_what_is_enforced_by_the_server",
+    "tests/members.test.ts::名簿 (T011) > list_filters_and_keyset_paging_are_applied_on_the_server",
+    "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history",
+    "tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/members.test.ts::名簿 (T011) > private_fields_never_leak_to_roster",
+      "tests/members.test.ts::名簿 (T011) > scoped_holder_can_read_private_fields_and_the_view_is_audited",
+      "tests/members.test.ts::名簿 (T011) > who_may_change_what_is_enforced_by_the_server"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/members.test.ts::名簿 (T011) > db_rejects_unapproved_private_columns_and_duplicate_profiles",
+      "tests/members.test.ts::名簿 (T011) > private_fields_never_leak_to_roster"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
+      "tests/mutation.test.ts::executeMutation review fixes (PH0 review round 1) > failures_in_infrastructure_statements_also_roll_back_everything",
+      "tests/members.test.ts::名簿 (T011) > db_rejects_unapproved_private_columns_and_duplicate_profiles"
+     ],
+     "note": "途中失敗は共通のexecuteMutation（全業務mutationが同じ1 batch経路）を各SQL位置で失敗させる試験と、機能固有の失敗時に履歴・監査が残らない断言で確認する"
+    }
+   }
+  },
+  {
+   "id": "AT-AUTH-04",
+   "reqId": "AUTH-04",
+   "tests": [
+    "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > disabled_user_is_denied_even_if_library_revoke_fails",
+    "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > stop_without_fault_revokes_sessions_immediately_and_records_the_reason_on_the_row",
+    "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > session_revocation_api_revokes_all_sessions_and_bumps_authz_version",
+    "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/authorization.test.ts::認可 (T008) > revoked_role_scope_and_status_changes_apply_on_the_next_request_without_version_bump",
+      "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads",
+      "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > disabled_user_is_denied_even_if_library_revoke_fails",
+      "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > last_admin_guard_also_holds_inside_the_commit_batch"
+     ]
+    },
+    "CT-10": {
+     "tests": [
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins"
+     ]
+    },
+    "CT-12": {
+     "tests": [
+      "tests/events.test.ts::認可済snapshot・イベント再開cursor・差分取得 (T072) > snapshot_to_subscription_gap_never_loses_committed_event",
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-AUTH-05",
+   "reqId": "AUTH-05",
+   "tests": [
+    "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > totp_second_factor_and_one_time_backup_codes",
+    "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > mfa_cannot_be_turned_off_or_bypassed_and_enabling_it_revokes_older_sessions",
+    "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > password_reset_token_is_hashed_one_time_and_revokes_old_sessions",
+    "tests/e2e/auth.spec.ts::mfa_recovery_code_cannot_be_reused"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/authorization.test.ts::認可 (T008) > admin_actions_require_mfa",
+      "tests/audit.test.ts::監査 (T014) > audit_requires_mfa_for_a_real_admin_session"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > mfa_management_endpoints_require_the_password_and_there_is_no_disable_path",
+      "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > login_wrong_password_is_rejected_and_unknown_user_looks_the_same"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > totp_second_factor_and_one_time_backup_codes",
+      "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > verify_totp_only_revokes_other_sessions_when_it_actually_enables_mfa",
+      "tests/e2e/auth.spec.ts::mfa_recovery_code_cannot_be_reused"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > sign_in_is_rate_limited_per_ip_in_d1",
+      "tests/security/abuse.test.ts::T081 濫用（連続要求・総当たり） > credential_recovery_invitation_and_mfa_abuse_is_uniform_and_breaks_nothing"
+     ]
+    }
+   },
+   "external": [
+    "X-V01",
+    "X-DEV-2",
+    "X-OUT-4"
+   ]
+  },
+  {
+   "id": "AT-ACT-01",
+   "reqId": "ACT-01",
+   "tests": [
+    "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience",
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience",
+      "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
+      "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience"
+     ],
+     "note": "途中失敗は共通のexecuteMutation（全業務mutationが同じ1 batch経路）を各SQL位置で失敗させる試験と、機能固有の失敗時に履歴・監査が残らない断言で確認する"
+    }
+   }
+  },
+  {
+   "id": "AT-ACT-02",
+   "reqId": "ACT-02",
+   "tests": [
+    "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer",
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels",
+    "tests/e2e/activities.spec.ts::proxy_answer_form_resets_after_save_and_leaves_without_warning"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > proxy_reason_is_capped_at_2000_chars (docs/05 §1)",
+      "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer"
+     ]
+    },
+    "CT-10": {
+     "tests": [
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-ACT-03",
+   "reqId": "ACT-03",
+   "tests": [
+    "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance",
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > same_key_resend_of_creation_returns_saved_result (docs/05 §2)"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
+      "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance"
+     ],
+     "note": "途中失敗は共通のexecuteMutation（全業務mutationが同じ1 batch経路）を各SQL位置で失敗させる試験と、機能固有の失敗時に履歴・監査が残らない断言で確認する"
+    }
+   }
+  },
+  {
+   "id": "AT-ACT-04",
+   "reqId": "ACT-04",
+   "tests": [
+    "tests/activity-history.test.ts::活動履歴の検索 (T038) > history_filters_actual_participants_and_half_open_time_range",
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/activity-history.test.ts::活動履歴の検索 (T038) > history_filters_actual_participants_and_half_open_time_range"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/activity-history.test.ts::活動履歴の検索 (T038) > invalid_history_conditions_are_rejected (T085)"
+     ]
+    },
+    "CT-09": {
+     "tests": [
+      "tests/activity-history.test.ts::活動履歴の検索 (T038) > history_filters_actual_participants_and_half_open_time_range"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-ACT-05",
+   "reqId": "ACT-05",
+   "tests": [
+    "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience",
+    "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_draft_proposals_from_announcement_and_inspection_due",
+    "tests/e2e/notifications.spec.ts::notification_ui_distinguishes_accepted_unknown_and_read"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience",
+      "tests/e2e/notifications.spec.ts::notification_approval_shows_conflict_when_already_approved_elsewhere"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > resend_with_same_idempotency_key_returns_saved_draft_even_if_audience_became_empty"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience"
+     ]
+    },
+    "CT-11": {
+     "tests": [
+      "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > unknown_delivery_is_not_blindly_retried",
+      "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > approved_unsent_cancel_via_api_unread_list_and_unknown_convention"
+     ]
+    }
+   },
+   "external": [
+    "X-V06-DELIVERY"
+   ]
+  },
+  {
+   "id": "AT-ACT-06",
+   "reqId": "ACT-06",
+   "tests": [
+    "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once",
+    "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval",
+    "tests/e2e/analytics.spec.ts::analytics_shows_conditions_and_traces_sources",
+    "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version",
+    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once",
+      "tests/reports.test.ts::帳票様式artifactと手動下書き・不変版 (T056) > report_template_is_allowlisted_and_old_versions_immutable"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once",
+      "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > report_draft_requests_are_validated_before_a_job_is_created"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > missing_times_and_injected_notes_do_not_create_facts",
+      "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages"
+     ]
+    },
+    "CT-14": {
+     "tests": [
+      "tests/load/api-load.test.ts::代表件数・30端末の性能 (T082) > ordinary_api_p95_is_measured_separately_from_map_and_ai",
+      "tests/e2e/accessibility.spec.ts::analytics_conditions_stay_inside_the_screen_at_phone_width"
+     ]
+    }
+   },
+   "external": [
+    "X-V07-RENDER"
+   ]
+  },
+  {
+   "id": "AT-MAP-01",
+   "reqId": "MAP-01",
+   "tests": [
+    "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail",
+    "tests/gis-query.test.ts::施設の全件取得 (T020) > query_returns_all_201_facilities_and_detects_snapshot_change",
+    "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login",
+      "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success",
+      "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls"
+     ]
+    },
+    "CT-09": {
+     "tests": [
+      "tests/gis-query.test.ts::施設の全件取得 (T020) > query_returns_all_201_facilities_and_detects_snapshot_change",
+      "tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport"
+     ]
+    }
+   },
+   "external": [
+    "X-V05"
+   ]
+  },
+  {
+   "id": "AT-MAP-02",
+   "reqId": "MAP-02",
+   "tests": [
+    "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail",
+    "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls"
+   ],
+   "ct": {
+    "CT-09": {
+     "tests": [
+      "tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport",
+      "tests/gis-query.test.ts::施設の全件取得 (T020) > query_returns_all_201_facilities_and_detects_snapshot_change"
+     ],
+     "external": [
+      "X-V05"
+     ]
+    },
+    "CT-14": {
+     "tests": [
+      "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls",
+      "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls@tablet-768"
+     ]
+    }
+   },
+   "external": [
+    "X-V05"
+   ]
+  },
+  {
+   "id": "AT-MAP-03",
+   "reqId": "MAP-03",
+   "tests": [
+    "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+    "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > create_links_ready_attachmentIds_and_patch_rejects_attachment_fields"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)"
+     ]
+    },
+    "CT-09": {
+     "tests": [
+      "tests/gis-query.test.ts::施設の全件取得 (T020) > query_returns_all_201_facilities_and_detects_snapshot_change"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-MAP-04",
+   "reqId": "MAP-04",
+   "tests": [
+    "tests/gis-query.test.ts::施設の全件取得 (T020) > query_returns_all_201_facilities_and_detects_snapshot_change",
+    "tests/gis-query.test.ts::施設の全件取得 (T020) > filters_by_latest_inspection_result_and_open_issues",
+    "tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport"
+   ],
+   "ct": {
+    "CT-02": {
+     "tests": [
+      "tests/gis-query.test.ts::施設の全件取得 (T020) > invalid_list_conditions_are_rejected_without_partial_results (T085)"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/gis-query.test.ts::施設の全件取得 (T020) > query_returns_all_201_facilities_and_detects_snapshot_change",
+      "tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport"
+     ]
+    },
+    "CT-09": {
+     "tests": [
+      "tests/gis-query.test.ts::施設の全件取得 (T020) > query_returns_all_201_facilities_and_detects_snapshot_change"
+     ]
+    },
+    "CT-14": {
+     "tests": [
+      "tests/load/api-load.test.ts::代表件数・30端末の性能 (T082) > ordinary_api_p95_is_measured_separately_from_map_and_ai"
+     ]
+    }
+   },
+   "external": [
+    "X-V07-PERF"
+   ]
+  },
+  {
+   "id": "AT-MAP-05",
+   "reqId": "MAP-05",
+   "tests": [
+    "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)",
+    "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads",
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success"
+     ]
+    },
+    "CT-09": {
+     "tests": [
+      "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail",
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)"
+     ]
+    },
+    "CT-16": {
+     "tests": [
+      "tests/file-inspection.test.ts::ファイル検査とready確定 (T016) > forged_mime_or_scanner_failure_never_becomes_ready",
+      "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-MAP-06",
+   "reqId": "MAP-06",
+   "tests": [
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_issue_and_photo_link_commit_together",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)",
+    "tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission",
+    "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > manual_issue_records_only_matching_origin_inspection",
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)",
+      "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_note_limits_follow_the_db_checks",
+      "tests/inspection-templates.test.ts::点検様式の版と承認 (T027) > unapproved_template_version_rejects_inspection_save"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original",
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_reuses_original_handler_authorization_for_inspection_correction_and_mobilization"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_mutation_rolls_back_at_any_statement_position",
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_issue_and_photo_link_commit_together"
+     ]
+    },
+    "CT-16": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_links_ready_attachments_and_rejects_uninspected_ones",
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_autolinked_photo_moves_to_inspection_on_save"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-MAP-07",
+   "reqId": "MAP-07",
+   "tests": [
+    "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified",
+    "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > paused_members_cannot_be_inspector_or_assignee",
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+      "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason",
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-MAP-08",
+   "reqId": "MAP-08",
+   "tests": [
+    "tests/csv-preview.test.ts::CSV取り込みのプレビュー (T023) > preview_changes_no_facility_even_with_valid_rows",
+    "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > import_commit_detects_master_change_and_escapes_formula",
+    "tests/e2e/csv.spec.ts::csv_import_preview_then_commit_updates_master"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/csv-preview.test.ts::CSV取り込みのプレビュー (T023) > preview_changes_no_facility_even_with_valid_rows",
+      "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > import_commit_detects_master_change_and_escapes_formula"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/csv-preview.test.ts::CSV取り込みのプレビュー (T023) > row_validation_rejects_long_cells_and_non_decimal_coordinates",
+      "tests/csv-preview.test.ts::CSV取り込みのプレビュー (T023) > preview_changes_no_facility_even_with_valid_rows"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > commit_job_detects_external_master_change_and_never_completes",
+      "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > import_commit_detects_master_change_and_escapes_formula"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > import_commit_detects_master_change_and_escapes_formula"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > import_commit_detects_master_change_and_escapes_formula",
+      "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > commit_job_detects_external_master_change_and_never_completes"
+     ]
+    },
+    "CT-09": {
+     "tests": [
+      "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > import_commit_detects_master_change_and_escapes_formula",
+      "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > overwrite_commit_resets_location_confirmation_with_new_location_version"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-MAP-09",
+   "reqId": "MAP-09",
+   "tests": [
+    "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking",
+    "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+      "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking",
+      "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success"
+     ]
+    },
+    "CT-09": {
+     "tests": [
+      "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail"
+     ]
+    }
+   },
+   "external": [
+    "X-DEV-MAPS"
+   ]
+  },
+  {
+   "id": "AT-MAP-10",
+   "reqId": "MAP-10",
+   "tests": [
+    "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > patrol_plan_stays_a_draft_until_human_confirms",
+    "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > candidate_order_excludes_archived_facilities_and_keeps_positions_unique",
+    "tests/e2e/patrol-plans.spec.ts::patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > patrol_plan_stays_a_draft_until_human_confirms"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > patrol_plan_stays_a_draft_until_human_confirms",
+      "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > candidate_order_excludes_archived_facilities_and_keeps_positions_unique"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > patrol_plan_stays_a_draft_until_human_confirms"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > patrol_plan_stays_a_draft_until_human_confirms",
+      "tests/e2e/patrol-plans.spec.ts::patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch"
+     ]
+    },
+    "CT-09": {
+     "tests": [
+      "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > candidate_order_excludes_archived_facilities_and_keeps_positions_unique"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-AST-01",
+   "reqId": "AST-01",
+   "tests": [
+    "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
+    "tests/e2e/assets.spec.ts::asset_detail_displays_quantity_unit_and_storage"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
+      "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_create_and_update_resend_have_one_effect (T085)"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-AST-02",
+   "reqId": "AST-02",
+   "tests": [
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)",
+    "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target",
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target",
+      "tests/inspection-templates.test.ts::点検様式の版と承認 (T027) > approved_template_is_immutable_and_required_items_enforced"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)",
+      "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_mutation_rolls_back_at_any_statement_position",
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target"
+     ],
+     "note": "施設・資産の点検は同じbuildInspectionMutation（明細・異常・系列を1 batch）。全SQL位置の失敗注入は共通spec、資産側は異種様式で原本0行の断言"
+    },
+    "CT-16": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)",
+      "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-AST-03",
+   "reqId": "AST-03",
+   "tests": [
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason",
+    "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > paused_members_cannot_be_inspector_or_assignee",
+      "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_report_and_transition_resend_have_one_effect (T085)"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason",
+      "tests/mutation.test.ts::executeMutation (T004) > root_update_matching_zero_rows_is_a_conflict_and_leaves_nothing",
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything"
+     ],
+     "note": "途中失敗は共通のexecuteMutation（全業務mutationが同じ1 batch経路）を各SQL位置で失敗させる試験と、機能固有の失敗時に履歴・監査が残らない断言で確認する"
+    }
+   }
+  },
+  {
+   "id": "AT-AST-04",
+   "reqId": "AST-04",
+   "tests": [
+    "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > due_detection_uses_japan_date_and_is_idempotent",
+    "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > inspection_due_metric_matches_overdue_asset_lists (T048)",
+    "tests/e2e/dashboard.spec.ts::home_metrics_drill_down_to_matching_lists"
+   ],
+   "ct": {
+    "CT-02": {
+     "tests": [
+      "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > schedule_put_validates_input_and_detail_and_lists_show_due"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > due_detection_uses_japan_date_and_is_idempotent",
+      "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > schedule_put_validates_input_and_detail_and_lists_show_due"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > due_detection_uses_japan_date_and_is_idempotent",
+      "tests/jobs.test.ts::persistent jobs (T006) > queue_send_failure_does_not_lose_the_job_and_cron_recovers_it"
+     ]
+    },
+    "CT-11": {
+     "tests": [
+      "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_draft_proposals_from_announcement_and_inspection_due"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-AST-05",
+   "reqId": "AST-05",
+   "tests": [
+    "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock",
+    "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_history_is_reachable_from_assets_and_shared_with_activities",
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment",
+    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages",
+      "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-DSP-01",
+   "reqId": "DSP-01",
+   "tests": [
+    "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches",
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > same_key_resend_returns_saved_response_for_create_and_update (docs/05 §2)"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-DSP-02",
+   "reqId": "DSP-02",
+   "tests": [
+    "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time",
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time",
+      "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > proxy_reason_is_capped_at_2000_chars (docs/05 §1)"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time"
+     ]
+    },
+    "CT-10": {
+     "tests": [
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_reuses_original_handler_authorization_for_inspection_correction_and_mobilization",
+      "tests/offline-store.test.ts::通信断下書きの写像 (T077・capture.planFor) > proxy_mobilization_is_never_captured_as_a_draft_but_self_mobilization_is",
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins"
+     ]
+    }
+   },
+   "external": [
+    "X-OUT-10"
+   ]
+  },
+  {
+   "id": "AT-DSP-03",
+   "reqId": "DSP-03",
+   "tests": [
+    "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages",
+    "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches",
+    "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once",
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment",
+    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > same_key_resend_returns_saved_response_for_create_and_update (docs/05 §2)"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-DSP-04",
+   "reqId": "DSP-04",
+   "tests": [
+    "tests/realtime.test.ts::30端末の更新配信と切断後snapshot回復 (T073) > reconnect_ignores_old_entity_versions_and_resyncs_expired_cursor",
+    "tests/events.test.ts::認可済snapshot・イベント再開cursor・差分取得 (T072) > snapshot_to_subscription_gap_never_loses_committed_event",
+    "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/events.test.ts::認可済snapshot・イベント再開cursor・差分取得 (T072) > attendance_events_follow_the_api_07_read_acl",
+      "tests/events.test.ts::認可済snapshot・イベント再開cursor・差分取得 (T072) > snapshot_to_subscription_gap_never_loses_committed_event"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/realtime-client.test.tsx::useIncidentUpdates (T073) > offline_pauses_polling_and_reports_offline_then_resumes",
+      "tests/events.test.ts::認可済snapshot・イベント再開cursor・差分取得 (T072) > snapshot_to_subscription_gap_never_loses_committed_event"
+     ]
+    },
+    "CT-12": {
+     "tests": [
+      "tests/realtime.test.ts::30端末の更新配信と切断後snapshot回復 (T073) > reconnect_ignores_old_entity_versions_and_resyncs_expired_cursor",
+      "tests/realtime-client.test.tsx::useIncidentUpdates (T073) > remote_newer_version_advances_and_old_version_does_not_regress",
+      "tests/realtime-client.test.tsx::useIncidentUpdates (T073) > resync_required_recovers_via_snapshot_and_continues_with_new_cursor",
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+     ]
+    },
+    "CT-14": {
+     "tests": [
+      "tests/realtime.test.ts::30端末の更新配信と切断後snapshot回復 (T073) > reconnect_ignores_old_entity_versions_and_resyncs_expired_cursor",
+      "tests/load/reconnect-load.test.ts::30端末の再接続集中（通常と通信劣化） (T082) > reconnect_storm_recovers_the_backlog_within_the_development_target_in_normal_and_degraded_network"
+     ],
+     "external": [
+      "X-V06-RT"
+     ]
+    }
+   },
+   "external": [
+    "X-V06-RT"
+   ]
+  },
+  {
+   "id": "AT-DSP-05",
+   "reqId": "DSP-05",
+   "tests": [
+    "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
+    "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
+    "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_routes_require_per13_at_entry_so_role_stripped_caller_is_403",
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_reuses_original_handler_authorization_for_inspection_correction_and_mobilization"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
+      "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_command_shares_the_original_api_idempotency_key_without_double_effect"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
+      "tests/client-shell.test.tsx::client shell (T005) > network_failure_and_5xx_mean_unknown_result_and_retry_reuses_the_same_key"
+     ]
+    },
+    "CT-10": {
+     "tests": [
+      "tests/offline-store.test.ts::端末下書き store (T075) > account_switch_and_expiry_never_restore_another_users_draft",
+      "tests/offline-store.test.ts::端末下書き store (T075) > login_sweeps_drafts_left_by_another_user_even_after_a_crash_skipped_logout",
+      "tests/e2e/offline-account-switch.spec.ts::account_switch_never_leaves_or_shows_another_users_offline_draft"
+     ]
+    },
+    "CT-12": {
+     "tests": [
+      "tests/realtime-client.test.tsx::useIncidentUpdates (T073) > offline_pauses_polling_and_reports_offline_then_resumes",
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+     ]
+    }
+   },
+   "external": [
+    "X-DEV-1"
+   ]
+  },
+  {
+   "id": "AT-COM-01",
+   "reqId": "COM-01",
+   "tests": [
+    "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
+    "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > announcement_response_carries_author_my_read_state_and_linked_attachments (T046)",
+    "tests/e2e/announcements.spec.ts::edited_announcement_requires_new_read"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
+      "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > audience_ids_are_projected_to_managers_only (docs/05 §1)"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > invalid_announcement_input_is_rejected_without_creating_anything (T085)"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
+      "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > same_key_resend_returns_saved_response_for_update_and_read (docs/05 §2)"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
+      "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision"
+     ],
+     "note": "途中失敗は共通のexecuteMutation（全業務mutationが同じ1 batch経路）を各SQL位置で失敗させる試験と、機能固有の失敗時に履歴・監査が残らない断言で確認する"
+    }
+   }
+  },
+  {
+   "id": "AT-COM-02",
+   "reqId": "COM-02",
+   "tests": [
+    "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > unknown_delivery_is_not_blindly_retried",
+    "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > approved_unsent_cancel_via_api_unread_list_and_unknown_convention",
+    "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
+    "tests/e2e/notifications.spec.ts::notification_ui_distinguishes_accepted_unknown_and_read",
+    "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/e2e/notifications.spec.ts::notification_approval_shows_conflict_when_already_approved_elsewhere",
+      "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > duplicate_and_timed_out_runs_never_send_twice",
+      "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > same_key_resend_returns_saved_response_for_update_and_read (docs/05 §2)"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > delivery_retry_exhaustion_marks_notification_failed",
+      "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > unknown_delivery_is_not_blindly_retried",
+      "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success"
+     ]
+    },
+    "CT-11": {
+     "tests": [
+      "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > unknown_delivery_is_not_blindly_retried",
+      "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > cancelled_pending_deliveries_are_not_sent_when_cancellation_commits_during_dispatch",
+      "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > delivery_skips_expired_notifications_and_inactive_recipients"
+     ]
+    }
+   },
+   "external": [
+    "X-V06-DELIVERY",
+    "X-OUT-3"
+   ]
+  },
+  {
+   "id": "AT-DOC-01",
+   "reqId": "DOC-01",
+   "tests": [
+    "tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload",
+    "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads",
+    "tests/e2e/attachments.spec.ts::checking_file_is_not_submitted_as_ready"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload",
+      "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/upload.test.ts::添付の予約とアップロード (T015) > upload_requires_token_and_owner_and_known_type",
+      "tests/upload.test.ts::添付の予約とアップロード (T015) > empty_upload_body_is_rejected_without_attempt"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload",
+      "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads",
+      "tests/file-inspection.test.ts::ファイル検査とready確定 (T016) > forged_mime_or_scanner_failure_never_becomes_ready"
+     ]
+    },
+    "CT-08": {
+     "tests": [
+      "tests/restore-consistency.test.ts::復元の整合と外部効果の照合 (T079) > restore_does_not_resend_notifications_or_revive_old_sessions",
+      "tests/restore-consistency.test.ts::復元の整合と外部効果の照合 (T079) > verify_restore_detects_missing_object_lost_deliveries_and_unrevoked_sessions"
+     ],
+     "external": [
+      "X-V07-RESTORE"
+     ]
+    },
+    "CT-16": {
+     "tests": [
+      "tests/file-inspection.test.ts::ファイル検査とready確定 (T016) > forged_mime_or_scanner_failure_never_becomes_ready",
+      "tests/file-inspection.test.ts::ファイル検査とready確定 (T016) > checking_attachment_is_retried_until_limit_not_staled",
+      "tests/e2e/attachments.spec.ts::checking_file_is_not_submitted_as_ready"
+     ]
+    }
+   },
+   "external": [
+    "X-V02"
+   ]
+  },
+  {
+   "id": "AT-DOC-02",
+   "reqId": "DOC-02",
+   "tests": [
+    "tests/reports.test.ts::帳票様式artifactと手動下書き・不変版 (T056) > report_template_is_allowlisted_and_old_versions_immutable",
+    "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval",
+    "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > second_approval_supersedes_previous_approved_version",
+    "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/reports.test.ts::帳票様式artifactと手動下書き・不変版 (T056) > report_template_is_allowlisted_and_old_versions_immutable",
+      "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > report_draft_requests_are_validated_before_a_job_is_created"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval",
+      "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > second_approval_supersedes_previous_approved_version"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/reports.test.ts::帳票様式artifactと手動下書き・不変版 (T056) > manual_draft_and_new_version_resend_have_one_effect (T085)"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > missing_times_and_injected_notes_do_not_create_facts",
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval"
+     ]
+    },
+    "CT-17": {
+     "tests": [
+      "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > missing_times_and_injected_notes_do_not_create_facts",
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > fabricated_and_incomplete_recordings_fail_the_report_gate"
+     ]
+    }
+   },
+   "external": [
+    "X-V07-RENDER",
+    "X-V04-LLM"
+   ]
+  },
+  {
+   "id": "AT-DASH-01",
+   "reqId": "DASH-01",
+   "tests": [
+    "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > dashboard_counts_match_authorized_drilldown_lists",
+    "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > inspection_due_metric_matches_overdue_asset_lists (T048)",
+    "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > dashboard_task_and_notification_metrics_match_their_lists (T052)",
+    "tests/e2e/dashboard.spec.ts::home_metrics_drill_down_to_matching_lists"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > dashboard_counts_match_authorized_drilldown_lists",
+      "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > dashboard_task_and_notification_metrics_match_their_lists (T052)"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > dashboard_counts_match_authorized_drilldown_lists"
+     ]
+    },
+    "CT-05": {
+     "notApplicable": "docs/08 §2「read-onlyや純粋な表示要件に不要なmutation試験を実施したことにしない」: ホーム（API-28）はGETだけの集計表示で、途中失敗させる書込が無い。数値の源（予定・出欠・異常・点検期限・タスク・通知）の原子性は各要件のCT-05（AT-ACT-01/02・AT-MAP-06・AT-AST-03/04・AT-AI-04）で検証する"
+    },
+    "CT-14": {
+     "tests": [
+      "tests/load/api-load.test.ts::代表件数・30端末の性能 (T082) > ordinary_api_p95_is_measured_separately_from_map_and_ai",
+      "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-DASH-02",
+   "reqId": "DASH-02",
+   "tests": [
+    "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once",
+    "tests/e2e/analytics.spec.ts::analytics_shows_conditions_and_traces_sources",
+    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once"
+     ]
+    },
+    "CT-02": {
+     "tests": [
+      "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once"
+     ]
+    },
+    "CT-14": {
+     "tests": [
+      "tests/load/api-load.test.ts::代表件数・30端末の性能 (T082) > ordinary_api_p95_is_measured_separately_from_map_and_ai",
+      "tests/e2e/accessibility.spec.ts::analytics_conditions_stay_inside_the_screen_at_phone_width"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-AI-01",
+   "reqId": "AI-01",
+   "tests": [
+    "tests/jev.test.ts::Jev分類 (T053) > jev_noul_value_is_not_a_confidence_field",
+    "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > quality_gate_fails_on_one_abnormal_to_no_issue_case",
+    "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval",
+    "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/jev.test.ts::Jev分類 (T053) > classification_requests_are_validated_before_a_job_is_created",
+      "tests/jev.test.ts::Jev分類 (T053) > ai_reviews_lists_pending_candidates_with_filters_and_keyset"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
+      "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/jev.test.ts::Jev分類 (T053) > without_the_ai_binding_the_job_lands_in_manual_review",
+      "tests/jev.test.ts::Jev分類 (T053) > invalid_outputs_go_to_manual_review_and_keep_no_candidate",
+      "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > budget_exhaustion_stops_optional_inference_but_preserves_saved_records"
+     ]
+    },
+    "CT-17": {
+     "tests": [
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > quality_gate_fails_on_one_abnormal_to_no_issue_case",
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > holdout_fixtures_are_committed_and_versioned"
+     ],
+     "external": [
+      "X-V04-JEV"
+     ]
+    }
+   },
+   "external": [
+    "X-V04-JEV"
+   ]
+  },
+  {
+   "id": "AT-AI-02",
+   "reqId": "AI-02",
+   "tests": [
+    "tests/jev.test.ts::Jev分類 (T053) > jev_noul_value_is_not_a_confidence_field",
+    "tests/jev.test.ts::Jev分類 (T053) > multiple_anomaly_probabilities_are_flagged_and_the_representative_is_kept"
+   ],
+   "ct": {
+    "CT-02": {
+     "tests": [
+      "tests/jev.test.ts::Jev分類 (T053) > classification_requests_are_validated_before_a_job_is_created"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/jev.test.ts::Jev分類 (T053) > source_version_change_or_requester_permission_loss_becomes_stale"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/jev.test.ts::Jev分類 (T053) > invalid_outputs_go_to_manual_review_and_keep_no_candidate",
+      "tests/jev.test.ts::Jev分類 (T053) > without_the_ai_binding_the_job_lands_in_manual_review"
+     ]
+    },
+    "CT-17": {
+     "tests": [
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > quality_gate_fails_on_one_abnormal_to_no_issue_case"
+     ],
+     "external": [
+      "X-V04-JEV"
+     ]
+    }
+   },
+   "external": [
+    "X-V04-JEV"
+   ]
+  },
+  {
+   "id": "AT-AI-03",
+   "reqId": "AI-03",
+   "tests": [
+    "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > missing_times_and_injected_notes_do_not_create_facts",
+    "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > report_draft_requests_are_validated_before_a_job_is_created"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > missing_times_and_injected_notes_do_not_create_facts"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > report_draft_job_without_ai_binding_lands_in_manual_review",
+      "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version"
+     ]
+    },
+    "CT-17": {
+     "tests": [
+      "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > missing_times_and_injected_notes_do_not_create_facts",
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > fabricated_and_incomplete_recordings_fail_the_report_gate"
+     ],
+     "external": [
+      "X-V04-LLM"
+     ]
+    }
+   },
+   "external": [
+    "X-V04-LLM"
+   ]
+  },
+  {
+   "id": "AT-AI-04",
+   "reqId": "AI-04",
+   "tests": [
+    "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
+    "tests/ai-decisions.test.ts::AI提案の決定 (T054) > inspection_candidate_approval_targets_the_linked_issue_once",
+    "tests/tasks.test.ts::業務タスク (T049) > ai_originated_task_tracks_status_changes_assignee_and_reason",
+    "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval",
+    "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > resend_with_same_idempotency_key_returns_saved_decision_even_if_assignee_became_inactive",
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > resend_with_same_idempotency_key_returns_saved_decision_even_if_notification_source_changed"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/tasks.test.ts::業務タスク (T049) > pending_ai_proposal_cannot_create_business_task",
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
+      "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval"
+     ]
+    },
+    "CT-11": {
+     "tests": [
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
+      "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+     ]
+    },
+    "CT-17": {
+     "tests": [
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
+      "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > prompt_injection_cannot_write_or_send_notification"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-AI-05",
+   "reqId": "AI-05",
+   "tests": [
+    "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > quality_gate_fails_on_one_abnormal_to_no_issue_case",
+    "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > evaluation_runs_are_listed_with_filters_and_keyset",
+    "tests/e2e/member-admin.spec.ts::ai_evaluation_buttons_meet_touch_target_on_mobile@phone-360"
+   ],
+   "ct": {
+    "CT-14": {
+     "tests": [
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > quality_gate_fails_on_one_abnormal_to_no_issue_case",
+      "tests/operations-panel.test.tsx::OperationsPanel (T080) > shows_not_measured_note_thresholds_costs_from_recorded_usage_and_audit_history"
+     ]
+    },
+    "CT-17": {
+     "tests": [
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > holdout_fixtures_are_committed_and_versioned",
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > unknown_versions_are_rejected_and_unrecorded_model_fails_honestly",
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > fabricated_and_incomplete_recordings_fail_the_report_gate"
+     ],
+     "external": [
+      "X-AIEVAL"
+     ]
+    }
+   },
+   "external": [
+    "X-AIEVAL"
+   ]
+  },
+  {
+   "id": "AT-AI-06",
+   "reqId": "AI-06",
+   "tests": [
+    "tests/rag.test.ts::出典付きRAG回答・原文一致・根拠不足保留 (T067) > answer_citations_remain_authorized_and_exact",
+    "tests/rag-holdout.test.ts::固定dataset55問の全件回帰 (T067・B低3) > all_55_questions_answer_with_expected_sources_or_abstain",
+    "tests/document-policy.test.ts::文書の承認・撤回・ACL変更と即時検索遮断 (T063) > withdrawal_blocks_search_before_index_cleanup",
+    "tests/document-extract.test.ts::文書抽出・ページ/段落/offset付きchunk (T064) > chunk_citation_can_be_resolved_to_exact_original_span",
+    "tests/e2e/documents.spec.ts::withdrawn_document_disappears_from_search_and_citation",
+    "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/rag.test.ts::出典付きRAG回答・原文一致・根拠不足保留 (T067) > answer_citations_remain_authorized_and_exact",
+      "tests/documents.test.ts::許諾文書の原本・版・閲覧API (T062) > document_version_requires_ready_original_and_license"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/document-policy.test.ts::文書の承認・撤回・ACL変更と即時検索遮断 (T063) > withdrawal_blocks_search_before_index_cleanup",
+      "tests/rag.test.ts::出典付きRAG回答・原文一致・根拠不足保留 (T067) > answer_citations_remain_authorized_and_exact"
+     ]
+    },
+    "CT-07": {
+     "tests": [
+      "tests/rag.test.ts::出典付きRAG回答・原文一致・根拠不足保留 (T067) > answer_citations_remain_authorized_and_exact",
+      "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > rag_and_assistant_are_metered_and_stopped_by_budget",
+      "tests/e2e/documents.spec.ts::image_only_pdf_version_shows_unextractable_reason"
+     ]
+    },
+    "CT-13": {
+     "tests": [
+      "tests/document-policy.test.ts::文書の承認・撤回・ACL変更と即時検索遮断 (T063) > withdrawal_blocks_search_before_index_cleanup",
+      "tests/retrieval.test.ts::選定した索引の投入・検索・失効回収 (T066) > index_hit_is_filtered_by_current_d1_acl_and_version",
+      "tests/e2e/documents.spec.ts::withdrawn_document_disappears_from_search_and_citation",
+      "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+     ]
+    },
+    "CT-17": {
+     "tests": [
+      "tests/rag-holdout.test.ts::固定dataset55問の全件回帰 (T067・B低3) > all_55_questions_answer_with_expected_sources_or_abstain",
+      "tests/rag.test.ts::出典付きRAG回答・原文一致・根拠不足保留 (T067) > answer_citations_remain_authorized_and_exact"
+     ],
+     "external": [
+      "X-V04-RET"
+     ]
+    }
+   },
+   "external": [
+    "X-V04-RET"
+   ]
+  },
+  {
+   "id": "AT-AI-07",
+   "reqId": "AI-07",
+   "tests": [
+    "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > prompt_injection_cannot_write_or_send_notification",
+    "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > assistant_proposal_approves_through_api_31_and_stale_references_are_rejected",
+    "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > prompt_injection_cannot_write_or_send_notification",
+      "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > api_30_masks_read_results_of_documents_the_viewer_cannot_see"
+     ]
+    },
+    "CT-03": {
+     "tests": [
+      "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > assistant_proposal_approves_through_api_31_and_stale_references_are_rejected"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > prompt_injection_cannot_write_or_send_notification"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > assistant_proposal_approves_through_api_31_and_stale_references_are_rejected"
+     ]
+    },
+    "CT-13": {
+     "tests": [
+      "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > api_30_masks_read_results_of_documents_the_viewer_cannot_see",
+      "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects",
+      "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+     ]
+    },
+    "CT-17": {
+     "tests": [
+      "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > prompt_injection_cannot_write_or_send_notification"
+     ],
+     "external": [
+      "X-V04-RET"
+     ]
+    }
+   },
+   "external": [
+    "X-V04-RET"
+   ]
+  },
+  {
+   "id": "AT-NFR-01",
+   "reqId": "NFR-01",
+   "tests": [
+    "tests/e2e/shell.spec.ts::shell_layout_matches_the_viewport",
+    "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls",
+    "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls@tablet-768",
+    "tests/e2e/revisit-flows.spec.ts::revisit_core_flows_complete_in_few_operations_after_relogin@tablet-768",
+    "tests/e2e/accessibility.spec.ts::inputs_stay_inside_the_search_card_at_narrow_widths",
+    "tests/e2e/accessibility.spec.ts::date_inputs_render_with_the_app_field_style_on_ios_browsers"
+   ],
+   "ct": {
+    "CT-10": {
+     "tests": [
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
+      "tests/e2e/pwa-cache.spec.ts::offline_cache_contains_no_api_response_or_google_tiles",
+      "tests/e2e/pwa-cache.spec.ts::sw_update_notifies_and_does_not_destroy_unsaved_input"
+     ]
+    },
+    "CT-12": {
+     "tests": [
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+     ]
+    },
+    "CT-14": {
+     "tests": [
+      "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls",
+      "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls@tablet-768",
+      "tests/e2e/revisit-flows.spec.ts::revisit_core_flows_complete_in_few_operations_after_relogin"
+     ]
+    }
+   },
+   "external": [
+    "X-DEV-1",
+    "X-DEV-2",
+    "X-DEV-3"
+   ]
+  },
+  {
+   "id": "AT-NFR-02",
+   "reqId": "NFR-02",
+   "tests": [
+    "tests/e2e/revisit-flows.spec.ts::revisit_core_flows_complete_in_few_operations_after_relogin",
+    "tests/e2e/revisit-flows.spec.ts::revisit_core_flows_complete_in_few_operations_after_relogin@tablet-768",
+    "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls"
+   ],
+   "ct": {
+    "CT-14": {
+     "tests": [
+      "tests/e2e/revisit-flows.spec.ts::revisit_core_flows_complete_in_few_operations_after_relogin",
+      "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls"
+     ],
+     "external": [
+      "X-DEV-4"
+     ]
+    }
+   },
+   "external": [
+    "X-DEV-4"
+   ]
+  },
+  {
+   "id": "AT-NFR-03",
+   "reqId": "NFR-03",
+   "tests": [
+    "tests/load/api-load.test.ts::代表件数・30端末の性能 (T082) > ordinary_api_p95_is_measured_separately_from_map_and_ai",
+    "tests/load/reconnect-load.test.ts::30端末の再接続集中（通常と通信劣化） (T082) > reconnect_storm_recovers_the_backlog_within_the_development_target_in_normal_and_degraded_network",
+    "tests/load/api-load.test.ts::代表件数・30端末の性能 (T082) > attendance_event_acl_scan_is_bounded_and_measured_for_denormalization_decision"
+   ],
+   "ct": {
+    "CT-14": {
+     "tests": [
+      "tests/load/api-load.test.ts::代表件数・30端末の性能 (T082) > ordinary_api_p95_is_measured_separately_from_map_and_ai",
+      "tests/load/reconnect-load.test.ts::30端末の再接続集中（通常と通信劣化） (T082) > reconnect_storm_recovers_the_backlog_within_the_development_target_in_normal_and_degraded_network"
+     ],
+     "external": [
+      "X-V07-PERF"
+     ]
+    },
+    "CT-15": {
+     "tests": [
+      "tests/e2e/shell.spec.ts::api_paths_return_json_never_the_spa",
+      "tests/runtime.test.ts::runtime (T001) > api_route_never_returns_spa",
+      "tests/deploy-config.test.ts::deploy-config (T078) > clean_environment_and_staged_expand_backfill_contract_pass"
+     ]
+    }
+   },
+   "external": [
+    "X-V07-PERF"
+   ]
+  },
+  {
+   "id": "AT-NFR-04",
+   "reqId": "NFR-04",
+   "tests": [
+    "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success",
+    "tests/jobs.test.ts::persistent jobs (T006) > queue_send_failure_does_not_lose_the_job_and_cron_recovers_it",
+    "tests/notification-delivery-label.test.tsx::配送結果の終端表示 (T084 R10) > finished_with_unknown_recipient_is_not_shown_as_green_done"
+   ],
+   "ct": {
+    "CT-07": {
+     "tests": [
+      "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success",
+      "tests/jobs.test.ts::persistent jobs (T006) > queue_send_failure_does_not_lose_the_job_and_cron_recovers_it"
+     ]
+    },
+    "CT-08": {
+     "tests": [
+      "tests/restore-consistency.test.ts::復元の整合と外部効果の照合 (T079) > restore_does_not_resend_notifications_or_revive_old_sessions"
+     ],
+     "external": [
+      "X-V07-RESTORE"
+     ]
+    },
+    "CT-11": {
+     "tests": [
+      "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success",
+      "tests/notification-delivery-label.test.tsx::配送結果の終端表示 (T084 R10) > finished_with_failed_recipient_is_not_shown_as_green_done",
+      "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > unknown_delivery_is_not_blindly_retried"
+     ]
+    },
+    "CT-12": {
+     "tests": [
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change",
+      "tests/realtime-client.test.tsx::useIncidentUpdates (T073) > offline_pauses_polling_and_reports_offline_then_resumes"
+     ]
+    }
+   },
+   "external": [
+    "X-OUT-1",
+    "X-OUT-2",
+    "X-OUT-3",
+    "X-OUT-4",
+    "X-OUT-5",
+    "X-OUT-6",
+    "X-OUT-7",
+    "X-OUT-8",
+    "X-OUT-9"
+   ]
+  },
+  {
+   "id": "AT-NFR-05",
+   "reqId": "NFR-05",
+   "tests": [
+    "tests/mutation.test.ts::executeMutation (T004) > same_key_concurrent_requests_apply_the_effect_once",
+    "tests/mutation.test.ts::executeMutation (T004) > same_key_and_body_replays_the_original_response_with_one_effect",
+    "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
+    "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
+    "tests/client-shell.test.tsx::client shell (T005) > double_tap_while_saving_sends_one_request",
+    "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+   ],
+   "ct": {
+    "CT-03": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > losing_update_leaves_no_child_audit_or_event",
+      "tests/mutation.test.ts::executeMutation review fixes (PH0 review round 1) > resending_an_old_base_version_with_a_new_key_after_a_real_update_conflicts",
+      "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > same_key_and_body_replays_the_original_response_with_one_effect",
+      "tests/mutation.test.ts::executeMutation (T004) > same_key_concurrent_requests_apply_the_effect_once",
+      "tests/mutation.test.ts::executeMutation (T004) > key_older_than_7_days_is_rejected_and_never_reexecuted",
+      "tests/client-shell.test.tsx::client shell (T005) > the_key_survives_401_and_429_after_an_unknown_result_so_a_retry_cannot_double_register",
+      "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
+      "tests/mutation.test.ts::executeMutation review fixes (PH0 review round 1) > failures_in_infrastructure_statements_also_roll_back_everything",
+      "tests/mutation.test.ts::executeMutation (T004) > root_update_matching_zero_rows_is_a_conflict_and_leaves_nothing",
+      "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_mutation_rolls_back_at_any_statement_position"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > replay_rechecks_current_authorization_and_never_returns_stale_data",
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect"
+     ]
+    },
+    "CT-10": {
+     "tests": [
+      "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
+      "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-NFR-06",
+   "reqId": "NFR-06",
+   "tests": [
+    "tests/restore-consistency.test.ts::復元の整合と外部効果の照合 (T079) > restore_does_not_resend_notifications_or_revive_old_sessions",
+    "tests/restore-consistency.test.ts::復元の整合と外部効果の照合 (T079) > verify_restore_detects_missing_object_lost_deliveries_and_unrevoked_sessions"
+   ],
+   "ct": {
+    "CT-08": {
+     "tests": [
+      "tests/restore-consistency.test.ts::復元の整合と外部効果の照合 (T079) > restore_does_not_resend_notifications_or_revive_old_sessions",
+      "tests/restore-consistency.test.ts::復元の整合と外部効果の照合 (T079) > verify_restore_detects_missing_object_lost_deliveries_and_unrevoked_sessions"
+     ],
+     "external": [
+      "X-V07-RESTORE"
+     ]
+    },
+    "CT-15": {
+     "tests": [
+      "tests/schema.test.ts::core schema (T003) > migrations_apply_to_an_empty_db_and_are_reapplicable",
+      "tests/deploy-config.test.ts::deploy-config (T078) > clean_environment_and_staged_expand_backfill_contract_pass",
+      "tests/deploy-config.test.ts::deploy-config (T078) > demo_binding_or_incompatible_schema_blocks_deploy"
+     ]
+    }
+   },
+   "external": [
+    "X-V07-RESTORE"
+   ]
+  },
+  {
+   "id": "AT-NFR-07",
+   "reqId": "NFR-07",
+   "tests": [
+    "tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered",
+    "tests/audit.test.ts::監査 (T014) > audit_search_filters_and_keyset_paging_are_stable",
+    "tests/e2e/audit.spec.ts::audit_panel_shows_who_changed_what_without_bodies"
+   ],
+   "ct": {
+    "CT-01": {
+     "tests": [
+      "tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered",
+      "tests/audit.test.ts::監査 (T014) > audit_requires_mfa_for_a_real_admin_session"
+     ]
+    },
+    "CT-04": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > same_key_and_body_replays_the_original_response_with_one_effect",
+      "tests/invitations.test.ts::招待 (T009) > invitation_has_one_consumer_and_bound_identity"
+     ]
+    },
+    "CT-05": {
+     "tests": [
+      "tests/mutation.test.ts::executeMutation (T004) > losing_update_leaves_no_child_audit_or_event",
+      "tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered",
+      "tests/mutation.test.ts::executeMutation (T004) > success_writes_child_audit_event_and_idempotency_in_one_batch"
+     ]
+    },
+    "CT-06": {
+     "tests": [
+      "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
+      "tests/mutation.test.ts::executeMutation review fixes (PH0 review round 1) > audit_metadata_rejects_free_text_such_as_names"
+     ]
+    }
+   }
+  },
+  {
+   "id": "AT-NFR-08",
+   "reqId": "NFR-08",
+   "tests": [
+    "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > budget_exhaustion_stops_optional_inference_but_preserves_saved_records",
+    "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > monitor_counters_are_aggregated_and_warn_but_do_not_stop",
+    "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > monthly_cost_estimate_is_computed_from_month_to_date_tokens_not_single_day"
+   ],
+   "ct": {
+    "CT-07": {
+     "tests": [
+      "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > budget_exhaustion_stops_optional_inference_but_preserves_saved_records",
+      "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > rag_and_assistant_are_metered_and_stopped_by_budget"
+     ]
+    },
+    "CT-14": {
+     "tests": [
+      "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > monitor_counters_are_aggregated_and_warn_but_do_not_stop",
+      "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > spike_baseline_keeps_recent_window_even_when_query_window_extends_to_month_start",
+      "tests/operations-panel.test.tsx::OperationsPanel (T080) > shows_not_measured_note_thresholds_costs_from_recorded_usage_and_audit_history"
+     ]
+    },
+    "CT-15": {
+     "tests": [
+      "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > metrics_reject_free_text_and_record_provider_rate_limits",
+      "tests/deploy-config.test.ts::deploy-config (T078) > workflows_keep_required_gates_and_block_secret_inline_and_cross_env"
+     ]
+    }
+   },
+   "external": [
+    "X-COST"
+   ]
+  },
+  {
+   "id": "AT-NFR-09",
+   "reqId": "NFR-09",
+   "tests": [
+    "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls",
+    "tests/client-shell.test.tsx::client shell (T005) > offline_is_shown_with_text_not_only_color",
+    "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail"
+   ],
+   "ct": {
+    "CT-09": {
+     "tests": [
+      "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls",
+      "tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport"
+     ]
+    },
+    "CT-14": {
+     "tests": [
+      "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls",
+      "tests/e2e/member-admin.spec.ts::keyboard_only_can_filter_open_and_close_the_member_drawer",
+      "tests/e2e/shell.spec.ts::keyboard_navigation_changes_screens_and_moves_focus_to_main",
+      "tests/client-shell.test.tsx::client shell (T005) > keyboard_can_reach_and_operate_the_main_navigation"
+     ]
+    }
+   },
+   "external": [
+    "X-DEV-1",
+    "X-DEV-2",
+    "X-DEV-3"
+   ]
+  },
+  {
+   "id": "AT-NFR-10",
+   "reqId": "NFR-10",
+   "tests": [
+    "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > quality_gate_fails_on_one_abnormal_to_no_issue_case",
+    "tests/rag-holdout.test.ts::固定dataset55問の全件回帰 (T067・B低3) > all_55_questions_answer_with_expected_sources_or_abstain",
+    "tests/rag-holdout.test.ts::固定dataset55問の全件回帰 (T067・B低3) > regression_summary_is_stable",
+    "tests/retrieval-selection.test.ts::検索方式の選定基盤 (T065) > retrieval_selection_requires_same_fixed_dataset_and_acl"
+   ],
+   "ct": {
+    "CT-13": {
+     "tests": [
+      "tests/rag-holdout.test.ts::固定dataset55問の全件回帰 (T067・B低3) > all_55_questions_answer_with_expected_sources_or_abstain",
+      "tests/retrieval-selection.test.ts::検索方式の選定基盤 (T065) > retrieval_selection_requires_same_fixed_dataset_and_acl",
+      "tests/retrieval.test.ts::選定した索引の投入・検索・失効回収 (T066) > index_hit_is_filtered_by_current_d1_acl_and_version"
+     ]
+    },
+    "CT-17": {
+     "tests": [
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > quality_gate_fails_on_one_abnormal_to_no_issue_case",
+      "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > holdout_fixtures_are_committed_and_versioned"
+     ],
+     "external": [
+      "X-AIEVAL",
+      "X-V04-RET"
+     ]
+    }
+   },
+   "external": [
+    "X-AIEVAL",
+    "X-V04-JEV",
+    "X-V04-LLM",
+    "X-V04-RET"
+   ]
+  }
+ ],
+ "legacy": [
+  {
+   "id": "TC-01",
+   "reqIds": [
+    "AUTH-01"
+   ],
+   "tests": [
+    "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions",
+    "tests/authorization.test.ts::認可 (T008) > unlinked_identity_and_forged_test_header_never_get_business_access",
+    "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login"
+   ],
+   "note": "未ログインで施設一覧（API-10）を含む全業務routeが401等で拒否（matrixの未認証主体）"
+  },
+  {
+   "id": "TC-02",
+   "reqIds": [
+    "AUTH-02"
+   ],
+   "tests": [
+    "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > role_replacement_bumps_authz_version_and_rejects_unsafe_changes",
+    "tests/members.test.ts::名簿 (T011) > who_may_change_what_is_enforced_by_the_server"
+   ]
+  },
+  {
+   "id": "TC-03",
+   "reqIds": [
+    "ACT-01",
+    "ACT-02"
+   ],
+   "tests": [
+    "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer",
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+   ]
+  },
+  {
+   "id": "TC-04",
+   "reqIds": [
+    "ACT-03"
+   ],
+   "tests": [
+    "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance",
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+   ]
+  },
+  {
+   "id": "TC-05",
+   "reqIds": [
+    "MAP-01",
+    "MAP-02"
+   ],
+   "tests": [
+    "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail",
+    "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls"
+   ],
+   "note": "地図面はプレースホルダー（実Google Mapsは未接続＝X-V05）。種別の識別はマーカーの文字・形と一覧で確認"
+  },
+  {
+   "id": "TC-06",
+   "reqIds": [
+    "MAP-03"
+   ],
+   "tests": [
+    "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+    "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking"
+   ]
+  },
+  {
+   "id": "TC-07",
+   "reqIds": [
+    "MAP-03"
+   ],
+   "tests": [
+    "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+    "tests/gis-query.test.ts::施設の全件取得 (T020) > invalid_list_conditions_are_rejected_without_partial_results (T085)"
+   ],
+   "note": "緯度91の登録は400で施設が作られない（coordinate_edit…の入力検証段）"
+  },
+  {
+   "id": "TC-08",
+   "reqIds": [
+    "MAP-04"
+   ],
+   "tests": [
+    "tests/gis-query.test.ts::施設の全件取得 (T020) > filters_by_latest_inspection_result_and_open_issues",
+    "tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport"
+   ]
+  },
+  {
+   "id": "TC-09",
+   "reqIds": [
+    "MAP-05",
+    "MAP-06"
+   ],
+   "tests": [
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_links_ready_attachments_and_rejects_uninspected_ones",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)",
+    "tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission"
+   ]
+  },
+  {
+   "id": "TC-10",
+   "reqIds": [
+    "MAP-07"
+   ],
+   "tests": [
+    "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified",
+    "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation"
+   ]
+  },
+  {
+   "id": "TC-11",
+   "reqIds": [
+    "AST-01",
+    "AST-02"
+   ],
+   "tests": [
+    "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target",
+    "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+   ]
+  },
+  {
+   "id": "TC-12",
+   "reqIds": [
+    "DSP-01",
+    "DSP-02"
+   ],
+   "tests": [
+    "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches",
+    "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time",
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+   ]
+  },
+  {
+   "id": "TC-13",
+   "reqIds": [
+    "DOC-01"
+   ],
+   "tests": [
+    "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads",
+    "tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload"
+   ]
+  },
+  {
+   "id": "TC-14",
+   "reqIds": [
+    "NFR-07"
+   ],
+   "tests": [
+    "tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered",
+    "tests/e2e/audit.spec.ts::audit_panel_shows_who_changed_what_without_bodies"
+   ]
+  },
+  {
+   "id": "TC-15",
+   "reqIds": [
+    "NFR-05"
+   ],
+   "tests": [
+    "tests/mutation.test.ts::executeMutation (T004) > same_key_concurrent_requests_apply_the_effect_once",
+    "tests/client-shell.test.tsx::client shell (T005) > double_tap_while_saving_sends_one_request",
+    "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+   ]
+  },
+  {
+   "id": "TC-16",
+   "reqIds": [
+    "NFR-05"
+   ],
+   "tests": [
+    "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)",
+    "tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown"
+   ]
+  },
+  {
+   "id": "TC-17",
+   "reqIds": [
+    "NFR-04"
+   ],
+   "tests": [
+    "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success",
+    "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls"
+   ],
+   "note": "Googleのみの障害（地図の代わりに一覧）とAPI障害（保存応答の消失）を分けて演習（dependency-outages scenario 1/3）"
+  },
+  {
+   "id": "TC-18",
+   "reqIds": [
+    "RG-09"
+   ],
+   "tests": [
+    "tests/deploy-config.test.ts::deploy-config (T078) > demo_binding_or_incompatible_schema_blocks_deploy",
+    "tests/schema.test.ts::core schema (T003) > fixture_has_two_units_four_roles_suspended_and_scopes_with_fictional_names"
+   ],
+   "note": "公開デモの実環境（分離した実Cloudflare）での確認はT086（X-DEMO）"
+  }
+ ],
+ "apis": {
+  "API-01": [
+   "tests/authorization.test.ts::認可 (T008) > admin_role_does_not_bypass_sensitive_scope",
+   "tests/authorization.test.ts::認可 (T008) > unlinked_identity_and_forged_test_header_never_get_business_access"
+  ],
+  "API-02": [
+   "tests/members.test.ts::名簿 (T011) > scoped_holder_can_read_private_fields_and_the_view_is_audited",
+   "tests/members.test.ts::名簿 (T011) > expired_scopes_are_not_listed_and_api37_keeps_the_expiry_it_is_given"
+  ],
+  "API-03": [
+   "tests/members.test.ts::名簿 (T011) > list_filters_and_keyset_paging_are_applied_on_the_server",
+   "tests/members.test.ts::名簿 (T011) > private_fields_never_leak_to_roster"
+  ],
+  "API-04": [
+   "tests/members.test.ts::名簿 (T011) > private_fields_never_leak_to_roster",
+   "tests/members.test.ts::名簿 (T011) > who_may_change_what_is_enforced_by_the_server"
+  ],
+  "API-05": [
+   "tests/activity-history.test.ts::活動履歴の検索 (T038) > history_filters_actual_participants_and_half_open_time_range"
+  ],
+  "API-06": [
+   "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience",
+   "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > same_key_resend_returns_saved_response_for_update_and_cancel (docs/05 §2)"
+  ],
+  "API-07": [
+   "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience"
+  ],
+  "API-08": [
+   "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer"
+  ],
+  "API-09": [
+   "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance",
+   "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > same_key_resend_of_creation_returns_saved_result (docs/05 §2)"
+  ],
+  "API-10": [
+   "tests/gis-query.test.ts::施設の全件取得 (T020) > query_returns_all_201_facilities_and_detects_snapshot_change",
+   "tests/gis-query.test.ts::施設の全件取得 (T020) > invalid_list_conditions_are_rejected_without_partial_results (T085)"
+  ],
+  "API-11": [
+   "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+   "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)"
+  ],
+  "API-12": [
+   "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+   "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > create_links_ready_attachmentIds_and_patch_rejects_attachment_fields"
+  ],
+  "API-13": [
+   "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+   "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)"
+  ],
+  "API-14": [
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_issue_and_photo_link_commit_together",
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original"
+  ],
+  "API-15": [
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason"
+  ],
+  "API-16": [
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason",
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_report_and_transition_resend_have_one_effect (T085)"
+  ],
+  "API-17": [
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason",
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_report_and_transition_resend_have_one_effect (T085)"
+  ],
+  "API-18": [
+   "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
+   "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > schedule_put_validates_input_and_detail_and_lists_show_due"
+  ],
+  "API-19": [
+   "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity"
+  ],
+  "API-20": [
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target",
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)"
+  ],
+  "API-21": [
+   "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches"
+  ],
+  "API-22": [
+   "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches",
+   "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > same_key_resend_returns_saved_response_for_create_and_update (docs/05 §2)"
+  ],
+  "API-23": [
+   "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time",
+   "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > proxy_reason_is_capped_at_2000_chars (docs/05 §1)"
+  ],
+  "API-24": [
+   "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
+   "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > announcement_response_carries_author_my_read_state_and_linked_attachments (T046)"
+  ],
+  "API-25": [
+   "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
+   "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > invalid_announcement_input_is_rejected_without_creating_anything (T085)"
+  ],
+  "API-26": [
+   "tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload",
+   "tests/upload.test.ts::添付の予約とアップロード (T015) > upload_requires_token_and_owner_and_known_type"
+  ],
+  "API-27": [
+   "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads"
+  ],
+  "API-28": [
+   "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > dashboard_counts_match_authorized_drilldown_lists",
+   "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > inspection_due_metric_matches_overdue_asset_lists (T048)"
+  ],
+  "API-29": [
+   "tests/jev.test.ts::Jev分類 (T053) > jev_noul_value_is_not_a_confidence_field",
+   "tests/jev.test.ts::Jev分類 (T053) > classification_requests_are_validated_before_a_job_is_created"
+  ],
+  "API-30": [
+   "tests/jev.test.ts::Jev分類 (T053) > ai_reviews_lists_pending_candidates_with_filters_and_keyset"
+  ],
+  "API-31": [
+   "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
+   "tests/ai-decisions.test.ts::AI提案の決定 (T054) > inspection_candidate_approval_targets_the_linked_issue_once"
+  ],
+  "API-32": [
+   "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > missing_times_and_injected_notes_do_not_create_facts",
+   "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > report_draft_requests_are_validated_before_a_job_is_created"
+  ],
+  "API-33": [
+   "tests/invitations.test.ts::招待 (T009) > invite_api_enforces_permission_unit_and_member_state",
+   "tests/invitations.test.ts::招待 (T009) > invitation_has_one_consumer_and_bound_identity"
+  ],
+  "API-34": [
+   "tests/invitations.test.ts::招待 (T009) > expired_cancelled_and_reissued_invitations_cannot_be_used"
+  ],
+  "API-35": [
+   "tests/invitations.test.ts::招待 (T009) > invitation_has_one_consumer_and_bound_identity",
+   "tests/invitations.test.ts::招待 (T009) > expired_cancelled_and_reissued_invitations_cannot_be_used"
+  ],
+  "API-36": [
+   "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > auth_works_in_workers_without_public_signup",
+   "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > only_contracted_auth_endpoints_are_reachable_and_cross_origin_writes_are_refused"
+  ],
+  "API-37": [
+   "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > role_replacement_bumps_authz_version_and_rejects_unsafe_changes",
+   "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > disabled_user_is_denied_even_if_library_revoke_fails"
+  ],
+  "API-38": [
+   "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > session_revocation_api_revokes_all_sessions_and_bumps_authz_version"
+  ],
+  "API-39": [
+   "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience",
+   "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > same_key_resend_returns_saved_response_for_update_and_cancel (docs/05 §2)"
+  ],
+  "API-40": [
+   "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience",
+   "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > same_key_resend_returns_saved_response_for_update_and_cancel (docs/05 §2)"
+  ],
+  "API-41": [
+   "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer",
+   "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > proxy_reason_is_capped_at_2000_chars (docs/05 §1)"
+  ],
+  "API-42": [
+   "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance"
+  ],
+  "API-43": [
+   "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance"
+  ],
+  "API-44": [
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)"
+  ],
+  "API-45": [
+   "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
+   "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > create_links_ready_attachmentIds_and_patch_rejects_attachment_fields"
+  ],
+  "API-46": [
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original",
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_conflict_is_detected_by_declared_series_version"
+  ],
+  "API-47": [
+   "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
+   "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock"
+  ],
+  "API-48": [
+   "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock",
+   "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > due_detection_uses_japan_date_and_is_idempotent"
+  ],
+  "API-49": [
+   "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
+   "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock"
+  ],
+  "API-50": [
+   "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity"
+  ],
+  "API-51": [
+   "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)",
+   "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > schedule_put_validates_input_and_detail_and_lists_show_due"
+  ],
+  "API-52": [
+   "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once"
+  ],
+  "API-53": [
+   "tests/csv-preview.test.ts::CSV取り込みのプレビュー (T023) > preview_changes_no_facility_even_with_valid_rows",
+   "tests/csv-preview.test.ts::CSV取り込みのプレビュー (T023) > row_validation_rejects_long_cells_and_non_decimal_coordinates"
+  ],
+  "API-54": [
+   "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > import_commit_detects_master_change_and_escapes_formula",
+   "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > commit_job_detects_external_master_change_and_never_completes"
+  ],
+  "API-55": [
+   "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > import_commit_detects_master_change_and_escapes_formula"
+  ],
+  "API-56": [
+   "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > due_detection_uses_japan_date_and_is_idempotent",
+   "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > schedule_put_validates_input_and_detail_and_lists_show_due"
+  ],
+  "API-57": [
+   "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock",
+   "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_history_is_reachable_from_assets_and_shared_with_activities"
+  ],
+  "API-58": [
+   "tests/reports.test.ts::帳票様式artifactと手動下書き・不変版 (T056) > report_template_is_allowlisted_and_old_versions_immutable"
+  ],
+  "API-59": [
+   "tests/reports.test.ts::帳票様式artifactと手動下書き・不変版 (T056) > report_template_is_allowlisted_and_old_versions_immutable",
+   "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval"
+  ],
+  "API-60": [
+   "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval",
+   "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > multipage_pdf_resolves_parent_on_every_page"
+  ],
+  "API-61": [
+   "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval",
+   "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > multipage_pdf_resolves_parent_on_every_page"
+  ],
+  "API-62": [
+   "tests/reports.test.ts::帳票様式artifactと手動下書き・不変版 (T056) > report_template_is_allowlisted_and_old_versions_immutable",
+   "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval"
+  ],
+  "API-63": [
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience",
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_draft_proposals_from_announcement_and_inspection_due"
+  ],
+  "API-64": [
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience",
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > approved_unsent_cancel_via_api_unread_list_and_unknown_convention"
+  ],
+  "API-65": [
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience",
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > approved_unsent_cancel_via_api_unread_list_and_unknown_convention"
+  ],
+  "API-66": [
+   "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
+   "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > announcement_response_carries_author_my_read_state_and_linked_attachments (T046)"
+  ],
+  "API-67": [
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience",
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > approved_unsent_cancel_via_api_unread_list_and_unknown_convention"
+  ],
+  "API-68": [
+   "tests/tasks.test.ts::業務タスク (T049) > pending_ai_proposal_cannot_create_business_task",
+   "tests/tasks.test.ts::業務タスク (T049) > my_task_list_serves_active_tasks_with_history"
+  ],
+  "API-69": [
+   "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches",
+   "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > same_key_resend_returns_saved_response_for_create_and_update (docs/05 §2)"
+  ],
+  "API-70": [
+   "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches"
+  ],
+  "API-71": [
+   "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages"
+  ],
+  "API-72": [
+   "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
+   "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > announcement_response_carries_author_my_read_state_and_linked_attachments (T046)"
+  ],
+  "API-73": [
+   "tests/documents.test.ts::許諾文書の原本・版・閲覧API (T062) > document_version_requires_ready_original_and_license",
+   "tests/documents.test.ts::許諾文書の原本・版・閲覧API (T062) > withdrawn_document_rejects_new_version_with_422"
+  ],
+  "API-74": [
+   "tests/documents.test.ts::許諾文書の原本・版・閲覧API (T062) > document_version_requires_ready_original_and_license",
+   "tests/documents.test.ts::許諾文書の原本・版・閲覧API (T062) > withdrawn_document_rejects_new_version_with_422"
+  ],
+  "API-75": [
+   "tests/document-policy.test.ts::文書の承認・撤回・ACL変更と即時検索遮断 (T063) > withdrawal_blocks_search_before_index_cleanup"
+  ],
+  "API-76": [
+   "tests/rag.test.ts::出典付きRAG回答・原文一致・根拠不足保留 (T067) > answer_citations_remain_authorized_and_exact"
+  ],
+  "API-77": [
+   "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > prompt_injection_cannot_write_or_send_notification"
+  ],
+  "API-78": [
+   "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > candidate_order_excludes_archived_facilities_and_keeps_positions_unique",
+   "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > patrol_plan_stays_a_draft_until_human_confirms"
+  ],
+  "API-79": [
+   "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > patrol_plan_stays_a_draft_until_human_confirms"
+  ],
+  "API-80": [
+   "tests/events.test.ts::認可済snapshot・イベント再開cursor・差分取得 (T072) > snapshot_to_subscription_gap_never_loses_committed_event",
+   "tests/events.test.ts::認可済snapshot・イベント再開cursor・差分取得 (T072) > attendance_events_follow_the_api_07_read_acl"
+  ],
+  "API-81": [
+   "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
+   "tests/sync.test.ts::保留操作の同期 (T076) > sync_reuses_original_handler_authorization_for_inspection_correction_and_mobilization"
+  ],
+  "API-82": [
+   "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
+   "tests/sync.test.ts::保留操作の同期 (T076) > sync_routes_require_per13_at_entry_so_role_stripped_caller_is_403"
+  ],
+  "API-83": [
+   "tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload",
+   "tests/upload.test.ts::添付の予約とアップロード (T015) > upload_requires_token_and_owner_and_known_type"
+  ],
+  "API-84": [
+   "tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload",
+   "tests/upload.test.ts::添付の予約とアップロード (T015) > upload_requires_token_and_owner_and_known_type"
+  ],
+  "API-85": [
+   "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads"
+  ],
+  "API-86": [
+   "tests/jobs.test.ts::GET /api/v1/jobs/:id (API-86) > only_the_requester_can_read_status_and_the_response_has_no_internal_fields"
+  ],
+  "API-87": [
+   "tests/tasks.test.ts::業務タスク (T049) > pending_ai_proposal_cannot_create_business_task",
+   "tests/tasks.test.ts::業務タスク (T049) > my_task_list_serves_active_tasks_with_history"
+  ],
+  "API-88": [
+   "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > evaluation_runs_are_listed_with_filters_and_keyset"
+  ],
+  "API-89": [
+   "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > quality_gate_fails_on_one_abnormal_to_no_issue_case",
+   "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > unknown_versions_are_rejected_and_unrecorded_model_fails_honestly"
+  ],
+  "API-90": [
+   "tests/documents.test.ts::許諾文書の原本・版・閲覧API (T062) > document_version_requires_ready_original_and_license"
+  ],
+  "API-91": [
+   "tests/documents.test.ts::許諾文書の原本・版・閲覧API (T062) > document_version_requires_ready_original_and_license"
+  ],
+  "API-92": [
+   "tests/document-policy.test.ts::文書の承認・撤回・ACL変更と即時検索遮断 (T063) > withdrawal_blocks_search_before_index_cleanup",
+   "tests/documents.test.ts::許諾文書の原本・版・閲覧API (T062) > withdrawn_document_rejects_new_version_with_422"
+  ],
+  "API-93": [
+   "tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered",
+   "tests/audit.test.ts::監査 (T014) > audit_search_filters_and_keyset_paging_are_stable"
+  ],
+  "API-94": [
+   "tests/inspection-templates.test.ts::点検様式の版と承認 (T027) > approved_template_is_immutable_and_required_items_enforced"
+  ],
+  "API-95": [
+   "tests/inspection-templates.test.ts::点検様式の版と承認 (T027) > approved_template_is_immutable_and_required_items_enforced",
+   "tests/inspection-templates.test.ts::点検様式の版と承認 (T027) > unapproved_template_version_rejects_inspection_save"
+  ],
+  "API-96": [
+   "tests/inspection-templates.test.ts::点検様式の版と承認 (T027) > approved_template_is_immutable_and_required_items_enforced"
+  ],
+  "API-97": [
+   "tests/inspection-templates.test.ts::点検様式の版と承認 (T027) > approved_template_is_immutable_and_required_items_enforced",
+   "tests/inspection-templates.test.ts::点検様式の版と承認 (T027) > unapproved_template_version_rejects_inspection_save"
+  ],
+  "API-98": [
+   "tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload",
+   "tests/upload.test.ts::添付の予約とアップロード (T015) > draft_classification_follows_intent_and_link_checks_intended_target"
+  ],
+  "API-99": [
+   "tests/document-policy.test.ts::文書の承認・撤回・ACL変更と即時検索遮断 (T063) > withdrawal_blocks_search_before_index_cleanup"
+  ],
+  "API-100": [
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience",
+   "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > approved_unsent_cancel_via_api_unread_list_and_unknown_convention"
+  ],
+  "API-101": [
+   "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads"
+  ],
+  "API-102": [
+   "tests/tasks.test.ts::業務タスク (T049) > my_task_list_serves_active_tasks_with_history",
+   "tests/tasks.test.ts::業務タスク (T049) > ai_originated_task_tracks_status_changes_assignee_and_reason"
+  ]
+ },
+ "screens": {
+  "SCR-01": [
+   "tests/e2e/auth.spec.ts::login_screen_matches_the_prototype_and_offers_no_public_signup",
+   "tests/e2e/auth.spec.ts::invitation_that_cannot_be_used_explains_why_without_leaking_state",
+   "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login"
+  ],
+  "SCR-02": [
+   "tests/e2e/dashboard.spec.ts::home_metrics_drill_down_to_matching_lists",
+   "tests/e2e/shell.spec.ts::shell_layout_matches_the_viewport"
+  ],
+  "SCR-03": [
+   "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail",
+   "tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport"
+  ],
+  "SCR-04": [
+   "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking",
+   "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified",
+   "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+  ],
+  "SCR-05": [
+   "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking"
+  ],
+  "SCR-06": [
+   "tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission",
+   "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original",
+   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+  ],
+  "SCR-07": [
+   "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified",
+   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+  ],
+  "SCR-08": [
+   "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+  ],
+  "SCR-09": [
+   "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels",
+   "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version"
+  ],
+  "SCR-10": [
+   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+  ],
+  "SCR-11": [
+   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+  ],
+  "SCR-12": [
+   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment",
+   "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change",
+   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+  ],
+  "SCR-13": [
+   "tests/e2e/assets.spec.ts::asset_detail_displays_quantity_unit_and_storage"
+  ],
+  "SCR-14": [
+   "tests/e2e/assets.spec.ts::asset_detail_displays_quantity_unit_and_storage",
+   "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+  ],
+  "SCR-15": [
+   "tests/e2e/member-admin.spec.ts::members_screen_matches_the_prototype_structure",
+   "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history"
+  ],
+  "SCR-16": [
+   "tests/e2e/announcements.spec.ts::edited_announcement_requires_new_read"
+  ],
+  "SCR-17": [
+   "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history",
+   "tests/e2e/inspection-templates.spec.ts::template_edit_creates_new_draft_version",
+   "tests/e2e/audit.spec.ts::audit_panel_shows_who_changed_what_without_bodies"
+  ],
+  "SCR-18": [
+   "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval",
+   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+  ],
+  "SCR-19": [
+   "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version",
+   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+  ],
+  "SCR-20": [
+   "tests/e2e/csv.spec.ts::csv_import_preview_then_commit_updates_master"
+  ],
+  "SCR-21": [
+   "tests/e2e/notifications.spec.ts::notification_ui_distinguishes_accepted_unknown_and_read",
+   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+  ],
+  "SCR-22": [
+   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment",
+   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+  ],
+  "SCR-23": [
+   "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+  ],
+  "SCR-24": [
+   "tests/e2e/documents.spec.ts::withdrawn_document_disappears_from_search_and_citation",
+   "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+  ],
+  "SCR-25": [
+   "tests/e2e/patrol-plans.spec.ts::patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch"
+  ],
+  "SCR-26": [
+   "tests/e2e/analytics.spec.ts::analytics_shows_conditions_and_traces_sources",
+   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+  ],
+  "SCR-27": [
+   "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
+   "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery"
+  ],
+  "SCR-28": [
+   "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects",
+   "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+  ]
+ },
+ "journeys": [
+  {
+   "id": "J1",
+   "name": "点検→異常→AI→task→通知",
+   "test": "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification",
+   "covers": [
+    "MAP-06",
+    "MAP-07",
+    "AI-01",
+    "AI-04",
+    "COM-02",
+    "ACT-05"
+   ]
+  },
+  {
+   "id": "J2",
+   "name": "活動/出動→使用→集計→帳票",
+   "test": "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report",
+   "covers": [
+    "ACT-03",
+    "DSP-01",
+    "DSP-03",
+    "AST-05",
+    "ACT-06",
+    "DASH-02",
+    "DOC-02"
+   ]
+  },
+  {
+   "id": "J3",
+   "name": "文書→引用→失効",
+   "test": "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal",
+   "covers": [
+    "AI-06",
+    "AI-07",
+    "DOC-01"
+   ]
+  },
+  {
+   "id": "J4",
+   "name": "offline→競合→復旧（点検の訂正）",
+   "test": "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery",
+   "covers": [
+    "DSP-05",
+    "MAP-06",
+    "NFR-05"
+   ]
+  }
+ ],
+ "external": [
+  {
+   "id": "X-V01",
+   "source": "docs/evidence/V01-auth.md「未実施」1〜8",
+   "summary": "実Cloudflare（staging）での認証・CPU時間・Secure Cookie の実測（test:live auth-workers）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-V02",
+   "source": "docs/evidence/V02-files.md「未実施」1〜6",
+   "summary": "実R2での検査・EXIF除去・ready不変（test:live file-inspection）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-V04-JEV",
+   "source": "docs/evidence/V04-jev.md「未実施」",
+   "summary": "実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）",
+   "owner": "T086/T088"
+  },
+  {
+   "id": "X-V04-LLM",
+   "source": "docs/evidence/V04-llm.md「未実施」",
+   "summary": "実生成モデルの比較・固定・捏造検出精度（D12/D16）",
+   "owner": "T086/T088"
+  },
+  {
+   "id": "X-V04-RET",
+   "source": "docs/evidence/V04-retrieval.md「未実施」「T066 限界・残手順」",
+   "summary": "OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価",
+   "owner": "T086/T088"
+  },
+  {
+   "id": "X-AIEVAL",
+   "source": "docs/evidence/ai-evaluation.md・docs/16 T061状態欄",
+   "summary": "実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）",
+   "owner": "T086/T088"
+  },
+  {
+   "id": "X-V05",
+   "source": "docs/16 T021状態欄・docs/14 D22（V05）",
+   "summary": "実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-DEV-MAPS",
+   "source": "ops/device-test-matrix.md §2.1/§2.2",
+   "summary": "実端末でのMapsアプリ起動（外部経路）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-V06-DELIVERY",
+   "source": "docs/evidence/V06-delivery.md「未実施」",
+   "summary": "実チャネル（Web Push/email。D13）での到達・不明・再送",
+   "owner": "T088"
+  },
+  {
+   "id": "X-V06-RT",
+   "source": "docs/evidence/V06-realtime.md「未実施」1〜4",
+   "summary": "実30端末・実回線での更新反映遅延（test:live realtime-load）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-V07-PERF",
+   "source": "docs/evidence/V07-performance.md「未実施」1〜4",
+   "summary": "実staging・実D1 rows_read・実回線での通常API p95（D18承認材料）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-V07-RESTORE",
+   "source": "docs/evidence/V07-restore.md「未実施」1〜4",
+   "summary": "実D1/R2での復元演習（別担当による実行を含む）",
+   "owner": "T087/T088"
+  },
+  {
+   "id": "X-V07-RENDER",
+   "source": "docs/evidence/V07-report-render.md「未実施」1〜8",
+   "summary": "PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-COST",
+   "source": "docs/evidence/cost-estimate.md「正直な限界」・ops/cost-alerts.md §4/§5",
+   "summary": "実使用量・実請求との照合、実環境の停止・復帰演習（D11）",
+   "owner": "T086/T088"
+  },
+  {
+   "id": "X-DEV-1",
+   "source": "ops/device-test-matrix.md §2.1〜2.3",
+   "summary": "iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線",
+   "owner": "T086"
+  },
+  {
+   "id": "X-DEV-2",
+   "source": "ops/device-test-matrix.md §2.1〜2.3",
+   "summary": "VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認",
+   "owner": "T086"
+  },
+  {
+   "id": "X-DEV-3",
+   "source": "docs/evidence/ph8.md「未実施・未接続」",
+   "summary": "axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-DEV-4",
+   "source": "ops/device-test-matrix.md §2.4",
+   "summary": "代表利用者（5名程度）による説明なし再訪の計測（D18の承認材料）",
+   "owner": "T087/T088"
+  },
+  {
+   "id": "X-DEMO",
+   "source": "docs/16 T086",
+   "summary": "公開デモ（分離した実環境）の構築と本番データとの完全分離の実地確認（RG-09）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-OUT-1",
+   "source": "docs/evidence/V07-outage.md「未実施」1",
+   "summary": "staging演習（6 scenarioを実Workers/D1/Queuesで）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-OUT-2",
+   "source": "docs/evidence/V07-outage.md「未実施」2",
+   "summary": "実Googleキーの停止で一覧代替を確認",
+   "owner": "T086"
+  },
+  {
+   "id": "X-OUT-3",
+   "source": "docs/evidence/V07-outage.md「未実施」3",
+   "summary": "実providerの到達不明（D13の了承後）",
+   "owner": "T088"
+  },
+  {
+   "id": "X-OUT-4",
+   "source": "docs/evidence/V07-outage.md「未実施」4",
+   "summary": "実在の正副担当の交代（ops/admin-handover.md §3）",
+   "owner": "T088"
+  },
+  {
+   "id": "X-OUT-5",
+   "source": "docs/evidence/V07-outage.md「未実施」5",
+   "summary": "別担当（人）によるrunbookの再現",
+   "owner": "T088"
+  },
+  {
+   "id": "X-OUT-6",
+   "source": "docs/evidence/V07-outage.md「未実施」6",
+   "summary": "紙/既存電話への切替と復帰照合の実地演習",
+   "owner": "T088"
+  },
+  {
+   "id": "X-OUT-7",
+   "source": "docs/evidence/V07-outage.md「未実施」7",
+   "summary": "遮断・鍵rotationの演習（ops/security-response.md §7）",
+   "owner": "T086"
+  },
+  {
+   "id": "X-OUT-8",
+   "source": "docs/evidence/V07-outage.md「未実施」8",
+   "summary": "Queue送信失敗の実環境観測",
+   "owner": "T086"
+  },
+  {
+   "id": "X-OUT-9",
+   "source": "docs/evidence/V07-outage.md「未実施」9",
+   "summary": "管理者全員回復不能時のCloudflare側復旧手順の整備",
+   "owner": "T086"
+  },
+  {
+   "id": "X-OUT-10",
+   "source": "docs/evidence/V07-outage.md「未実施」10",
+   "summary": "代理の参集記録の担当を付ける画面（D08）",
+   "owner": "T088"
+  }
+ ],
+ "issues": [
+  {
+   "id": "T085-D1",
+   "source": "T085のAPI-44網羅試験（tests/inspections-issues.test.ts T085）",
+   "summary": "施設の点検履歴（API-44）の続き取得が新しい順なのに cursor条件が > で、2頁目以降が欠落していた",
+   "severity": "high",
+   "status": "resolved",
+   "basis": "履歴の欠落（AT-MAP-05/06「過去版を開く」）。limit=1の全cursor完走で4件中1件しか返らない赤を確認→ < へ修正し緑",
+   "owner": "T029"
+  },
+  {
+   "id": "T085-D2",
+   "source": "T085のe2e（tests/e2e/asset-inspection.spec.ts）",
+   "summary": "点検保存の応答が失われた後、画面の案内どおり送り直すと二重登録になっていた（実施日時を送信ごとに作り直し、送信鍵が変わる）",
+   "severity": "high",
+   "status": "resolved",
+   "basis": "NFR-05/TC-15の二重登録。修正前の実行で同一点検2件（inspectedAt差130ms）の赤を確認→最初の送信で固定して緑",
+   "owner": "T033"
+  },
+  {
+   "id": "T085-D3",
+   "source": "docs/16 T033状態欄・ph2-review 第3回「点検結果表示が現在版でない」",
+   "summary": "SCR-23（資産点検）と点検訂正の画面が未実装、施設詳細の点検結果が現在版でなく最新日時の行",
+   "severity": "medium",
+   "status": "resolved",
+   "basis": "T033の残作業（画面の欠落）。T085でSCR-23・訂正モード・API-51点検履歴・API-44 isCurrentを接続しe2eで確認",
+   "owner": "T033/T030"
+  },
+  {
+   "id": "FLAKE-1",
+   "source": "docs/evidence/ph8.md「既知フレーキー」documents.spec desktop「題名消失」",
+   "summary": "fill値の消失で文書作成のPOSTが送られず30秒で落ちる（稀。引き金未特定）",
+   "severity": "medium",
+   "status": "open",
+   "basis": "試験の不安定さ。製品の再レンダリング競合の可能性は残る（データ破壊なし・単独実行は緑）。ph8.md T084最終検証で3回中1回",
+   "owner": "T085b"
+  },
+  {
+   "id": "FLAKE-2",
+   "source": "docs/evidence/ph8.md「既知フレーキー」継続観察",
+   "summary": "reports.spec desktop／facility-location.spec desktop／notifications.spec phone の1回off",
+   "severity": "low",
+   "status": "open",
+   "basis": "フル走行15回で各1回。単独実行は常に緑",
+   "owner": "T085b"
+  },
+  {
+   "id": "FLAKE-3",
+   "source": "T085の全スイート実行（tests/inspections-issues.test.ts manual_issue_links_ready_attachments_and_rejects_uninspected_ones）",
+   "summary": "完了確定済みの添付を背景のQueue consumerがreadyへ進め、「未検査は422」の断言が201で落ちた（試験側の競合）",
+   "severity": "low",
+   "status": "resolved",
+   "basis": "collect-evidence 1回目でvitest 1件failed。完了確定前の添付（makeNotYetCompleted）へ変更し同型の2箇所も修正",
+   "owner": "T029/T032（試験）"
+  },
+  {
+   "id": "T085-D4",
+   "source": "T085の全スイート実行（accessibility.spec desktop inputs_stay_inside_the_search_card_at_narrow_widths）",
+   "summary": "予定・出動の検索カードが単一のauto列のgridで、参加者selectの最長の団員名より狭くなれず200px幅で横スクロールが出た（データ量で再現）",
+   "severity": "medium",
+   "status": "resolved",
+   "basis": "フル走行の共有D1で団員が増えると発火（scrollWidth 269/202）。grid-cols-1＋min-w-0で同じデータで200に収まることを実測",
+   "owner": "T039/T044（T083の狭幅修正の系）"
+  },
+  {
+   "id": "T085-D5",
+   "source": "T085の全スイート実行（assistant.spec desktop）",
+   "summary": "AIアシスタントの「記録を添える」チップが確認待ちの異常を古い順に5件だけ出し、新しい異常を添えられなかった",
+   "severity": "medium",
+   "status": "resolved",
+   "basis": "確認待ちが5件を超えると再現（実行時14件）。全件を読み新しい順に5件へ修正し、同じデータでチップが出ることを確認",
+   "owner": "T070"
+  },
+  {
+   "id": "PH1-A1",
+   "source": "docs/evidence/ph1-review.md A（中・方針で残す）",
+   "summary": "管理者がAPI-03で他人の許可列に初期値を書ける／担当付与で連絡先を読む迂回",
+   "severity": "medium",
+   "status": "open",
+   "basis": "ph1-review表の重大度「中」。設計（docs/10）。D03承認待ち・担当付与は監査とMFAで抑止",
+   "owner": "T088（D03）"
+  },
+  {
+   "id": "PH1-A2",
+   "source": "docs/evidence/ph1-review.md A（低〜中・方針で残す）",
+   "summary": "認証イベントが監査に残らない／アカウント単位の回数制限が無い",
+   "severity": "medium",
+   "status": "open",
+   "basis": "ph1-review表の重大度「低〜中」。D18計測前の案",
+   "owner": "T086"
+  },
+  {
+   "id": "PH1-B1",
+   "source": "docs/evidence/ph1-review.md B（中〜低・方針で残す）",
+   "summary": "実装先行タスクの赤の証跡・変異の再現手順が無い",
+   "severity": "medium",
+   "status": "open",
+   "basis": "ph1-review表の重大度「中〜低」。scripts/mutate*.shを追加済みで記録のまま",
+   "owner": "-"
+  },
+  {
+   "id": "PH0-BF07",
+   "source": "docs/evidence/ph0-review.md B-F07（中・方針で残す）",
+   "summary": "試験名「効果が二重にならない」とhandler副作用の不一致（確定の一回性のみ保証）",
+   "severity": "medium",
+   "status": "open",
+   "basis": "ph0-review表の重大度「中」。外部効果はhandlerの責務と明記",
+   "owner": "-"
+  },
+  {
+   "id": "PH2-B12",
+   "source": "docs/evidence/ph2-review.md B12（中・方針で残す）",
+   "summary": "PH2のコミット境界が1タスク1コミットに従わない",
+   "severity": "medium",
+   "status": "open",
+   "basis": "ph2-review表の重大度「中」。履歴の書換えはしない（docs/16 §1に記録）",
+   "owner": "-"
+  },
+  {
+   "id": "PH2-C15",
+   "source": "docs/evidence/ph2-review.md C15（中・方針で残す）",
+   "summary": "地図の種別チップのトグルで全件再取得し一覧が点滅する",
+   "severity": "medium",
+   "status": "open",
+   "basis": "ph2-review表の重大度「中」。件数を最新にする意図（docs/03 SCR-03）",
+   "owner": "T086"
+  },
+  {
+   "id": "PH4-B2",
+   "source": "docs/evidence/ph4-review.md B2（中・方針で残す）",
+   "summary": "承認待ち通知draftが送信者の一覧に現れない（送信者一覧APIが契約に無い）",
+   "severity": "medium",
+   "status": "open",
+   "basis": "ph4-review表の重大度「中」。未送信・対象者非表示に害が限定",
+   "owner": "未割当（画面改善）"
+  },
+  {
+   "id": "PH4-B3",
+   "source": "docs/evidence/ph4-review.md B3（中・方針で残す）",
+   "summary": "点検源のAI候補は原文表示・版比較・再生成がUIから不可（点検の単一件GET契約が無い）",
+   "severity": "medium",
+   "status": "open",
+   "basis": "ph4-review表の重大度「中」。stale検知と承認409は機能中。T085で点検履歴（API-44 isCurrent・API-51）は接続したが単一件GETは未提供",
+   "owner": "T033/T055"
+  },
+  {
+   "id": "PH0-AF7",
+   "source": "docs/evidence/ph0-review.md A-F7",
+   "summary": "タイムアウト後もhandlerが動き外部効果が二重になり得る",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph0-review表「低・方針で残す」",
+   "owner": "-"
+  },
+  {
+   "id": "PH0-L",
+   "source": "docs/evidence/ph0-review.md L-2/L-3/L-5/L-7/L-8",
+   "summary": "allowedStates二重管理ほか軽微5件",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph0-review表「方針で残す」（低）",
+   "owner": "-"
+  },
+  {
+   "id": "PH1-A3",
+   "source": "docs/evidence/ph1-review.md A",
+   "summary": "冪等再送が認可版の増分後は403／停止済み再停止が409",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph1-review表「低・方針で残す」",
+   "owner": "-"
+  },
+  {
+   "id": "PH1-C",
+   "source": "docs/evidence/ph1-review.md C",
+   "summary": "フォーカス循環の細部・寸法の微差",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph1-review表「低・方針で残す」",
+   "owner": "T086"
+  },
+  {
+   "id": "PH2-A12",
+   "source": "docs/evidence/ph2-review.md A12",
+   "summary": "API-27が状態で422/404を区別／import解析中の固定・staging孤児",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph2-review表「低・方針で残す」",
+   "owner": "T087"
+  },
+  {
+   "id": "PH2-C19",
+   "source": "docs/evidence/ph2-review.md C19〜C21",
+   "summary": "選択シートのEsc・フォーカス、語彙の微差",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph2-review表「低・方針で残す」",
+   "owner": "T086"
+  },
+  {
+   "id": "PH2-R1",
+   "source": "docs/evidence/ph2-review.md 第2回①②",
+   "summary": "系列一意409のAPI試験なし・分類変更イベントなし・表示の軽微差（CSV成功表示等）",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph2-review表「低・方針で残す」",
+   "owner": "-"
+  },
+  {
+   "id": "PH2-R3",
+   "source": "docs/evidence/ph2-review.md 第3回",
+   "summary": "job自動リンクの監査・再リンク防止の明示試験なし",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph2-review表「低・方針で残す」",
+   "owner": "-"
+  },
+  {
+   "id": "PH3-A4",
+   "source": "docs/evidence/ph3-review.md A4/新規1",
+   "summary": "API-22×使用履歴同時指定の版増分二重積み・狭い条件で再送404",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph3-review表「低・方針で残す」",
+   "owner": "-"
+  },
+  {
+   "id": "PH3-A5",
+   "source": "docs/evidence/ph3-review.md A5",
+   "summary": "出欠の対象外が404/403に揺れる",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph3-review表「低・方針で残す」",
+   "owner": "-"
+  },
+  {
+   "id": "PH3-C8",
+   "source": "docs/evidence/ph3-review.md C8・N2・N4・参考",
+   "summary": "小見出し形式・複数LeaveConfirm・canManage出し分け・ID開示",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph3-review表「低・方針で残す」",
+   "owner": "T086"
+  },
+  {
+   "id": "PH3-T",
+   "source": "docs/evidence/ph3-review.md 第3回",
+   "summary": "activities.specの死に変数・先取り断言・wrangler d1 executeのseed",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph3-review表「低・方針で残す」",
+   "owner": "T085b"
+  },
+  {
+   "id": "PH4-L",
+   "source": "docs/evidence/ph4-review.md「方針で残す」",
+   "summary": "再開理由のtrim無しほか低（A低/B低/C低の一部）",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph4-review「方針で残す」（低）",
+   "owner": "-"
+  },
+  {
+   "id": "PH5-L",
+   "source": "docs/evidence/ph5-review.md「方針で残す」1〜7",
+   "summary": "superseded旧版FTS行・空索引succeeded・無効jobId・文内リンク44px・重複取得ほか",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph5-review「方針で残す」（低）",
+   "owner": "-"
+  },
+  {
+   "id": "PH6-L",
+   "source": "docs/evidence/ph6-review.md A低1/要確認1/要確認2",
+   "summary": "部分filter cursor・同unit cursor再利用・resync札の点色",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph6-review表「低/要確認・方針で残す」",
+   "owner": "-"
+  },
+  {
+   "id": "PH7-L",
+   "source": "docs/evidence/ph7-review.md「方針で残す」1〜9",
+   "summary": "ai.calls計上位置・Retry-After固定・理由コード不統一・ラベル語彙ほか",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph7-review「方針で残す」（低）",
+   "owner": "T086"
+  },
+  {
+   "id": "PH8-L",
+   "source": "docs/evidence/ph8-review.md「方針で残す」（T083・T084）",
+   "summary": "sync_recoverの手動再送の非決定性・FORBIDDEN語彙・注記の文体差・Google Fonts停止時のアイコン表示ほか",
+   "severity": "low",
+   "status": "open",
+   "basis": "ph8-review「方針で残す」（低・軽微）",
+   "owner": "-"
+  },
+  {
+   "id": "T085-O1",
+   "source": "T085で観察",
+   "summary": "API-51の異常の子Pageは未接続（APIはT032で完了）",
+   "severity": "low",
+   "status": "open",
+   "basis": "docs/05 API-51行に残作業として記録",
+   "owner": "未割当"
+  }
+ ],
+ "knownSkips": [
+  {
+   "test": "tests/e2e/shell.spec.ts::mobile_menu_tab_shows_profile_and_tiles",
+   "project": "desktop-1280",
+   "reason": "メニュータブはスマホ幅のみの画面（test.skip(!isPhone)）",
+   "evidenceProject": "phone-360"
+  },
+  {
+   "test": "tests/e2e/member-admin.spec.ts::ai_evaluation_buttons_meet_touch_target_on_mobile",
+   "project": "desktop-1280",
+   "reason": "押下領域44pxの規則はモバイル。PCはprototypeのコンパクト寸法が正",
+   "evidenceProject": "phone-360"
+  },
+  {
+   "test": "tests/e2e/assistant.spec.ts::assistant_input_controls_meet_touch_target_on_mobile",
+   "project": "desktop-1280",
+   "reason": "押下領域44pxの規則はモバイル。PCはprototypeのコンパクト寸法が正",
+   "evidenceProject": "phone-360"
+  }
+ ]
+}

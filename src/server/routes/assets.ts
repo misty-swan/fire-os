@@ -1,4 +1,4 @@
-import { Equipment, Vehicle, type AssetDetailDto } from "../../shared/contracts/assets";
+import { AssetInspectionRow, Equipment, Vehicle, type AssetDetailDto } from "../../shared/contracts/assets";
 import { resolvePrincipal } from "../auth/principal";
 import { businessDateIn, isOverdue, overdueAssetCondition, BUSINESS_TIMEZONE } from "../jobs/handlers/inspection-due";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
@@ -290,7 +290,8 @@ export function registerAssetRoutes(app: ApiApp): void {
       });
       const usages = await usageChildPage(c, p.unitId, params.type, params.id, query.cursor, query.limit);
       const inspectionDue = await assetInspectionDue(c, p.unitId, params.type, params.id);
-      return ok(c, { asset, usages: usages.page, inspectionDue }, { nextCursor: usages.nextCursor });
+      const inspections = await assetInspections(c, p.unitId, params.type, params.id);
+      return ok(c, { asset, inspections, usages: usages.page, inspectionDue }, { nextCursor: usages.nextCursor });
     }
     const row = await c.env.DB.prepare("SELECT * FROM equipment WHERE id = ?").bind(params.id)
       .first<EquipmentRow>().then((r) => (r && r.unit_id === p.unitId ? r : null));
@@ -303,8 +304,30 @@ export function registerAssetRoutes(app: ApiApp): void {
     });
     const usages = await usageChildPage(c, p.unitId, params.type, params.id, query.cursor, query.limit);
     const inspectionDue = await assetInspectionDue(c, p.unitId, params.type, params.id);
-    return ok(c, { asset, usages: usages.page, inspectionDue }, { nextCursor: usages.nextCursor });
+    const inspections = await assetInspections(c, p.unitId, params.type, params.id);
+    return ok(c, { asset, inspections, usages: usages.page, inspectionDue }, { nextCursor: usages.nextCursor });
   });
+}
+
+/**
+ * 資産の点検履歴（T085でT030の残作業を接続。docs/05 API-51 inspections）。新しい順に最大100件。
+ * 訂正前の原本も返す（追記型。過去版を開ける）。isCurrentは系列の現在版ポインタ（訂正はこれだけに許す）。
+ */
+async function assetInspections(
+  c: ApiContext, unitId: string, type: "vehicle" | "equipment", id: string,
+): Promise<AssetDetailDto["inspections"]> {
+  const col = type === "vehicle" ? "vehicle_id" : "equipment_id";
+  const rows = (await c.env.DB.prepare(
+    "SELECT json_object(" +
+      "'id', i.id, 'seriesId', i.series_id, 'seriesVersion', s.version, 'templateVersionId', i.template_version_id, " +
+      "'inspectorMemberId', i.inspector_member_id, 'inspectedAt', i.inspected_at, 'result', i.result, 'note', i.note, " +
+      "'items', json((SELECT json_group_array(json_object('code', m.item_code, 'result', m.result, 'value', json(m.value_json), 'note', m.note)) FROM inspection_items m WHERE m.asset_inspection_id = i.id)), " +
+      "'supersedesId', i.supersedes_id, 'correctionReason', i.correction_reason, " +
+      "'isCurrent', json(CASE WHEN s.current_asset_inspection_id = i.id THEN 'true' ELSE 'false' END)) AS j " +
+      `FROM asset_inspections i JOIN inspection_series s ON s.id = i.series_id AND s.unit_id = i.unit_id WHERE i.${col} = ? AND i.unit_id = ? ` +
+      "ORDER BY i.inspected_at DESC, i.created_at DESC, i.id DESC LIMIT 100",
+  ).bind(id, unitId).all<{ j: string }>()).results;
+  return rows.map((r) => AssetInspectionRow.parse(JSON.parse(r.j)));
 }
 
 /**

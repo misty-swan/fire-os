@@ -174,6 +174,7 @@ describe("deploy-config (T078)", () => {
     const requiredGates = [
       "npm run typecheck",
       "npm run check:contracts",
+      "npm run check:coverage",
       "npm run check:migrations",
       "npm run build",
       "npm run check:environment",
@@ -182,6 +183,13 @@ describe("deploy-config (T078)", () => {
     ];
     for (const gate of requiredGates) {
       expect(ciYaml).toContain(gate);
+    }
+    // 受入ゲート（T085）は結果照合のためCIで流さない: 業務e2eのプロジェクトだけを明示し、acceptanceを含めない（裁定R10）
+    for (const yaml of [ciYaml, deployStagingYaml, deployProductionYaml]) {
+      const e2eLine = yaml.split("\n").find((l) => l.includes("npm run test:e2e"))!;
+      expect(e2eLine).toContain("--project=phone-360");
+      expect(e2eLine).toContain("--project=desktop-1280");
+      expect(e2eLine).not.toContain("acceptance");
     }
 
     // 配置workflow: 手動起動のみ。verify（全ゲート）に依存し、verifyが失敗すればdeployは実行されない

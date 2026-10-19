@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
-import { api } from "../../api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
+import { api, apiCall } from "../../api";
 import { AttachmentUploader } from "../attachments/AttachmentUploader";
 import { FormErrors } from "../../components/FormErrors";
 import { LeaveConfirm } from "../../components/LeaveConfirm";
@@ -14,7 +14,27 @@ import { useMe } from "../../me";
  * 点検登録（T033、SCR-06。prototype 点検登録の3ステップ: チェック→写真・メモ→確認）。
  * 承認済み様式の項目ごとに結果を選び、写真の検査が済んだものだけをいっしょに保存する。
  * AI分類の候補枠は紫で示す（確定は人の操作。依頼と承認はAIレビュー（SCR-18）で行う＝T055）。
+ *
+ * T033の残作業をT085で接続: 同じ3ステップの部品で
+ *  - 資産（車両・資機材）の点検登録（SCR-23 /app/assets/:type/:id/inspection。API-20）
+ *  - 点検の訂正（?correct=<点検ID>。API-46。元の結果・メモを入れた状態で始め、理由を必須にする。
+ *    訂正は新しい原本で、元の原本は書き換えない＝docs/11 §3。訂正できるのは系列の現在版だけ＝409で止まる）
+ * 実施日時は最初の送信で固定する（T085で発見: 送るたびに作り直すと、応答が失われた保存を送り直したとき
+ * 内容が変わって別の送信鍵になり、二重登録になっていた。同じ内容なら同じ鍵＝docs/03 §1「結果を確認できません」）。
  */
+
+type InspectionTarget = { type: "facility" | "vehicle" | "equipment"; id: string };
+
+/** 訂正の元（API-44／API-51の点検履歴の1行） */
+interface OriginalInspection {
+  id: string;
+  seriesVersion: number;
+  templateVersionId: string;
+  inspectedAt: string;
+  note: string;
+  items: { code: string; result: string }[];
+  isCurrent: boolean;
+}
 
 interface TemplateVersion {
   id: string;
@@ -31,8 +51,16 @@ const RESULT_LABELS: Record<string, { label: string; tone: "ok" | "alert" | "neu
 
 export function InspectionFormPage() {
   const navigate = useNavigate();
-  const params = useParams<{ id: string }>();
-  const facilityId = params.id!;
+  const params = useParams<{ id: string; type?: string }>();
+  const [search] = useSearchParams();
+  const target: InspectionTarget = {
+    type: params.type === "vehicle" || params.type === "equipment" ? params.type : "facility",
+    id: params.id!,
+  };
+  const isAsset = target.type !== "facility";
+  const correctId = search.get("correct");
+  const backTo = isAsset ? `/app/assets/${target.type}/${target.id}` : `/app/facilities/${target.id}`;
+  const title = correctId ? "点検の訂正" : isAsset ? "資産の点検登録" : "点検登録";
   const { me } = useMe();
   const myMemberId = me?.profile.memberId ?? "";
   const [templates, setTemplates] = useState<TemplateVersion[] | "loading" | "none">("loading");
@@ -46,12 +74,19 @@ export function InspectionFormPage() {
   const [touched, setTouched] = useState(false);
   /** 保存が完了したら離脱確認を外す（保存後の自動遷移を確認ダイアログで止めない） */
   const [completed, setCompleted] = useState(false);
-  const save = useMutation("API-14");
+  const [reason, setReason] = useState("");
+  const [original, setOriginal] = useState<OriginalInspection | "loading" | "missing" | null>(correctId ? "loading" : null);
+  /** 最初の送信で固定する実施日時（送り直しで内容を変えない＝同じ送信鍵） */
+  const inspectedAtRef = useRef<string | null>(null);
+  const saveFacility = useMutation("API-14");
+  const saveAsset = useMutation("API-20");
+  const saveCorrection = useMutation("API-46");
+  const save = correctId ? saveCorrection : isAsset ? saveAsset : saveFacility;
 
   useEffect(() => {
     void (async () => {
       try {
-        const data = (await api("API-94", { query: { targetType: "facility" } })) as unknown as TemplateVersion[];
+        const data = (await api("API-94", { query: { targetType: target.type } })) as unknown as TemplateVersion[];
         // 現在の承認版（currentVersion）だけを入力画面の候補にする（docs/16 T028: 現承認版を選べる）
         const approved = data
           .filter((t) => t.status === "active" && t.currentVersion?.status === "approved")
@@ -61,40 +96,85 @@ export function InspectionFormPage() {
         setTemplates("none");
       }
     })();
-  }, []);
+  }, [target.type]);
+
+  // 訂正の元を読み、結果・メモを入れた状態で始める（施設=API-44の履歴、資産=API-51の点検履歴）
+  useEffect(() => {
+    if (!correctId) return;
+    void (async () => {
+      try {
+        let found: OriginalInspection | undefined;
+        if (isAsset) {
+          const detail = (await api("API-51", { params: { type: target.type as "vehicle" | "equipment", id: target.id }, query: {} })) as unknown as { inspections: OriginalInspection[] };
+          found = detail.inspections.find((r) => r.id === correctId);
+        } else {
+          let cursor: string | undefined;
+          for (let page = 0; page < 20 && !found; page++) {
+            const res = await apiCall("API-44", { params: { id: target.id }, query: { limit: 200, ...(cursor ? { cursor } : {}) } });
+            found = (res.data as unknown as OriginalInspection[]).find((r) => r.id === correctId);
+            cursor = res.nextCursor;
+            if (!cursor) break;
+          }
+        }
+        if (!found) {
+          setOriginal("missing");
+          return;
+        }
+        setOriginal(found);
+        setResults(Object.fromEntries(found.items.map((i) => [i.code, i.result])));
+        setNote(found.note);
+      } catch {
+        setOriginal("missing");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [correctId]);
+
+  // 訂正では元の点検で使った様式を選んだ状態にする（承認済みの候補にあれば）
+  useEffect(() => {
+    if (!Array.isArray(templates) || !original || typeof original === "string") return;
+    const idx = templates.findIndex((t) => t.currentVersion.id === original.templateVersionId);
+    if (idx >= 0) setChosen(idx);
+  }, [templates, original]);
 
   const schema = Array.isArray(templates) ? templates[chosen]?.currentVersion.itemSchema ?? [] : [];
   const missingRequired = schema.filter((s) => s.required && !results[s.code]);
 
+  const correcting = original !== null && typeof original !== "string" ? original : null;
   const submit = useCallback(async () => {
     setTouched(true);
     if (missingRequired.length > 0 || busyAttachments) return;
-    const result = save.state;
-    void result;
-    const res = await save.run({
-      params: { id: facilityId },
-      body: {
-        templateVersionId: (Array.isArray(templates) ? templates[chosen]?.currentVersion.id : "") ?? "",
-        inspectedAt: new Date().toISOString(),
-        inspectorMemberId: myMemberId,
-        result: Object.values(results).some((r) => r === "needs_review") ? "needs_review" : "ok",
-        checkItems: schema.map((s) => ({ code: s.code, result: results[s.code] ?? "unknown" })),
-        note: note.trim() || "特記事項なし",
-        createIssue: Object.values(results).some((r) => r === "needs_review"),
-        attachmentIds: readyIds,
-        ...(draftId ? {} : {}),
-      },
-    } as never);
+    if (correctId && (!correcting || !reason.trim())) return;
+    // 実施日時: 訂正は元の点検の日時のまま。新規は最初の送信の時刻で固定し、送り直しでは変えない
+    inspectedAtRef.current ??= correcting ? correcting.inspectedAt : new Date().toISOString();
+    const shape = {
+      templateVersionId: (Array.isArray(templates) ? templates[chosen]?.currentVersion.id : "") ?? "",
+      inspectedAt: inspectedAtRef.current,
+      inspectorMemberId: myMemberId,
+      result: Object.values(results).some((r) => r === "needs_review") ? "needs_review" : "ok",
+      checkItems: schema.map((s) => ({ code: s.code, result: results[s.code] ?? "unknown" })),
+      note: note.trim() || "特記事項なし",
+      createIssue: Object.values(results).some((r) => r === "needs_review"),
+      attachmentIds: readyIds,
+    };
+    const res = correcting
+      ? await saveCorrection.run({
+        params: { type: target.type, id: correcting.id },
+        body: { seriesVersion: correcting.seriesVersion, supersedesId: correcting.id, reason: reason.trim(), ...shape },
+      } as never)
+      : isAsset
+        ? await saveAsset.run({ body: { target: { type: target.type, id: target.id }, ...shape } } as never)
+        : await saveFacility.run({ params: { id: target.id }, body: shape } as never);
     if (res) {
       setCompleted(true);
       // 「保存しました」のトーストが見える時間を確保してから遷移する（離脱確認の番もこの間に降りる）
       await new Promise((r) => setTimeout(r, 1000));
-      navigate(`/app/facilities/${facilityId}`);
+      navigate(backTo);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [missingRequired.length, busyAttachments, results, note, readyIds, draftId, facilityId, schema, templates, chosen, myMemberId]);
+  }, [missingRequired.length, busyAttachments, results, note, readyIds, draftId, target.id, target.type, schema, templates, chosen, myMemberId, reason, correcting]);
 
-  if (templates === "loading") {
+  if (templates === "loading" || original === "loading") {
     return (
       <div className="flex flex-col gap-3">
         <div className="h-10 w-1/2 animate-pulse rounded bg-white/[.05]" />
@@ -102,10 +182,20 @@ export function InspectionFormPage() {
       </div>
     );
   }
+  if (original === "missing") {
+    return (
+      <div className="flex max-w-[720px] flex-col gap-4">
+        <SubHeader title={title} closeIcon backTo={backTo} />
+        <Banner tone="warning" eyebrow="NOT FOUND" title="訂正する点検の記録が見つかりません">
+          記録が削除されたのではなく、表示できる範囲に無い可能性があります。詳細の画面から開き直してください。
+        </Banner>
+      </div>
+    );
+  }
   if (templates === "none" || templates.length === 0) {
     return (
       <div className="flex max-w-[720px] flex-col gap-4">
-        <SubHeader title="点検登録" closeIcon backTo={`/app/facilities/${facilityId}`} />
+        <SubHeader title={title} closeIcon backTo={backTo} />
         <Banner tone="info" eyebrow="NO TEMPLATE" title="承認済みの点検様式がまだありません">
           管理画面で様式を承認すると点検を登録できます。
         </Banner>
@@ -122,9 +212,9 @@ export function InspectionFormPage() {
   return (
     <div className="flex flex-col gap-4 pb-28">
       <SubHeader
-        title="点検登録"
+        title={title}
         closeIcon
-        backTo={`/app/facilities/${facilityId}`}
+        backTo={backTo}
         right={<span className="font-mono text-[11px] text-ink-muted">{stepLabel(step)}</span>}
       />
       <div className="grid grid-cols-3 gap-1.5 px-1">
@@ -135,6 +225,13 @@ export function InspectionFormPage() {
           </div>
         ))}
       </div>
+
+      {correcting && (
+        <Notice tone="info" icon="history" role="status">
+          {correcting.inspectedAt.slice(0, 10)}の点検を訂正します。元の記録は書き換えず、訂正した記録を新しく残します。
+          {!correcting.isCurrent && "（この記録はすでに訂正されています。保存すると競合として止まります）"}
+        </Notice>
+      )}
 
       {step === 1 && (
         <div className="flex flex-col gap-2.5">
@@ -203,7 +300,8 @@ export function InspectionFormPage() {
           <div className="flex flex-col gap-2">
             <span className="text-[14px] font-bold">写真</span>
             <AttachmentUploader
-              target={{ type: "facility", id: facilityId }}
+              // 施設の新規点検は従来どおり施設を直targetにする（保存時に点検へ移る）。資産と訂正は点検向けの予約で受け、保存と同時に点検へリンクする
+              target={!isAsset && !correctId ? { type: "facility", id: target.id } : { type: "inspection" }}
               onReady={(ids, draft) => { setReadyIds(ids); if (draft) setDraftId(draft); }}
               onChange={setBusyAttachments}
             />
@@ -266,18 +364,26 @@ export function InspectionFormPage() {
             </Notice>
           )}
           {save.state.kind === "conflict" && (
-            <Banner tone="warning" eyebrow="CONFLICT" title="他の操作で更新されています">内容を確認して再度保存してください。</Banner>
+            <Banner tone="warning" eyebrow="CONFLICT" title="他の操作で更新されています">
+              {correctId ? "この点検はすでに訂正されています。詳細の画面から最新の記録を開き直して訂正してください。" : "内容を確認して再度保存してください。"}
+            </Banner>
           )}
           {save.state.kind === "unknown" && (
             <Banner tone="warning" eyebrow="UNKNOWN" title="結果を確認できません">同じ内容で再送しても二重登録にはなりません。</Banner>
           )}
           {/* 保存の成功はトースト（docs/03 §1.1。savedのときだけ出す） */}
           <MutationStatus state={save.state.kind === "saved" ? save.state : { kind: "idle" }} toastBottom={110} />
+          {correctId && (
+            <TextArea name="correction-reason" label="訂正の理由（必須）" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="例: 結果の記入を誤った" />
+          )}
+          {save.state.kind === "rejected" && (
+            <Banner tone="warning" eyebrow="REJECTED" title="この内容では保存できません">写真の検査が終わっているか、様式が承認済みかを確認してください。</Banner>
+          )}
           <FormErrors issues={save.state.kind === "invalid" ? save.state.details : []} />
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setStep(2)} className="max-lg:min-h-11 flex-none px-5">戻る</Button>
-            <Button busy={save.saving || busyAttachments} onClick={() => void submit()} className="flex-1">
-              {save.state.kind === "processing" ? "処理中（完了ではありません）" : "点検を保存"}
+            <Button busy={save.saving || busyAttachments} disabled={Boolean(correctId) && !reason.trim()} onClick={() => void submit()} className="flex-1">
+              {save.state.kind === "processing" ? "処理中（完了ではありません）" : correctId ? "訂正を保存" : "点検を保存"}
             </Button>
           </div>
         </div>

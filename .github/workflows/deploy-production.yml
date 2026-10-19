@@ -32,12 +32,14 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run check:contracts
+      - run: npm run check:coverage
       - run: npm run check:migrations
       - run: npm run build
       - run: npm run check:environment
       - run: npx vitest --run
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      # 業務のe2eだけ（受入ゲート〔project acceptance〕は証跡indexの照合でフルe2eの結果に依存するためCIでは流さない＝T085裁定R10）
+      - run: npm run test:e2e -- --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768
   deploy:
     needs: verify
     if: github.ref == 'refs/heads/main' && inputs.confirm == 'production'

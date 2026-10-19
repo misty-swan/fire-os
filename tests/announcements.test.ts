@@ -393,4 +393,28 @@ describe("お知らせの公開対象・版・本人既読 (T045)", () => {
       [member.memberId!, operator.memberId!, admin.memberId!].sort(),
     );
   });
+  // --- T085の網羅で見つけた欠落（作成・改版の入力拒否。AT-COM-01のCT-02） ---
+  it("invalid_announcement_input_is_rejected_without_creating_anything (T085)", async () => {
+    const admin = fx.units.a.people.admin;
+    const member = fx.units.a.people.member;
+    const count = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM announcements").first<{ n: number }>())!.n;
+    const before = await count();
+    const valid = { title: "架空の連絡", body: "架空の本文", audienceMemberIds: [member.memberId!] };
+    for (const [label, body] of [
+      ["題名が空", { ...valid, title: "" }],
+      ["題名が長すぎる", { ...valid, title: "長".repeat(201) }],
+      ["本文が空", { ...valid, body: "" }],
+      ["対象が配列でない", { ...valid, audienceMemberIds: "all" }],
+      ["対象のIDがUUIDでない", { ...valid, audienceMemberIds: ["NOT-A-UUID"] }],
+      ["公開日時が日時でない", { ...valid, publishAt: "来週" }],
+      ["契約外の列", { ...valid, unitId: fx.units.b.id }],
+    ] as const) {
+      const res = await fx.client(admin).request("POST", "/api/v1/announcements", body, idem());
+      expect(res.status, label).toBe(400);
+    }
+    // 別分団の団員を対象にしても作られない（存在を明かさない）
+    const foreign = await fx.client(admin).request("POST", "/api/v1/announcements", { ...valid, audienceMemberIds: [fx.units.b.people.member.memberId!] }, idem());
+    expect([404, 422]).toContain(foreign.status);
+    expect(await count()).toBe(before);
+  });
 });

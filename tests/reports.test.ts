@@ -156,4 +156,38 @@ describe("帳票様式artifactと手動下書き・不変版 (T056)", () => {
     expect(template.fieldSchema.map((f) => f.code)).toContain("participantCount");
     await expect(getReportTemplate("unknown-v99")).rejects.toMatchObject({ code: "UNAPPROVED_POLICY" });
   });
+  // --- T085の網羅で見つけた欠落（帳票の作成・改版の再送。AT-DOC-02のCT-04） ---
+  it("manual_draft_and_new_version_resend_have_one_effect (T085)", async () => {
+    const admin = fx.units.a.people.admin;
+    const member = fx.units.a.people.member;
+    const created = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "架空の夜警（再送確認）", kind: "夜警", plannedStartsAt: "2026-10-22T10:00:00.000Z",
+      locationText: "架空市詰所", ownerMemberId: admin.memberId!, audienceMemberIds: [member.memberId!],
+    }, idem());
+    const activityId = ((await json(created)).data! as { id: string }).id;
+    await fx.client(admin).request("PATCH", `/api/v1/activities/${activityId}`, { version: 1, status: "scheduled", reason: "公開" }, idem());
+    await fx.client(admin).request("POST", `/api/v1/activities/${activityId}/actual-results`, {
+      activityVersion: 2, content: "夜警を実施。", actualStartsAt: "2026-10-22T10:05:00.000Z",
+      participants: [{ memberId: member.memberId!, actualStatus: "participated" }], attachmentIds: [],
+    }, idem());
+    const result = await loadResult(activityId);
+    const body = { activityId, resultVersion: result.rootVersion, templateVersion: "test-activity-v1", text: "夜警を実施した（再送確認）。" };
+    const key = { "idempotency-key": crypto.randomUUID() };
+    const m1 = await fx.client(admin).request("POST", "/api/v1/reports/manual", body, key);
+    const m2 = await fx.client(admin).request("POST", "/api/v1/reports/manual", body, key);
+    expect([m1.status, m2.status]).toEqual([201, 201]);
+    const report = ((await json(m1)).data! as { report: { id: string; version: number } }).report;
+    expect(((await json(m2)).data! as { report: { id: string } }).report.id).toBe(report.id);
+    expect(await fx.rows("reports", { activity_id: activityId })).toHaveLength(1);
+    // 改版の再送も版を1つしか作らない（応答消失後の再試行で第3版が生まれない）
+    const edit = { version: report.version, text: "夜警を実施。異常なし。", missingFields: [], sourceVersions: {}, reason: "追記" };
+    const editKey = { "idempotency-key": crypto.randomUUID() };
+    const e1 = await fx.client(admin).request("POST", `/api/v1/reports/${report.id}/versions`, edit, editKey);
+    const e2 = await fx.client(admin).request("POST", `/api/v1/reports/${report.id}/versions`, edit, editKey);
+    expect([e1.status, e2.status]).toEqual([201, 201]);
+    expect(((await json(e2)).data! as { id: string }).id).toBe(((await json(e1)).data! as { id: string }).id);
+    expect(await fx.rows("report_versions", { report_id: report.id })).toHaveLength(2);
+    // 同じ鍵で別の本文は409
+    expect((await fx.client(admin).request("POST", `/api/v1/reports/${report.id}/versions`, { ...edit, text: "別の本文" }, editKey)).status).toBe(409);
+  });
 });

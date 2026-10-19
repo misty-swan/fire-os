@@ -66,6 +66,20 @@ async function makeUploaded(who: Identity, intended: string): Promise<string> {
   return intent.id;
 }
 
+/**
+ * 完了確定（API-84）前の添付（検査jobが無く、背景のQueue consumerでreadyへ進まない）。「未検査は422」を
+ * 決定的に試すため（T085: 完了確定済みの添付は全スイート実行中にconsumerがreadyへ進め、422の断言が201で落ちた）
+ */
+async function makeNotYetCompleted(who: Identity, intended: string): Promise<string> {
+  const dRes = await fx.client(who).request("POST", "/api/v1/attachment-drafts", { intendedEntityType: intended }, idem());
+  const draft = (await json(dRes)).data! as { id: string };
+  const iRes = await fx.client(who).request(
+    "POST", "/api/v1/attachments/upload-intents",
+    { target: { type: "attachment_draft", id: draft.id }, contentType: "image/png", byteSize: pngBytes().byteLength }, idem(),
+  );
+  return ((await json(iRes)).data! as { id: string }).id;
+}
+
 /** 既存の業務対象を直targetにしたintent（SCR-06のuploaderと同じ経路）。転送と完了まで進める */
 async function makeUploadedTo(who: Identity, target: { type: "facility"; id: string }): Promise<string> {
   const iRes = await fx.client(who).request(
@@ -461,7 +475,7 @@ describe("点検と異常 (T029〜T032)", () => {
     expect((await fx.rows("attachments", { id: readyId }))[0]!.classification).toBe("sensitive");
 
     // (b) 未検査（ready前）の添付を渡すと422で、点検も異常も増えない
-    const uninspectedId = await makeUploaded(admin, "inspection"); // 完了済みだが検査jobは未実行
+    const uninspectedId = await makeNotYetCompleted(admin, "inspection"); // 検査前（ready前）
     const before = {
       inspections: (await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections").first<{ n: number }>())!.n,
       issues: (await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>())!.n,
@@ -519,7 +533,7 @@ describe("点検と異常 (T029〜T032)", () => {
     expect(await fx.rows("attachment_links", { attachment_id: ready2 })).toHaveLength(1);
 
     // (c) 未検査（ready前）の添付は422で、異常もリンクも増えない
-    const uninspectedId = await makeUploaded(admin, "issue"); // 完了済みだが検査jobは未実行
+    const uninspectedId = await makeNotYetCompleted(admin, "issue"); // 検査前（ready前）
     const beforeIssues = (await env.DB.prepare("SELECT COUNT(*) AS n FROM issues").first<{ n: number }>())!.n;
     const notReady = await fx.client(admin).request(
       "POST", "/api/v1/issues",
@@ -786,5 +800,142 @@ describe("点検と異常 (T029〜T032)", () => {
       { seriesVersion: made.data.seriesVersion, supersedesId: made.data.id, reason: "数値の誤り訂正", ...facilityInput(t.facilityVersionId, admin.memberId!, { note: "正しい訂正" }) }, idem(),
     );
     expect(current.status).toBe(201);
+  });
+  // --- T085の網羅で見つけた欠落（API-44の機能試験が無かった。AT-MAP-05/06・TC-09） ---
+  it("facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+    const post = (inspectedAt: string, note: string) => fx.client(admin).request(
+      "POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { inspectedAt, note }), idem(),
+    );
+    // 3回の点検（時刻の異なる原本）と、最新の1件への訂正（追記型の訂正原本）
+    const made: { id: string; seriesVersion: number }[] = [];
+    for (const [at, note] of [["2026-10-01T01:00:00.000Z", "一回目"], ["2026-10-02T01:00:00.000Z", "二回目"], ["2026-10-03T01:00:00.000Z", "三回目"]] as const) {
+      const r = await post(at, note);
+      expect(r.status).toBe(201);
+      made.push((await json(r)).data! as { id: string; seriesVersion: number });
+    }
+    const latest = made[2]!;
+    const corrected = await fx.client(admin).request(
+      "POST", `/api/v1/inspections/facility/${latest.id}/corrections`,
+      { seriesVersion: latest.seriesVersion, supersedesId: latest.id, reason: "結果の記入誤り", ...facilityInput(t.facilityVersionId, admin.memberId!, { inspectedAt: "2026-10-03T01:00:00.000Z", result: "needs_review", checkItems: [{ code: "exterior", result: "needs_review" }], note: "三回目（訂正）" }) },
+      idem(),
+    );
+    expect(corrected.status).toBe(201);
+    const correctedId = ((await json(corrected)).data! as { id: string }).id;
+
+    // limit=1で全cursorを完走: 4件（原本3＋訂正1）が重複・欠落なく、新しい順で一度ずつ返る
+    const seen: { id: string; inspectedAt: string; supersedesId: string | null; result: string; note: string; isCurrent: boolean }[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 10; guard++) {
+      const res = await fx.client(admin).request("GET", `/api/v1/facilities/${facilityId}/inspections?limit=1${cursor ? `&cursor=${cursor}` : ""}`);
+      expect(res.status).toBe(200);
+      const page = (await res.json()) as { data: typeof seen; meta: { nextCursor?: string } };
+      seen.push(...page.data);
+      cursor = page.meta.nextCursor;
+      if (!cursor) break;
+    }
+    const ids = seen.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length); // 重複なし
+    expect(new Set(ids)).toEqual(new Set([...made.map((m) => m.id), correctedId])); // 欠落なし
+    const times = seen.map((r) => r.inspectedAt);
+    expect([...times].sort().reverse()).toEqual(times); // 新しい順
+    // 訂正前の原本は不変で、訂正原本は元を指す（過去版を開ける）
+    expect(seen.find((r) => r.id === latest.id)).toMatchObject({ result: "ok", note: "三回目", supersedesId: null, isCurrent: false });
+    expect(seen.find((r) => r.id === correctedId)).toMatchObject({ result: "needs_review", supersedesId: latest.id, isCurrent: true });
+    expect(seen.filter((r) => (r as unknown as { isCurrent: boolean }).isCurrent)).toHaveLength(1); // 系列の現在版はちょうど1件
+    // 結果での絞り込み・期間（from包含/to排他）
+    const onlyReview = (await (await fx.client(admin).request("GET", `/api/v1/facilities/${facilityId}/inspections?result=needs_review`)).json()) as { data: { id: string }[] };
+    expect(onlyReview.data.map((r) => r.id)).toEqual([correctedId]);
+    const window = (await (await fx.client(admin).request("GET", `/api/v1/facilities/${facilityId}/inspections?from=2026-10-02T01:00:00.000Z&to=2026-10-03T01:00:00.000Z`)).json()) as { data: { id: string }[] };
+    expect(window.data.map((r) => r.id)).toEqual([made[1]!.id]);
+    // 別unitは存在を明かさない404。壊れたcursorは400
+    expect((await fx.client(fx.units.b.people.admin).request("GET", `/api/v1/facilities/${facilityId}/inspections`)).status).toBe(404);
+    expect((await fx.client(admin).request("GET", `/api/v1/facilities/${facilityId}/inspections?cursor=not-a-cursor`)).status).toBe(400);
+  });
+
+  // --- T085の網羅で見つけた欠落（資産点検の再送・写真。AT-AST-02のCT-04/CT-16） ---
+  it("asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const vehicle = await (await fx.client(admin).request("POST", "/api/v1/vehicles", { assetCode: `P-T85-${crypto.randomUUID().slice(0, 4)}`, name: "架空の小型ポンプ車", status: "運用" }, idem())).json() as { data: { id: string } };
+    const readyId = await makeUploaded(admin, "inspection");
+    await runDueJobs(env);
+    expect((await fx.rows("attachments", { id: readyId }))[0]!.status).toBe("ready");
+    const body = {
+      target: { type: "vehicle", id: vehicle.data.id },
+      templateVersionId: t.vehicleVersionId, inspectedAt: "2026-10-14T03:00:00.000Z",
+      inspectorMemberId: admin.memberId!, result: "ok",
+      checkItems: [{ code: "lights", result: "ok" }], note: "車両点検（写真つき）", createIssue: false, attachmentIds: [readyId],
+    };
+    const key = { "idempotency-key": crypto.randomUUID() };
+    const first = await fx.client(admin).request("POST", "/api/v1/asset-inspections", body, key);
+    expect(first.status).toBe(201);
+    const firstRow = (await json(first)).data! as { id: string; seriesVersion: number };
+    const firstId = firstRow.id;
+    // 同じ鍵・同じ本文の再送（応答消失の再試行）は同じ結果で、点検もリンクも増えない
+    const again = await fx.client(admin).request("POST", "/api/v1/asset-inspections", body, key);
+    expect(again.status).toBe(201);
+    expect(((await json(again)).data! as { id: string }).id).toBe(firstId);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM asset_inspections WHERE vehicle_id = ?").bind(vehicle.data.id).first<{ n: number }>())!.n).toBe(1);
+    const links = (await fx.rows("attachment_links", { attachment_id: readyId })).filter((l) => l.unlinked_at === null);
+    expect(links).toHaveLength(1);
+    expect(links[0]!.entity_id).toBe(firstId);
+    // 同じ鍵で別の本文は409（別の操作を同じ鍵で通さない）
+    const mismatch = await fx.client(admin).request("POST", "/api/v1/asset-inspections", { ...body, note: "別の本文" }, key);
+    expect(mismatch.status).toBe(409);
+    // 未検査（ready前）の写真は422で、点検は増えない。完了確定（API-84）をしていない添付は検査jobが無く、
+    // 背景のQueue consumerでreadyへ進むことも無い（試験の競合を作らない）
+    const notReady = await makeNotYetCompleted(admin, "inspection");
+    expect((await fx.rows("attachments", { id: notReady }))[0]!.status).not.toBe("ready");
+    const rejected = await fx.client(admin).request("POST", "/api/v1/asset-inspections", { ...body, attachmentIds: [notReady] }, idem());
+    expect(rejected.status).toBe(422);
+    expect(((await json(rejected)).error?.code)).toBe("ATTACHMENT_NOT_READY");
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM asset_inspections WHERE vehicle_id = ?").bind(vehicle.data.id).first<{ n: number }>())!.n).toBe(1);
+
+    // 資産の詳細（API-51）の点検履歴: 訂正すると原本は残り、現在版だけが訂正の対象になる（T030の残作業をT085で接続）
+    const fixed = await fx.client(admin).request(
+      "POST", `/api/v1/inspections/vehicle/${firstId}/corrections`,
+      { seriesVersion: firstRow.seriesVersion, supersedesId: firstId, reason: "灯火類の結果を訂正", templateVersionId: t.vehicleVersionId, inspectedAt: "2026-10-14T03:00:00.000Z", inspectorMemberId: admin.memberId!, result: "needs_review", checkItems: [{ code: "lights", result: "needs_review" }], note: "車両点検（訂正）", createIssue: false, attachmentIds: [] },
+      idem(),
+    );
+    expect(fixed.status).toBe(201);
+    const fixedId = ((await json(fixed)).data! as { id: string }).id;
+    const detail = (await (await fx.client(admin).request("GET", `/api/v1/assets/vehicle/${vehicle.data.id}`)).json()) as { data: { inspections: { id: string; isCurrent: boolean; supersedesId: string | null; result: string; items: { code: string; result: string }[] }[] } };
+    expect(detail.data.inspections.map((r) => [r.id, r.isCurrent])).toEqual([[fixedId, true], [firstId, false]]);
+    expect(detail.data.inspections[0]).toMatchObject({ supersedesId: firstId, result: "needs_review", items: [{ code: "lights", result: "needs_review" }] });
+    expect(detail.data.inspections[1]).toMatchObject({ supersedesId: null, result: "ok" }); // 原本は不変
+    // 別分団には存在を明かさない
+    expect((await fx.client(fx.units.b.people.admin).request("GET", `/api/v1/assets/vehicle/${vehicle.data.id}`)).status).toBe(404);
+  });
+
+  // --- T085の網羅で見つけた欠落（異常の起票・状態変更の再送。AT-AST-03のCT-04） ---
+  it("issue_report_and_transition_resend_have_one_effect (T085)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const facilityId = await seedFacility(a.id, admin.userId);
+    const createBody = { target: { type: "facility", id: facilityId }, title: "表示板の破損", description: "架空の点検で見つけた表示板の割れ", attachmentIds: [] };
+    const createKey = { "idempotency-key": crypto.randomUUID() };
+    const c1 = await fx.client(admin).request("POST", "/api/v1/issues", createBody, createKey);
+    const c2 = await fx.client(admin).request("POST", "/api/v1/issues", createBody, createKey);
+    expect([c1.status, c2.status]).toEqual([201, 201]);
+    const issue = (await json(c1)).data! as { id: string; version: number };
+    expect(((await json(c2)).data! as { id: string }).id).toBe(issue.id);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM issues WHERE facility_id = ?").bind(facilityId).first<{ n: number }>())!.n).toBe(1);
+    const eventsOf = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM issue_events WHERE issue_id = ?").bind(issue.id).first<{ n: number }>())!.n;
+    const before = await eventsOf();
+    const moveKey = { "idempotency-key": crypto.randomUUID() };
+    const move = { version: issue.version, status: "under_review", reason: "確認を始める" };
+    const m1 = await fx.client(admin).request("PATCH", `/api/v1/issues/${issue.id}`, move, moveKey);
+    const m2 = await fx.client(admin).request("PATCH", `/api/v1/issues/${issue.id}`, move, moveKey);
+    expect([m1.status, m2.status]).toEqual([200, 200]);
+    expect(((await json(m2)).data! as { version: number }).version).toBe(((await json(m1)).data! as { version: number }).version);
+    expect((await eventsOf()) - before).toBe(1); // 再送で履歴は増えない
+    // 同じ鍵で別の遷移は409
+    expect((await fx.client(admin).request("PATCH", `/api/v1/issues/${issue.id}`, { ...move, status: "in_progress" }, moveKey)).status).toBe(409);
   });
 });

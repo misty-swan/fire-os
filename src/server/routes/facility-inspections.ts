@@ -42,9 +42,10 @@ export function registerFacilityInspectionRoutes(app: ApiApp): void {
     if (query.to) { where.push("i.inspected_at < ?"); binds.push(query.to); }
     if (query.result) { where.push("i.result = ?"); binds.push(query.result); }
     if (query.cursor) {
-      // from/to/resultで絞った安定keyset（inspected_at, id）。cursorはその最後の組
+      // from/to/resultで絞った安定keyset（inspected_at, id）。cursorはその最後の組。
+      // 並びは新しい順（DESC）なので、続きは「最後の組より古い」側（T085で発見: 旧実装は > で2頁目以降が欠落していた）
       const [at, id] = decodeCursor(query.cursor);
-      where.push("(i.inspected_at > ? OR (i.inspected_at = ? AND i.id > ?))");
+      where.push("(i.inspected_at < ? OR (i.inspected_at = ? AND i.id < ?))");
       binds.push(at, at, id);
     }
     const rows = (
@@ -73,6 +74,8 @@ const FACILITY_INSPECTION_JSON =
   "'id', i.id, 'seriesId', i.series_id, 'seriesVersion', s.version, 'target', json_object('type', 'facility', 'id', i.facility_id), " +
   "'templateVersionId', i.template_version_id, 'inspectorMemberId', i.inspector_member_id, 'inspectedAt', i.inspected_at, " +
   "'result', i.result, 'note', i.note, 'supersedesId', i.supersedes_id, 'correctionReason', i.correction_reason, 'createdAt', i.created_at, " +
+  // 系列の現在版か（訂正前の原本はfalse。訂正〔API-46〕は現在版だけに許す。T085で画面の「現在版」表示と訂正導線のため追加）
+  "'isCurrent', json(CASE WHEN s.current_facility_inspection_id = i.id THEN 'true' ELSE 'false' END), " +
   "'items', (SELECT json_group_array(json_object('code', m.item_code, 'result', m.result, 'value', json(m.value_json), 'note', m.note)) FROM inspection_items m WHERE m.facility_inspection_id = i.id)) " +
   "FROM facility_inspections i JOIN inspection_series s ON s.id = i.series_id WHERE i.id = ?";
 

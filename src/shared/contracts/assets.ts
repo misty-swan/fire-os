@@ -5,7 +5,7 @@ import {
 } from "./common";
 import { inspectionShape } from "./gis";
 import { ResourceUsageRow } from "./operations";
-import { attachmentStates, assetStatuses, issueStates } from "../states";
+import { attachmentStates, assetStatuses, inspectionResults, issueStates } from "../states";
 
 export const attachmentTargetTypes = [
   "facility", "activity", "vehicle", "equipment", "inspection", "issue", "announcement", "report_version", "document",
@@ -45,8 +45,25 @@ export const AssetInspectionDue = obj({
   /** JST暦日で期限を過ぎているか（docs/14 D06。期限当日23:59は未超過、翌日00:00で超過） */
   overdue: z.boolean(),
 });
+/**
+ * 資産の点検履歴の1行（T085でT030の残作業「点検履歴」を接続。docs/05 API-51）。
+ * 訂正前の原本も残る（追記型）。isCurrentは系列の現在版（訂正できるのは現在版だけ＝API-46の版ガード）。
+ */
+export const AssetInspectionRow = obj({
+  id: Id, seriesId: Id, seriesVersion: Version, templateVersionId: Id, inspectorMemberId: Id,
+  inspectedAt: z.iso.datetime(), result: z.enum(inspectionResults), note: z.string(),
+  items: z.array(obj({
+    code: z.string(), result: z.string(),
+    value: z.union([z.string(), z.number(), z.boolean()]).nullable(), note: z.string().nullable(),
+  })).max(LIMITS.arrayMax),
+  supersedesId: Id.nullable(), correctionReason: z.string().nullable(), isCurrent: z.boolean(),
+});
+export type AssetInspectionRowDto = z.infer<typeof AssetInspectionRow>;
+
 export const AssetDetail = obj({
   asset: z.union([Vehicle, Equipment]),
+  /** この資産の点検履歴（新しい順。最大100件。訂正前の原本も含む） */
+  inspections: z.array(AssetInspectionRow).max(LIMITS.arrayMax),
   /** この資産の使用履歴（docs/04:100。cancelledも行として残る。operationIdで元の活動/出動を辿れる） */
   usages: z.array(ResourceUsageRow).max(LIMITS.arrayMax),
   /** 点検期限（T048。API-56で設定したscheduleの現在値＋超過判定） */
@@ -199,7 +216,7 @@ export const assetsApis = {
     method: "GET", path: "/assets/:type/:id", permission: "PER-01", kind: "get", success: [200],
     request: obj({ params: obj({ type: z.enum(["vehicle", "equipment"]), id: Id }), query: listQuery({}) }),
     // docs/05 API-51行どおりAssetDetail（T042でprovisionalから厳格化。使用履歴の子Pageを接続。
-    // 点検/異常/点検期限の子Pageは未接続＝残作業（T030/T032/T048））
+    // 点検履歴はT085で接続（inspections。T030の残作業）。異常の子Pageは未接続）
     response: AssetDetail,
   }),
   "API-56": defineApi({

@@ -160,4 +160,25 @@ describe("施設の全件取得 (T020)", () => {
     expect(await idsOf("?hasOpenIssue=true")).toEqual([]);
     void noInspection;
   });
+  // --- T085の網羅で見つけた欠落（一覧の入力拒否。AT-MAP-04のCT-02） ---
+  it("invalid_list_conditions_are_rejected_without_partial_results (T085)", async () => {
+    const admin = fx.units.a.people.admin;
+    const get = (q: string) => fx.client(admin).request("GET", `/api/v1/facilities?${q}`);
+    for (const q of [
+      "bbox=139,35,139.1", // 4値でない
+      "bbox=139,95,139.1,35.1", // 緯度範囲外
+      "bbox=abc,35,139.1,35.1", // 数でない
+      "type=unknown_type", // 列挙外
+      "limit=0", "limit=201", // 上限外
+      "unknownParam=1", // 契約外
+    ]) {
+      const res = await get(q);
+      expect(res.status, q).toBe(400);
+      expect((await json(res)).error?.code, q).toBe("VALIDATION_ERROR");
+    }
+    // 壊れたcursorは条件変更と同じ409（署名不一致。gis/cursor.tsの設計どおり）で、一部の結果を返さない
+    const broken = await get("cursor=not-a-cursor");
+    expect(broken.status).toBe(409);
+    expect((await json(broken)).data).toBeUndefined();
+  });
 });

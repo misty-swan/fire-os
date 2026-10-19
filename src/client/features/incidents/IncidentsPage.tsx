@@ -161,8 +161,8 @@ export function IncidentsPage() {
       </div>
 
       {/* 検索（docs/03 SCR-11: 種別/日時/状態。API-21のkind/status/from/to） */}
-      <Card className="grid gap-3 lg:grid-cols-2" aria-label="出動記録の検索">
-        <label className="hairline flex h-[54px] items-center gap-2 rounded-field bg-white/[.06] px-4">
+      <Card className="grid grid-cols-1 gap-3 lg:grid-cols-2" aria-label="出動記録の検索">
+        <label className="hairline flex h-[54px] min-w-0 items-center gap-2 rounded-field bg-white/[.06] px-4">
           <span className="text-[12px] font-bold text-ink-sub">種別</span>
           <select
             aria-label="種別で絞る"
@@ -178,7 +178,7 @@ export function IncidentsPage() {
             ))}
           </select>
         </label>
-        <label className="hairline flex h-[54px] items-center gap-2 rounded-field bg-white/[.06] px-4">
+        <label className="hairline flex h-[54px] min-w-0 items-center gap-2 rounded-field bg-white/[.06] px-4">
           <span className="text-[12px] font-bold text-ink-sub">状態</span>
           <select
             aria-label="状態で絞る"

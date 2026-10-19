@@ -245,4 +245,42 @@ describe("施設の台帳と位置確認 (T019)", () => {
     expect(patchDraft.status).toBe(400);
     expect((await json(patchDraft)).error?.code).toBe("VALIDATION_ERROR");
   });
+  // --- T085の網羅で見つけた欠落（施設の再送・2端末更新。AT-MAP-03のCT-03/CT-04、TC-15/16） ---
+  it("same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)", async () => {
+    const admin = fx.units.a.people.admin;
+    const officer = fx.units.a.people.officer;
+    const body = {
+      type: "cistern", latitude: 35.0101, longitude: 139.0101,
+      locationSource: "架空市台帳", locationNote: "公民館の裏", managementNumber: `T85-${crypto.randomUUID().slice(0, 6)}`,
+    };
+    const key = { "idempotency-key": crypto.randomUUID() };
+    const r1 = await fx.client(admin).request("POST", "/api/v1/facilities", body, key);
+    const r2 = await fx.client(admin).request("POST", "/api/v1/facilities", body, key);
+    expect([r1.status, r2.status]).toEqual([201, 201]);
+    const f = (await json(r1)).data as FacilityDto;
+    expect(((await json(r2)).data as FacilityDto).id).toBe(f.id);
+    expect(await fx.rows("facilities", { management_number: body.managementNumber })).toHaveLength(1);
+    // 同じ鍵で別の本文は409（IDEMPOTENCY_MISMATCH。2件目を作らない）
+    const mismatch = await fx.client(admin).request("POST", "/api/v1/facilities", { ...body, locationNote: "別の本文" }, key);
+    expect(mismatch.status).toBe(409);
+
+    // 2端末（管理者と幹部）が同じ版を見て更新: 先の1件だけ成功し、後は409。後勝ちで黙って上書きしない
+    const v = f.version;
+    const deviceA = await fx.client(admin).request("PATCH", `/api/v1/facilities/${f.id}`, { version: v, locationNote: "端末Aの修正" }, idem());
+    const deviceB = await fx.client(officer).request("PATCH", `/api/v1/facilities/${f.id}`, { version: v, locationNote: "端末Bの修正" }, idem());
+    expect([deviceA.status, deviceB.status]).toEqual([200, 409]);
+    expect((await json(deviceB)).error?.code).toBe("VERSION_CONFLICT");
+    const row = (await fx.rows("facilities", { id: f.id }))[0]!;
+    expect(row.location_note).toBe("端末Aの修正");
+    expect(row.version).toBe(v + 1);
+    // 競合した側の監査は残らない（成功した更新だけが記録される）
+    const updates = (await fx.rows("audit_logs", { entity_id: f.id })).filter((x) => String(x.action).includes("update"));
+    expect(updates).toHaveLength(1);
+    // 成功した更新の同じ鍵の再送は同じ応答で、版を進めない
+    const patchKey = { "idempotency-key": crypto.randomUUID() };
+    const p1 = await fx.client(admin).request("PATCH", `/api/v1/facilities/${f.id}`, { version: v + 1, locationNote: "再送の確認" }, patchKey);
+    const p2 = await fx.client(admin).request("PATCH", `/api/v1/facilities/${f.id}`, { version: v + 1, locationNote: "再送の確認" }, patchKey);
+    expect([p1.status, p2.status]).toEqual([200, 200]);
+    expect((await fx.rows("facilities", { id: f.id }))[0]!.version).toBe(v + 2);
+  });
 });

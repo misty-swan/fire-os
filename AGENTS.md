@@ -22,10 +22,14 @@
 npm ci                  # Node >=22（.nvmrc は26）
 npm run typecheck       # tsc --noEmit
 npm run check:contracts # 102 API台帳×docs/05の表×openapi/fireos.json の一致検査
+npm run check:coverage  # 受入manifest（tests/acceptance/manifest.json）が54要件/AT×CT/18TC/102API/28SCR/journey4を実テストへ対応付けているかの静的検査
 npm run build           # vite build → dist/client
 npx vitest --run        # workers（実workerd＋D1/Queues）と client（jsdom）の両プロジェクト
-npm run test:e2e        # Playwright（要: npx playwright install chromium）
+npm run test:e2e -- --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768  # 業務のe2e（CIと同じ。要: npx playwright install chromium）
 ```
+
+- 受入ゲート（T085）: `npm run collect:evidence` が vitest・`test:load`・業務e2eを実行して証跡index（docs/evidence/acceptance-index.json）と docs/evidence/acceptance-results.md を作る（約20分。8787番を使う。`test:live` はSecret無しなら「未実施」と記録）。ゲートは `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case`。**index作成後にコード（src/tests/drizzle/scripts/設定・workflow・docs/03・openapi）を変えると全件「未実行」で赤**＝変えたら collect:evidence をやり直す。フレーキーで1スイートだけ落ちたときは `npm run collect:evidence -- --only=e2e`（スイート全体を同じコードで再実行し、旧実行は記録に残す）。`--project` を付けない `npm run test:e2e` は受入ゲート（project acceptance）も流す
+- manifestを直したら `npm run check:coverage` → `npx tsx scripts/collect-evidence.ts --report-only`（acceptance-results.mdの作り直し。manifestはhashの対象外なので再収集は不要）
 
 - 単一テスト: `npx vitest --run tests/members.test.ts -t "ケース名"` / e2e単独: `npm run test:e2e -- tests/e2e/auth.spec.ts --grep ケース名`
 - API/DTOを変えたら `npm run generate:contracts` で `openapi/fireos.json` を再生成（check:contractsが古い生成物を検出する）

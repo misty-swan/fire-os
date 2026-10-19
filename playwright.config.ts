@@ -5,9 +5,15 @@ import { defineConfig, devices } from "@playwright/test";
 // setup プロジェクトが管理者アカウント（招待受領→二要素認証）を実際の経路で作り、各試験はそのセッションを使う。
 // workers=1：認証の回数制限や共有の局所DBを試験同士で食い合わないため。
 const ADMIN_STATE = "tests/e2e/.state/admin-storage.json";
+// 受入ゲート（T085。tests/acceptance）はブラウザを使わず、collect-evidence.ts が保存した証跡indexを照合する。
+// 業務のe2e（tests/e2e）とは別プロジェクト「acceptance」に置き、他のプロジェクトからは外す。
+// CI・collect-evidence は業務のe2eだけを --project で指定して流す（結果照合はCIに入れない＝コントローラ裁定R10）
+const E2E_ONLY = /tests\/e2e\//;
 
 export default defineConfig({
-  testDir: "tests/e2e",
+  testDir: "tests",
+  // vitestの *.test.ts を拾わないよう、Playwrightの対象は e2e の spec/setup と受入ゲートだけ
+  testMatch: [/e2e\/.*\.spec\.ts$/, /e2e\/auth\.setup\.ts$/, /acceptance\/.*\.spec\.ts$/],
   workers: 1,
   use: { baseURL: "http://localhost:8787" },
   webServer: {
@@ -26,13 +32,13 @@ export default defineConfig({
     {
       name: "phone-360",
       dependencies: ["setup"],
-      testIgnore: /auth\.setup\.ts/,
+      testIgnore: [/auth\.setup\.ts/, /acceptance\//],
       use: { ...devices["Pixel 5"], viewport: { width: 360, height: 740 }, storageState: ADMIN_STATE },
     },
     {
       name: "desktop-1280",
       dependencies: ["setup"],
-      testIgnore: /auth\.setup\.ts/,
+      testIgnore: [/auth\.setup\.ts/, /acceptance\//],
       use: { viewport: { width: 1280, height: 800 }, storageState: ADMIN_STATE },
     },
     {
@@ -40,9 +46,15 @@ export default defineConfig({
       // T083の新規2spec（accessibility / revisit-flows）だけをこのプロジェクトで走らせる
       name: "tablet-768",
       dependencies: ["setup"],
-      testIgnore: /auth\.setup\.ts/,
+      testIgnore: [/auth\.setup\.ts/, /acceptance\//],
       testMatch: /accessibility\.spec\.ts|revisit-flows\.spec\.ts/,
       use: { viewport: { width: 768, height: 1024 }, storageState: ADMIN_STATE },
+    },
+    {
+      // 受入ゲート（T085）。ブラウザ・ログイン状態を使わない（setupに依存しない）
+      name: "acceptance",
+      testMatch: /acceptance\/.*\.spec\.ts$/,
+      testIgnore: E2E_ONLY,
     },
   ],
 });

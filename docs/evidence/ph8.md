@@ -1,6 +1,6 @@
 # PH8 実行証跡（2026-10-18〜。T083・T084）
 
-対象: **T083 実端末・アクセシビリティ・再訪操作の検証修正**（PH8の最初の1タスク）と **T084 外部障害・通信断・管理者不在の代替運用**（末尾の「T084」節。T085以降は未着手）。実行環境はローカル（Node v26 / workerd / wrangler 4.x / vitest / Playwright chromium）。**実Cloudflare・実staging・実端末（iOS/Android実機）・実スクリーンリーダー・実PWA install環境は使っていない**（PH0〜PH7から継続で未接続・実端末は本環境に存在しない）。データはすべて架空。実装はsubagent-driven（実装サブエージェント1体→コントローラ検証→4体並行レビュー〔docs/evidence/ph8-review.md〕）で遂行。実装コミットは **7bb8d08** `feat: complete T083 ux`（25ファイル・実装・試験・契約3点セット・docsを同一コミットに。BASE=f8f0c4d）。
+対象: **T083 実端末・アクセシビリティ・再訪操作の検証修正**（PH8の最初の1タスク）と **T084 外部障害・通信断・管理者不在の代替運用**（「T084」節）と **T085 全54受入・17共通・18継続シナリオの統合**（末尾の「T085」節。T085b以降は未着手）。実行環境はローカル（Node v26 / workerd / wrangler 4.x / vitest / Playwright chromium）。**実Cloudflare・実staging・実端末（iOS/Android実機）・実スクリーンリーダー・実PWA install環境は使っていない**（PH0〜PH7から継続で未接続・実端末は本環境に存在しない）。データはすべて架空。実装はsubagent-driven（実装サブエージェント1体→コントローラ検証→4体並行レビュー〔docs/evidence/ph8-review.md〕）で遂行。実装コミットは **7bb8d08** `feat: complete T083 ux`（25ファイル・実装・試験・契約3点セット・docsを同一コミットに。BASE=f8f0c4d）。
 
 ## 実行結果
 
@@ -109,3 +109,59 @@
 
 - 受入基準: T083と同じ「最終HEADでフル2回連続緑」を満たす（2・3回目）。test:load・check:coverageはT085/T086の範囲で未実施
 - レビューサイクル: docs/evidence/ph8-review.md「T084」節（4体並行→修正2ラウンド→再レビュー3回。確認済みの高・中の未解消0件）
+
+## T085 全54受入・17共通・18継続シナリオの統合（2026-10-19。局所完了）
+
+実行環境はT083/T084と同じローカル（workerd＋ローカルD1＋Playwright chromium＋試験専用fake AI）。実Cloudflare・staging・実Google・実provider・実端末・実在の人は使っていない。データはすべて架空。新規endpoint無し・migration無し（API-51の応答拡張とAPI-44の行へのisCurrent追加は既存APIの契約変更。契約3点セットで実施）。試験専用APIの本番登録無し。
+
+### 作ったもの
+
+| 部品 | 内容 |
+|---|---|
+| `tests/acceptance/manifest.json` | 正本から機械抽出したID（docs/08のAT54・CT17・AT×CTの組220・TC18、docs/12の要件54、契約台帳のAPI102、画面台帳のSCR28）ごとに、それを実際に試している実テスト（vitest/load/e2e の file＋完全title。e2eは必要ならproject指定）を対応付ける。notApplicableは1組（AT-DASH-01×CT-05＝API-28は読取専用。docs/08 §2の根拠つき）。横断journey4本、実外部・実端末・人の残手順29件（external。V文書・ops/device-test-matrix §2・V07-outage「未実施」1〜10の番号つき）、課題台帳（issues。各ph*-reviewの「方針で残す」・既知フレーキー・T085で見つけた欠陥。重大度は出典の行が根拠）、既知skip3件の分類 |
+| `scripts/acceptance-lib.ts`・`scripts/check-coverage.ts` | 静的検査（`npm run check:coverage`。CIに追加）: ID集合の欠落/余剰、参照先テストの宣言の実在とskip/only/todo/fixme、本文に条件付きskipを持つe2eはproject指定必須、**API参照先ファイルがそのroute（method＋path）を叩く記述を持つこと**、**画面参照先（e2e）がその画面のパスへ行く記述を持つこと** |
+| `scripts/collect-evidence.ts` | `npm run collect:evidence`: vitest（workers＋client）→`test:load`→業務e2e（受入ゲート自身は除く）をJSON reporterで実行し、証跡index `docs/evidence/acceptance-index.json`（testId/reqIds/commit/codeHash/設計版/fixture/model/question/browser/network/日時/結果/証跡）と `docs/evidence/acceptance-results.md` を生成。`test:live` はSecret未設定のため「未実施」と記録（合格に数えない）。`--only=<suite>` はスイート全体を同じコードで再実行し、旧実行は `discardedRuns` に残す |
+| `tests/acceptance/all-requirements.spec.ts` | 指定試験 `acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case`（5断言）＋各AT・各TCの独立タイトル（72件）＋陽性対照 `gate_detects_injected_skip_missing_title_routeless_api_stale_index_and_open_high_issue`。Playwrightのproject `acceptance`（ブラウザ不使用） |
+
+- **「未実行」の判定（裁定R2の実装）**: indexにはcollect時の作業木の内容ハッシュ（codeHash: src/tests/drizzle/scripts/public/config/.github/openapi/docs/03・設定ファイル。gate自身のmanifest・lib・spec・2scriptは除外）を保存し、ゲートは現在のハッシュと比較する。commit同士のdiffでなく内容ハッシュにしたのは、未コミットの変更も「未実行」として検出するため（R2より厳しい側）。docs/03とworkflowを含めたのはclient-shell・deploy-configの試験がそれらを読むため。
+- **CI**: ci.yml・deploy-*.yml に `npm run check:coverage` を追加し、e2eは業務のprojectだけを明示（受入ゲートは結果照合のためCIで流さない＝R10）。deploy-config.test.tsの断言を同時に更新。
+
+### 赤→緑
+
+- **赤（手順2）**: 空のmanifestで `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` → `expect(missingRequirementIds).toEqual([])` が78件（AT54＋TC18＋journey4＋…の「manifestに無い」）でFAIL。runnerの故障・構文エラーではない。
+- **静的検査の途中の赤**: check:coverageが「API-58の参照ファイルがGET /reports/:idを叩かない」「J1がSCR-18のパスへ行く記述が無い」を検出 → 参照を差し替え／J1にURL断言を追加。
+- **緑**: 下の「最終検証」。
+
+### 網羅で見つけた欠落と埋め方（R5）
+
+| 欠落 | 埋め方 |
+|---|---|
+| SCR-23（資産点検）・点検の訂正画面が未実装（T033残作業） | 実装（下の欠陥表D3・docs/03 §1.1-27）。e2e `asset-inspection.spec.ts` 2件 |
+| API-44の機能試験が無い（負荷とe2eの読み出しだけ） | `facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)`（→欠陥D1を発見） |
+| 施設・資産・異常・帳票の同キー再送（CT-04）の機能別試験が無い | facilities/assets/inspections-issues/reports に各1件（`… (T085)`） |
+| 一覧の入力拒否（CT-02）: 施設一覧・活動履歴・お知らせ | gis-query/activity-history/announcements に各1件 |
+| 施設の2端末更新（TC-16）が位置確認の版競合だけ | `same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)` |
+| 横断journey 4本 | `tests/e2e/journeys.spec.ts`（J1 点検→異常→AI→task→通知／J2 活動・出動→使用→集計→帳票／J3 文書→引用→失効／J4 offline→競合→復旧〔点検の訂正〕）。phone-360・desktop-1280 |
+
+### 見つけて直した欠陥（所有タスクの状態欄にも記録）
+
+| id | 所有 | 内容 | 赤→緑 |
+|---|---|---|---|
+| D1 | T029 | API-44の続き取得が新しい順なのにcursor条件が「>」で2頁目以降が欠落 | limit=1完走で4件中1件→「<」で4件 |
+| D2 | T033 | 保存の応答が失われた後、画面の案内どおり送り直すと二重登録（実施日時を送信ごとに作り直し送信鍵が変わる） | 同一点検2件→最初の送信で固定して1件 |
+| D3 | T033/T030 | SCR-23・訂正画面・資産の点検履歴（API-51）が未接続、施設詳細の点検結果が現在版でない | e2eで記録→訂正→元の記録不変・現在版表示 |
+| D4 | T039/T044 | 予定・出動の検索カードが参加者selectの最長の団員名より狭くなれず200px幅で横スクロール（団員が増えると再現） | 1回目のフル走行で scrollWidth 202/200 → 同じデータで269→200 |
+| D5 | T070 | AIアシスタントの「記録を添える」チップが確認待ちの異常を古い順に5件だけ出す（新しい異常を添えられない） | 1回目のフル走行でassistant.spec desktopが失敗（確認待ち14件）→ 新しい順5件 |
+| 試験 | T029/T032 | 「未検査は422」の2試験が背景のQueue consumerとの競合で落ち得た（1回目のフル走行でvitest 1件failed） | 完了確定前の添付へ変更 |
+
+### 既知フレーキーの扱い（R8）
+
+documents.spec desktop「題名消失」（`題名を入力してください` の検証エラー＝fillの値が消えて作成POSTが出ない）が collect の1・2回目で各1回発火。署名はph8.md既存の記録と同じで、試験の構造は変えていない（作り直しはT085b）。e2eスイート全体を `--only=e2e` で再実行し、失敗した実行は証跡indexの `discardedRuns` と acceptance-results.md に残した。
+
+### T085bへの申し送り（高速化材料）
+
+- フルe2eは **120件（117実行＋skip3）で約14〜20分/回**（T084時点105件・約13分）。collect-evidenceはこれにvitest約1分・load約1分が加わる。コード変更のたびに再収集が要る（R2のコスト）。
+- 受入ゲートのspecは project `acceptance`（ブラウザ不使用）だが、Playwrightの仕様でwebServer（D1再作成＋build）が毎回起動する。ゲート単独の実行も約1分かかる＝ゲートをPlaywright外（tsx/vitest）で回す選択肢がある（T085本文がPlaywrightのコマンドを指定しているため今回は変えていない）。
+- 共有D1にデータが溜まるほど結果が変わる試験があった（D4・D5は製品側の欠陥として修正済み）。試験ごとのデータ分離（T085bの候補③）で、データ量依存の欠陥を「たまたま緑」にしないこと（D4/D5は分離すると再現しなくなる）＝狭幅・一覧の上限は意図して多件データで試す試験を別に持つのが望ましい。
+- workers試験は背景のQueue consumerが走るため、「まだreadyでない添付」は完了確定前の状態で作ること（T085で2試験を修正）。
+- 既知フレーキー: documents.spec desktop「題名消失」は今回のフル走行2/2回で発火（以前より高頻度）。単独実行は緑。

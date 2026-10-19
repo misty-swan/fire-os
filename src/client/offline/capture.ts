@@ -15,9 +15,9 @@ import { draftExpiryFrom } from "./lifecycle";
  * 同じ鍵なので、もし操作が実はサーバーに届いていた場合も再送は一回だけ成立する
  * （docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」。tests/sync.test.tsの再送試験と同じ）。
  *
- * 対象はT076のallowlistのうち画面がある3つ（点検保存API-14・本人出欠API-08・参集API-23）。
- * 点検訂正（API-46）は訂正フォームが未実装（T033残作業）のため、フォーム経由の捕捉対象外
- * （seed等で作られた訂正の下書きは同期runnerが扱える）。
+ * 対象はT076のallowlistの4つ（点検保存API-14・点検訂正API-46・本人出欠API-08・参集API-23）。
+ * 点検訂正（API-46）の画面はT085でT033の残作業として接続した（InspectionForm.tsxの訂正モード）。
+ * 資産の点検登録（API-20）はallowlist外のため下書きにしない（結果不明の表示と同じ鍵での再送だけ）。
  */
 
 /** 同期できる操作の表示名（SCR-27の一覧で使う。語彙はT076のallowlistと一致） */

@@ -145,4 +145,25 @@ describe("車両・資機材の台帳 (T025)", () => {
     expect(memberCreate.status).toBe(403);
     void expect; void json;
   });
+  // --- T085の網羅で見つけた欠落（台帳登録・変更の再送。AT-AST-01のCT-04） ---
+  it("asset_create_and_update_resend_have_one_effect (T085)", async () => {
+    const admin = fx.units.a.people.admin;
+    const code = `T85-${crypto.randomUUID().slice(0, 6)}`;
+    const body = { assetCode: code, name: "架空の可搬ポンプ", quantity: 1, quantityUnit: "台", storage: { note: "架空の倉庫" } };
+    const key = { "idempotency-key": crypto.randomUUID() };
+    const r1 = await fx.client(admin).request("POST", "/api/v1/equipment", body, key);
+    const r2 = await fx.client(admin).request("POST", "/api/v1/equipment", body, key);
+    expect([r1.status, r2.status]).toEqual([201, 201]);
+    const eq = (await json(r1)).data! as { id: string; version: number };
+    expect(((await json(r2)).data! as { id: string }).id).toBe(eq.id);
+    expect(await fx.rows("equipment", { asset_code: code })).toHaveLength(1);
+    expect((await fx.client(admin).request("POST", "/api/v1/equipment", { ...body, name: "別の本文" }, key)).status).toBe(409);
+    // 変更の再送も版を1つしか進めない
+    const patchKey = { "idempotency-key": crypto.randomUUID() };
+    const change = { version: eq.version, quantity: 3 };
+    const p1 = await fx.client(admin).request("PATCH", `/api/v1/equipment/${eq.id}`, change, patchKey);
+    const p2 = await fx.client(admin).request("PATCH", `/api/v1/equipment/${eq.id}`, change, patchKey);
+    expect([p1.status, p2.status]).toEqual([200, 200]);
+    expect((await fx.rows("equipment", { id: eq.id }))[0]!.version).toBe(eq.version + 1);
+  });
 });
