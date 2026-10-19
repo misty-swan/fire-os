@@ -9,7 +9,7 @@ import { useMe } from "../../me";
 import { useMutation } from "../../useMutation";
 import { fmtInstant } from "../activities/time";
 import { TasksPanel } from "../tasks/TasksPanel";
-import { NotificationApproval, SenderNotificationDetail, isSenderProjection } from "./NotificationApproval";
+import { FormalContactNotice, NotificationApproval, SenderNotificationDetail, isSenderProjection } from "./NotificationApproval";
 import { useMemberNames } from "./names";
 
 /**
@@ -224,6 +224,8 @@ function NotificationsList({ canManage }: { canManage: boolean }) {
           さらに読み込む
         </Button>
       )}
+      {/* 正式連絡は既存の系統（T084。docs/07 §5。通知一覧を災害時の唯一の連絡手段に見せない） */}
+      <FormalContactNotice />
     </div>
   );
 }
@@ -357,6 +359,7 @@ function MyNotificationDetail({ data, onRead }: { data: MyNotificationDto; names
       <p className="text-[12px] text-ink-muted">
         受付や配送の記録と、自分の確認（既読）は別のものとして扱われます（docs/11「受付≠到達≠既読」）。
       </p>
+      <FormalContactNotice />
     </div>
   );
 }

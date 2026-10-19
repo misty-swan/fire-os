@@ -69,4 +69,4 @@ API-82照会分岐の「到達不能コード」（ph6.md記録）: **T081の同
 ## 7. 予約欄
 
 - **重大未解決0のレビュー証跡**: PH7レビューサイクルで記録（この節は予約。実施後に結果を追記する）。
-- 実環境での遮断・rotation演習: ops/security-response.md §7（初回手順つき）をT084で実施後、結果を追記。
+- 実環境での遮断・rotation演習: **未実施**。T084（2026-10-19）で行ったのはローカルの障害演習（Google/AI/API応答消失/Queue/通知の到達不明/正担当不在の6scenario。docs/evidence/V07-outage.md）までで、ops/security-response.md §7の遮断・`BETTER_AUTH_SECRET`のrotation演習はstaging（`--remote`）が要るため実施していない。V07-outage.md「未実施」7に残手順として移した。

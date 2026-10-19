@@ -44,6 +44,19 @@ export const DELIVERY_LABEL: Record<string, { label: string; tone: "ok" | "atten
 /** 未知・未確定の配送状態の既定表示（pending。noUncheckedIndexedAccessのため実体を別に持つ） */
 const DELIVERY_PENDING = { label: "送信待ち", tone: "neutral" as const };
 
+/**
+ * 正式連絡は既存の系統で行う旨の注記（T084。docs/07 §1/§5「正式指令/119/安否確認の唯一の手段としない」
+ * 「FireOSだけで災害時連絡を完結したと表示しない」、docs/14 D08/D17）。prototypeの通知画面には無い文言のため
+ * docs/03「prototypeから意図して変えた点」に記録。出動画面の注記（IncidentsPage）と同じ「補助」の語を使う。
+ */
+export function FormalContactNotice() {
+  return (
+    <Notice tone="info" icon="info">
+      災害時の正式な連絡は、既存の連絡網（電話・無線など）で行ってください。この通知は補助であり、受付や既読は連絡の完了・安否の確認を意味しません。
+    </Notice>
+  );
+}
+
 /** 送信者投影（Notification）か対象者投影（MyNotification）かを実行値で区別する（API-65は呼び出し者で投影が変わる） */
 export const isSenderProjection = (data: NotificationDto | MyNotificationDto): data is NotificationDto =>
   "bodyHash" in data;
@@ -374,6 +387,7 @@ function ConfirmStep({
         <Notice tone="warning" icon="sync_lock">
           ここでの対象の変更は新しい下書きになります（作成済みの下書きの対象は変えられません）。変える場合は「あらためて作成」から。
         </Notice>
+        <FormalContactNotice />
       </section>
 
       {cancelled && (
@@ -549,6 +563,7 @@ export function DeliveryResultsSection({ draft, names }: { draft: NotificationDt
         <p className="text-[12px] text-ink-muted">
           受付は送信先が受け付けたこと、既読は対象者が画面で確認したことを示します。到達や読了を保証する表示ではありません。
         </p>
+        <FormalContactNotice />
 
         {/* 到達不明は「結果を確認」の導線で対象と対処を開く（docs/03 SCR-21） */}
         {unknown > 0 && (
