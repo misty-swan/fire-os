@@ -306,30 +306,32 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 
 ## T086 架空データの完成版・公開デモ分離・操作説明（2026-10-20。実装完了・最終検証待ち）
 
-実行環境はT083〜T085bと同じローカル（Node v26 / workerd / vitest / Playwright chromium）。**実Cloudflare・実staging・実Google Maps・実端末・実在の団体は使っていない**（PH0〜PH8から継続で未接続＝局所完了。下記「未実施・未接続」）。データはすべて架空。実装は分担制（コア実装→issues台帳のmedium 3件〔D2〕→low 4件〔D3〕→docs 7点〔本節〕→コントローラ最終検証）。migration無し。契約変更はAPI-67（GET /notifications/me）へ `sent=true` の要求拡張のみ（契約3点セット。T085のAPI-44/51と同じ前例）。
+実行環境はT083〜T085bと同じローカル（Node v26 / workerd / vitest / Playwright chromium）。**実Cloudflare・実staging・実Google Maps・実端末・実在の団体は使っていない**（PH0〜PH8から継続で未接続＝局所完了。下記「未実施・未接続」）。データはすべて架空。実装は分担制（コア実装→issues台帳のmedium 3件〔D2〕→low 4件〔D3〕→docs 7点〔D4〕→使い方ガイド画面〔D5〕→4体並行レビュー→fix wave 1〔本節の更新・語彙修正〕→コントローラ最終検証）。migration無し。契約変更はAPI-67（GET /notifications/me）へ `sent=true` の要求拡張のみ（契約3点セット。T085のAPI-44/51と同じ前例）。
 
-実装コミット: **bde6533** `feat: complete T086 demo`（seed-demo・demo-isolation試験・demo.ts・DEMO_SECURITY_POLICY）→ **8ec9f26** `fix: make T086 demo reset assertion detect other-environment removals`（fix round 1）→ issues台帳: **08b523d**（PH1-A2 認証イベントの監査）・**198f792**（PH2-C15 地図チップの一覧点滅）・**0d2fed3**（PH4-B2 送信した通知とdraft再開）・**ead8421**（PH7-L）・**bcc7404**（PH1-C）・**1b0d76d**（PH2-C19）・**f0c4212**（PH3-C8の判定記録）。
+実装コミット: **bde6533** `feat: complete T086 demo`（seed-demo・demo-isolation試験・demo.ts・DEMO_SECURITY_POLICY）→ **8ec9f26** `fix: make T086 demo reset assertion detect other-environment removals`（fix round 1）→ issues台帳: **08b523d**（PH1-A2 認証イベントの監査）・**198f792**（PH2-C15 地図チップの一覧点滅）・**0d2fed3**（PH4-B2 送信した通知とdraft再開）・**ead8421**（PH7-L）・**bcc7404**（PH1-C）・**1b0d76d**（PH2-C19）・**f0c4212**（PH3-C8の判定記録）→ docs: **47fdb84**（demo-deploy・USER_GUIDE）・**f703c13**（X-OUT-9）・**d891443**（development-completion・本節・docs/16）・**3ed5fc2**（manifest・e2e-speed）→ **da22779** `feat: implement T086 help screen`（使い方ガイド画面SHELL-HELP・jsdom 2件・e2e 1件・§1.1-28）→ レビューwave 1（4体並行レビューの指摘F1〜F16・裁定R23〜R25に基づく記録更新・語彙修正）。
 
-### 検証（docs担当が本節作成時に実行。2026-10-20）
+### 検証（fix wave 1時点で再実行。2026-10-21）
 
 | 確認 | コマンド | 結果 |
 |---|---|---|
 | 型検査 | `npm run typecheck` | 成功 |
 | 契約検査 | `npm run check:contracts` | 102 API / docs/05 102行 / OpenAPI一致（API-67 sent=trueを含む） |
-| 単体・結合試験 | `npx vitest --run` | **70ファイル332件成功**（T085b最終322＋本タスク10: demo-isolation 1・audit 1〔PH1-A2〕・map-facilities 4〔PH2-C15 3＋PH2-C19 1〕・通知sent 1〔PH4-B2〕・login-aria 2〔PH1-C〕・job-error-label 1〔PH7-L〕） |
+| 単体・結合試験 | `npx vitest --run` | **71ファイル334件成功**（T085b最終322＋T086分12: demo-isolation 1・audit 1〔PH1-A2〕・map-facilities 4〔PH2-C15 3＋PH2-C19 1〕・通知sent 1〔PH4-B2〕・login-aria 2〔PH1-C〕・job-error-label 1〔PH7-L〕・help-page 2〔da22779〕） |
 | 網羅（静的） | `npm run check:coverage` | 成功。要件54 / AT54 / CT17（組220・notApplicable 0） / TC18 / API102 / SCR28 / journey4 / 実外部の残手順29 / 参照テスト272件 |
 | ビルド | `npm run build` | 成功（precache 9 entries） |
 | 指定試験 | `npx vitest --run tests/demo-isolation.test.ts` | 1 passed（`demo_cannot_reach_production_or_expose_real_personal_data`） |
+| 幅仕分け | `npx tsx scripts/e2e-width-triage.ts --check` | 成功。全60試験（両幅12・desktop限定43・phone限定5。T086で2件追加＝PH4-B2とヘルプ画面。業務の実行はsetup1＋phone17＋desktop55＋tablet2＝75件） |
+| 焦点e2e | `npm run test:e2e -- tests/e2e/shell.spec.ts --project=desktop-1280 --project=phone-360` ほかaudit.spec | shell 8 passed（ヘルプ画面e2e込み）・audit 3 passed（監査ラベル語彙変更後） |
 
 ### 作ったもの
 
 | 部品 | 内容 |
 |---|---|
 | `scripts/seed-demo.ts` | `seedDemo(env)`（workerd側。冪等）とCLI（`--persist-to`。SQL直列化＋`wrangler d1 execute --file`＋R2 object put）が同じ計画 `buildDemoSeedPlan`（純関数）を共有。架空団員16名（4役割＋未登録10名＋第二分団2名）・施設13・点検様式1（承認済み）＋点検6（要確認2）・異常2・車両1・機材2・活動3（実績・実参加つき）・出動1（参集5名）・お知らせ1・通知1・帳票1（承認済み版）・タスク2・文書1（FTS索引つき）・写真/文書実体2（決定的生成の架空PNG/PDF・`demo/` prefix）。outbox（domain_events）と`units.event_sequence`はseed自身が作る（seed-load.tsと同じ作法）。実デモではbootstrap-adminが作った「架空市 第一分団」とその管理者に解決（`resolveDemoTargets`）。`verifyDemoIsolation(config)`（demo設定にproduction資源値・production専用Secret名が現れないこと＋reset射程）・`demoResetRemovals()`（resetの射程の正本）・`collectDemoPrivacyRows`＋`detectRealPersonalData`（全行走査・実在風データの検出） |
-| `tests/demo-isolation.test.ts` | 指定試験（ブリーフの4断言＋周辺の6検査）: ①productionのD1/Secret差替えを注入すると検出できる（恒久対照） ②reset射程＝demo.tsの削除系呼び出しの**全件列挙**が`["DEMO_PERSIST_DIR"]`だけ（fix round 1。他環境削除1行で落ちる） ③seed全行の走査（表ごと行数をDEMO_PROFILEと厳密照合＋合成行で検出器能力を常時検査） ④書き込み先がdemo自身のD1/R2だけ ⑤主要19動線（ホーム/名簿/地図/施設/施設詳細/点検/異常/活動/出動/文書/通知/帳票/同期/お知らせ/タスク/車両/機材/様式/集計/写真実体）の到達チェックリスト ⑥`DEMO_SECURITY_POLICY`でAI 30回/分の連打が429（枠内は429にしない） |
+| `tests/demo-isolation.test.ts` | 指定試験（ブリーフの4断言＋周辺の6検査）: ①productionのD1/Secret差替えを注入すると検出できる（恒久対照） ②reset射程＝demo.tsの削除系呼び出しの**全件列挙**が`["DEMO_PERSIST_DIR"]`だけ（fix round 1。他環境削除1行で落ちる） ③seed全行の走査（表ごと行数をDEMO_PROFILEと厳密照合＋合成行で検出器能力を常時検査） ④書き込み先がdemo自身のD1/R2だけ ⑤主要19動線（ホーム/名簿/施設一覧〔地図データ源〕/施設詳細/点検/異常/活動/出動/文書/通知/帳票/同期/お知らせ/タスク/車両/機材/点検様式/集計/写真実体）の到達チェックリスト ⑥`DEMO_SECURITY_POLICY`でAI 30回/分の連打が429（枠内は429にしない） |
 | `scripts/demo.ts` | 初回判定をmigration適用の**前**へ（`migrations apply --persist-to`がpersistを作るため、旧位置だと初回でも「2回目以降」になりbootstrap-adminが一度も走らないバグの修正）＋初回にseed CLIを接続。resetの射程は`DEMO_PERSIST_DIR`のimportで正本を1つに |
 | レート/費用上限 | `DEMO_SECURITY_POLICY`（auth 60/ai 30/search 60/upload 30/default 1,200 req/分・IP、user次元はdefault 600等。**未承認の開発設定**）と`securityPolicyForEnv`（demoだけ公開デモ用。他は従来どおり）。`createApp`のpolicy既定を環境選択へ。費用上限はT080のbudget機構（月$5・AI 500回/日等）がそのまま効くため追加実装なし。Maps 2,000ロード/月はアプリ内計測不能のため**Googleコンソール側の割当**としてops/demo-deploy.md §4.3に手順化 |
-| docs 7点 | ①ops/demo-deploy.md（分離の考え方・初回構築・reset・レート/費用上限・外部公開手順〔明示的な依頼がある時のみ〕・X-DEMO未実施明記） ②docs/USER_GUIDE.md（導入/通常利用/点検/承認/通知/通信断/復旧/困ったとき。実装の実際の画面語彙で書いた） ③docs/evidence/development-completion.md（完成の範囲・局所完了・issues要約・既知の制限。最終検証節は空欄） ④X-OUT-9: ops/account-recovery.md §5（Cloudflare側復旧の番号付き手順。V07-outage「未実施」9の状態更新・admin-handover.md §3-6の参照更新・manifest summary更新） ⑤docs/16 T086節（対応行へNFR-08追記・手順1〜3・5チェック・実施記録） ⑥本節 ⑦e2e-speed.md（後述） |
+| docs 7点＋ヘルプ画面 | ①ops/demo-deploy.md（分離の考え方・初回構築・reset・レート/費用上限・外部公開手順〔明示的な依頼がある時のみ〕・X-DEMO未実施明記） ②docs/USER_GUIDE.md（導入/通常利用/点検/承認/通知/通信断/復旧/困ったとき。実装の実際の画面語彙で書いた） ③docs/evidence/development-completion.md（完成の範囲・局所完了・issues要約・既知の制限。最終検証節は空欄） ④X-OUT-9: ops/account-recovery.md §5（Cloudflare側復旧の番号付き手順。V07-outage「未実施」9の状態更新・admin-handover.md §3-6の参照更新・manifest summary更新） ⑤docs/16 T086節（対応行へNFR-08追記・手順1〜3・5チェック・実施記録） ⑥本節 ⑦e2e-speed.md ⑧使い方ガイド画面SHELL-HELP（da22779。src/client/features/help/HelpPage.tsx＋routes.tsxの登録点。prototypeに個別デザインが無ため共通部品で構成＝docs/03 §1.1-28。jsdom 2件・e2e 1件〔desktop限定〕。USER_GUIDEの要点を章ごとに示す） |
 | issues台帳（manifest） | **resolved 6件**: PH1-A2（認証イベント〔サインイン成功/失敗・二要素設定・再設定要求/完了〕をaudit_logsへ。秘密は載せない・unit帰属できない試行はIP回数制限が担当）・PH2-C15（useFacilitiesの再取得を非破壞に。件数を最新にする意図は保持）・PH4-B2（API-67 `sent=true`で自分が作った通知〔draft含む〕を返す＋「送信した通知」切替とResumeDraftStep）・PH1-C（ログインの誤りpと入力欄のaria関連付け等）・PH2-C19（選択シートのEsc・フォーカス。OverlayのuseOverlayを共有）・PH7-L（ai.calls計上位置・user次元429のRetry-After窓計算値・budget_stopped中立語彙等9項目）。PH3-C8は現状確認の記録のみ（open・owner未割当）。T085b-W1は最終検証のフルe2eで状態確認（コントローラ） |
 
 ### 赤→緑の扱い（正当な赤の記録）
@@ -337,6 +339,7 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 - **コア（手順2）**: 実装前に試験のみを実行し `Cannot find module '../scripts/seed-demo'`＝未実装moduleの解決失敗で赤（T064と同じ正統な赤。runner故障ではない）。実装後の最初の実行では同期API-80のenvelope読み違いで**断言ベースの赤**も観測（`['同期（API-80）: outboxから差分が取れない']`）→修正して緑。
 - **一時実証（実施後に復元・コミットに不含）**: ①チェックリスト1項目の期待を反転（DF-0001→DF-9999）→`developmentIncompleteFeatures`が非空で赤 ②membersへ実在風「山田 太郎」を注入→`realPersonalDataFound`が非空で主断言が赤 ③demo.tsへ`rmSync(".wrangler/state")`を1行注入→削除呼び出し全件列挙の断言が赤（fix round 1の恒久化の根拠）。production差替えは本試験に恒久対照として組み込み。
 - **issues各件（旧実装で赤→緑）**: PH1-A2=監査行が1行も無い／PH2-C15=reload直後に`state=loading`・`items=[]`になることと失敗時に空になること／PH4-B2=サーバーはsent未知queryの400・e2eは「送信した通知」ボタン不在のタイムアウト／PH7-L=ai.callsが増える（0期待に1）・Retry-Afterに60が返る／PH1-C=idもaria-describedbyも無い／PH2-C19=フォーカスが動かない・Escで閉じない。
+- **ヘルプ画面（da22779）**: jsdom 2件は旧実装（プレースホルダー）に章見出しが1つも無い・「未実装」チップが実在、で赤→実装で緑（tests/help-page.test.tsx。レビューwave 1でUSER_GUIDE文言断言を「操作説明書」へ同期）。
 
 ### 未実施・未接続（局所完了。検証済みとして扱わない）
 

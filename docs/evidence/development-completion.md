@@ -1,13 +1,13 @@
-# 開発完成の証跡（T086。2026-10-20時点・実装完了・最終検証待ち）
+# 開発完成の証跡（T086。2026-10-21時点〔レビューwave 1込み〕・実装完了・最終検証待ち）
 
-T001〜T086（docs/16）の実装が揃った時点での「何が完成し、何が残っているか」の正本。**開発完成と正式運用開始は別物**（docs/16末尾の規定どおり）: この文書は架空データ・ローカル検証の範囲の完成を述べるもので、実データの投入・実団体の了承・docs/13の正式リリース判定（RG-01〜10）は含まない。数値はすべて docs/16 の各状態欄・証跡文書の実測を参照する（この文書では再計測しない）。
+T001〜T086（docs/16）の実装が揃った時点での「何が完成し、何が残っているか」の正本。**開発完成と正式運用開始は別物**（docs/16末尾の規定どおり）: この文書は架空データ・ローカル検証の範囲の完成を述べるもので、実データの投入・実団体の了承・docs/13の正式リリース判定（RG-01〜10）は含まない。数値はすべて docs/16 の各状態欄・証跡文書の実測を参照する（この文書では再計測しない。実行時点: docs/evidence/ph8.md「T086」の検証表＝2026-10-21）。
 
 ## 1. 完成の範囲
 
 - **タスク**: T001〜T086（89タスク: T001〜T088＋枝番T085b。T087〔提案資料〕・T088〔正式判定〕は完成後の別タスク）。このうち完了・局所完了の内訳と各タスクの詳細は docs/16 の状態欄が正。
 - **受入の網羅（docs/evidence/acceptance-results.md の機械抽出どおり）**: 要件**54** / AT**54** / CT**17**（AT×CTの組220・うちnotApplicable 0） / 継続TC**18** / API**102** / 画面**SCR28** / 横断journey**4**。参照している実テスト272件。※docs/16のT085/T086本文にある「101 API」は陳腐な初期表記で、契約台帳・docs/05・OpenAPIの一致検査（`npm run check:contracts`）が**102 API**を正とする（T085裁定R9と同じ）。
 - **実装commitとテスト結果**: 各タスクの実装commitはdocs/16の該当行に記録済み。受入の全AT×CT×TC×journeyへの実テストの対応付けと実行結果は **docs/evidence/acceptance-index.json**（testId/reqIds/commit/codeHash/設計版/実行環境/結果/証跡。収集は `npm run collect:evidence`）と **docs/evidence/acceptance-results.md** が正。ゲート（`acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case`）がindexの新しさ（codeHash）とskip・未実施の無いことを機械的に検査する。
-- **画面**: 28画面（SCR-01〜28）すべてがプレースホルダーでなく実装済み（`src/client/routes.tsx` の screenElements。docs/03 が正本）。
+- **画面**: 28画面（SCR-01〜28）すべてがプレースホルダーでなく実装済み（`src/client/routes.tsx` の screenElements。docs/03 が正本）。シェル画面も実装済み（`/app/menu` メニュー・`/app/help` 使い方ガイド〔SHELL-HELP。T086 da22779で実装。docs/03 §1.1-28〕）。
 
 ## 2. 証跡への参照（docs/evidence/ 配下）
 
@@ -25,7 +25,7 @@ T001〜T086（docs/16）の実装が揃った時点での「何が完成し、�
 | 費用 | cost-estimate.md（+ ops/cost-alerts.md・config/budget-development.json） |
 | e2e高速化・幅仕分け | e2e-speed.md（T085b） |
 | 公開デモ | ops/demo-deploy.md（T086。分離・seed・レート/費用上限・外部公開手順） |
-| 操作説明 | docs/USER_GUIDE.md（T086。導入/通常利用/点検/承認/通知/通信断/復旧） |
+| 操作説明 | docs/USER_GUIDE.md（T086。導入/通常利用/点検/承認/通知/通信断/復旧）＋アプリ内「メニュー → 使い方ガイド」画面（da22779。docs/03 §1.1-28） |
 
 ## 3. 局所完了の明示（実環境・実端末・実キーが要るもの）
 

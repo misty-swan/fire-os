@@ -1,10 +1,10 @@
 # 公開デモの配信設定と運用手順（T086）
 
-目的: 公開デモ（APP_ENV=demo）を**架空データだけ**で動かすための、①環境分離の考え方、②初回構築、③リセット、④レート/費用上限、⑤外部公開の手順を定める。対象は docs/13 RG-09（本番/デモ分離）・TC-18・docs/07 §7「公開デモは架空人物/地点/写真のみ、本番/staging/demoを別Worker/D1/R2/Google key/AI設定へ分離する」。
+目的: 公開デモ（APP_ENV=demo）を**架空データだけ**で動かすための、①環境分離の考え方、②初回構築、③リセット、④レート/費用上限、⑤外部公開の手順を定める。対象は docs/13 RG-09（本番/デモ分離）・TC-18・docs/07 §1「公開デモは架空人物/地点/写真のみ、本番/staging/demoを別Worker/D1/R2/Google key/AI設定へ分離する」（運用境界・データ分類の節）。
 
 **現状の正直な限界（2026-10-20時点）**: このリポジトリの検証はすべてローカル（`npm run demo`＝workerd＋ローカルD1/R2・ポート8787）で、実Cloudflareには未接続（wrangler未ログイン）。実Cloudflare上のdemo環境（`fireos-demo`）の構築・分離の実地確認（**X-DEMO＝RG-09の実地確認は未実施**）。下記の実環境手順は「実在の仕組みだけを書いた未実施の手順」であり、実施記録ではない。
 
-## 1. 分離の考え方（docs/07 §7・RG-09・AGENTS.md）
+## 1. 分離の考え方（docs/07 §1・RG-09・AGENTS.md）
 
 - **実データ（実名簿・実出動・非公開水利・現場写真）は絶対に入れない。** デモに入れるのは `scripts/seed-demo.ts` が作る架空データ（氏名は「架空」、地名は「架空市…」、メールは@example.test系、座標は実在地図上の実在地点を指さない均等グリッド）だけ。写真・文書の実体も決定的に生成した架空の8x8 PNGと1頁PDF（実在の画像・文書を模さない）。
 - 4環境（local/demo/staging/production）はWorker・D1・R2・Queuesを**共有しない**（wrangler.jsonc。wranglerのenvはbindingを継承しないため各環境に全bindingを書く）。demo環境の資源:
@@ -21,7 +21,7 @@
 - 分離は3層で検査されている（毎回の検証で自動的に確認される）:
   1. **配置ゲート** `npm run check:environment`（scripts/check-environment.ts。T078）: 4環境の必須binding・資源分離・demo→production参照の拒否・Secret混入の静的検査。CI（verifyジョブ）にも入っている。
   2. **分離の純関数** `verifyDemoIsolation(config)`（scripts/seed-demo.ts）: demo設定にproductionのD1/R2/queue/Worker名/Secret名が現れないこと・`demo:reset` の削除射程がdemoのpersistだけであることを実値（実wrangler.jsoncのパース結果）で検査する。
-  3. **指定試験** `npx vitest --run tests/demo-isolation.test.ts`（`demo_cannot_reach_production_or_expose_real_personal_data`）: ①production binding/token差替えを注入すると必ず検出できること ②reset射程（demo.tsの削除系呼び出し全件が `DEMO_PERSIST_DIR` だけ） ③seedした全行（表ごとの行数をDEMO_PROFILEと照合）に実在風個人データが無いこと ④書き込み先がdemo自身のD1/R2だけ ⑤主要19動線（ホーム/名簿/地図/施設/施設詳細/点検/異常/活動/出動/文書/通知/帳票/同期/お知らせ/タスク/車両/機材/点検様式/集計/写真実体）が全部動くこと ⑥公開デモpolicyでAI連打が429で防がれること。
+  3. **指定試験** `npx vitest --run tests/demo-isolation.test.ts`（`demo_cannot_reach_production_or_expose_real_personal_data`）: ①production binding/token差替えを注入すると必ず検出できること ②reset射程（demo.tsの削除系呼び出し全件が `DEMO_PERSIST_DIR` だけ） ③seedした全行（表ごとの行数をDEMO_PROFILEと照合）に実在風個人データが無いこと ④書き込み先がdemo自身のD1/R2だけ ⑤主要19動線（ホーム/名簿/施設一覧〔地図データ源〕/施設詳細/点検/異常/活動/出動/文書/通知/帳票/同期/お知らせ/タスク/車両/機材/点検様式/集計/写真実体）が全部動くこと ⑥公開デモpolicyでAI連打が429で防がれること。
 
 ## 2. ローカルの公開デモ（`npm run demo`）— 手元確認
 
