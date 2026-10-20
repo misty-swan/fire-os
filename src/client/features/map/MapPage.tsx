@@ -23,7 +23,9 @@ export function MapPage() {
 
   const { items, state, reload } = useFacilities({ bbox: `${CITY_BBOX.west},${CITY_BBOX.south},${CITY_BBOX.east},${CITY_BBOX.north}` });
 
-  // 種別チップは表示のON/OFF（prototype filters）。件数は読めた施設から数える
+  // 種別チップは表示のON/OFF（prototype filters）。件数は読めた施設から数える。
+  // トグルはreload()も呼ぶ（件数を最新に保つ。docs/03 SCR-03）が、再取得は裏で走り一覧は点滅しない
+  // （useFacilitiesの再取得は現在の表示を壊さず、結果が揃ったときだけ差し替える。PH2-C15）
   const counts = useMemo(() => {
     const c: Record<FacilityType, number> = { hydrant: 0, cistern: 0, box: 0 };
     for (const f of items) c[f.type]!++;

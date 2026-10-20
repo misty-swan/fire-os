@@ -5,6 +5,9 @@ import { apiCall, type ApiInput } from "../../api";
  * 施設の一覧取得（T021、docs/05 §5）。
  * 全cursorをたどるまで「部分取得」を表示し、応答の世代（reqNo）が古いものは破棄する。
  * 条件が変わったときは進行中の要求をabortして新しい世代だけを採用する（docs/05 §5「前世代応答を破棄」）。
+ * **再取得（一覧を持っている間のreload/条件変更）は非破壊**（PH2-C15・T086）: 一覧を空にせず
+ * 「loading」にも戻さず、新しい世代が全cursor完走したときだけ結果を差し替える。種別チップの
+ * トグルで一覧が点滅しないための構造（件数を最新にする再取得の意図は保つ。docs/03 SCR-03）。
  */
 
 export interface FacilityItem {
@@ -39,6 +42,9 @@ export function useFacilities(query: FacilitiesQuery): {
   const [state, setState] = useState<FacilitiesState>("loading");
   const [tick, setTick] = useState(0);
   const reqNo = useRef(0);
+  // 現在の一覧の有無をeffectから読むための写し（effectの依存にitemsを置くと再取得が無限に走る）
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
 
@@ -46,9 +52,16 @@ export function useFacilities(query: FacilitiesQuery): {
     const generation = ++reqNo.current;
 
     const controller = new AbortController();
+    // 再取得（既に一覧がある間のtick変更）では現在の表示を壊さない: 一覧を空にせず「loading」にも
+    // 戻さず、新しい世代が完走したときだけ結果を差し替える（PH2-C15。種別チップのトグルは表示の
+    // フィルタで、件数を最新にする再取得は裏で走る。prototypeでは一覧が点滅しない）。初回の読み込み
+    // （一覧が無い）は従来どおり「loading」→ページごとの部分表示を通る（docs/05 §5）
+    const initial = itemsRef.current.length === 0;
+    if (initial) {
+      setState("loading");
+      setItems([]);
+    }
     const current: FacilityItem[] = [];
-    setState("loading");
-    setItems([]);
     void (async () => {
       try {
         let cursor: string | undefined;
@@ -57,15 +70,21 @@ export function useFacilities(query: FacilitiesQuery): {
           const res = await apiCall("API-10", input, { signal: controller.signal });
           if (generation !== reqNo.current) return; // 古い世代の応答は捨てる
           for (const row of res.data as unknown as FacilityItem[]) current.push(row);
-          // 完走までは部分取得（docs/05 §5）。表示を止めないために途中から描画する
-          setItems([...current]);
-          setState("partial");
+          if (initial) {
+            // 完走までは部分取得（docs/05 §5）。表示を止めないために途中から描画する
+            setItems([...current]);
+            setState("partial");
+          }
           cursor = res.nextCursor;
           if (!cursor) break;
         }
-        if (generation === reqNo.current) setState("complete");
+        if (generation === reqNo.current) {
+          setItems(current);
+          setState("complete");
+        }
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return;
+        // 再取得の失敗では最後の一覧を表示し続ける（NFR-09の縮退。空に戻さない）
         if (generation === reqNo.current) setState("error");
       }
     })();

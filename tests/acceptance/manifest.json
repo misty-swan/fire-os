@@ -3200,8 +3200,8 @@
    "source": "docs/evidence/ph2-review.md C15（中・方針で残す）",
    "summary": "地図の種別チップのトグルで全件再取得し一覧が点滅する",
    "severity": "medium",
-   "status": "open",
-   "basis": "ph2-review表の重大度「中」。件数を最新にする意図（docs/03 SCR-03）",
+   "status": "resolved",
+   "basis": "useFacilitiesの再取得を非破壊化: 一覧を持っている間のreloadでは一覧を空にせず「loading」に戻さず、新世代が全cursor完走したときだけ差し替える（トグルは表示フィルタのまま件数再取得の意図=docs/03 SCR-03は保持）。旧実装でtests/map-facilities.test.tsxのreload系2件が赤（reload直後state=loading・items=[]、失敗時も空）→実装で緑。初回読込のpartial表示を据え置く回帰1件は旧実装で緑のまま。map.spec両幅7件緑",
    "owner": "T086"
   },
   {
