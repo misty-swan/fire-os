@@ -17,7 +17,35 @@ const localInput = (offsetMs: number) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
-test("planned_answer_and_actual_presence_have_separate_labels", async ({ page, browser, request }, testInfo) => {
+/**
+ * 稼働中のwrangler dev（webServer）と同じローカルD1（.wrangler/e2e）へ、団員への代理回答scope
+ * （docs/10 D05。entity_type='member'×PER-02）を直接seedする。D05の承認フローがまだ無く、API-37は
+ * member対象にPER-06しか許さない（src/server/routes/member-roles.ts SCOPE_ENTITIES）ため、単体試験
+ * （attendance.test.ts）と同じく業務操作の前のseedとして直接DBへ入れる。
+ * 別プロセスからのSQLiteアクセスはサーバー側の書き込みと重なると database is locked（SQLITE_BUSY）で
+ * 拒否される（workers≥2での並行実行で顕著＝T085bの試験間分離）。ロックは一瞬なので少し空けて再試行する
+ * （SQLiteの複数プロセスアクセスはファイルロックでACID保証され、INSERTのidは都度新規）。
+ */
+async function seedProxyScope(officerMemberId: string, targetMemberId: string): Promise<void> {
+  const sql =
+    "INSERT INTO scope_assignments (id, unit_id, member_id, entity_type, entity_id, permissions, created_at, updated_at, created_by, actor_kind) " +
+    `SELECT '${crypto.randomUUID()}', m.unit_id, m.id, 'member', '${targetMemberId}', '["PER-02"]', '${new Date().toISOString()}', '${new Date().toISOString()}', (SELECT user_id FROM members WHERE id = m.id), 'human' ` +
+    `FROM members m WHERE m.id = '${officerMemberId}'`;
+  let lastError = "unknown";
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      execFileSync("npx", ["wrangler", "d1", "execute", "DB", "--local", "--persist-to", ".wrangler/e2e", "--command", sql], { stdio: "pipe" });
+      return;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+      if (!/database is locked|SQLITE_BUSY/i.test(lastError)) break; // ロック以外（SQLの誤り等）は再試行しない
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+    }
+  }
+  throw new Error(`代理回答scope（D05）のseedに失敗: ${lastError}`);
+}
+
+test("planned_answer_and_actual_presence_have_separate_labels", async ({ browser, request }, testInfo) => {
   test.setTimeout(240_000);
   const viewport = testInfo.project.use.viewport!;
   const tag = crypto.randomUUID().slice(0, 6);
@@ -152,7 +180,7 @@ test("planned_answer_and_actual_presence_have_separate_labels", async ({ page, b
   await expect(officerPage.getByText(/未回答 1/)).toBeVisible();
 });
 
-test("proxy_answer_form_resets_after_save_and_leaves_without_warning", async ({ page, browser, request }, testInfo) => {
+test("proxy_answer_form_resets_after_save_and_leaves_without_warning", async ({ browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const viewport = testInfo.project.use.viewport!;
   const tag = crypto.randomUUID().slice(0, 6);
@@ -188,13 +216,8 @@ test("proxy_answer_form_resets_after_save_and_leaves_without_warning", async ({ 
 
   // D05の承認済み担当（entity_type='member'×PER-02）は承認フローがまだ無く、API-37はmember対象にPER-06しか
   // 許さない（src/server/routes/member-roles.ts SCOPE_ENTITIES）。単体試験（attendance.test.ts）と同じく、
-  // 業務操作に入る前のseedとして直接DBに入れる（webServerと同じ .wrangler/e2e を操作する。unit_idと
-  // created_byはSQLの中で団員・利用者から引く）
-  const now = new Date().toISOString();
-  execFileSync("npx", ["wrangler", "d1", "execute", "DB", "--local", "--persist-to", ".wrangler/e2e", "--command",
-    "INSERT INTO scope_assignments (id, unit_id, member_id, entity_type, entity_id, permissions, created_at, updated_at, created_by, actor_kind) " +
-    `SELECT '${crypto.randomUUID()}', m.unit_id, m.id, 'member', '${member.memberId}', '["PER-02"]', '${now}', '${now}', (SELECT user_id FROM members WHERE id = m.id), 'human' ` +
-    `FROM members m WHERE m.id = '${officer.memberId}'`], { stdio: "pipe" });
+  // 業務操作に入る前のseedとして直接DBに入れる（上のseedProxyScope。SQLITE_BUSYは再試行で吸収）
+  await seedProxyScope(officer.memberId, member.memberId);
 
   // --- 1) 幹部が予定を登録して公開し、団員を対象にする（既存のactivities試験と同じ流儀） ---
   await officerPage.goto("/app/activities/new");
@@ -221,7 +244,11 @@ test("proxy_answer_form_resets_after_save_and_leaves_without_warning", async ({ 
   // フォーム下端のボタンはスマホでは固定ナビに半分隠れて当たり判定が安定しないためキーボードで保存
   await proxyForm.getByRole("button", { name: "代理で回答を保存" }).focus();
   await officerPage.keyboard.press("Enter");
-  await expect(memberRow.getByText("不参加", { exact: true })).toBeVisible({ timeout: 15_000 }); // 保存で一覧の行に反映される
+  // 保存が済むとフォームは閉じて（閉じるのは成功時だけ）一覧の行のチップが「不参加」に変わる。旧来の
+  // 行スコープのgetByTextは、開いたままのフォーム内<select>の<option>「不参加」に先取りされ得たため
+  // （PH3-T）、フォームが閉じたことを確定させてからチップを断言する
+  await expect(memberRow.getByRole("combobox")).toHaveCount(0, { timeout: 15_000 });
+  await expect(memberRow.getByText("不参加", { exact: true })).toBeVisible();
 
   // --- 3) 同じ対象者のフォームを開き直し、何も入力せずに離れる → 確認ダイアログは出ない（保存済みは下書きではない） ---
   await memberRow.getByRole("button", { name: "代理で回答" }).click();

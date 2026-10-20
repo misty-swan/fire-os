@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { BASE } from "./helpers";
 
 /**
  * 施設の登録・詳細・位置（T022、SCR-04/05）。
@@ -57,13 +58,21 @@ test("gps_denial_allows_manual_entry_without_tracking", async ({ page, context }
   await expect(page.getByLabel("位置確認")).toBeVisible();
   await expect(page.getByText("位置：未確認")).toBeVisible();
   await expect(page.getByText(`${LAT}, ${LNG}`, { exact: true })).toBeVisible();
-  // 外部経路は送る座標を明示してMaps URLを開く（api=1、destination=座標）
-  const externalUrl = page.waitForEvent("popup", { timeout: 5000 }).catch(() => null);
-  await page.getByRole("link", { name: /Googleマップで経路を開く/ }).click();
-  const popup = await externalUrl;
-  const url = popup ? popup.url() : await page.evaluate(() => document.querySelector<HTMLAnchorElement>('a[aria-label*="Googleマップ"]')!.href);
-  if (popup) await popup.close();
-  expect(new URL(url).searchParams.get("destination")).toBe(`${LAT},${LNG}`);
+  // 外部経路は送る座標を明示してMaps URLを開く（api=1、destination=座標）。
+  // hrefは押す前に待って検査する（旧来の`querySelector('a[aria-label*=…]')!.href`フォールバックは
+  // このリンクがaria-labelを持たず（名前は本文から）、popupを取り逃したときnull参照で落ちていた＝FLAKE-2b）
+  const mapsLink = page.getByRole("link", { name: /Googleマップで経路を開く/ });
+  await expect(mapsLink).toHaveAttribute("target", "_blank"); // 別タブで開く（開く操作そのものは下で実際に走らせる）
+  const href = await mapsLink.getAttribute("href");
+  expect(new URL(href!, BASE).searchParams.get("destination")).toBe(`${LAT},${LNG}`);
+  expect(new URL(href!).searchParams.get("api")).toBe("1");
+  const popupPromise = page.waitForEvent("popup", { timeout: 15_000 });
+  await mapsLink.click();
+  const popup = await popupPromise;
+  // popup.url()は作成直後の_pending_ URL（遷移先）を読む。完了待ち（waitForURL）は外部網の届かない環境で
+  // 永遠に確定しないため使わない（押す前のhref検査でURLの組み立ては確定済み）
+  expect(new URL(popup.url()).searchParams.get("destination")).toBe(`${LAT},${LNG}`); // 開いた先も同じ座標
+  await popup.close();
 
   // 座標を変えると位置確認が失効する（docs/11）: 編集UI（API-13）から座標を変え、詳細の表示が切り替わることを確認
   const id = new URL(page.url()).pathname.split("/").pop()!;

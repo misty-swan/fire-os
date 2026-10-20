@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { adminApi, adminApiData } from "./helpers";
+import { adminApiData } from "./helpers";
 
 /**
  * 点検入力（T033、SCR-06）。3ステップのフォーム。
@@ -7,7 +7,7 @@ import { adminApi, adminApiData } from "./helpers";
  * 異常あり → 異常の報告が作られる（T029）。
  */
 
-test("inspection_form_preserves_values_after_failed_submission", async ({ page }, info) => {
+test("inspection_form_preserves_values_after_failed_submission", async ({ page, context }) => {
   const tag = crypto.randomUUID().slice(0, 6);
   // 施設と承認済み様式を用意（API）
   const facility = await adminApiData(page.request, "POST", "/api/v1/facilities", {
@@ -31,16 +31,21 @@ test("inspection_form_preserves_values_after_failed_submission", async ({ page }
   await page.getByRole("button", { name: "異常あり" }).click();
   await page.getByRole("button", { name: /写真・メモへ進む/ }).click();
 
-  // ステップ2: メモを入力し、意図的に通信失敗させる（PUT /upload と API-14 を遮断）
+  // ステップ2: メモを入力し、意図的に通信失敗させる。断は経路遮断（route.abort）ではなく文脈ごとオフライン化
+  // で作る（T085b）: 並行実行（workers≥2）の負荷がかかると、page.routeの遮断が POST /api/v1/facilities/:id/
+  // inspections の_fetch_を取り逃がし、保存が成功して「結果を確認できません」が出ないまま詳細へ遷移して
+  // 落ちる干渉が観測された（test-resultsのerror-context: 作成済みの点検が一覧に出ている＝遮断漏れ）。
+  // オフライン化はChromiumのネットワーク層で効くためFetchの取り逃がりが構造的に起きない。失敗の意味は
+  // docs/03の「通信断」のとおり（useMutationは status 0 →「結果を確認できません」＋端末下書き化。同じ鍵で再送可）
   const originalNote = "蓋の開閉が重い";
   await page.getByLabel("メモ・特記事項").fill(originalNote);
   await page.getByRole("button", { name: /確認へ進む/ }).click();
   await expect(page.getByText("点検を保存")).toBeVisible();
-  await page.route("**/api/v1/facilities/*/inspections", (route) => route.abort());
+  await context.setOffline(true);
   await page.getByRole("button", { name: "点検を保存" }).click();
   // 保存状態の表示（docs/03: 通信断は「結果を確認できません。同じ内容で再送しても二重登録にならない」）
   await expect(page.getByText(/結果を確認できません/)).toBeVisible({ timeout: 20_000 });
-  await page.unrouteAll({ behavior: "ignoreErrors" });
+  await context.setOffline(false);
 
   // 失敗後も入力が保持されている（docs/16: preserves_values）。戻るとステップ2でメモが残る
   await page.getByRole("button", { name: "戻る" }).click();
@@ -61,5 +66,4 @@ test("inspection_form_preserves_values_after_failed_submission", async ({ page }
   expect(savedInspections).toBe(1);
   // 位置確認が点検結果と混同されて表示されないこと（点検の記録は位置確認の確認状態を変えない。D06）
   await expect(page.getByLabel("位置確認")).toBeVisible();
-  void info;
 });

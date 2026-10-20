@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type Response } from "@playwright/test";
 import { adminApiData, BASE } from "./helpers";
 
 /**
@@ -42,13 +42,41 @@ async function searchCitations(request: APIRequestContext, query: string): Promi
  *  playwrightのfillは再レンダリングと競合し得るため、書いて値を確認し、消えていたら書き直す。
  *  最後は通常のexpectで締めて、最終的に値が乗っていることを保証する。このspec内だけで使う）
  */
-async function stickyFill(page: import("@playwright/test").Page, label: string, value: string): Promise<void> {
+async function stickyFill(page: Page, label: string, value: string): Promise<void> {
   const field = page.getByLabel(label);
   for (let i = 0; i < 3; i++) {
     await field.fill(value);
     if ((await field.inputValue()) === value) return;
   }
   await expect(field).toHaveValue(value);
+}
+
+/**
+ * 文書作成のPOSTを確実に出す（FLAKE-1=題名消失の作り直し。docs/evidence/ph8.md）: fill値の確認後にも
+ * 稀に背景の再レンダリング競合でReact状態が空に戻ることがあり、そのときクライアント検証がPOSTを出さず
+ * 「題名を入力してください」が残る（引き金は未特定。ph8.mdの診断記録）。粘着fillで書いて押し、POSTが
+ * 観測できなければ**検証エラーの見えたこと確認してから**再fill・再押下する（高々3回。検証エラーが見え
+ * ないのにPOSTが無い場合は再押下せず、そこで赤＝二重作成は起きない。POSTの成功は1回だけで、複数回の
+ * 押下が成功することは無い）。3回とも出ないときはnullを返す（呼び出し側で赤にする）
+ */
+async function clickCreateUntilPosted(page: Page, title: string, classification: string): Promise<Response | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await stickyFill(page, "題名", title);
+    await stickyFill(page, "分類", classification);
+    const posted = page
+      .waitForResponse((r) => r.url().endsWith("/api/v1/documents") && r.request().method() === "POST", { timeout: 10_000 })
+      .catch(() => null);
+    await page.getByRole("button", { name: "文書を作成する" }).click();
+    const response = await posted;
+    if (response) return response;
+    // POST無し＝クライアント検証で止まっているはず。検証エラーが見えることを確かめてから再試行する
+    // （検証エラーが見えないのにPOSTが無いなら想定外の状態なので、再押下せずここで赤にする）
+    await expect(
+      page.getByText("題名を入力してください").or(page.getByText("分類を入力してください")),
+      "POST未発なのに検証エラーが見えない（想定外。二重作成を避けるため再押下しない）",
+    ).toBeVisible();
+  }
+  return null;
 }
 
 test("withdrawn_document_disappears_from_search_and_citation", async ({ page, request }) => {
@@ -73,20 +101,17 @@ test("withdrawn_document_disappears_from_search_and_citation", async ({ page, re
   await page.getByRole("link", { name: "文書を作成" }).click();
   await expect(page).toHaveURL(/\/app\/documents\/new$/);
 
-  // 題名・分類は粘着fill（上のヘルパー。fill値が背景再レンダリングで消える競合への対策）
-  await stickyFill(page, "題名", title);
-  await stickyFill(page, "分類", "訓練資料");
-  // ACL（deny優先）: 初期行は自分（許可）。seed団員の閲覧も許可する
+  // ACL（deny優先）: 初期行は自分（許可）。seed団員の閲覧も許可する。fill→押下の間を最小化するため、
+  // 対象者の追加を先に済ませて題名・分類は直前に埋める（FLAKE-1＝下のclickCreateUntilPostedで確定させる）
   await page.getByRole("button", { name: "対象を追加" }).click();
   await page.getByLabel("対象の団員2").selectOption({ label: `架空 文書閲覧者 ${tag}` });
   // 保存の応答を待ってから可視フィードバックを断言する（T083 R4。旧断言「トーストが見える」は
   // 応答が遅いと保存成功でも落っていた＝トースト〔2.6秒で自動消失〕への固定時間依存のフレーク。
   // 応答の確定後にrole=statusへスコープして待つため、成功の可視フィードバックの意味は保ったまま
-  // 待ち合わせを時間に依存させない。タイムアウト30秒＝根因〔fill値消失で送信不発〕が起きても
-  // 300秒のテストタイムアウトを継承せず、検証エラーの画面ごと早く明確に落ちる）
-  const created = page.waitForResponse((r) => r.url().endsWith("/api/v1/documents") && r.request().method() === "POST", { timeout: 30_000 });
-  await page.getByRole("button", { name: "文書を作成する" }).click();
-  expect((await created).status()).toBe(201);
+  // 待ち合わせを時間に依存させない。POST自体が出ない題名消失は上の回復ループが拾う）
+  const created = await clickCreateUntilPosted(page, title, "訓練資料");
+  expect(created, "3回の再fillでも文書作成のPOSTが出ない（題名消失＝FLAKE-1が回復不能）").not.toBeNull();
+  expect(created!.status()).toBe(201);
   await expect(page.getByRole("status").filter({ hasText: "保存しました" }).first()).toBeVisible();
   await expect(page).toHaveURL(/\/app\/documents\/[0-9a-f-]{36}$/, { timeout: 15_000 });
   const documentId = new URL(page.url()).pathname.split("/").pop()!;
@@ -192,9 +217,9 @@ test("image_only_pdf_version_shows_unextractable_reason", async ({ page, request
   const pdf = readFileSync(new URL("../fixtures/documents/image-only-ja.pdf", import.meta.url));
 
   await page.goto("/app/documents/new");
-  await page.getByLabel("題名").fill(title);
-  await page.getByLabel("分類").fill("訓練資料");
-  await page.getByRole("button", { name: "文書を作成する" }).click();
+  const created = await clickCreateUntilPosted(page, title, "訓練資料");
+  expect(created, "3回の再fillでも文書作成のPOSTが出ない（題名消失＝FLAKE-1が回復不能）").not.toBeNull();
+  expect(created!.status()).toBe(201);
   await expect(page).toHaveURL(/\/app\/documents\/[0-9a-f-]{36}$/, { timeout: 15_000 });
 
   // 原本の添付→検査job（T069本体試験と同じ流儀。jobは開発用トリガで回す）

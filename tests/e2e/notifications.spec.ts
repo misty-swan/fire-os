@@ -85,7 +85,8 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
   const sourceSelect = officerPage.getByLabel("抽出する予定");
   await sourceSelect.selectOption((await sourceSelect.locator("option", { hasText: `集合時刻の変更 ${tag}` }).getAttribute("value"))!);
   // 提案対象（未回答者3人）の反映を待ってから本文を変える（対象変更は新draftになる旨の注記が出る）
-  await expect(officerPage.getByText(/対象者（3人/).first()).toBeVisible();
+  //（T085b: 並行実行の負荷で既定5秒を超え得るため、ネットワークを挟む断言は明示タイムアウトに揃える）
+  await expect(officerPage.getByText(/対象者（3人/).first()).toBeVisible({ timeout: 15_000 });
   await officerPage.getByLabel("本文").fill(`出欠の回答は締切済みです。${tag}の1通目は取り消します。`);
   await officerPage.getByRole("button", { name: "下書きを作成" }).click();
   // 保存の確認は承認前確認の表示で行う（保存後に即座に承認前確認へ切り替わるため、トーストは遷移で消える）
@@ -97,7 +98,7 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
   const cancelDialog = officerPage.getByRole("dialog", { name: "この下書きを取消しますか" });
   await expect(cancelDialog.getByText(/3人/).first()).toBeVisible(); // 取消の対象を明示
   await cancelDialog.getByRole("button", { name: "取消する" }).click();
-  await expect(officerPage.getByText("保存しました").first()).toBeVisible();
+  await expect(officerPage.getByText("保存しました").first()).toBeVisible({ timeout: 15_000 });
   await expect(officerPage.getByText("取消済み").first()).toBeVisible({ timeout: 15_000 });
 
   // --- 4) 別draft（既定文のまま）を作って承認する。送信確認ダイアログで本文・対象・人数を明示 ---
@@ -107,7 +108,7 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
   const sourceSelect2 = officerPage.getByLabel("抽出する予定");
   await sourceSelect2.selectOption((await sourceSelect2.locator("option", { hasText: `集合時刻の変更 ${tag}` }).getAttribute("value"))!);
   // 源からの既定文が提案欄に反映されるのを待ってから下書きを作る（未入力のまま送らない）
-  await expect(officerPage.getByLabel("本文")).toHaveValue(/出欠確認/);
+  await expect(officerPage.getByLabel("本文")).toHaveValue(/出欠確認/, { timeout: 15_000 });
   await officerPage.getByRole("button", { name: "下書きを作成" }).click();
   const preview2 = officerPage.getByLabel("承認前の確認");
   await expect(preview2.getByText(/出欠確認/)).toBeVisible(); // 源からの既定文（保存の確認は承認前確認の表示で行う）
@@ -119,7 +120,7 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
   await expect(approveDialog.getByText(`架空 連絡不明 ${tag}`)).toBeVisible(); // 対象者
   await approveDialog.getByRole("button", { name: "承認する" }).click();
   // 承認は202（配送jobの受付）。処理中という表示が出て、完了では扱わない
-  await expect(officerPage.getByText(/処理中/).first()).toBeVisible();
+  await expect(officerPage.getByText(/処理中/).first()).toBeVisible({ timeout: 15_000 });
 
   // --- 5) 配送結果は受付/到達不明/失敗を別表示する（docs/11「受付≠到達≠既読」）。既読は最初0 ---
   // 承認で登録された配送jobの回収（本番=毎分Cron）を、ローカルでは開発用トリガで走らせる
@@ -128,13 +129,13 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
     await runLocalCron(request);
     await expect(results.getByText("受付済み").first()).toBeVisible();
   }).toPass({ timeout: 30_000 });
-  await expect(results.getByText("到達不明").first()).toBeVisible();
-  await expect(results.getByText("既読").first()).toBeVisible();
-  const readCountBefore = await results.getByTestId("read-count").textContent();
-  expect(Number(readCountBefore)).toBe(0);
+  await expect(results.getByText("到達不明").first()).toBeVisible({ timeout: 15_000 });
+  await expect(results.getByText("既読").first()).toBeVisible({ timeout: 15_000 });
+  // 既読は最初0（1回だけのDOM読みではなく、確定するまで待つ断言で観測する＝T085b）
+  await expect(results.getByTestId("read-count")).toHaveText("0");
   // 到達不明は「結果を確認」の導線で内容（誰が・なぜ）を確認できる（要約と宛先行の2箇所に出るためfirst）
   await results.getByRole("button", { name: "結果を確認" }).click();
-  await expect(results.getByText(`架空 連絡不明 ${tag}`).first()).toBeVisible();
+  await expect(results.getByText(`架空 連絡不明 ${tag}`).first()).toBeVisible({ timeout: 15_000 });
 
   // --- 6) 対象者が自分宛通知を開き、明示操作で本人既読（API-100）。取消済みの1通目は現れない ---
   const memberCtx = await newUserContext(browser, viewport);
@@ -144,7 +145,7 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
   await expect(memberPage.getByText(/出欠確認/).first()).toBeVisible({ timeout: 15_000 });
   await expect(memberPage.getByText(/1通目/)).toHaveCount(0); // 無承認送信0（取消済みは存在を見せない）
   await memberPage.getByRole("link", { name: /出欠確認/ }).click();
-  await expect(memberPage.getByText("この通知は未読です")).toBeVisible();
+  await expect(memberPage.getByText("この通知は未読です")).toBeVisible({ timeout: 15_000 });
   await memberPage.getByRole("button", { name: "内容を確認" }).click();
   // 既読は保存後に詳細を読み直して示す（トーストは再読込で入れ替わるため、既読の表示を確認の根拠にする）
   await expect(memberPage.getByText("既読").first()).toBeVisible({ timeout: 15_000 });
@@ -161,22 +162,22 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
   await expect(memberPage).toHaveURL(/tab=tasks/);
   const taskRow = memberPage.getByRole("list", { name: "自分のタスク" }).getByRole("listitem")
     .filter({ hasText: `資機材の注文 ${tag}` });
-  await expect(taskRow).toBeVisible();
+  await expect(taskRow).toBeVisible({ timeout: 15_000 });
   await taskRow.getByRole("button", { name: "着手" }).click();
   await expect(taskRow.getByText("着手中", { exact: true })).toBeVisible({ timeout: 15_000 });
   await taskRow.getByRole("button", { name: "完了する" }).click();
-  await expect(memberPage.getByText("保存しました").first()).toBeVisible();
+  await expect(memberPage.getByText("保存しました").first()).toBeVisible({ timeout: 15_000 });
   // 完了したタスクは対応中の一覧から外れる（ダッシュボードの「自分のタスク」と同じ条件）
   await expect(taskRow).toHaveCount(0, { timeout: 15_000 });
   await memberPage.getByLabel("状態で絞る").selectOption("done");
   const doneRow = memberPage.getByRole("list", { name: "自分のタスク" }).getByRole("listitem")
     .filter({ hasText: `資機材の注文 ${tag}` });
-  await expect(doneRow).toBeVisible();
-  await expect(doneRow.getByText("完了").first()).toBeVisible();
+  await expect(doneRow).toBeVisible({ timeout: 15_000 });
+  await expect(doneRow.getByText("完了").first()).toBeVisible({ timeout: 15_000 });
   // 完了済みには再開（理由必須の確認ダイアログ）が出る
   await doneRow.getByRole("button", { name: "再開する" }).click();
   const reopenDialog = memberPage.getByRole("dialog", { name: "このタスクを再開しますか" });
-  await expect(reopenDialog.getByLabel("再開の理由（必須）")).toBeVisible();
+  await expect(reopenDialog.getByLabel("再開の理由（必須）")).toBeVisible({ timeout: 15_000 });
   await reopenDialog.getByRole("button", { name: "戻る" }).click();
 });
 
@@ -226,7 +227,7 @@ test("notification_approval_shows_conflict_when_already_approved_elsewhere", asy
   await officerPage.getByLabel("通知の源").selectOption("activity");
   const sourceSelect = officerPage.getByLabel("抽出する予定");
   await sourceSelect.selectOption((await sourceSelect.locator("option", { hasText: `出動時の持ち物 ${tag}` }).getAttribute("value"))!);
-  await expect(officerPage.getByText(/対象者（1人/).first()).toBeVisible();
+  await expect(officerPage.getByText(/対象者（1人/).first()).toBeVisible({ timeout: 15_000 });
   const draftResponsePromise = officerPage.waitForResponse(
     (r) => r.url().includes("/api/v1/notifications/drafts") && r.request().method() === "POST",
   );
@@ -234,7 +235,7 @@ test("notification_approval_shows_conflict_when_already_approved_elsewhere", asy
   const draftResponse = (await (await draftResponsePromise).json()) as {
     data: { id: string; version: number; bodyHash: string; audienceHash: string };
   };
-  await expect(officerPage.getByText(/出欠確認/).first()).toBeVisible(); // 承認前確認に進んでいる
+  await expect(officerPage.getByText(/出欠確認/).first()).toBeVisible({ timeout: 15_000 }); // 承認前確認に進んでいる
 
   // --- 2) 別経路（管理者のAPI直操作）で同じ下書きを先に承認済みにする（画面の表示は古いまま） ---
   const approveElsewhere = await adminApiData(request, "POST", `/api/v1/notifications/${draftResponse.data.id}/approval`, {
@@ -249,6 +250,6 @@ test("notification_approval_shows_conflict_when_already_approved_elsewhere", asy
   await officerPage.getByRole("button", { name: "承認する" }).click();
   const approveDialog = officerPage.getByRole("dialog", { name: "この通知を承認して送信しますか" });
   await approveDialog.getByRole("button", { name: "承認する" }).click();
-  await expect(officerPage.getByText("他の操作で更新されています")).toBeVisible();
+  await expect(officerPage.getByText("他の操作で更新されています")).toBeVisible({ timeout: 15_000 });
   await expect(approveDialog).toBeVisible(); // 失敗したので承認は進まず、ダイアログは開いたまま案内する
 });

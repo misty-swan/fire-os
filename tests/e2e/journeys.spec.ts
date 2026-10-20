@@ -268,8 +268,15 @@ test("journey_activity_incident_usage_analytics_report", async ({ page, request 
   await page.getByRole("button", { name: "班長に確認を依頼" }).click();
   await expect(page.getByText("確認待ち").first()).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: "承認する" }).click();
+  // 承認の確定はAPI-60の応答で待つ（reports.specと同じ理由〔FLAKE-2a〕: 「承認済み」の部分一致は
+  // 承認前の常時表示「承認済みの版が無いため…」に先取りして通り、直後のCSV取得が承認前に走ると404になる）
+  const decisionPosted = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/v1/reports/${reportId}/decision`) && r.request().method() === "POST",
+    { timeout: 30_000 },
+  );
   await page.getByRole("dialog", { name: "この版を承認しますか" }).getByRole("button", { name: "承認する" }).click();
-  await expect(page.getByText("承認済み").first()).toBeVisible({ timeout: 15_000 });
+  expect((await decisionPosted).status()).toBe(200);
+  await expect(page.getByText("承認済み", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
   const csv = await request.fetch(`${BASE}/api/v1/reports/${reportId}/content?format=csv`, { headers: { origin: BASE } });
   expect(csv.status()).toBe(200);
   const [header, values] = (await csv.text()).replace(/^﻿/, "").trim().split(/\r?\n/).map((l) => l.split(","));

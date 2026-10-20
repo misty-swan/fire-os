@@ -132,9 +132,18 @@ test("report_ui_shows_missing_fields_and_only_exports_approved_version", async (
   await page.getByRole("button", { name: "承認する" }).click();
   const approveDialog = page.getByRole("dialog", { name: "この版を承認しますか" });
   await expect(approveDialog.getByText(/第2版を承認すると/)).toBeVisible();
+  // 承認の確定はAPI-60の応答で待つ。旧来の「トースト→『承認済み』」の待ち合わせは、前の保存のトーストが
+  // 残っていると先に通り、かつ「承認済み」が**承認前の常時表示**「承認済みの版が無いため…」に部分一致して
+  // 先に通るため、直後のAPI-58 GETが承認の確定前に走る競合があった（FLAKE-2a。承認記録の「承認済み」は
+  // exact一致で部分一致と区別する）
+  const decisionPosted = page.waitForResponse(
+    (r) => r.url().endsWith(`/api/v1/reports/${reportId}/decision`) && r.request().method() === "POST",
+    { timeout: 30_000 },
+  );
   await approveDialog.getByRole("button", { name: "承認する" }).click();
-  await expect(page.getByText("保存しました").first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("承認済み").first()).toBeVisible({ timeout: 15_000 });
+  expect((await decisionPosted).status()).toBe(200);
+  await expect(page.getByText("保存しました").first()).toBeVisible({ timeout: 15_000 }); // 成功の可視フィードバック（T083 R4。応答確定後、トーストの寿命2.6秒のうちに）
+  await expect(page.getByText("承認済み", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
 
   // 承認版（currentApprovedVersionId）をAPI-58で確認する
   const afterApprove = await adminApiData<ReportHistoryForTest>(page.request, "GET", `/api/v1/reports/${reportId}`);
