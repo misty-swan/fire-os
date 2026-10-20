@@ -2977,7 +2977,7 @@
   {
    "id": "X-OUT-9",
    "source": "docs/evidence/V07-outage.md「未実施」9",
-   "summary": "管理者全員回復不能時のCloudflare側復旧手順の整備",
+   "summary": "管理者全員回復不能時のCloudflare側復旧手順の整備はT086で実施（ops/account-recovery.md §5）。stagingでの演習が残る（X-OUT-1と併せて実施）",
    "owner": "T086"
   },
   {
@@ -3363,7 +3363,7 @@
    "summary": "ai.calls計上位置・Retry-After固定・理由コード不統一・ラベル語彙ほか",
    "severity": "low",
    "status": "resolved",
-   "basis": "T086（low対応）で9項目を個別判定。修正4: ①A低1 ai.calls計上位置=classification.ts・report.tsともenv.AI存在確認より前で計上していたのを呼び出し可能を確認した後へ移動（RAG・アシスタントと同じ位置。AI無し環境のmanual_reviewで枠の母数が汚れない。jev.test.ts/report-generation.test.tsのai_unavailable試験へ「ai.callsが増えない」断言を追加し旧実装で赤→緑）②A低2 user次元429のRetry-After=enforceUserRateLimitが窓計算値をHttpErrorの追加headersで渡し、共通onError→errorResponseに出す（IP次元と同じ計算値。abuse.test.ts user次元試験の窓を5秒にして「Retry-After≤5秒」断言を追加し旧実装の包括既定60秒で赤→緑）③再レビュー軽微1 budget_stoppedラベル=「AIの月次上限に達したため」を中立語彙「AIの呼び出しが上限により停止されているため」へ（serverは全停止理由〔日次枠・通知枠・429許容・費用試算・手動停止〕で同コードを返すため理由を断定しない。client-job-error-labels.test.tsxへ「月次上限を含まない」断言を追加し赤→緑）④再レビュー軽微3 limits.ts開発設定コメントの「負荷検証」をdocs/05 §1・docs/07 §2と同じ「公開設定時の検証」へ統一。他タスクで既に解消2: C低4（OperationsPanelの403=FORBIDDEN Banner統一）はT083 R3で解消、#9（documents.specトースト断言のフレーク）はT083 R4で応答待ち＋role=statusスコープ待ちへ作り直し済み（T085b以降フルe2e 3回連続緑で未再発）。記録で決着3: B低2（報告書のtest:load数え間違い）はリポジトリ外のため修正しない（証跡正本はph7.md）・C低3（OperationsPanel内の理由コード扱い）は評価実行の失敗=生コード提示がAiEvaluationPanel前例・監査の停止理由=BUDGET_REASON_CODES閉集合の日本語化で領域別の整理として現状維持・再レビュー軽微2（docs/16 T086節対応行へのNFR-08追記）はdocs/16が本対応の対象外のためT086本体のdocs更新時に残す",
+   "basis": "T086（low対応）で9項目を個別判定。修正4: ①A低1 ai.calls計上位置=classification.ts・report.tsともenv.AI存在確認より前で計上していたのを呼び出し可能を確認した後へ移動（RAG・アシスタントと同じ位置。AI無し環境のmanual_reviewで枠の母数が汚れない。jev.test.ts/report-generation.test.tsのai_unavailable試験へ「ai.callsが増えない」断言を追加し旧実装で赤→緑）②A低2 user次元429のRetry-After=enforceUserRateLimitが窓計算値をHttpErrorの追加headersで渡し、共通onError→errorResponseに出す（IP次元と同じ計算値。abuse.test.ts user次元試験の窓を5秒にして「Retry-After≤5秒」断言を追加し旧実装の包括既定60秒で赤→緑）③再レビュー軽微1 budget_stoppedラベル=「AIの月次上限に達したため」を中立語彙「AIの呼び出しが上限により停止されているため」へ（serverは全停止理由〔日次枠・通知枠・429許容・費用試算・手動停止〕で同コードを返すため理由を断定しない。client-job-error-labels.test.tsxへ「月次上限を含まない」断言を追加し赤→緑）④再レビュー軽微3 limits.ts開発設定コメントの「負荷検証」をdocs/05 §1・docs/07 §2と同じ「公開設定時の検証」へ統一。他タスクで既に解消2: C低4（OperationsPanelの403=FORBIDDEN Banner統一）はT083 R3で解消、#9（documents.specトースト断言のフレーク）はT083 R4で応答待ち＋role=statusスコープ待ちへ作り直し済み（T085b以降フルe2e 3回連続緑で未再発）。記録で決着3: B低2（報告書のtest:load数え間違い）はリポジトリ外のため修正しない（証跡正本はph7.md）・C低3（OperationsPanel内の理由コード扱い）は評価実行の失敗=生コード提示がAiEvaluationPanel前例・監査の停止理由=BUDGET_REASON_CODES閉集合の日本語化で領域別の整理として現状維持・再レビュー軽微2（docs/16 T086節対応行へのNFR-08追記）はdocs/16が本対応の対象外のためT086本体のdocs更新時に残す→T086 docs担当が追記済み（2026-10-20）",
    "owner": "T086"
   },
   {

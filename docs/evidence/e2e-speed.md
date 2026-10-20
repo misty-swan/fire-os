@@ -57,7 +57,7 @@
 | 業務のみ（CIと同じ4プロジェクト指定） | `npm run test:e2e -- --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --workers=2` | **343秒（5.7分）** | **73 passed / 0 failed / 0 skipped** |
 | smoke ×3 | `npm run test:e2e:smoke` | 65 / 53 / 52秒（負荷あり・実装者計測）。**静かな環境での再計測×3は 46.0〜47.3秒・12 passed×3**（t085b-smoke-run{1,2,3}.log） | 12 passed ×3（計6回） |
 
-- プロジェクト別の試験数: setup 1 / phone-360 **17**（両幅12＋phone限定5）/ desktop-1280 **53**（両幅12＋desktop限定41）/ tablet-768 **2** / acceptance 75。
+- プロジェクト別の試験数: setup 1 / phone-360 **17**（両幅12＋phone限定5）/ desktop-1280 **53**（両幅12＋desktop限定41）/ tablet-768 **2** / acceptance 75。（T086追記: PH4-B2のe2e 1件〔desktop限定〕を追加したため、現在は**全59試験・desktop-1280 54・業務の実行は74件**。上の仕分け表が正）
 - skip件数は **3→0**（旧・本文内 `test.skip(!isPhone)` 3件〔shell mobile_menu・member-admin ai_evaluation・assistant touch targets〕を設定側の phone限定仕分けへ移行。断言の意味は不変。manifestの該当knownSkips 3件を刈り取り）。
 - M3（コントローラ計測・静かな環境）は中央値**6.2分**で目標超過、fix round 1（4ad6883）を挟んだM3′で中央値**5.7分**となり**目標≤6.0分を達成**（上の表・M3の失敗2件の節を参照）。実装時の予測は「5.3〜6.1分（負荷係数0.9〜1.1）」で、M3は予測上限を僅かに超え（+0.1分）、M3′は範囲内に収まった（予測値自体は結果を見て書き換えていない）。
 
@@ -72,7 +72,7 @@
 - knownSkips 3件 → 0件（本文内skipの廃止に伴う）。
 - `npm run check:coverage` 緑（参照テスト272件）。
 
-## 幅の仕分け表（全58試験・マーカーと1対1）
+## 幅の仕分け表（全59試験・マーカーと1対1。T086で1件追加）
 
 判定の基準: **断言の対象になる**isPhone分岐・幅依存の断言（押下領域44px・ボトムナビ/サイドバーの構成・scrollWidth/はみ出し・viewport固有の可視性・prototypeの寸法）を持つ試験は**両方**（または幅固有なら**phone限定**）。描画待ちの見出しレベル・語彙の吸収など**断言の対象でない**isPhone分岐だけを持つ試験と、純粋な流れ・API-through-UI・データ断言の試験は**desktop限定**（シェル構成自体の幅差はshell.specが両幅で担保）。データ量に依存する試験の絞り込みは行っていない（accessibilityの狭幅回帰は長い名前の団員を自前でseed・assistantのnewest-5系は対象外のため影響なし）。
 | spec | 試験 | 判定 | 根拠 |
@@ -127,6 +127,7 @@
 | member-admin.spec.ts | `unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown` | desktop限定 | 幅で変わる断言なし（流れ・データの断言） |
 | notifications.spec.ts | `notification_ui_distinguishes_accepted_unknown_and_read` | desktop限定 | 幅で変わる断言なし（流れ・データの断言） |
 | notifications.spec.ts | `notification_approval_shows_conflict_when_already_approved_elsewhere` | desktop限定 | 幅で変わる断言なし（流れ・データの断言） |
+| notifications.spec.ts | `pending_draft_appears_in_sent_list_and_can_be_resumed_to_send` | desktop限定 | 幅で変わる断言なし（流れ・データの断言）。T086 PH4-B2（「送信した通知」切替と未承認draftの再開）で追加 |
 | offline-account-switch.spec.ts | `account_switch_never_leaves_or_shows_another_users_offline_draft` | desktop限定 | 幅で変わる断言なし（流れ・データの断言）。isPhone分岐は描画待ちの見出しレベルの吸収のみで断言対象外 |
 | offline-sync.spec.ts | `offline_conflict_never_uses_last_write_wins` | desktop限定 | 幅で変わる断言なし（流れ・データの断言）。isPhone分岐は描画待ちの見出しレベルの吸収のみで断言対象外 |
 | patrol-plans.spec.ts | `patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch` | desktop限定 | 幅で変わる断言なし（流れ・データの断言） |
