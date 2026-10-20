@@ -1,5 +1,5 @@
-import { Link } from "react-router";
-import { Chip } from "../../components/ui";
+import { Link, useLocation } from "react-router";
+import { Chip, Notice } from "../../components/ui";
 
 /**
  * 点検の記録（T033の残作業をT085で接続。施設詳細SCR-04・資産詳細SCR-14で共用。docs/03 §1.1-27）。
@@ -55,5 +55,22 @@ export function InspectionHistoryList({ rows, correctTo }: { rows: InspectionHis
         );
       })}
     </ul>
+  );
+}
+
+/**
+ * 点検の保存後、詳細画面に戻ったときに「異常の報告を作ったか」を示す（T085裁定R20）。
+ * 訂正では、記録の履歴に既に異常の報告があればサーバーは新しく作らないため、実際の結果を表示する。
+ */
+export function InspectionIssueOutcome() {
+  const location = useLocation();
+  const outcome = (location.state as { inspectionIssueOutcome?: "created" | "already_raised" } | null)?.inspectionIssueOutcome;
+  if (!outcome) return null;
+  return (
+    <Notice tone={outcome === "created" ? "warning" : "info"} icon="report" role="status">
+      {outcome === "created"
+        ? "異常の報告を作成しました。点検管理で確認できます。"
+        : "この記録の履歴に異常の報告がすでにあるため、新しい異常の報告は作りませんでした。"}
+    </Notice>
   );
 }

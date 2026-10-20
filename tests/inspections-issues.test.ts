@@ -6,6 +6,8 @@ import { runDueJobs } from "../src/server/jobs/runner";
 import { buildInspectionMutation } from "../src/server/inspections/build";
 import { executeMutation, type Principal } from "../src/server/mutations/execute";
 import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
+import { canonicalJson, sha256Hex } from "../src/server/mutations/hash";
+import { LINEAGE_CHUNK } from "../src/server/inspections/build";
 
 let fx: TestFixture;
 beforeAll(async () => {
@@ -1022,44 +1024,77 @@ describe("点検と異常 (T029〜T032)", () => {
       expect(await fx.rows("attachment_links", { attachment_id: id })).toHaveLength(0);
     }
   });
-  // --- T085裁定R17（レビューN3）: 訂正での異常の二重起票はサーバーでも拒否する（API-46直接・同期API-81も同じ組立て関数） ---
-  it("correction_cannot_raise_a_second_issue_for_a_finding_already_raised (T085 R17)", async () => {
+  // --- T085裁定R17→R20: 訂正で、系譜（訂正元とその前の原本）で既に起票・異常ありの所見に createIssue=true が来ても、
+  //     422にせず起票しない（行き止まりを作らない）。実際に起票したかは応答の createdIssueId で分かる ---
+  it("correction_ignores_create_issue_when_the_lineage_already_raised_it (T085 R20)", async () => {
     const a = fx.units.a;
     const admin = a.people.admin;
     const t = await seedTemplates(admin);
     const facilityId = await seedFacility(a.id, admin.userId);
-    const issuesOf = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM issues WHERE facility_id = ?").bind(facilityId).first<{ n: number }>())!.n;
+    const issuesOf = async (fid: string) => (await env.DB.prepare("SELECT COUNT(*) AS n FROM issues WHERE facility_id = ?").bind(fid).first<{ n: number }>())!.n;
     const review = { result: "needs_review", checkItems: [{ code: "exterior", result: "needs_review" }] };
-    // 異常ありの原本（起点の異常が1件）
-    const made = (await json(await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/inspections`,
-      facilityInput(t.facilityVersionId, admin.memberId!, { ...review, createIssue: true, note: "異常ありの原本" }), idem()))).data! as { id: string; seriesVersion: number };
-    expect(await issuesOf()).toBe(1);
-    // 同じ所見の訂正でcreateIssue=true → 422（issue_already_raised）。何も書かれない
-    const dup = await fx.client(admin).request("POST", `/api/v1/inspections/facility/${made.id}/corrections`,
-      { seriesVersion: made.seriesVersion, supersedesId: made.id, reason: "メモの追記", ...facilityInput(t.facilityVersionId, admin.memberId!, { ...review, createIssue: true, note: "追記" }) }, idem());
-    expect(dup.status).toBe(422);
-    expect(((await json(dup)).error?.details ?? []).some((d) => d.field === "createIssue" && d.reason === "issue_already_raised")).toBe(true);
-    expect(await issuesOf()).toBe(1);
-    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections WHERE facility_id = ?").bind(facilityId).first<{ n: number }>())!.n).toBe(1);
-    // 起票なしの訂正は通る
-    const fixed = await fx.client(admin).request("POST", `/api/v1/inspections/facility/${made.id}/corrections`,
-      { seriesVersion: made.seriesVersion, supersedesId: made.id, reason: "メモの追記", ...facilityInput(t.facilityVersionId, admin.memberId!, { ...review, createIssue: false, note: "追記" }) }, idem());
-    expect(fixed.status).toBe(201);
-    const fixedRow = (await json(fixed)).data! as { id: string; seriesVersion: number };
-    // 系譜の先（訂正の訂正）でも、元の所見の異常があるので起票は拒否
-    const again = await fx.client(admin).request("POST", `/api/v1/inspections/facility/${fixedRow.id}/corrections`,
-      { seriesVersion: fixedRow.seriesVersion, supersedesId: fixedRow.id, reason: "再訂正", ...facilityInput(t.facilityVersionId, admin.memberId!, { ...review, createIssue: true, note: "再訂正" }) }, idem());
-    expect(again.status).toBe(422);
-    expect(await issuesOf()).toBe(1);
-    // 良好の原本を異常ありへ訂正するときは起票できる
+    type Row = { id: string; seriesVersion: number; createdIssueId: string | null };
+    const correct = async (from: Row, over: Record<string, unknown>, reason: string) =>
+      fx.client(admin).request("POST", `/api/v1/inspections/facility/${from.id}/corrections`,
+        { seriesVersion: from.seriesVersion, supersedesId: from.id, reason, ...facilityInput(t.facilityVersionId, admin.memberId!, over) }, idem());
+    // v1: 異常ありの原本（起点の異常が1件）
+    const v1Res = await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { ...review, createIssue: true, note: "v1 異常あり" }), idem());
+    const v1 = (await json(v1Res)).data! as Row;
+    expect(v1.createdIssueId).toBeTruthy(); // 新規の点検では起票され、応答で分かる
+    expect(await issuesOf(facilityId)).toBe(1);
+    // 古い版を宣言した訂正は、createIssueがあっても版の競合（409）が先に返る（起票の判定で422にならない）
+    const stale = await correct({ ...v1, seriesVersion: v1.seriesVersion - 1 }, { ...review, createIssue: true }, "古い版");
+    expect(stale.status).toBe(409);
+    // v2: 良好へ訂正
+    const v2 = (await json(await correct(v1, { note: "v2 良好へ訂正" }, "誤記の訂正"))).data! as Row;
+    // v3: 再び異常ありへ訂正し createIssue=true（画面は直前の記録=良好だけを見て起票を求める）→ 201、起票はしない
+    const v3Res = await correct(v2, { ...review, createIssue: true, note: "v3 やはり異常あり" }, "再確認");
+    expect(v3Res.status).toBe(201);
+    const v3 = (await json(v3Res)).data! as Row;
+    expect(v3.createdIssueId).toBeNull();
+    expect(await issuesOf(facilityId)).toBe(1);
+    // 同期（API-81の点検訂正）でも同じ（端末の下書きが保存できなくなる行き止まりにしない）
+    const payload = { type: "facility", seriesVersion: v3.seriesVersion, reason: "同期での再訂正", ...facilityInput(t.facilityVersionId, admin.memberId!, { ...review, createIssue: true, note: "v4 同期" }) };
+    const clientOperationId = crypto.randomUUID();
+    const synced = await fx.client(admin).request("POST", "/api/v1/sync/commands", {
+      clientOperationId, deviceId: crypto.randomUUID(), operationCode: "inspection.correction", targetId: v3.id, baseVersion: 0,
+      payload, payloadHash: await sha256Hex(canonicalJson(payload)),
+    }, { "idempotency-key": clientOperationId });
+    expect(synced.status).toBe(200);
+    expect(await issuesOf(facilityId)).toBe(1);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM facility_inspections WHERE facility_id = ?").bind(facilityId).first<{ n: number }>())!.n).toBe(4);
+    // 良好の系譜を異常ありへ訂正するときは起票され、応答で分かる
     const facility2 = await seedFacility(a.id, admin.userId);
-    const okOriginal = (await json(await fx.client(admin).request("POST", `/api/v1/facilities/${facility2}/inspections`,
-      facilityInput(t.facilityVersionId, admin.memberId!, { note: "良好の原本" }), idem()))).data! as { id: string; seriesVersion: number };
-    const raise = await fx.client(admin).request("POST", `/api/v1/inspections/facility/${okOriginal.id}/corrections`,
-      { seriesVersion: okOriginal.seriesVersion, supersedesId: okOriginal.id, reason: "見落とし", ...facilityInput(t.facilityVersionId, admin.memberId!, { ...review, createIssue: true, note: "異常を見落としていた" }) }, idem());
-    expect(raise.status).toBe(201);
-    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM issues WHERE facility_id = ?").bind(facility2).first<{ n: number }>())!.n).toBe(1);
+    const ok1 = (await json(await fx.client(admin).request("POST", `/api/v1/facilities/${facility2}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { note: "良好の原本" }), idem()))).data! as Row;
+    const raised = (await json(await correct(ok1, { ...review, createIssue: true, note: "見落とし" }, "見落とし"))).data! as Row;
+    expect(raised.createdIssueId).toBeTruthy();
+    expect(await issuesOf(facility2)).toBe(1);
   });
+
+  // --- T085再レビュー第2ラウンド（軽微）: 長い訂正の系譜（D1のバインド上限100を超える世代数）でも照会が壊れない ---
+  it("long_correction_lineage_is_checked_in_chunks (T085 R20)", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const t = await seedTemplates(admin);
+    const facilityId = await seedFacility(a.id, admin.userId);
+    type Row = { id: string; seriesVersion: number; createdIssueId: string | null };
+    let row = (await json(await fx.client(admin).request("POST", `/api/v1/facilities/${facilityId}/inspections`,
+      facilityInput(t.facilityVersionId, admin.memberId!, { note: "0" }), idem()))).data! as Row;
+    // 40世代（3種の照会×40＝120個のIDを1回でbindすると上限超過で500になっていた）
+    for (let n = 1; n <= 40; n++) {
+      const r = await fx.client(admin).request("POST", `/api/v1/inspections/facility/${row.id}/corrections`,
+        { seriesVersion: row.seriesVersion, supersedesId: row.id, reason: `訂正${n}`, ...facilityInput(t.facilityVersionId, admin.memberId!, { note: String(n) }) }, idem());
+      expect(r.status, `世代${n}`).toBe(201);
+      row = (await json(r)).data! as Row;
+    }
+    const last = await fx.client(admin).request("POST", `/api/v1/inspections/facility/${row.id}/corrections`,
+      { seriesVersion: row.seriesVersion, supersedesId: row.id, reason: "41世代目で異常あり", ...facilityInput(t.facilityVersionId, admin.memberId!, { result: "needs_review", checkItems: [{ code: "exterior", result: "needs_review" }], createIssue: true }) }, idem());
+    expect(last.status).toBe(201);
+    expect(((await json(last)).data! as Row).createdIssueId).toBeTruthy(); // 系譜に異常が無いので起票される
+    expect(LINEAGE_CHUNK).toBeLessThanOrEqual(45);
+  }, 120_000);
 
   // --- T085裁定R18: 元の実施者が休団・退団でも、訂正は元の実施者を保って通す（訂正した人は監査に別に残る） ---
   it("correction_keeps_an_inactive_original_inspector (T085 R18)", async () => {

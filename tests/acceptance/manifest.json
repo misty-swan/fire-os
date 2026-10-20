@@ -579,7 +579,8 @@
    "id": "AT-MAP-06",
    "reqId": "MAP-06",
    "tests": [
-    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_cannot_raise_a_second_issue_for_a_finding_already_raised (T085 R17)",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_ignores_create_issue_when_the_lineage_already_raised_it (T085 R20)",
+    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > long_correction_lineage_is_checked_in_chunks (T085 R20)",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_keeps_an_inactive_original_inspector (T085 R18)",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_issue_and_photo_link_commit_together",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original",
@@ -2441,7 +2442,8 @@
    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original",
    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_conflict_is_detected_by_declared_series_version",
    "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > member_cannot_correct_another_members_inspection_or_reassign_the_inspector (T085 A-I3)",
-   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_cannot_raise_a_second_issue_for_a_finding_already_raised (T085 R17)"
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > correction_ignores_create_issue_when_the_lineage_already_raised_it (T085 R20)",
+   "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > long_correction_lineage_is_checked_in_chunks (T085 R20)"
   ],
   "API-47": [
    "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
@@ -3069,11 +3071,11 @@
   },
   {
    "id": "T085-N3",
-   "source": "T085再レビューN3（裁定R17）",
+   "source": "T085再レビューN3（裁定R17→再々レビューで裁定R20）",
    "summary": "訂正のcreateIssueをサーバーが受け付け、API-46直接・同期API-81で同じ所見の異常を二重に起票できた（画面だけの防止だった）",
    "severity": "medium",
    "status": "resolved",
-   "basis": "docs/11 §3の二重起票防止。訂正元の系譜に異常あり・起票済みがあれば422 issue_already_raised。試験は修正前201（赤）",
+   "basis": "docs/11 §3の二重起票防止。訂正元の系譜に異常あり・起票済みがあればcreateIssueを無視して起票しない（R17の422は画面・同期下書きの行き止まりになるためR20で変更）。実際の起票は応答のcreatedIssueIdで示す。系譜の照会はD1の束縛上限内に分割。試験はR17の422・束縛上限超えの500に対し赤→緑",
    "owner": "T031/T033"
   },
   {

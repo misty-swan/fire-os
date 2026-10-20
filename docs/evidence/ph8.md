@@ -217,3 +217,20 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 | `npx vitest --run` | 67ファイル321件 passed |
 | `npm run collect:evidence`（ポート8797） | vitest 321・load 3・**e2e 119 passed／3 skipped／0 failed（15.4分）**・live未実施 |
 | ゲート | `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` 1 passed（受入spec全体75 passed） |
+
+### T085 レビュー第3ラウンドの修正（2026-10-20）
+
+再々レビュー（e50c98d）の Important 1・Minor 4 を修正（裁定R20）:
+
+- **訂正の行き止まりを解消（R20。N3の方式変更）**: R17の「系譜に起票済みなら `createIssue=true` を422」は、画面が直前の記録しか見ないため 異常あり→良好→異常あり（v3）の訂正や同期API-81の下書きが保存できない行き止まりになった。サーバーは系譜に既にあれば `createIssue` を**無視して保存**し（起票しない）、応答の `createdIssueId`（その記録から起票された異常のID・無ければnull。API-44/51の点検の記録にも付く）で実際の結果を返す。監査のmetadataに `issue: created / already_raised / none`。画面は訂正の確認で条件つきの予告（「この記録の履歴でまだ異常の報告が作られていなければ…」）を出し、保存後の施設詳細・資産詳細に「異常の報告を作成しました。」または「…新しい異常の報告は作りませんでした。」を示す。REJECTEDの専用文言は廃止。docs/05 API-46・docs/03 §1.1-27を更新（docs/11は「既存異常と二重にしない」の規則のままで変更なし）。
+  - 試験: `correction_ignores_create_issue_when_the_lineage_already_raised_it (T085 R20)`（v1→v2→v3をAPI-46で201・createdIssueId null・異常1件のまま、同期API-81の訂正も200で異常1件、系譜に無い施設では起票。R17の実装では422で赤）。e2e `inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original` に予告・保存後の結果表示と v3 の画面での訂正（異常あり→良好→異常あり）を追加（360/1280とも合格）。
+- **系譜の照会の束縛数（Minor）**: 最大50世代×3でD1の束縛上限（100）を超えていた → 45件ずつに分割（`LINEAGE_CHUNK`）。試験 `long_correction_lineage_is_checked_in_chunks (T085 R20)`（40世代の後の訂正。分割前は500で赤）。
+- **古い版の409が起票判定より先（Minor）**: 上のR20の試験で、古いseriesVersionの訂正にcreateIssueを付けて409を断言。
+- **docs/16（Minor）**: D10の回帰を正確なテスト名 `inputs_stay_inside_the_search_card_at_narrow_widths` で引用。T030行の入れ子の太字を解消。
+
+| 確認 | 結果 |
+|---|---|
+| typecheck／check:contracts／check:coverage／build | 成功／102一致／成功（参照272・notApplicable 0）／成功 |
+| `npx vitest --run` | 67ファイル322件 passed |
+| `npm run collect:evidence`（ポート8797） | vitest 322・load 3・**e2e 119 passed／3 skipped／0 failed（15.0分）**・live未実施（Secret未設定） |
+| ゲート | `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` 1 passed |

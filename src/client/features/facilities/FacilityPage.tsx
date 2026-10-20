@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api, apiCall, ApiError } from "../../api";
-import { INSPECTION_RESULT_LABELS, InspectionHistoryList, jstDay, type InspectionHistoryRow } from "../inspections/InspectionHistory";
+import { INSPECTION_RESULT_LABELS, InspectionHistoryList, InspectionIssueOutcome, jstDay, type InspectionHistoryRow } from "../inspections/InspectionHistory";
 import { SubHeader } from "../../components/Page";
 import { Notice } from "../../components/ui";
 import { Banner, Button, Card, Chip, Icon } from "../../components/ui";
@@ -201,6 +201,7 @@ export function FacilityPage() {
         </div>
       )}
 
+      <InspectionIssueOutcome />
       {/* 状態の3行表示（docs/16 T034: 位置/点検結果/異常対応を混同しない） */}
       <Card className="flex flex-col gap-2.5" aria-label="状態">
         <div className="flex items-center justify-between text-[13px]">

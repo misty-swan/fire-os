@@ -75,9 +75,13 @@ test("inspection_retry_after_lost_response_registers_once_and_correction_keeps_t
   await page.getByRole("button", { name: /確認へ進む/ }).click();
   // 理由が無いと保存できない
   await expect(page.getByRole("button", { name: "訂正を保存" })).toBeDisabled();
+  // 訂正の確認画面は、画面が履歴全体を持たないため条件つきで起票を予告する（T085裁定R20）
+  await expect(page.getByText("この記録の履歴でまだ異常の報告が作られていなければ、保存すると作成されます", { exact: false })).toBeVisible();
   await page.getByLabel("訂正の理由（必須）").fill("結果の記入を誤った（架空）");
   await page.getByRole("button", { name: "訂正を保存" }).click();
   await expect(page).toHaveURL(new RegExp(`/app/facilities/${facilityId}$`), { timeout: 20_000 });
+  // 保存後、実際に起票したかを詳細画面で示す（応答のcreatedIssueId。R20）
+  await expect(page.getByText("異常の報告を作成しました。点検管理で確認できます。")).toBeVisible();
   const afterFix = await adminApiData<{ id: string; isCurrent: boolean; supersedesId: string | null; result: string }[]>(page.request, "GET", `/api/v1/facilities/${facilityId}/inspections`);
   expect(afterFix.data.data).toHaveLength(2);
   const current = afterFix.data.data.find((r) => r.isCurrent)!;
@@ -99,9 +103,29 @@ test("inspection_retry_after_lost_response_registers_once_and_correction_keeps_t
   await page.getByRole("button", { name: /写真・メモへ進む/ }).click();
   await page.getByLabel("メモ・特記事項").fill(`蓋の開閉が重い（追記） ${tag}`);
   await page.getByRole("button", { name: /確認へ進む/ }).click();
+  await expect(page.getByText("元の記録の異常の報告がすでにあるため、新しい異常の報告は作りません。")).toBeVisible();
   await page.getByLabel("訂正の理由（必須）").fill("メモの追記（架空）");
   await page.getByRole("button", { name: "訂正を保存" }).click();
   await expect(page).toHaveURL(new RegExp(`/app/facilities/${facilityId}$`), { timeout: 20_000 });
+  await expect(page.getByText("この記録の履歴に異常の報告がすでにあるため、新しい異常の報告は作りませんでした。")).toBeVisible();
+  expect(await issuesOf()).toBe(1);
+
+  // --- 4) 異常あり→良好→異常あり（v3）の訂正も保存できる（行き止まりにしない。T085裁定R20）。履歴に起票済みなので起票しない ---
+  const correctTo = async (label: "良好" | "異常あり", reason: string) => {
+    await page.getByRole("link", { name: "点検を訂正する" }).click();
+    await expect(page.getByRole("main").getByText("点検の訂正", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: label }).click();
+    await page.getByRole("button", { name: /写真・メモへ進む/ }).click();
+    await page.getByRole("button", { name: /確認へ進む/ }).click();
+    await page.getByLabel("訂正の理由（必須）").fill(reason);
+    await page.getByRole("button", { name: "訂正を保存" }).click();
+    await expect(page).toHaveURL(new RegExp(`/app/facilities/${facilityId}$`), { timeout: 20_000 });
+  };
+  await correctTo("良好", "結果を良好に直す（架空）");
+  await expect(page.getByLabel("状態").getByText("良好")).toBeVisible();
+  await correctTo("異常あり", "やはり異常あり（架空）");
+  await expect(page.getByText("この記録の履歴に異常の報告がすでにあるため、新しい異常の報告は作りませんでした。")).toBeVisible();
+  await expect(page.getByLabel("状態").getByText("異常あり")).toBeVisible();
   expect(await issuesOf()).toBe(1);
 });
 

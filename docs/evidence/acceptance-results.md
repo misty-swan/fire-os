@@ -8,9 +8,9 @@
 
 | 項目 | 値 |
 |---|---|
-| 収集日時 | 2026-10-19T23:45:19.234Z |
-| commit | f4288f757688a368b1f337a5c153520c13183676（未コミットのコード変更 12件を含む作業木で実行。内容はcodeHashで固定） |
-| codeHash | 7fcce26251c47213bf0c328f6d4285b6265be1bb92db99120f110c0f483b5651 |
+| 収集日時 | 2026-10-20T00:14:58.624Z |
+| commit | e50c98db54f27ba0015de558c06c0fbc09a5723d（未コミットのコード変更 9件を含む作業木で実行。内容はcodeHashで固定） |
+| codeHash | ae4f9cdd4c4cfcfaf935f92bb5304f79dc797f7153992efe72aaff2ca6f6e34d |
 | 設計版 | 08:v0.3 / 2026-10-13 12:v0.3 / 2026-10-15 |
 | 実行環境 | node v26.8.2 / linux-x64 / Playwright 1.64.0 / vitest/4.1.11 linux-x64 node-v26.8.2 / wrangler 4.150.0 |
 | ゲート判定 | **緑**（開発版の範囲） |
@@ -19,10 +19,10 @@
 
 | スイート | 結果 | passed | failed | skipped | 開始 | 終了 | コマンド |
 |---|---|---|---|---|---|---|---|
-| vitest | passed | 321 | 0 | 0 | 2026-10-19T23:28:30.243Z | 2026-10-19T23:29:20.360Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-19T23-28-29-672Z/vitest.json` |
-| load | passed | 3 | 0 | 0 | 2026-10-19T23:29:20.360Z | 2026-10-19T23:29:51.805Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-19T23-28-29-672Z/load.json` |
-| e2e | passed | 119 | 0 | 3 | 2026-10-19T23:29:51.805Z | 2026-10-19T23:45:19.201Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
-| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-19T23:45:19.201Z | 2026-10-19T23:45:19.201Z | `npm run test:live` |
+| vitest | passed | 322 | 0 | 0 | 2026-10-19T23:58:21.482Z | 2026-10-19T23:59:26.837Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-19T23-58-20-591Z/vitest.json` |
+| load | passed | 3 | 0 | 0 | 2026-10-19T23:59:26.837Z | 2026-10-19T23:59:59.735Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-19T23-58-20-591Z/load.json` |
+| e2e | passed | 119 | 0 | 3 | 2026-10-19T23:59:59.735Z | 2026-10-20T00:14:58.602Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
+| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-20T00:14:58.602Z | 2026-10-20T00:14:58.602Z | `npm run test:live` |
 
 skipされた試験 3件（いずれも証拠に使わない。manifest.knownSkips の分類）:
 
@@ -32,7 +32,7 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 
 ## 件数（正本から機械抽出）
 
-要件54 / AT54 / CT17（AT×CTの組220、うち notApplicable 0） / 継続TC18 / API102 / SCR28 / 横断journey4 / 実外部の残手順29。参照している実テスト 271件。
+要件54 / AT54 / CT17（AT×CTの組220、うち notApplicable 0） / 継続TC18 / API102 / SCR28 / 横断journey4 / 実外部の残手順29。参照している実テスト 272件。
 
 ## 受入（AT）
 
@@ -54,7 +54,7 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 | AT-MAP-03 | MAP-03 | 合格（局所） | 2 | 5 | - |
 | AT-MAP-04 | MAP-04 | 合格（局所） | 3 | 4 | X-V07-PERF（実staging・実D1 rows_read・実回線での通常API p95（D18承認材料）・T086） |
 | AT-MAP-05 | MAP-05 | 合格（局所） | 3 | 4 | - |
-| AT-MAP-06 | MAP-06 | 合格（局所） | 7 | 5 | - |
+| AT-MAP-06 | MAP-06 | 合格（局所） | 8 | 5 | - |
 | AT-MAP-07 | MAP-07 | 合格（局所） | 3 | 4 | - |
 | AT-MAP-08 | MAP-08 | 合格（局所） | 3 | 6 | - |
 | AT-MAP-09 | MAP-09 | 合格（局所） | 2 | 3 | X-DEV-MAPS（実端末でのMapsアプリ起動（外部経路）・T086） |
@@ -176,7 +176,7 @@ skipされた試験 3件（いずれも証拠に使わない。manifest.knownSki
 | T031-I3 | high | resolved | API-46の権限判定がクライアントの送るbody.inspectorMemberIdで行われ、一般団員が他人の点検を訂正し実施者を差し替えられた（T031の既存欠陥。T085の訂正画面で到達可能になった） | T085レビューA-I3（src/server/routes/inspection-corrections.ts） | 権限欠陥（Review Focus 1）。修正前は他人の点検の訂正が201（赤）→元の原本の実施者と新しい実施者の両方で判定して403（緑） | T031 |
 | T085-D8 | medium | resolved | 点検の記録の「訂正済み」を系列の現在版でないこと（isCurrent=false）で判定しており、新しい点検があるだけの古い記録まで訂正済みと表示した | T085レビューA-I1 | 表示の誤り（記録の意味を取り違える）。supersededByIdで判定し、2件以上の資産でe2eの赤（訂正済み2件）→緑 | T033 |
 | T085-D9 | medium | resolved | 異常ありの点検を訂正すると、異常が二重に起票された（訂正モードでcreateIssueを常に有効にしていた） | T085レビューA-I2 | docs/11 §3（既存異常と二重にしない）違反。良好→異常ありの訂正のときだけ起票に変更し、e2eの赤（異常2件）→緑 | T033 |
-| T085-N3 | medium | resolved | 訂正のcreateIssueをサーバーが受け付け、API-46直接・同期API-81で同じ所見の異常を二重に起票できた（画面だけの防止だった） | T085再レビューN3（裁定R17） | docs/11 §3の二重起票防止。訂正元の系譜に異常あり・起票済みがあれば422 issue_already_raised。試験は修正前201（赤） | T031/T033 |
+| T085-N3 | medium | resolved | 訂正のcreateIssueをサーバーが受け付け、API-46直接・同期API-81で同じ所見の異常を二重に起票できた（画面だけの防止だった） | T085再レビューN3（裁定R17→再々レビューで裁定R20） | docs/11 §3の二重起票防止。訂正元の系譜に異常あり・起票済みがあればcreateIssueを無視して起票しない（R17の422は画面・同期下書きの行き止まりになるためR20で変更）。実際の起票は応答のcreatedIssueIdで示す。系譜の照会はD1の束縛上限内に分割。試験はR17の422・束縛上限超えの500に対し赤→緑 | T031/T033 |
 | T085-N1 | medium | resolved | staging孤児の回収が毎分先頭から最大1,000件だけを見て続きを保存せず、台帳のある実体が先頭に溜まると後ろの孤児に永遠に届かなかった（毎分のR2一覧費用も） | T085再レビューN1 | 続き位置をR2に保存して巡回・1回500件・15分ごと。試験（台帳のある1,010件の後ろの孤児）は続き位置を使わないと失敗 | T017 |
 | T085-R18 | low | resolved | 訂正で元の実施者を保つと、その団員が休団・退団のとき管理者の訂正が422 inspector_not_activeで行き止まりになった | T085再レビュー（裁定R18） | 元の実施者を保つ訂正に限り通す（訂正した人は監査）。試験は修正前422（赤） | T031 |
 | T085-D6 | low | resolved | 未作成の行を作るPUT（出欠の初回回答など）の途中の文が失敗すると、内部障害が「対象が見つかりません」の404に誤分類された | T085レビューB-I3の読取境界試験（tests/dashboard.test.ts） | 効果は0（全取消）だが理由の誤表示。前提条件を満たしているときは内部障害にする（前提を満たさない場合の404は従来どおり＝ph3-review A5の方針） | T004/T036 |

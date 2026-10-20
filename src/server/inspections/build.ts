@@ -31,6 +31,8 @@ export const Inspection = z.object({
   items: z.array(InspectionItemDto),
   supersedesId: Id.nullable(),
   correctionReason: z.string().nullable(),
+  /** この保存で起票された異常のID（起票しなかったらnull。T085裁定R20: 訂正で系譜に既に異常があるときcreateIssueは無視される） */
+  createdIssueId: Id.nullable().optional(),
   createdAt: z.iso.datetime(),
 });
 export type Inspection = z.infer<typeof Inspection>;
@@ -64,6 +66,8 @@ const FACILITY_JSON =
   "'id', i.id, 'seriesId', i.series_id, 'seriesVersion', s.version, 'target', json_object('type', 'facility', 'id', i.facility_id), " +
   "'templateVersionId', i.template_version_id, 'inspectorMemberId', i.inspector_member_id, 'inspectedAt', i.inspected_at, " +
   "'result', i.result, 'note', i.note, 'supersedesId', i.supersedes_id, 'correctionReason', i.correction_reason, 'createdAt', i.created_at, " +
+  // この点検の保存で起票された異常（無ければnull。訂正で系譜に既に異常があり起票しなかったときもnull＝T085裁定R20）
+  "'createdIssueId', (SELECT x.id FROM issues x WHERE x.source_facility_inspection_id = i.id), " +
   "'items', (SELECT json_group_array(json_object('code', m.item_code, 'result', m.result, 'value', json(m.value_json), 'note', m.note)) FROM inspection_items m WHERE m.facility_inspection_id = i.id)) " +
   "FROM facility_inspections i JOIN inspection_series s ON s.id = i.series_id WHERE i.id = ?";
 
@@ -72,8 +76,41 @@ const ASSET_JSON =
   "'id', i.id, 'seriesId', i.series_id, 'seriesVersion', s.version, 'target', json_object('type', CASE WHEN i.vehicle_id IS NOT NULL THEN 'vehicle' ELSE 'equipment' END, 'id', COALESCE(i.vehicle_id, i.equipment_id)), " +
   "'templateVersionId', i.template_version_id, 'inspectorMemberId', i.inspector_member_id, 'inspectedAt', i.inspected_at, " +
   "'result', i.result, 'note', i.note, 'supersedesId', i.supersedes_id, 'correctionReason', i.correction_reason, 'createdAt', i.created_at, " +
+  "'createdIssueId', (SELECT x.id FROM issues x WHERE x.source_asset_inspection_id = i.id), " +
   "'items', (SELECT json_group_array(json_object('code', m.item_code, 'result', m.result, 'value', json(m.value_json), 'note', m.note)) FROM inspection_items m WHERE m.asset_inspection_id = i.id)) " +
   "FROM asset_inspections i JOIN inspection_series s ON s.id = i.series_id WHERE i.id = ?";
+
+/**
+ * 訂正元の系譜（訂正元とその前の原本。supersedes_idを遡る。最大50世代）に、異常ありの結果・明細か、
+ * そこから起票された異常があるか（T085裁定R20）。IN句はD1のバインド上限（100）を超えないよう45件ずつ照会する。
+ */
+async function lineageAlreadyRaised(env: AppEnv, unitId: string, type: "facility" | "vehicle" | "equipment", fromId: string): Promise<boolean> {
+  const table = type === "facility" ? "facility_inspections" : "asset_inspections";
+  const itemCol = type === "facility" ? "facility_inspection_id" : "asset_inspection_id";
+  const sourceCol = type === "facility" ? "source_facility_inspection_id" : "source_asset_inspection_id";
+  const lineage: string[] = [];
+  let cursor: string | null = fromId;
+  for (let i = 0; i < 50 && cursor; i++) {
+    lineage.push(cursor);
+    const prev: { supersedes_id: string | null } | null = await env.DB.prepare(`SELECT supersedes_id FROM ${table} WHERE id = ? AND unit_id = ?`)
+      .bind(cursor, unitId).first<{ supersedes_id: string | null }>();
+    cursor = prev?.supersedes_id ?? null;
+  }
+  for (let i = 0; i < lineage.length; i += LINEAGE_CHUNK) {
+    const chunk = lineage.slice(i, i + LINEAGE_CHUNK);
+    const marks = chunk.map(() => "?").join(", ");
+    for (const sql of [
+      `SELECT 1 FROM ${table} WHERE unit_id = ? AND id IN (${marks}) AND result = 'needs_review' LIMIT 1`,
+      `SELECT 1 FROM inspection_items WHERE unit_id = ? AND ${itemCol} IN (${marks}) AND result = 'needs_review' LIMIT 1`,
+      `SELECT 1 FROM issues WHERE unit_id = ? AND ${sourceCol} IN (${marks}) LIMIT 1`,
+    ]) {
+      if (await env.DB.prepare(sql).bind(unitId, ...chunk).first()) return true;
+    }
+  }
+  return false;
+}
+/** 系譜の照会1回あたりのID数（D1のバインド上限100未満） */
+export const LINEAGE_CHUNK = 45;
 
 /**
  * 点検1件の原子更新を作る（T029施設/T030資産/T031訂正で共用）。
@@ -145,7 +182,11 @@ export async function buildInspectionMutation(
     .first<SeriesRow>();
 
   const inspectionId = crypto.randomUUID();
-  const issueId = input.createIssue ? crypto.randomUUID() : null;
+  // 訂正での異常の起票（T085裁定R17→R20・docs/11 §3「既存異常と二重にしない」）: 訂正元の系譜（訂正元とその前の原本）に
+  // 異常ありの結果・明細か、そこから起票された異常があるときは、createIssueを**無視する**（起票しない。422にはしない＝
+  // 画面・同期API-81の下書きが保存できなくなる行き止まりを作らない）。実際に起票したかは応答の createdIssueId で分かる
+  const createIssue = input.createIssue && !(correction && await lineageAlreadyRaised(env, principal.unitId, target.type, correction.supersedesId));
+  const issueId = createIssue ? crypto.randomUUID() : null;
   const newSeriesId = existingSeries ? null : crypto.randomUUID();
   const inspectionTable = target.type === "facility" ? "facility_inspections" : "asset_inspections";
   const responseSql = target.type === "facility" ? FACILITY_JSON : ASSET_JSON;
@@ -170,28 +211,6 @@ export async function buildInspectionMutation(
   }
   if (correction) {
     if (!existingSeries) throw new HttpError("NOT_FOUND");
-    // 訂正での異常の起票（T085裁定R17・docs/11 §3「既存異常と二重にしない」）: 訂正元の系譜（訂正元とその前の原本）に
-    // 異常ありの結果があるか、そこから起票された異常があるときは、createIssueを422で拒否する（画面だけでなく
-    // API-46の直接呼出し・同期API-81でも二重に起票させない）。良好→異常ありの訂正だけが起票できる
-    if (input.createIssue) {
-      const lineage: string[] = [];
-      let cursor: string | null = correction.supersedesId;
-      for (let i = 0; i < 50 && cursor; i++) {
-        lineage.push(cursor);
-        const prev: { supersedes_id: string | null } | null = await env.DB.prepare(`SELECT supersedes_id FROM ${inspectionTable} WHERE id = ? AND unit_id = ?`)
-          .bind(cursor, principal.unitId).first<{ supersedes_id: string | null }>();
-        cursor = prev?.supersedes_id ?? null;
-      }
-      const marks = lineage.map(() => "?").join(", ");
-      const itemCol = target.type === "facility" ? "facility_inspection_id" : "asset_inspection_id";
-      const sourceCol = target.type === "facility" ? "source_facility_inspection_id" : "source_asset_inspection_id";
-      const raised = await env.DB.prepare(
-        `SELECT 1 FROM ${inspectionTable} WHERE unit_id = ? AND id IN (${marks}) AND result = 'needs_review' ` +
-          `UNION ALL SELECT 1 FROM inspection_items WHERE unit_id = ? AND ${itemCol} IN (${marks}) AND result = 'needs_review' ` +
-          `UNION ALL SELECT 1 FROM issues WHERE unit_id = ? AND ${sourceCol} IN (${marks}) LIMIT 1`,
-      ).bind(principal.unitId, ...lineage, principal.unitId, ...lineage, principal.unitId, ...lineage).first();
-      if (raised) throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "createIssue", reason: "issue_already_raised" }]);
-    }
     // 訂正対象（supersedesId）がseriesの現在版であること。現在版以外から枝分かれする訂正は作れない
     const pointerCol = target.type === "facility" ? "current_facility_inspection_id" : "current_asset_inspection_id";
     // 訂正元が現在版でなくなったのは「他の訂正で更新された」こと。docs/16どおり409にする
@@ -299,7 +318,7 @@ export async function buildInspectionMutation(
     ] as unknown as D1PreparedStatement[],
     audit: {
       action: `${target.type}_inspection.create`, entityType: target.type === "facility" ? "facility_inspection" : "asset_inspection",
-      entityId: inspectionId, metadata: { result: input.result, issue: input.createIssue ? "created" : "none" },
+      entityId: inspectionId, metadata: { result: input.result, issue: createIssue ? "created" : input.createIssue ? "already_raised" : "none" },
     },
     event: {
       entityType: target.type === "facility" ? "facility_inspection" : "asset_inspection", entityId: inspectionId,

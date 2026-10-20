@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { api } from "../../api";
-import { InspectionHistoryList } from "../inspections/InspectionHistory";
+import { InspectionHistoryList, InspectionIssueOutcome } from "../inspections/InspectionHistory";
 import { ConfirmDialog } from "../../components/Overlay";
 import { MutationStatus } from "../../components/MutationStatus";
 import { PageTitle } from "../../components/Page";
@@ -105,6 +105,7 @@ export function AssetPage() {
         <InfoCell label="状態" value={status} />
       </Card>
 
+      <InspectionIssueOutcome />
       {/* 導線: 点検履歴（T033の点検から作られる）。使用履歴は下のカード（T042でAPI-51の子Pageに接続） */}
       <Card className="flex flex-col gap-2" aria-label="履歴">
         <span className="text-[14px] font-bold">点検履歴</span>

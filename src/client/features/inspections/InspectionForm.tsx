@@ -141,10 +141,11 @@ export function InspectionFormPage() {
   const missingRequired = schema.filter((s) => s.required && !results[s.code]);
 
   const correcting = original !== null && typeof original !== "string" ? original : null;
-  // 異常を起票するか（新規は異常ありのとき。訂正は「元の記録に異常ありが無く、訂正で異常ありになった」ときだけ＝
-  // サーバーも同じ規則で拒否する。T085レビューA-I2・裁定R17）
+  // 異常の起票（T085裁定R20）: 異常ありなら createIssue を送る。訂正では、この記録の履歴（訂正元とその前の原本）で
+  // 既に異常ありの結果・起票済みの異常があればサーバーが起票しない（422にはしない）。画面の直前の記録だけでは
+  // 履歴全体が分からないため、訂正の注記は条件つきの言い方にし、保存後に実際の結果（createdIssueId）を詳細画面で示す
+  const hasReviewNow = Object.values(results).some((r) => r === "needs_review");
   const originalHadReview = correcting ? correcting.result === "needs_review" || correcting.items.some((i) => i.result === "needs_review") : false;
-  const willCreateIssue = Object.values(results).some((r) => r === "needs_review") && !originalHadReview;
   const submit = useCallback(async () => {
     setTouched(true);
     if (missingRequired.length > 0 || busyAttachments) return;
@@ -160,7 +161,7 @@ export function InspectionFormPage() {
       result: hasReview ? "needs_review" : "ok",
       checkItems: schema.map((s) => ({ code: s.code, result: results[s.code] ?? "unknown" })),
       note: note.trim() || "特記事項なし",
-      createIssue: willCreateIssue,
+      createIssue: hasReview,
       attachmentIds: readyIds,
     };
     const res = correcting
@@ -175,7 +176,11 @@ export function InspectionFormPage() {
       setCompleted(true);
       // 「保存しました」のトーストが見える時間を確保してから遷移する（離脱確認の番もこの間に降りる）
       await new Promise((r) => setTimeout(r, 1000));
-      navigate(backTo);
+      // 異常ありで保存したときは、実際に異常の報告を作ったかを詳細画面で示す（訂正で履歴に既にあれば作らない＝R20）
+      // 応答に createdIssueId が無い（結果が分からない）ときは何も示さない
+      const createdIssueId = (res.data as { createdIssueId?: string | null } | undefined)?.createdIssueId;
+      const known = hasReview && createdIssueId !== undefined;
+      navigate(backTo, known ? { state: { inspectionIssueOutcome: createdIssueId ? "created" : "already_raised" } } : undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [missingRequired.length, busyAttachments, results, note, readyIds, draftId, target.id, target.type, schema, templates, chosen, myMemberId, reason, correcting]);
@@ -383,15 +388,17 @@ export function InspectionFormPage() {
             </div>
             {note.trim() && <p className="text-[12px] text-ink-muted">{note}</p>}
           </Card>
-          {willCreateIssue && (
+          {hasReviewNow && !correcting && (
             <Notice tone="warning" icon="report" role="status">
               異常ありの項目があります。保存すると異常の報告が作成されます。
             </Notice>
           )}
-          {/* 訂正で元から異常ありの記録は、既にある異常の報告をそのまま使う（新しく起票しない。T085裁定R17・docs/11 §3） */}
-          {!willCreateIssue && correcting && Object.values(results).some((r) => r === "needs_review") && (
-            <Notice tone="info" icon="report" role="status">
-              元の記録の異常の報告がすでにあるため、新しい異常の報告は作りません。
+          {/* 訂正: この記録の履歴でまだ異常の報告が作られていなければ作る（既にあれば作らない。T085裁定R20・docs/11 §3） */}
+          {hasReviewNow && correcting && (
+            <Notice tone={originalHadReview ? "info" : "warning"} icon="report" role="status">
+              {originalHadReview
+                ? "元の記録の異常の報告がすでにあるため、新しい異常の報告は作りません。"
+                : "異常ありの項目があります。この記録の履歴でまだ異常の報告が作られていなければ、保存すると作成されます（作られたかは保存後に表示します）。"}
             </Notice>
           )}
           {save.state.kind === "conflict" && (
@@ -409,9 +416,7 @@ export function InspectionFormPage() {
           )}
           {save.state.kind === "rejected" && (
             <Banner tone="warning" eyebrow="REJECTED" title="この内容では保存できません">
-              {save.state.details.some((d) => d.reason === "issue_already_raised")
-                ? "この所見の異常の報告は以前の記録ですでに作られています。異常ありのまま訂正するときは、新しい異常の報告は作られません。"
-                : "写真の検査が終わっているか、様式が承認済みかを確認してください。"}
+              写真の検査が終わっているか、様式が承認済みかを確認してください。
             </Banner>
           )}
           <FormErrors issues={save.state.kind === "invalid" ? save.state.details : []} />
