@@ -68,7 +68,7 @@ export const screens: ScreenDef[] = [
 /** SCR番号を持たないシェルの画面（ナビの一部）。docs/03「シェル」節。 */
 export const shellScreens: ScreenDef[] = [
   s({ id: "SHELL-MENU", path: "/app/menu", title: "メニュー", summary: "プロフィール、機能への入口、ログアウト", ownerTask: "T005", phase: "PH1", tab: "menu" }),
-  s({ id: "SHELL-HELP", path: "/app/help", title: "使い方ガイド", summary: "操作の説明（内容は完成版で整備）", ownerTask: "T086", phase: "PH6", tab: "menu" }),
+  s({ id: "SHELL-HELP", path: "/app/help", title: "使い方ガイド", summary: "操作の要点を章ごとに示す（導入/通常利用/点検/通知/承認/通信断/復旧/困ったとき。T086で実装。docs/USER_GUIDE.mdが正本）", ownerTask: "T086", phase: "PH6", tab: "menu" }),
 ];
 
 /** スマホ下部ナビ。prototype の navDef をそのまま採用（AIタブの強調色だけ紫） */

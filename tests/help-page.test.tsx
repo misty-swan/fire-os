@@ -74,7 +74,8 @@ describe("help screen (T086)", () => {
     const trouble = screen.getByRole("heading", { level: 3, name: "困ったとき" }).closest("section")!;
     expect(within(trouble).getByText(/招待のリンク/)).toBeTruthy();
     expect(within(trouble).getByText(/再発行/)).toBeTruthy();
-    // 全文は操作説明書（USER_GUIDE）への誘導が出る
-    expect(screen.getByText(/USER_GUIDE/)).toBeTruthy();
+    // 全文は操作説明書への誘導が出る（画面文面に内部文書名〔USER_GUIDE〕は出さない＝PH7と同じ方針）
+    expect(screen.getByText(/操作説明書/)).toBeTruthy();
+    expect(screen.queryByText(/USER_GUIDE/)).toBeNull();
   });
 });

@@ -19,7 +19,7 @@ const ACTION_LABEL: Record<string, string> = {
   "user.sessions.revoke": "全セッションを失効",
   "bootstrap.issue": "初期管理者の招待を発行",
   // 認証イベント（PH1-A2・T086。docs/evidence/ph1-review.md A）。秘密（パスワード・token）は記録されない
-  "auth.sign_in": "サインイン（成功・失敗）",
+  "auth.sign_in": "ログイン（成功・失敗）",
   "auth.two_factor.setup_started": "二要素認証の設定を開始",
   "auth.two_factor.enabled": "二要素認証を有効化",
   "auth.two_factor.backup_codes_regenerated": "回復コードを再発行",
