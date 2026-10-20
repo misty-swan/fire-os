@@ -295,6 +295,11 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 - wrangler devのProxyWorkerドロップはwrangler側の既知問題のため吸収は一部specのみ（残存クラスをe2e-speed.mdに記録。T086/T088のフル走行で新規発火時は同ヘルパの適用を検討）
 - webServer停止滞留は経過観察（未再現）
 
-### 最終検証（コントローラ実行）— 完了時に追記
+### 最終検証（コントローラ実行・cd6b549時点。2026-10-20）
 
-### レビュー — docs/evidence/ph8-review.md「T085b」節 — 完了時に追記
+- typecheck成功／check:contracts「102 API / docs/05 102行 / OpenAPI一致」／check:coverage成功（参照テスト272件）／vitest **67ファイル322件**合格／build成功（precache 9 entries）
+- `npm run collect:evidence`: vitest 322・test:load 3・e2e **73 passed / 0 failed / 0 skipped**・test:live未実施（Secret未設定）。**1回目はvitest 1 failed**〔auth-adapter `verify_totp_only_revokes_other_sessions_when_it_actually_enables_mfa`＝テスト環境でIP判定不可のauthレート制限バケット〔sign-in 5回/60秒等・config.ts:124-139のdocs/14検証値〕とファイル内連続auth呼び出しの競合。本日2回目の稀フレーキーでT085b差分〔src/無変更〕と無関係〕→ 裁定R13で `--only=vitest` によりスイート全体を同じコードで再実行（失敗した旧実行はindexのdiscardedRunsとacceptance-results.mdに記録）＝緑
+- 受入ゲート: `acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` **1 passed**（codeHash一致）
+- **フルe2e（`npm run test:e2e`＝業務73＋受入ゲート75）3回連続緑: run1 148 passed / 0 skipped / 0 failed（6.0分）、run2 148 passed（5.8分）、run3 148 passed（5.7分）**。skip 0（3→0）。完了条件（最終HEADで3回連続緑・skip増加なし・網羅維持・typecheck/vitest/build緑）を満たす
+
+### レビュー — docs/evidence/ph8-review.md「T085b」節（4体並行レビュー→修正ラウンド→再レビュー全件ADDRESSED。確認済みの高・中の未解消0件）

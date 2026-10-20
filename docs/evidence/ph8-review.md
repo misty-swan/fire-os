@@ -192,3 +192,43 @@ A=正確さ・セキュリティ／B=ゲートの妥当性＋対応付けの空�
 - コミット: **a855bc3**（実装）・**b4f4271**（round 1）・**f4288f7**（e2eポート移動）・**e50c98d**（round 2）・**52e9bf6**（round 3）
 - 最終全検証（コントローラ実行・52e9bf6時点）: typecheck成功／check:contracts 102一致／check:coverage 成功（参照テスト272件）／build成功／vitest **67ファイル322件**／フルe2e（業務119＋受入ゲート75）**2回連続 194 passed / 3 skipped / 0 failed**（14.8分・14.6分。e2eサーバーは8797番）。証跡index（collect:evidence・52e9bf6のコードと codeHash 一致）: vitest 322・load 3・業務e2e 119 passed / 3 skipped / 0 failed・test:live 未実施（Secret未設定）
 - 局所完了の残作業: acceptance-results.md の external 29件（担当T086/T087/T088）。T085の開発版ゲートは緑だが **RG-03合格ではない**
+
+# T085b レビュー・修正サイクル（2026-10-20）
+
+T083〜T085と同じ手順。対象はT085b「e2e試験の高速化と試験間の分離」。範囲は **0d21ca3**（T085完了）〜 **a047569**（実装69279d7・68b5328・4ad6883・4c2f176・39fcef1＋コントローラdocs）と関連docs、修正ラウンドは **db8db32・b673d36・cd6b549**。レビュー担当は読み取りのみ。指摘はメインのエージェント（コントローラ）が実ファイル・実ログで確かめてから分類した。作業記録の副本はworkspace（.superpowers/sdd/16_実装タスク一覧/task-85b-*.md・t085b-*.log・ph8-review-t085b-{A,B,C,D}.md・task-85b-rereview-fix{1,2,3}.md）。
+
+## 工程と実装者サブエージェントの役割分担
+
+実装はサブエージェント2体（①分離＋既知フレーキー作り直し＝69279d7、②高速化〔候補①〜⑤〕＝68b5328）。コントローラが基準計測（M0）・workers=2赤観測（M1）・目標値決定（R5）・各計測（M2/M3/M3'）・最終検証を担当。タスクレビュー×2（各dispatch直後・Spec✅/品質承認）＋スコープ付き再レビュー3回（fix round 1〜3）＋最後に4体並行レビュー。
+
+## 開始時の裁定（コントローラ。台帳から）
+
+R1 mainで直接コミット・workspace継続／R2 幅絞り込みと「skip件数を増やさない」の両立〔test.skipを増やさずプロジェクトスコープ除外＋manifestの@project付与。skip 3→0は可〕／R3 多件データ試験の保持〔D4/D5回帰を分離で消さない〕／R4 T085b担当中の課題台帳3件〔FLAKE-1・FLAKE-2・PH3-T〕を範囲に含める／R5 目標値≤6.0分（基準14.8分比-59%以上。基準計測後に決めて固定）／R6 繰り延べMinor3件はM3記入と同時にfix round 2で処理／R7 M3の2失敗と停止滞留はT085b本体（試験基盤の安定化）として対応・計測やり直し（M3'）／R8 docs/16の「完了」前倒し撤回〔実装完了→最終検証後に完了確定〕／R9 issues台帳方針〔PH3-T/FLAKE-2=resolved・FLAKE-1=openのままbasis更新・T085b-W1（low）新設〕／R10 triageのバックティック題名対応／R11 補助計測の証跡保存（smoke×3・build×3を再計測）／R12 報告書の「指数バックオフ」誤記はworkspace訂正のみ。
+
+## 第1回（4体並行。0d21ca3..a047569）
+
+A=正確さ・セキュリティ／B=docs/16完了条件と試験の妥当性／C=prototype準拠／D=docsと実装の整合。合計: **Important 4（B1・D1〜D3）／Minor 11／要確認 2**。Cは承認。
+
+| 観点 | 指摘（重要） | 対応 |
+|---|---|---|
+| B-1/D-1/D-2 | docs/16が最終検証（collect:evidence再実行＋最終HEADでフルe2e3回連続緑）前に「完了」記帳。ph8.mdの最終検証・レビュー節が空欄のままの完了宣言は様式不整合。ゲートcodeHash赤（collect:evidence未再実行）もdocs/16残作業に載っていない | 状態を「実装完了（最終検証とレビューサイクル確定後に完了確定）」へ訂正（cd6b549）。最終検証後に完了確定〔この節の最終状態〕 |
+| D-3 | manifest issues台帳が本diffで無更新（PH3-Tがopenのまま・FLAKE-1/2のbasis陳腐）。R7「未解決はissues台帳から判定」でT088の判定を歪め得る | R9のとおり更新: PH3-T/FLAKE-2=resolved、FLAKE-1=openのままbasis更新（抑止・根因未特定）、T085b-W1（low・open・owner T086）新設。--report-onlyでacceptance-results.md作り直し（b673d36） |
+
+Minor（全て修正または繰り延べ。修正はcd6b549・db8db32）: e2e-speed.mdの件数55/53→58/58（A-F1）・execute.ts行参照の訂正〔一件化は:220〕（A-F2）・ph8.md M0行に1f欠け（A-F3）・acceptance実行約14秒→9.4〜12.1秒（A-F5）・triageのバックティック題名非対応の理論穴（A-F7→db8db32）・docs/16 checkbox未整備（B-2）・t085b-m3.shのdrift（B-3。コントローラが復元）・④tablet除外の根拠が推論であることの注記（B-4）・ph8.mdの二重計上（D-4）・e2e-speed.mdへの残作業追記（D-5）・ph8.md T083節「根因ごと修正」の陳腐化注記（D-6）・補助数値の証跡注記（A-F4/R11）・pwa-cache phone見出し語彙の将来注意（C-1）。
+
+## 方針で残す（Rulingつきの全リスト）
+
+1. **FLAKE-1 documents「題名消失」の根因は未特定のまま**（medium・open）— Ruling: 回復ループ（検証エラー確認後のみ再fill・再押下×3）＋ACL先出し＋ドロップ吸収で抑止し、本物の作成失敗は赤のまま（無条件リトライではない）。M0基準3回中3回発火→M3'（4ad6883）以降は未発火。次にDocumentEditorへ触るタスクが調査を引き継ぐ（台帳owner=T085bのまま・basisに記録）。コスト: 根因不明の稀な赤の可能性が残る
+2. **wrangler 4.150 ProxyWorkerドロップは一部specのみ吸収**（low・open=T085b-W1）— Ruling: 上流問題（#14926/#15252）でCLI調整不可。署名限定・有界3回・同一冪等鍵のヘルパをissues 6書き込み＋documents作成へ適用し、残存クラスの署名・切り分け手順をe2e-speed.mdに記録。他specのawaited書き込みで発火したら同ヘルパ適用を検討（T086がフル走行を回す）。Playwrightのretries設定は使わない（失敗の意味を変えるため）。コスト: 未適用specでの稀な赤
+3. **webServer停止滞留（M3 run3のみ実経過38分）は経過観察**— Ruling: その後4走行で未再現・設定での決定的対処なし。壁時間とPlaywright報告値の差で検知する（所要時間の正はPlaywright報告値）。コスト: 稀に停止待ちで壁時間が膨らむ
+4. **triageの宣言解析は静的解析**（low）— Ruling: 宣言直上の「幅:」マーカーを正本とし、マーカー無し・孤立・未消費は例外で落とす（fail-fast）。テンプレートリテラル内の動的題名は対象外（本リポジトリは静的題名のみ・db8db32でバックティック自体は対応）。コスト: 動的題名の試験を導入する場合は手動でマーカー管理
+5. **pwa-cache の phone幅見出し語彙はdesktop限定化で断言先が無い**（low）— Ruling: 描画待ちの吸収は断言対象外という仕分け基準の範囲内。将来この語彙（マップ・団員名簿・お知らせ）を変えるときはphone幅の確認を別途入れる（e2e-speed.mdに注記済み）。コスト: 語彙回帰の自動検出なし
+6. **④tablet除外のanalytics_conditions根拠は360実測＋幅の単調性からの推論**（low）— Ruling: 406px未満でしか起きない回帰の性質上、768では恒真。実測でなく推論であることをe2e-speed.mdに注記済み。コスト: なし
+
+## 最終状態
+
+- 確認済みの高・中の未解消: **0件**（4体並行レビュー→修正ラウンド→再レビュー全件ADDRESSED。タスクレビュー×2・スコープ付き再レビュー3回）
+- コミット: **69279d7**（分離＋フレーキー作り直し）・**68b5328**（幅絞り込み・workers=2・smoke・manifest）・**4ad6883**（ドロップ吸収・popup待ち）・**4c2f176**（tripwire強化）・**39fcef1**（証跡docs確定）・**a047569**（コントローラdocs）・**db8db32**（triageバックティック）・**b673d36**（issues台帳）・**cd6b549**（レビュー対応docs）
+- 最終全検証（コントローラ実行・最終HEAD時点）: typecheck成功／check:contracts「102 API / docs/05 102行 / OpenAPI一致」／check:coverage成功（参照テスト272件）／vitest **67ファイル322件**合格／build成功（precache 9 entries）／**M4フルe2e 3回連続緑（run1 148 passed / 0 skipped / 0 failed（6.0分）・run2 148 passed（5.8分）・run3 148 passed（5.7分）＝**3回連続緑**〔148＝業務73＋受入ゲート75。skip 0＝旧3件は幅仕分けへ移行〕）**
+- 証跡index（docs/evidence/acceptance-index.json。codeHashは最終コードと一致＝ゲート緑）: vitest 322・test:load 3・e2e 73 passed / 0 failed / 0 skipped・test:live未実施（Secret未設定）。1回目の収集はvitest 1 failed〔auth-adapterのTOTP試験＝テスト環境でIP判定不可のauthレート制限バケット（sign-in 5回/60秒等）とファイル内連続auth呼び出しの競合。本日2回目の稀フレーキーでT085b差分とは無関係〕→ 裁定R13で`--only=vitest`によりスイート全体を同じコードで再実行（旧実行はdiscardedRunsに記録）＝緑。ゲート緑〔missingReq=0・skippedOrUnexecuted=0・criticalOrHigh=0〕
+- T085bの成果: フルe2e中央値 **14.8分→5.7分（-61.5%・2.60倍）**・実行122→73件・skip 3→0・業務コードsrc/無変更・網羅（check:coverage 272件）不変
