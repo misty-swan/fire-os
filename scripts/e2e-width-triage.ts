@@ -7,8 +7,9 @@
 //   // 幅: desktop限定     … desktop-1280 だけで実行（画面の配置に依存しない流れ・データ断言）
 //   // 幅: phone限定       … phone-360 だけで実行（押下領域44px・狭幅の回帰など、幅固有の試験）
 //
-// 安全装置: 宣言数とマーカー数が一致しない（新規試験にマーカーが無い等）場合は例外で落とす。
-// 静かに「全試験が両幅に戻る」あるいは「除外が消える」ことを許さないため。
+// 安全装置（すべて例外でPlaywrightの設定読み込みを落とす＝静かに「全試験が両幅に戻る」／「除外が消える」ことを許さない）:
+//   - 宣言にマーカーが無い（新規試験・マーカー消し忘れ）
+//   - マーカーが連続する／ファイル末尾で余る（試験の削除・改名で孤立したマーカー）
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -32,20 +33,31 @@ export function widthTriage(): Map<string, WidthScope> {
     const lines = readFileSync(join(E2E_DIR, file), "utf8").split("\n");
     let pendingMarker: WidthScope | null = null;
     let sawMarker = false;
-    for (const line of lines) {
+    let markerLine = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
       const m = MARKER.exec(line);
       if (m) {
+        // マーカーが連続＝直前のマーカーがどの試験宣言にも対応しない（試験の削除・改名で孤立した）。静かに両幅へ戻さない
+        if (sawMarker) {
+          throw new Error(`${file}:${i + 1}: 幅マーカーが連続しています（${markerLine}行目のマーカーが対応する試験宣言を持たない＝試験の削除・改名で孤立した可能性）。マーカーと試験宣言を1対1にしてください`);
+        }
         pendingMarker = scopeOf(m[0])!;
         sawMarker = true;
+        markerLine = i + 1;
         continue;
       }
       const d = DECL.exec(line);
       if (!d) continue;
       if (!sawMarker || pendingMarker === null) {
-        throw new Error(`${file}: 試験「${d[2]}」に幅マーカー（// 幅: 両方 | desktop限定 | phone限定）がありません。docs/evidence/e2e-speed.md の仕分け表に合わせて追加してください`);
+        throw new Error(`${file}:${i + 1}: 試験「${d[2]}」に幅マーカー（// 幅: 両方 | desktop限定 | phone限定）がありません。docs/evidence/e2e-speed.md の仕分け表に合わせて追加してください`);
       }
       out.set(d[2]!, pendingMarker);
       sawMarker = false; // マーカーは直近1試験にだけ効く
+    }
+    // ファイル末尾で未消費のマーカー＝宣言に届かなかった（末尾の試験が削除された等）
+    if (sawMarker) {
+      throw new Error(`${file}:${markerLine}: ファイル末尾までにこの幅マーカーに対応する試験宣言がありません（末尾の試験が削除・移動された可能性）`);
     }
   }
   if (out.size === 0) throw new Error("tests/e2e/*.spec.ts から試験宣言を1つも読めません（パスの誤り）");
