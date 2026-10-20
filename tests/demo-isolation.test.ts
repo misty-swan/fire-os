@@ -95,12 +95,18 @@ describe("demo isolation (T086)", () => {
 
     // ---- 2) demo:reset の射程はdemoのpersistだけ（他環境・本番設定に触れない） ----
     const removals = demoResetRemovals();
-    const demoSourceUsesSharedConstant = demoSource.includes("rmSync(DEMO_PERSIST_DIR");
+    // 実際のreset（scripts/demo.ts --reset）から削除系の呼び出し（node:fsの rmSync/unlinkSync/rmdirSync）を
+    // **全て**抽出し「件数が1・引数がDEMO_PERSIST_DIRだけ」を断言する。包含検査だと
+    // rmSync(".wrangler/state") 等の他環境削除が1行増えても通ってしまうため、全出現の列挙で比較する
+    // （fix round 1。陽性対照: 他環境削除を注入するとこの断言が落ちることは報告書に記録済み）
+    const removalCalls = [...demoSource.matchAll(/\b(?:rmSync|unlinkSync|rmdirSync)\s*\(\s*([^),\s]+)/g)].map((m) => m[1]!.trim());
+    expect(removalCalls, `demo.tsの削除呼び出し全件: ${removalCalls.join(" / ")}`).toEqual(["DEMO_PERSIST_DIR"]);
     const demoResetLeavesProductionUntouched =
       !iso.resetTouchesOtherEnvironments &&
       removals.length === 1 &&
       removals.every((p) => p === DEMO_PERSIST_DIR) &&
-      demoSourceUsesSharedConstant;
+      removalCalls.length === 1 &&
+      removalCalls[0] === "DEMO_PERSIST_DIR";
     expect(demoResetLeavesProductionUntouched).toBe(true);
 
     // ---- 3) seedした全行の走査（実在風データの検出。走査漏れは行数照合で落とす） ----
