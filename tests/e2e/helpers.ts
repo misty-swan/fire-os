@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, type APIRequestContext, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Browser, type BrowserContext, type Page, type Response } from "@playwright/test";
 import { secretFromUri, totpCode } from "../helpers/totp";
 import { E2E_BASE } from "../../scripts/e2e-port";
 
@@ -126,4 +126,56 @@ export async function logoutViaUi(page: Page) {
   else await page.getByRole("link", { name: "プロフィールとログアウト" }).click();
   await page.getByRole("button", { name: "ログアウト" }).click();
   await expect(page).toHaveURL(/\/login$/);
+}
+
+/**
+ * UIの書き込み操作を、wrangler dev のProxyWorkerが接続を落としても届くまでやり直す（T085b fix round1）。
+ *
+ * 背景: wrangler dev（4.150）のProxyWorker→UserWorker接続は、kjのkeep-aliveタイムアウト（約5秒アイドルで
+ * プールの両側が同時切断）と重なった要求を落とす（cloudflare/workers-sdk #14926・#15252。workers=2の並行
+ * 負荷で顕在化し、M3 run1のissues.spec赤＝この経路）。GETはwrangler側が自動再試行するが、PATCH/POSTは
+ * 冪等でないため**再試行されず**、当該要求だけが失敗する（開発サーバー自体は生き続ける）。
+ *
+ * 対処はアプリの再送設計（docs/05 §2）と同じ: useMutation は同じ内容を同じ Idempotency-Key で再送し、
+ * サーバーが1回だけ適用する。そこで**この落下の署名に限って**同じUI操作をやり直す:
+ *  - 要求がトランスポート層で失敗した（requestfailed）
+ *  - または 5xx 応答の本文が "Network connection lost"（wranglerのproxyが返す落下の署名）
+ * それ以外（400/409/422等の製品の応答・署名の違う5xx・応答なし）はやり直さず呼び出し側の断言に任せる
+ * ＝失敗を隠さない。署名入り5xxも規定回数続けば最後の応答を返して断言が赤にする
+ */
+export async function clickUntilWriteArrives(
+  page: Page,
+  click: () => Promise<unknown>,
+  write: { urlIncludes: string; method: "PATCH" | "POST" },
+  opts: { attempts?: number; timeoutMs?: number } = {},
+): Promise<Response | null> {
+  const attempts = opts.attempts ?? 3;
+  const timeoutMs = opts.timeoutMs ?? 15_000;
+  type Outcome = { kind: "responded" | "dropped" | "silent"; response: Response | null };
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const responded: Promise<Outcome> = page
+      .waitForResponse((r) => r.request().method() === write.method && r.url().includes(write.urlIncludes), { timeout: timeoutMs })
+      .then((response): Outcome => ({ kind: "responded", response }))
+      .catch((): Outcome => ({ kind: "silent", response: null }));
+    const failed: Promise<Outcome> = page
+      .waitForEvent("requestfailed", {
+        predicate: (r) => r.method() === write.method && r.url().includes(write.urlIncludes),
+        timeout: timeoutMs,
+      })
+      .then((): Outcome => ({ kind: "dropped", response: null }))
+      .catch((): Outcome => ({ kind: "silent", response: null }));
+    await click();
+    const first = await Promise.race([responded, failed]); // 負けた側もcatch済みで放置できる
+    if (first.kind === "silent") return null; // 応答も失敗も観測できず（送信すらされていない等）＝断言に任せる
+    if (first.kind === "dropped") {
+      if (attempt === attempts) return null; // 落下が続く＝回復不能。断言が赤にする
+      await page.waitForTimeout(250);
+      continue;
+    }
+    if (first.response!.status() < 500) return first.response; // 製品の応答（成功も4xxも）はそのまま返す
+    const body = await first.response!.text().catch(() => "");
+    if (!/network connection lost/i.test(body) || attempt === attempts) return first.response; // 署名が違う5xx・使い切り
+    await page.waitForTimeout(250); // wrangler proxyの落下署名 → 同じ鍵で同じ操作をやり直す
+  }
+  return null;
 }

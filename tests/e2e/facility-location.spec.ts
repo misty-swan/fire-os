@@ -67,12 +67,20 @@ test("gps_denial_allows_manual_entry_without_tracking", async ({ page, context }
   const href = await mapsLink.getAttribute("href");
   expect(new URL(href!, BASE).searchParams.get("destination")).toBe(`${LAT},${LNG}`);
   expect(new URL(href!).searchParams.get("api")).toBe("1");
+  // 開く操作: 別タブ（popup）が実際に開き、その最初の**要求**が同じMaps URLへ向かうことを確認する。
+  // popup.url() は作成直後が about:blank（遷移のCommit前）で、読むタイミングによって null になる
+  // （M3 run3の赤＝FLAKE-2bの実発火）。かといってCommit完了を待つ（waitForURL）と外部網の届かない環境で
+  // 永遠に確定しない。要求イベントは送出時に上がるため両環境で確定し、要求URLそのものを断言できる
   const popupPromise = page.waitForEvent("popup", { timeout: 15_000 });
+  const openedRequest = context.waitForEvent("request", {
+    predicate: (r) => r.method() === "GET" && r.url().startsWith("https://www.google.com/maps/dir/"),
+    timeout: 15_000,
+  });
   await mapsLink.click();
   const popup = await popupPromise;
-  // popup.url()は作成直後の_pending_ URL（遷移先）を読む。完了待ち（waitForURL）は外部網の届かない環境で
-  // 永遠に確定しないため使わない（押す前のhref検査でURLの組み立ては確定済み）
-  expect(new URL(popup.url()).searchParams.get("destination")).toBe(`${LAT},${LNG}`); // 開いた先も同じ座標
+  const opened = await openedRequest;
+  expect(opened.isNavigationRequest(), "別タブの本文の遷移として開かれる").toBe(true);
+  expect(new URL(opened.url()).searchParams.get("destination")).toBe(`${LAT},${LNG}`); // 開いた先も同じ座標
   await popup.close();
 
   // 座標を変えると位置確認が失効する（docs/11）: 編集UI（API-13）から座標を変え、詳細の表示が切り替わることを確認

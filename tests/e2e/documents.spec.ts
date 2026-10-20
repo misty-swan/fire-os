@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page, type Response } from "@playwright/test";
-import { adminApiData, BASE } from "./helpers";
+import { adminApiData, BASE, clickUntilWriteArrives } from "./helpers";
 
 /**
  * 文書・規程（T069、SCR-24 /app/documents。docs/03 §2 SCR-24「許諾原本の登録/版/承認/撤回/ACL/閲覧」）。
@@ -63,11 +63,15 @@ async function clickCreateUntilPosted(page: Page, title: string, classification:
   for (let attempt = 0; attempt < 3; attempt++) {
     await stickyFill(page, "題名", title);
     await stickyFill(page, "分類", classification);
-    const posted = page
-      .waitForResponse((r) => r.url().endsWith("/api/v1/documents") && r.request().method() === "POST", { timeout: 10_000 })
-      .catch(() => null);
-    await page.getByRole("button", { name: "文書を作成する" }).click();
-    const response = await posted;
+    // 押下はclickUntilWriteArrivesで行う: wrangler devのProxyWorkerが書き込み要求を落とした署名
+    // （requestfailed・"Network connection lost"の5xx＝T085b fix round1）のときは同じ鍵で押し直す。
+    // 題名消失で送信されなかった場合（応答も失敗も観測できない）は下で検証エラーを確認して再fillする
+    const response = await clickUntilWriteArrives(
+      page,
+      () => page.getByRole("button", { name: "文書を作成する" }).click(),
+      { urlIncludes: "/api/v1/documents", method: "POST" },
+      { attempts: 3, timeoutMs: 10_000 },
+    );
     if (response) return response;
     // POST無し＝クライアント検証で止まっているはず。検証エラーが見えることを確かめてから再試行する
     // （検証エラーが見えないのにPOSTが無いなら想定外の状態なので、再押下せずここで赤にする）

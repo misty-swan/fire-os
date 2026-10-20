@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { adminApiData } from "./helpers";
+import { adminApiData, clickUntilWriteArrives } from "./helpers";
 
 /**
  * 異常一覧（T034、SCR-07）。状態は文字と色で表す。
@@ -44,19 +44,22 @@ test("issue_state_does_not_appear_as_location_verified", async ({ page }) => {
   await card.getByRole("button", { name: "点検で異常を確認" }).click();
   const actions = card.getByLabel("異常の操作");
 
-  // 担当の変更（UI → API-17 assigneeMemberId）。先頭の選択肢は「未担当」なので自分を選ぶ
+  // 担当の変更（UI → API-17 assigneeMemberId）。先頭の選択肢は「未担当」なので自分を選ぶ。
+  // 以降の書き込み操作はすべてclickUntilWriteArrivesで包む: wrangler devのProxyWorkerがまれに書き込み要求を
+  // 落とす（kj keep-aliveの5秒境界。T085b fix round1＝M3 run1の赤）ため、その署名のときだけ同じ操作を
+  // （同じIdempotency-Keyで＝二重適用なし）やり直す。製品の応答は従前どおり次の断言が検査する
   await actions.getByRole("combobox").selectOption({ label: meName });
-  await actions.getByRole("button", { name: "担当を更新" }).click();
+  await clickUntilWriteArrives(page, () => actions.getByRole("button", { name: "担当を更新" }).click(), { urlIncludes: "/api/v1/issues/", method: "PATCH" });
   await expect(actions.getByRole("button", { name: "担当を外す" })).toBeVisible({ timeout: 10_000 });
 
   // reported → under_review（UI操作。完了したら一覧が再読込され、次の操作が出る）
-  await actions.getByRole("button", { name: "確認する" }).click();
+  await clickUntilWriteArrives(page, () => actions.getByRole("button", { name: "確認する" }).click(), { urlIncludes: "/api/v1/issues/", method: "PATCH" });
   await expect(actions.getByRole("button", { name: "対応開始" })).toBeVisible({ timeout: 10_000 });
 
   // under_review → in_progress → resolved
-  await actions.getByRole("button", { name: "対応開始" }).click();
+  await clickUntilWriteArrives(page, () => actions.getByRole("button", { name: "対応開始" }).click(), { urlIncludes: "/api/v1/issues/", method: "PATCH" });
   await expect(actions.getByRole("button", { name: "対応実施" })).toBeVisible({ timeout: 10_000 });
-  await actions.getByRole("button", { name: "対応実施" }).click();
+  await clickUntilWriteArrives(page, () => actions.getByRole("button", { name: "対応実施" }).click(), { urlIncludes: "/api/v1/issues/", method: "PATCH" });
   await expect(actions.getByRole("button", { name: "確認終了" })).toBeVisible({ timeout: 10_000 });
 
   // resolved → closed（終了は理由入力必須の確認ダイアログ。既定フォーカスは「戻る」）
@@ -65,13 +68,13 @@ test("issue_state_does_not_appear_as_location_verified", async ({ page }) => {
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "戻る" })).toBeFocused();
   await dialog.getByLabel("理由（必須）").fill("修繕が済み、現地で確認を終えた");
-  await dialog.getByRole("button", { name: "確認終了" }).click();
+  await clickUntilWriteArrives(page, () => dialog.getByRole("button", { name: "確認終了" }).click(), { urlIncludes: "/api/v1/issues/", method: "PATCH" });
   await expect(actions.getByRole("button", { name: "再開" })).toBeVisible({ timeout: 10_000 });
 
   // closed → under_review（再開も理由必須）。under_reviewの操作（対応開始）が再び出る
   await actions.getByRole("button", { name: "再開" }).click();
   await page.getByRole("dialog").getByLabel("理由（必須）").fill("再確認が必要になった");
-  await page.getByRole("dialog").getByRole("button", { name: "再開" }).click();
+  await clickUntilWriteArrives(page, () => page.getByRole("dialog").getByRole("button", { name: "再開" }).click(), { urlIncludes: "/api/v1/issues/", method: "PATCH" });
   await expect(actions.getByRole("button", { name: "対応開始" })).toBeVisible({ timeout: 10_000 });
 
   // 施設詳細で「位置：未確認」と「異常対応」の導線が混同されず表示される
