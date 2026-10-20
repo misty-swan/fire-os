@@ -304,7 +304,7 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 
 ### レビュー — docs/evidence/ph8-review.md「T085b」節（4体並行レビュー→修正ラウンド→再レビュー全件ADDRESSED。確認済みの高・中の未解消0件）
 
-## T086 架空データの完成版・公開デモ分離・操作説明（2026-10-20。実装完了・最終検証待ち）
+## T086 架空データの完成版・公開デモ分離・操作説明（2026-10-20〜21。局所完了）
 
 実行環境はT083〜T085bと同じローカル（Node v26 / workerd / vitest / Playwright chromium）。**実Cloudflare・実staging・実Google Maps・実端末・実在の団体は使っていない**（PH0〜PH8から継続で未接続＝局所完了。下記「未実施・未接続」）。データはすべて架空。実装は分担制（コア実装→issues台帳のmedium 3件〔D2〕→low 4件〔D3〕→docs 7点〔D4〕→使い方ガイド画面〔D5〕→4体並行レビュー→fix wave 1〔本節の更新・語彙修正〕→コントローラ最終検証）。migration無し。契約変更はAPI-67（GET /notifications/me）へ `sent=true` の要求拡張のみ（契約3点セット。T085のAPI-44/51と同じ前例）。
 
@@ -352,6 +352,22 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 5. Googleコンソール側のMaps割当設定（Maps JS API接続＝X-V05/T021後の前提整備）
 6. X-OUT-9のstaging演習（整備は実施。X-OUT-1と併せて）・T084残手順（X-V01/V02/V05/V06-RT/V07-PERF/V07-RENDER/X-OUT-1/2/7/8・X-DEV-1/2/3）は未実施のまま（担当表はacceptance-results.md）
 
-### 最終検証とレビューサイクル（コントローラが後に追記）
+### 最終検証（コントローラ実行・2026-10-21）
 
-> `npm run collect:evidence` 再実行・受入ゲート・最終HEADでのフルe2e 3回連続緑・レビューサイクル（ph8-review.md「T086」節）確定後に、コントローラが実測値を追記する。T085b-W1（ProxyWorkerドロップの残存クラス）の状態確認もここで行う。
+| 確認 | コマンド | 結果 |
+|---|---|---|
+| 型検査 | `npm run typecheck` | 成功 |
+| 契約検査 | `npm run check:contracts` | 102 API / docs/05 102行 / OpenAPI一致（API-67のsent要求拡張込み） |
+| 網羅（静的） | `npm run check:coverage` | 成功（参照テスト272件・notApplicable 0） |
+| ビルド | `npm run build` | 成功（precache 9 entries） |
+| 証跡の収集 | `npm run collect:evidence` | vitest **71ファイル334件** passed／test:load **3件** passed／e2e **75 passed・0 failed・0 skipped**／test:live **未実施**（Secret未設定・合格に数えない〔R4前例〕）。ゲート内訳: missingReq=0 missingApi=0 missingScr=0 skippedOrUnexecuted=0 criticalOrHigh=0 |
+| 受入ゲート | `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` | 1 passed（13.7秒） |
+| ブラウザ試験（フル×3） | `npm run test:e2e` | **150 passed ×3＝5.2分/5.0分/5.1分＝3回連続緑・skip 0**（業務75＋受入ゲートspec75。受入はcollect:evidenceのcodeHash一致分） |
+
+- **T085b-W1（ProxyWorkerドロップ）の状態確認**: 4走行（collect:evidenceのe2e＋フル3回）で失敗0＝ヘルパ適用外specでの赤は観測されず。上流（wrangler #14926/#15252）は未解決のため **openのまま継続観察へ**（manifest basis更新済み・ownerをT086から外す）
+- 1タスク完了の定義どおり「記載実装＋指定試験＋関連回帰＋docs/16の状態・証跡更新」が揃っている。T086は**局所完了**（docs/16状態欄・development-completion.md §3の番号付き残作業）
+- コードのhash: collect:evidenceは最後のsrc/tests/docs/03変更（レビューwave 1・c374e4c＋e233138）の後で実行しており、その後の変更はdocs/16・docs/evidence・manifest（いずれもcodeHash対象外）のみ＝index有効
+
+### レビューサイクル（2026-10-21。docs/evidence/ph8-review.md「T086」）
+
+4体並行レビュー（a859e3e..da22779。A正確さ/B完了条件/C prototype準拠/D docs整合。報告はph8-review-t086-{A,B,C,D}.md）→ **fix wave 1**（c374e4c＋e233138。指摘統合task-086-findings-r0.mdのF1〜F16＋R23）→ スコープ付き再レビューで**全指摘ADDRESSED・新規Critical/Important無し**。確認済みの高・中の未解消0件。主な裁定: R18使い方ガイド画面はT086の範囲〔screens.ts ownerTask〕・R19章順序はUSER_GUIDE〔内容の正〕優先・R20/R21 ImportantとMinor語彙をfix wave 1へ・R23 PCのEsc挙動はdocs/03⑥で意図化（構造変更は繰り延べ）・R24 campaign icon/PC導線なしはprototype踏襲で維持・R25コミット粒度は履歴書換え禁止でparked。繰り延べMinorはph8-review.md「T086」と本節の記録どおり。

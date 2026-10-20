@@ -232,3 +232,44 @@ Minor（全て修正または繰り延べ。修正はcd6b549・db8db32）: e2e-s
 - 最終全検証（コントローラ実行・最終HEAD時点）: typecheck成功／check:contracts「102 API / docs/05 102行 / OpenAPI一致」／check:coverage成功（参照テスト272件）／vitest **67ファイル322件**合格／build成功（precache 9 entries）／**M4フルe2e 3回連続緑（run1 148 passed / 0 skipped / 0 failed（6.0分）・run2 148 passed（5.8分）・run3 148 passed（5.7分）＝**3回連続緑**〔148＝業務73＋受入ゲート75。skip 0＝旧3件は幅仕分けへ移行〕）**
 - 証跡index（docs/evidence/acceptance-index.json。codeHashは最終コードと一致＝ゲート緑）: vitest 322・test:load 3・e2e 73 passed / 0 failed / 0 skipped・test:live未実施（Secret未設定）。1回目の収集はvitest 1 failed〔auth-adapterのTOTP試験＝テスト環境でIP判定不可のauthレート制限バケット（sign-in 5回/60秒等）とファイル内連続auth呼び出しの競合。本日2回目の稀フレーキーでT085b差分とは無関係〕→ 裁定R13で`--only=vitest`によりスイート全体を同じコードで再実行（旧実行はdiscardedRunsに記録）＝緑。ゲート緑〔missingReq=0・skippedOrUnexecuted=0・criticalOrHigh=0〕
 - T085bの成果: フルe2e中央値 **14.8分→5.7分（-61.5%・2.60倍）**・実行122→73件・skip 3→0・業務コードsrc/無変更・網羅（check:coverage 272件）不変
+
+# T086 レビュー・修正サイクル（2026-10-20〜21）
+
+T083〜T085bと同じ手順。対象はT086「架空データの完成版・公開デモ分離・操作説明」。範囲は **a859e3e**（T085b完了）〜 **da22779**（実装bde6533〔コア〕・8ec9f26・08b523d〔PH1-A2〕・198f792〔PH2-C15〕・0d2fed3〔PH4-B2〕・ead8421〔PH7-L〕・bcc7404〔PH1-C〕・1b0d76d〔PH2-C19〕・f0c4212〔PH3-C8〕・47fdb84・f703c13〔X-OUT-9〕・d891443・3ed5fc2〔docs/manifest〕・da22779〔使い方ガイド画面〕）と関連docs、修正ラウンド（fix wave 1）は **c374e4c・e233138**。レビュー担当は読み取りのみ。指摘はコントローラが実ファイル・実ログで確かめてから分類した。作業記録の副本はworkspace（.superpowers/sdd/16_実装タスク一覧/task-086-*.md・review-a859e3e..*.diff・ph8-review-t086-{A,B,C,D}.md）。
+
+## 工程と実装者サブエージェントの役割分担
+
+実装はサブエージェント5体（①コアTDD〔赤→seedDemo/verifyDemoIsolation→緑〕＝bde6533＋8ec9f26、②issues台帳medium 3件＝08b523d・198f792・0d2fed3、③issues台帳low 4件＝ead8421・bcc7404・1b0d76d・f0c4212〔利用制限で中断→同一セッション再開〕、④docs一式＝47fdb84〜3ed5fc2、⑤使い方ガイド画面＝da22779）。コントローラが要件の裁定（R14〜R25）・X-OUT-9とdocs 3点の担当割り・SHELL-HELP画面の範囲確定・最終検証を担当。タスクレビュー×4（各dispatch直後。D1のみfix round 1〔恒真断言〕＋再レビューADDRESSED）＋4体並行レビュー＋fix wave 1＋スコープ付き再レビュー。
+
+## 開始時とルートの裁定（コントローラ。台帳から）
+
+R14 PH4-B2は新規endpoint禁止〔T086対応欄〕のため既存APIの応答・要求拡張〔T085のAPI-44/51前例・契約3点セット〕で解消。不可能ならbasisに記して残す → 実装はAPI-67への`sent`要求拡張で解消〔check:contracts緑〕／R15 developmentIncompleteFeaturesは明示チェックリストの未達集計〔恒真禁止・T081前例〕／R16 D1レビューの「X-OUT-9・docs 3点未作成」はdispatch分割の帰属であってD1の欠陥ではない（文書系は専任dispatch。完了条件で検収）／R17 demoResetLeavesProductionUntouchedの恒真化はfix round 1で修正〔全件列挙断言へ・陽性対照実証済み〕／R18 SHELL-HELP（/app/help）はT086の範囲〔screens.ts:71のownerTask=T086・docs/03「内容はT086」〕＝D5で実装／R19 章順序はUSER_GUIDE〔内容の正〕優先（docs/16手順3の列挙は集合で順序指定ではない）／R20・R21 4体レビューのImportant 2系統＋Minor語彙・docs整合はfix wave 1へ繰り入れ（T085b R6前例・ユーザー指定フロー）／R22〜R25は下表。
+
+## 第1回（4体並行。a859e3e..da22779）
+
+A=正確さ／B=完了条件／C=prototype準拠〔承認〕／D=docs整合。合計: **Important 3系統〔F1証跡docsがda22779未反映＝B-I1/D-I1/D-I2/A-I1/A-M1/D-M1・F2 docs/03 §1.1のhelp記録欠落＝C-5〕／Minor 16〔統合後F3〜F16〕／要確認 6**。Critical 0。指摘統合と対応は workspace の task-086-findings-r0.md、修正はc374e4c＋e233138、再レビューで**F1〜F16・R23全てADDRESSED**。
+
+| 観点 | 指摘（重要） | 対応 |
+|---|---|---|
+| F1（B-I1/D-I1/D-I2/A-I1/A-M1/D-M1） | 証跡docs（ph8.md T086節・docs/16実施記録・development-completion.md）が最終コミットda22779〔使い方ガイド画面〕を反映せず、docs/16のissues対応件数が「5件」（実際6件＝1b0d76d欠落）。検証表の「70ファイル332件」は旧時点値 | e233138: 3文書をda22779込みへ更新・件数訂正・数値は当日再実測値〔71ファイル334件〕を記載 |
+| F2（C-5） | prototypeに個別デザインが無いヘルプ画面にdocs/03 §1.1の構成記録が無い（前例どおり記録すべき） | e233138: §1.1-28を新設〔共通部品構成・入口はスマホのみ＝prototype Desktop踏襲・語彙・試験〕 |
+
+## 方針で残す（Rulingつきの全リスト）
+
+1. **PC幅で不可視の選択シートがEscスタックに参加し、選択解除と右パネル詳細が閉じる**（low・C-3）— Ruling: コード変更はせず docs/03 SCR-03⑥へ意図化追記（e233138）。構造変更（可視時のみスタック参加）は実害薄・Esc規律の呼び出し点が広いため繰り延べ。コスト: PCのEscで詳細が閉じる挙動が残る
+2. **「送信した通知」のcampaignアイコン**（要確認・C-6）— Ruling: 通知機能内の「下書き」チップの前例に従順でありprototypeのcampaign=お知らせ割当との競合は機能内で一貫。維持。コスト: prototype語彙との微差
+3. **PCに使い方ガイドへの導線が無い**（要確認・C-7）— Ruling: prototype DesktopのnavGroupsに無く、URL直打ち・スマホメニューのみはprototype踏襲で意図的（docs/03 §1.1-28に記録済み）。コスト: PC利用者はユーザーガイド・管理者の案内に依存
+4. **ead8421がPH7-Lの4項を1コミットに集約**（low・B-M4）— Ruling: 履歴の書換えはしない〔AGENTS.md・PH2-B12前例〕。理由記録はコミットと報告書にあり。parked。コスト: 1タスク1コミットの原則からのはみ出しの記録
+5. **AuditPanel二要素ラベルがresult=failure行と読み分けられない**（low・D2 M5）— 繰り延べ（表示の磨き）
+6. **InvitationPage/MfaPanelにログイン画面と同型の誤り関連付け未実装**（low・D3 M1）— 繰り延べ（LoginPageと同じ数行で揃えられる。次に触るタスクで）
+7. **manifest PH1-A2 basisの散文語「サインイン」**（low・fix wave 1再レビュー）— Ruling: 画面ラベルは「ログイン」へ揃えた〔F8〕が、basisはサーバーイベントの記述で断言・利用者文面でないため直さない（直すならreport-only連鎖が要る）。コスト: なし
+8. **useFacilitiesの「一覧無し/正しく空」区別・map-facilities試験のreload系計数・HelpPage章題の短縮表記・Notice文言・demo.ts初回判定の縁・demo.ts削除列挙が同期APIのみ・CLI内SQL補間**（low各件・D1〜D5の繰り延べMinor）— 各報告書と台帳に記録。次に触るタスクで処理候補
+9. **T085b-W1（ProxyWorkerドロップ）はopenのまま継続観察**— Ruling: T086最終検証の4走行（collect:evidenceのe2e＋フル3回・75〜150件/回）で失敗0。上流（#14926/#15252）未解決のためstatus=open・ownerを外しbasisに記録。発火時はclickUntilWriteArrives適用。コスト: 稀な赤の可能性が残る
+10. **T086の局所完了（実環境・実端末・実キー）**— Ruling: X-V01・X-V02・X-V05・X-DEV-MAPS・X-V06-RT・X-V07-PERF・X-V07-RENDER・X-DEMO・X-DEV-1/2/3・X-OUT-1/2/7/8とX-COST・X-V04-*/X-AIEVALのT086分は本環境では実施不能。番号付き残作業はacceptance-results「実外部」・ops/demo-deploy.md §5・development-completion.md §3が正。外部公開の実行は明示的な依頼がある時のみ。コスト: RG-09等の実地確認は未達のまま〔T087/T088へ〕
+
+## 最終状態
+
+- 確認済みの高・中の未解消: **0件**（タスクレビュー×4＋D1 fix round 1→ADDRESSED＋4体並行レビュー→fix wave 1→再レビュー全件ADDRESSED）
+- コミット: **bde6533**（コア実装・指定試験）・**8ec9f26**（reset断言の恒真排除）・**08b523d・198f792・0d2fed3**（issues台帳medium 3件・API-67契約3点）・**ead8421・bcc7404・1b0d76d・f0c4212**（issues台帳low 4件）・**47fdb84・f703c13・d891443・3ed5fc2**（docs一式・X-OUT-9・manifest）・**da22779**（使い方ガイド画面）・**c374e4c・e233138**（fix wave 1）
+- 最終全検証（コントローラ実行・2026-10-21）: typecheck成功／check:contracts「102 API / docs/05 102行 / OpenAPI一致」／check:coverage成功（参照テスト272件）／build成功（precache 9 entries）／collect:evidence〔vitest **71ファイル334件**・load 3・**e2e 75 passed / 0 failed / 0 skipped**・live未実施〕＋**受入ゲート 1 passed**／**フルe2e 3回連続緑〔150 passed ×3＝5.2/5.0/5.1分〕**
+- T086は**局所完了**。issues台帳のT086担当8件を決着（resolved 6＋PH3-C8現状確認の記録〔N2はopen・owner未割当〕＋T085b-W1継続観察へ）。docs/16のT086状態欄・ph8.md「T086」・development-completion.mdに番号付き残作業
