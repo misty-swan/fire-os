@@ -64,6 +64,45 @@ export const DEVELOPMENT_SECURITY_POLICY: SecurityPolicy = {
   },
 };
 
+/**
+ * 公開デモ用のpolicy（T086。docs/07 §2・§8「デモ2,000 Maps/月」等の前提とdocs/14 D11の検証設定）。
+ *
+ * - 公開デモ（APP_ENV=demo）を寛容な開発設定（DEVELOPMENT_SECURITY_POLICY）で動かさないための値。
+ *   **未承認の開発設定**である点は DEVELOPMENT_SECURITY_POLICY と同じ（実環境での確定は実Cloudflare接続後。
+ *   docs/16 T086・docs/evidence/security.mdの限界節。WAF/Rate Limiting製品層との併用前提）。
+ * - 認証経路（/api/auth/*）はライブラリのD1計上（sign-in等 5回/分/IP）が実効上限。この層は後段の防衛線。
+ * - アプリ内の計数はisolate内メモリ（DEVELOPMENT_SECURITY_POLICYの注記と同じ）。厳密な全体上限は
+ *   Cloudflare側の製品層で行う（未接続のため未実施＝局所完了。X-V01/X-DEMO）。
+ * - 費用上限（月額$5・AI 500回/日等）はT080のbudget機構（config/budget-development.json）が担い、
+ *   ここでは重複実装しない。Maps 2,000ロード/月はアプリ内で計測できない（unmeasured）ため
+ *   Googleコンソール側の制限として運用手順（ops/demo-deploy.md）に記録する。
+ */
+export const DEMO_SECURITY_POLICY: SecurityPolicy = {
+  rateLimit: {
+    // 資格情報を受ける経路はライブラリ側が5回/分/IPで締める。ここはそれより広い後段（総当たりの遅延）
+    auth: { requests: 60, windowMs: 60_000 },
+    // 高価な系列（AI呼出し・検索・upload）。デモでは少数の試用で足りる幅に絞る
+    ai: { requests: 30, windowMs: 60_000 },
+    search: { requests: 60, windowMs: 60_000 },
+    upload: { requests: 30, windowMs: 60_000 },
+    // 通常API（閲覧・同期poll）。1IPあたり毎分1,200reqはデモ閲覧には十分な幅
+    default: { requests: 1_200, windowMs: 60_000 },
+  },
+  // user次元（同一IPを共有する複数利用者を締め付けすぎない。demoの1userあたりの上限）
+  userRateLimit: {
+    auth: { requests: 60, windowMs: 60_000 },
+    ai: { requests: 30, windowMs: 60_000 },
+    search: { requests: 60, windowMs: 60_000 },
+    upload: { requests: 30, windowMs: 60_000 },
+    default: { requests: 600, windowMs: 60_000 },
+  },
+};
+
+/** 環境名から既定のpolicyを選ぶ（index.tsがpolicy注入されないときに使う。demoだけ公開デモ用の値） */
+export function securityPolicyForEnv(envName: "local" | "demo" | "staging" | "production"): SecurityPolicy {
+  return envName === "demo" ? DEMO_SECURITY_POLICY : DEVELOPMENT_SECURITY_POLICY;
+}
+
 // --- バケットの分類（台帳から機械展開。APIの追加・移動に追従する） ---
 
 /** AI呼出し系（docs/07 §2「AI」の上限。job受付API-89も実行時にAI評価を伴う系列として同じ区分） */

@@ -187,7 +187,8 @@ async function lazyFs(): Promise<NodeFs> {
 }
 
 // JSONCのコメント（// と //** */）だけを取り除く。文字列リテラル（https://... 等）の中は触らない。
-function stripJsonComments(jsonc: string): string {
+// （T086でexport: 試験が実wrangler.jsoncを同じ手続きで読めるように。CLIと試験で解析を共有する）
+export function stripJsonComments(jsonc: string): string {
   let out = "";
   let inString = false;
   for (let i = 0; i < jsonc.length; i++) {

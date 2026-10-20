@@ -3,19 +3,20 @@ import { assertEnvName, type AppBindings, type AppEnv, type JobMessage } from ".
 import { handleQueueBatch, handleScheduled } from "./jobs/dispatch";
 import { errorResponse, notFound, onError } from "./http";
 import { registerRoutes } from "./routes";
-import { applySecurity, DEVELOPMENT_SECURITY_POLICY, type SecurityPolicy } from "./security/limits";
+import { applySecurity, securityPolicyForEnv, type SecurityPolicy } from "./security/limits";
 
 /**
  * アプリ本体。順序が重要：
  *  1. /api/* は必ずJSONで終わる(未実装APIをSPAのHTMLで成功に見せない)
  *  2. それ以外はReact(静的ファイル)。未知のURLはSPAのindex.html
  *
- * securityPolicyは共通セキュリティ処理（applySecurity）の差し替え口。既定は寛容な開発設定。
+ * securityPolicyは共通セキュリティ処理（applySecurity）の差し替え口。無指定のときは環境で選ぶ
+ * （demo=公開デモ用のDEMO_SECURITY_POLICY、他=寛容な開発設定。T086）。
  * Honoは登録順に照合するため、policyは**routesの登録前に**適用される必要がある——後から
  * applySecurity(app, …)を呼んでも、既に登録されたrouteの前には挟まらない（試験で確認済み）。
  * 試験・T082の負荷試験はこの引数で厳しい/緩和policyを差す。
  */
-export function createApp(env: Pick<AppEnv, "APP_ENV">, securityPolicy: SecurityPolicy = DEVELOPMENT_SECURITY_POLICY): Hono<AppBindings> {
+export function createApp(env: Pick<AppEnv, "APP_ENV">, securityPolicy?: SecurityPolicy): Hono<AppBindings> {
   assertEnvName(env.APP_ENV);
   const app = new Hono<AppBindings>();
 
@@ -25,8 +26,9 @@ export function createApp(env: Pick<AppEnv, "APP_ENV">, securityPolicy: Security
     c.header("x-request-id", c.get("requestId"));
   });
 
-  // 共通セキュリティ処理（T081）。既定は寛容な開発設定（DEVELOPMENT_SECURITY_POLICY）。
-  applySecurity(app, securityPolicy);
+  // 共通セキュリティ処理（T081）。policy注入が無いときは環境で選ぶ: 公開デモ（demo）だけ
+  // DEMO_SECURITY_POLICY、他は寛容な開発設定（DEVELOPMENT_SECURITY_POLICY）（T086）。
+  applySecurity(app, securityPolicy ?? securityPolicyForEnv(env.APP_ENV));
 
   // 他originからの変更要求を拒否する（CSRF対策。Cookieは SameSite=Lax だが、Originも二重に見る）。
   // ブラウザは変更要求にOriginを付ける。Originが無い場合は sec-fetch-site が cross-site でないことを要求する。
