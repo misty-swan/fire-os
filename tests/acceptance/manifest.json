@@ -3318,8 +3318,8 @@
    "summary": "小見出し形式・複数LeaveConfirm・canManage出し分け・ID開示",
    "severity": "low",
    "status": "open",
-   "basis": "ph3-review表「低・方針で残す」",
-   "owner": "T086"
+   "basis": "T086（low対応）で現状確認。コード不变で記録: C8（等幅小見出し）=一覧系は「2026 · 画面名」（ActivitiesPage/AnnouncementsPageほか）または画面名（INCIDENTS/MAP等）の既存流儀。prototypeの「2026 · OCT」は単月ビューの予定・活動画面の表記で、実装の一覧は日付絞り込みで複数月にまたがるため単月を示す語彙の選定は設計判断（出動・お知らせはprototypeに画面が無く共通部品構成=docs/03 §1.1-10/11）。統一は画面改善タスクで（ph3-reviewのRulingどおり）。N2（同一ページの複数LeaveConfirm）=PatrolPlansPage・ReportDraftPage・IncidentPageに2個ずつあり、react-router複数blockerの挙動は実装依存のため両方が同時dirtyで重なった場合の振る舞い（確認ダイアログの重なり）は未検証。単一blockerへの再構成は18呼び出し点に触れる構造変更のため本対応の範囲外。実害の再現・設計判断が固まった時に再対応。N4（出動詳細のcanManage）=IncidentPage.tsx:94は役割（officer/admin）で出し分け、サーバーは毎要求PER-04担当scopeを検査して担当scope保持者の一般団員を拒否（画面は案内）。ActivityPage/AnnouncementsPageと同じ「役割で出し分け・判定はサーバー」流儀でdocs/03 §1.1-10/14に記録済みのため維持。参考2件=①活動詳細API-07が対象者ID一覧をPER-01全員に返す②scope担当のPER-03保持者が対象外の公開済みをお知らせ一覧で見られない——いずれも既存のD23/T045設計の範囲で、解消には契約変更（API/DTO）が必要なため本対応（low・API不変）の対象外。必要になった時に契約変更で整理",
+   "owner": "-"
   },
   {
    "id": "PH3-T",
