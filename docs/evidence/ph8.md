@@ -222,7 +222,7 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 
 再々レビュー（e50c98d）の Important 1・Minor 4 を修正（裁定R20）:
 
-- **訂正の行き止まりを解消（R20。N3の方式変更）**: R17の「系譜に起票済みなら `createIssue=true` を422」は、画面が直前の記録しか見ないため 異常あり→良好→異常あり（v3）の訂正や同期API-81の下書きが保存できない行き止まりになった。サーバーは系譜に既にあれば `createIssue` を**無視して保存**し（起票しない）、応答の `createdIssueId`（その記録から起票された異常のID・無ければnull。API-44/51の点検の記録にも付く）で実際の結果を返す。監査のmetadataに `issue: created / already_raised / none`。画面は訂正の確認で条件つきの予告（「この記録の履歴でまだ異常の報告が作られていなければ…」）を出し、保存後の施設詳細・資産詳細に「異常の報告を作成しました。」または「…新しい異常の報告は作りませんでした。」を示す。REJECTEDの専用文言は廃止。docs/05 API-46・docs/03 §1.1-27を更新（docs/11は「既存異常と二重にしない」の規則のままで変更なし）。
+- **訂正の行き止まりを解消（R20。N3の方式変更）**: R17の「系譜に起票済みなら `createIssue=true` を422」は、画面が直前の記録しか見ないため 異常あり→良好→異常あり（v3）の訂正や同期API-81の下書きが保存できない行き止まりになった。サーバーは系譜に既にあれば `createIssue` を**無視して保存**し（起票しない）、応答の `createdIssueId`（その記録から起票された異常のID・無ければnull。API-14・API-46の保存応答だけに付き、API-44/51の点検の記録には付かない＝最終レビューR21で訂正）で実際の結果を返す。監査のmetadataに `issue: created / already_raised / none`。画面は訂正の確認で条件つきの予告（「この記録の履歴でまだ異常の報告が作られていなければ…」）を出し、保存後の施設詳細・資産詳細に「異常の報告を作成しました。」または「…新しい異常の報告は作りませんでした。」を示す。REJECTEDの専用文言は廃止。docs/05 API-46・docs/03 §1.1-27を更新（docs/11は「既存異常と二重にしない」の規則のままで変更なし）。
   - 試験: `correction_ignores_create_issue_when_the_lineage_already_raised_it (T085 R20)`（v1→v2→v3をAPI-46で201・createdIssueId null・異常1件のまま、同期API-81の訂正も200で異常1件、系譜に無い施設では起票。R17の実装では422で赤）。e2e `inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original` に予告・保存後の結果表示と v3 の画面での訂正（異常あり→良好→異常あり）を追加（360/1280とも合格）。
 - **系譜の照会の束縛数（Minor）**: 最大50世代×3でD1の束縛上限（100）を超えていた → 45件ずつに分割（`LINEAGE_CHUNK`）。試験 `long_correction_lineage_is_checked_in_chunks (T085 R20)`（40世代の後の訂正。分割前は500で赤）。
 - **古い版の409が起票判定より先（Minor）**: 上のR20の試験で、古いseriesVersionの訂正にcreateIssueを付けて409を断言。
@@ -234,3 +234,17 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 | `npx vitest --run` | 67ファイル322件 passed |
 | `npm run collect:evidence`（ポート8797） | vitest 322・load 3・**e2e 119 passed／3 skipped／0 failed（15.0分）**・live未実施（Secret未設定） |
 | ゲート | `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` 1 passed |
+
+### T085 最終検証（コントローラ実行・52e9bf6時点。2026-10-20）
+
+- typecheck成功／check:contracts「102 API / docs/05 102行 / OpenAPI一致」／check:coverage 成功（参照テスト272件）／build成功／vitest **67ファイル322件** 合格
+- フルe2e（`npm run test:e2e`＝業務のphone-360/desktop-1280/tablet-768の119件＋受入ゲートのacceptance 75件）: **run1 194 passed / 3 skipped / 0 failed（14.8分）、run2 194 passed / 3 skipped / 0 failed（14.6分）＝2回連続緑**。e2eサーバーは8797番（裁定R19）。skip 3件はphone専用の除外で、manifestのknownSkipsに登録済み（合格の根拠には使わない）
+- 証跡index（docs/evidence/acceptance-index.json。実装者のcollect:evidence。codeHashは52e9bf6のコードと一致＝ゲート緑）: vitest 322・load 3・業務e2e 119 passed / 3 skipped / 0 failed・test:live 未実施（Secret未設定）
+- 文書の訂正（裁定R21）: docs/05 API-46と本書R20の項の「createdIssueIdはAPI-44/51の点検の記録にも付く」は誤り（両SQLは未変更）→「API-14・API-46の保存応答だけに付く」へ訂正。docs/05・本書はcodeHashの対象外のため再収集は不要
+
+### T085bへの追加の申し送り（コントローラが作業中に観測）
+
+- **所要時間**: フルe2e 約14.7分（194件）、collect:evidence 約17〜20分。コード変更のたびにcollect:evidenceが要るため、修正1ラウンドの検証で約35分（収集＋ゲート＋フルe2e）かかった
+- **待ち方の不具合**: 実装担当が `until ! pgrep -f "collect-evidence"; do sleep 15; done` で待つと、自分自身のコマンド文に一致して永久に終わらない（最長11時間半残留→コントローラが停止）。待機はPIDで行う、または `pgrep -f "[c]ollect-evidence"` の形にする
+- **wrangler devの取り残し**: 中断した実行の `wrangler dev` が親を失って2回残った（8787を占有はしていなかったがファイル変更で再起動していた）。webServerの後始末・`--only` 再実行時のサーバーの扱いを見直す材料
+- **ポートの共用**: 利用者は別プロジェクトの開発サーバーを8787で動かす。e2eは `scripts/e2e-port.ts`（`FIREOS_E2E_PORT`・既定8797／inspector 9239）へ集約済み＝workers≥2のときプロセスごとのポート割当の土台に使える
