@@ -33,6 +33,7 @@ import { MenuPage } from "./components/MenuPage";
 import { MobileTopRow, PageTitle } from "./components/Page";
 import { Card, Chip, Icon } from "./components/ui";
 import { SyncPage } from "./features/sync/SyncPage";
+import { HelpPage } from "./features/help/HelpPage";
 import { screens, shellScreens, type ScreenDef } from "./screens";
 
 /** 未実装画面の仮表示。どのタスクで作るかを示し、成功したように見せない。 */
@@ -91,6 +92,8 @@ export const screenElements: Partial<Record<string, ReactNode>> = {
   "SCR-24": <DocumentsPage />,
   "SCR-25": <PatrolPlansPage />,
   "SCR-27": <SyncPage />,
+  // 使い方ガイド（シェル画面SHELL-HELP。SCRと同じ登録点で繋ぐ。T086）
+  "SHELL-HELP": <HelpPage />,
 };
 
 function toRoutes(sc: ScreenDef, overrides: Record<string, ReactNode>): RouteObject[] {

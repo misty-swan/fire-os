@@ -82,6 +82,26 @@ test("mobile_menu_tab_shows_profile_and_tiles", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
+// 幅: desktop限定（内容の断言のみで幅で変わる構成・寸法は無い。見出しはPCヘッダーのh1）
+test("help_screen_shows_concise_guide_chapters_without_placeholder", async ({ page }) => {
+  await page.goto("/app/help");
+  await expect(page.getByRole("heading", { level: 1, name: "使い方ガイド" })).toBeVisible();
+  // USER_GUIDEと同じ章立て（導入/通常利用/点検/通知/承認/通信断/復旧＋困ったとき）
+  for (const h of [
+    "導入（はじめて使うとき）",
+    "通常利用（ホーム・出欠・名簿・お知らせ）",
+    "点検（施設・資機材・異常・訂正）",
+    "通知（受け取る・送る）",
+    "承認（AIの提案・帳票）",
+    "通信断（圏外・つながらないとき）",
+    "復旧（通信が戻った・競合したとき）",
+    "困ったとき",
+  ]) {
+    await expect(page.getByRole("heading", { level: 3, name: h })).toBeVisible();
+  }
+  await expect(page.getByText("未実装")).toHaveCount(0);
+});
+
 // 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("api_paths_return_json_never_the_spa", async ({ request }) => {
   // 末尾スラッシュなしの /api も、assetsのSPA fallbackより先にWorkerへ届く（run_worker_first）
