@@ -22,4 +22,18 @@ describe("job error labels (review round 1)", () => {
       expect(label!.includes("budget_stopped"), `${name}が生コードを含む`).toBe(false); // 生コードをそのまま見せない
     }
   });
+
+  it("budget_stopped_label_is_reason_neutral_because_the_client_cannot_know_the_stop_reason", () => {
+    // ph7-review 再レビュー軽微1: サーバーは全ての停止理由（日次枠・通知枠・429許容・費用試算・手動停止）で
+    // 同じerrorCode「budget_stopped」を返す（reasonsはjobに渡らない構造制約）。ラベルが特定の理由
+    // （例: 月次上限）を断定すると、日次枠や手動停止の保留に誤った説明が見えるため中立語彙にする。
+    for (const [name, labels] of [
+      ["JOB_ERROR_LABELS", JOB_ERROR_LABELS],
+      ["REPORT_JOB_ERROR_LABELS", REPORT_JOB_ERROR_LABELS],
+    ] as const) {
+      const label = labels.budget_stopped!;
+      expect(label.includes("月次上限"), `${name}が理由を「月次上限」に固定している`).toBe(false);
+      expect(label.includes("上限"), `${name}が停止の性質（上限/運用による停止）に触れていない`).toBe(true);
+    }
+  });
 });

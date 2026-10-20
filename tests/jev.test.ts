@@ -82,6 +82,12 @@ const getEvaluation = async (jobId: string) =>
   env.DB.prepare("SELECT * FROM ai_evaluations WHERE job_id = ?").bind(jobId)
     .first<{ id: string; unit_id: string; job_id: string; source_type: string; source_id: string; source_version: number; input_hash: string; input_snapshot_ref: string | null; question_version: string; model_id: string; actual_model_version: string | null; output_json: string; status: string; usage_json: string | null }>();
 
+/** ai.callsの既知合計（呼出し試行の計上。tests/budget.test.tsのknownSumと同じ集計） */
+const aiCallsKnown = async (): Promise<number> =>
+  (await env.DB.prepare(
+    "SELECT COALESCE(SUM(amount), 0) AS n FROM usage_metrics WHERE service = 'ai' AND metric = 'ai.calls' AND amount_known = 1",
+  ).first<{ n: number }>())!.n;
+
 /** AI処理の前後で設備・資産・異常の行が変わらないことの物差し（AIだけでは状態を変えない） */
 const assetSnapshot = async () => ({
   facilities: await env.DB.prepare("SELECT id, verification_status, location_version, metadata, version, updated_at FROM facilities ORDER BY id").all(),
@@ -346,12 +352,16 @@ describe("Jev分類 (T053)", () => {
     const res = await postClassification(admin, { sourceType: "issue", sourceId: issueId, sourceVersion: 1, questionVersion: "v1" });
     expect(res.status).toBe(202);
     const { id: jobId } = ((await json(res)).data!) as { id: string };
+    // 呼び出しできない環境では試行を計上しない（ph7-review A低1: ai.callsは実際に呼ぶときだけ数える。
+    //   AI無しで計上すると日次枠の母数が汚れる。RAG/アシスタントは既に呼出し後に計上）
+    const aiCallsBefore = await aiCallsKnown();
     const summary = await runJobsWithAi(undefined);
     expect(summary.committed).toBe(1);
     const jobRow = await getJob(jobId);
     expect(jobRow.status).toBe("manual_review");
     expect(jobRow.error_code).toBe("ai_unavailable");
     expect(await getEvaluation(jobId)).toBeNull();
+    expect(await aiCallsKnown()).toBe(aiCallsBefore); // 1度も呼んでいないため増えない（赤で確認済み）
   });
 
   it("same_source_version_and_question_share_one_job", async () => {

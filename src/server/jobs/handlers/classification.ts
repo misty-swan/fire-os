@@ -124,12 +124,14 @@ export async function classifyJob(job: LeasedJob, env: AppEnv): Promise<JobOutco
   const gate = await expensiveCallGate(env, { unitId: job.unitId, source: "job:ai.classify" });
   if (!gate.allowed) return { kind: "manual_review", errorCode: "budget_stopped" };
 
-  // 使用量の計上（T080。観測は業務を止めない。試行1回=1。usageの既知/未知・失敗/429を別metricで計上する。
-  //   jobの再実行で呼出しがやり直されると試行分が重複計上され得る＝近似であることをdocs/07 §8に記録）
-  await recordMetricSafe(env, { service: "ai", metric: "ai.calls", unit: "count", amount: 1, source: "job:ai.classify" });
-
   const ai = env.AI ?? localTestAi(env);
   if (!ai) return { kind: "manual_review", errorCode: "ai_unavailable" };
+
+  // 使用量の計上（T080。観測は業務を止めない。試行1回=1。usageの既知/未知・失敗/429を別metricで計上する。
+  //   jobの再実行で呼出しがやり直されると試行分が重複計上され得る＝近似であることをdocs/07 §8に記録。
+  //   計上は呼べることを確認した後（ph7-review A低1）: AI無しの環境で返る保留は呼び出していないため
+  //   枠の母数を汚さない。RAG・アシスタントと同じ「実際に呼ぶときだけ数える」位置）
+  await recordMetricSafe(env, { service: "ai", metric: "ai.calls", unit: "count", amount: 1, source: "job:ai.classify" });
 
   let candidate: Awaited<ReturnType<typeof runJev>>["candidate"];
   let validated: Awaited<ReturnType<typeof runJev>>["validated"];

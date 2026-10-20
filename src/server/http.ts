@@ -15,6 +15,8 @@ export class HttpError extends Error {
     public readonly code: ErrorCode,
     message?: string,
     public readonly details: { field: string; reason: string }[] = [],
+    /** 応答へ付ける追加headers（429のRetry-Afterなど。onErrorがerrorResponseへ渡す） */
+    public readonly headers: Record<string, string> = {},
   ) {
     super(message ?? code);
   }
@@ -65,7 +67,7 @@ export function notFound(c: Ctx): Response {
  * ログにも例外本文を出さない（T081のredact。本文はライブラリ内部で要求本文・bind値を含むことがあるため）。
  */
 export function onError(err: Error, c: Ctx): Response | Promise<Response> {
-  if (err instanceof HttpError) return errorResponse(c, err.code, err.details, err.message === err.code ? undefined : err.message);
+  if (err instanceof HttpError) return errorResponse(c, err.code, err.details, err.message === err.code ? undefined : err.message, err.headers);
   if (err instanceof ContractError) return errorResponse(c, "VALIDATION_ERROR", err.details);
   return redactError(err).then((redacted) => {
     console.error(JSON.stringify({ requestId: c.get("requestId"), error: redacted }));

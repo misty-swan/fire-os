@@ -109,6 +109,12 @@ const getJobRow = async (jobId: string) =>
   (await env.DB.prepare("SELECT id, status, attempts, error_code, result_ref, dedupe_key FROM jobs WHERE id = ?")
     .bind(jobId).first<{ id: string; status: string; attempts: number; error_code: string | null; result_ref: string | null; dedupe_key: string }>())!;
 
+/** ai.callsの既知合計（呼出し試行の計上。tests/budget.test.tsのknownSumと同じ集計） */
+const aiCallsKnown = async (): Promise<number> =>
+  (await env.DB.prepare(
+    "SELECT COALESCE(SUM(amount), 0) AS n FROM usage_metrics WHERE service = 'ai' AND metric = 'ai.calls' AND amount_known = 1",
+  ).first<{ n: number }>())!.n;
+
 const versionIdOf = (jobId: string): string | null => {
   const ref = jobResultRefs.get(jobId) ?? null;
   return ref?.startsWith("report_version:") ? ref.slice("report_version:".length) : null;
@@ -462,11 +468,14 @@ describe("LLMによる報告書下書き生成 (T057)", () => {
     const res = await postDraft(admin, { activityId: act.activityId, resultVersion: act.resultVersion, templateVersion: "test-activity-v1" });
     expect(res.status).toBe(202);
     const { id: jobId } = ((await json(res)).data!) as { id: string };
+    // 呼び出しできない環境では試行を計上しない（ph7-review A低1: ai.callsは実際に呼ぶときだけ数える）
+    const aiCallsBefore = await aiCallsKnown();
     const summary = await runJobsWithAi(undefined);
     expect(summary.committed).toBe(1);
     const row = await getJobRow(jobId);
     expect(row.status).toBe("manual_review");
     expect(row.error_code).toBe("ai_unavailable");
     expect(row.result_ref).toBeNull(); // 保留のjobは報告書版を作らない
+    expect(await aiCallsKnown()).toBe(aiCallsBefore); // 1度も呼んでいないため増えない（赤で確認済み）
   });
 });

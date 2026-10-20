@@ -41,7 +41,7 @@ export interface SecurityPolicy {
   userRateLimit?: Record<RateLimitBucket, RateLimitRule>;
 }
 
-/** 開発設定（未承認。docs/07の上限案を「開発設定」として置いたもの。実環境の値はT086の負荷検証とD11の承認で確定）。 */
+/** 開発設定（未承認。docs/07の上限案を「開発設定」として置いたもの。実環境の値はT086の公開設定時の検証とD11の承認で確定）。 */
 export const DEVELOPMENT_SECURITY_POLICY: SecurityPolicy = {
   rateLimit: {
     // 認証はライブラリのD1上限（sign-in/sign-up等 5回/分/IP）が実効上限。この層はそれより広い後段の防衛線
@@ -197,7 +197,10 @@ export const enforceUserRateLimit = (c: ApiContext, userId: string): void => {
   const bucket = rateLimitBucketFor(c.req.method, c.req.path);
   const retryAfter = checkRateLimit(policy.userRateLimit, bucket, userId, Date.now());
   if (retryAfter !== null) {
-    throw new HttpError("RATE_LIMITED", undefined, [{ field: "rate", reason: `user_${bucket}` }]);
+    // Retry-AfterはIP次元と同じ窓計算値（ph7-review A低2。docs/05 §1「Retry-After（秒）」。
+    //   throwはresolvePrincipalの深部から出るため、窓の秒数をHttpErrorの追加headersへ載せて
+    //   共通のonError→errorResponseで応答へ出す。載せない場合はerrorResponseの包括既定60秒になる）
+    throw new HttpError("RATE_LIMITED", undefined, [{ field: "rate", reason: `user_${bucket}` }], { "retry-after": String(retryAfter) });
   }
 };
 

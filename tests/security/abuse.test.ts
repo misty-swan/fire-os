@@ -108,6 +108,8 @@ describe("T081 濫用（連続要求・総当たり）", () => {
     // docs/07 §2（D18「IP＋user単位」）のuser次元: 認証解決後の第二計上点。
     // IP境界は寛容・user単位だけ厳しいpolicyで、**同じIPの別利用者は止まらない**ことを観測する
     // （fixture経由の要求は全てcf-connecting-ip無し＝同一IPの鍵にまとまるため、違いはuser次元だけ）。
+    // user次元の窓は5秒にして、429のRetry-AfterがIP次元と同じ窓計算値であることも観測する
+    // （ph7-review A低2: 包括既定60秒でなく計算値を返す。docs/05 §1「Retry-After（秒）」）。
     const policy: SecurityPolicy = {
       rateLimit: {
         auth: { requests: 1000, windowMs: 60_000 }, ai: { requests: 1000, windowMs: 60_000 },
@@ -117,13 +119,13 @@ describe("T081 濫用（連続要求・総当たり）", () => {
       userRateLimit: {
         auth: { requests: 1000, windowMs: 60_000 }, ai: { requests: 1000, windowMs: 60_000 },
         search: { requests: 1000, windowMs: 60_000 }, upload: { requests: 1000, windowMs: 60_000 },
-        default: { requests: 2, windowMs: 60_000 },
+        default: { requests: 2, windowMs: 5_000 },
       },
     };
     const app = createApp(env, policy);
     const meAs = async (who: Identity) =>
       app.fetch(new Request("http://example.com/api/v1/me", { headers: { "x-test-identity": JSON.stringify(who) } }), env);
-    // 同一利用者の3回目はuser単位の上限（2/分）で429になる
+    // 同一利用者の3回目はuser単位の上限（2/5秒）で429になる
     expect((await meAs(fx.units.a.people.admin)).status).toBe(200);
     expect((await meAs(fx.units.a.people.admin)).status).toBe(200);
     const third = await meAs(fx.units.a.people.admin);
@@ -131,6 +133,10 @@ describe("T081 濫用（連続要求・総当たり）", () => {
     expect(third.status, `user単位の3回目: ${thirdBody.error?.code}`).toBe(429);
     expect(thirdBody.error?.code).toBe("RATE_LIMITED");
     expect(thirdBody.error?.details?.[0]?.reason, "user次元の計上であること").toBe("user_default");
+    // Retry-Afterは窓（5秒）から計算された値（1〜5秒）。包括既定の60秒ではない
+    const retryAfter = Number(third.headers.get("retry-after"));
+    expect(Number.isInteger(retryAfter) && retryAfter >= 1, `Retry-Afterが秒数ではない: ${third.headers.get("retry-after")}`).toBe(true);
+    expect(retryAfter, "窓5秒の計算値であること（包括既定60秒でない）").toBeLessThanOrEqual(5);
     // 同じIPでも別利用者は止まらない（user次元の鍵は利用者ごと。IP次元のカウントは3で上限1000に遠く及ばない）
     expect((await meAs(fx.units.a.people.officer)).status).toBe(200);
   });
