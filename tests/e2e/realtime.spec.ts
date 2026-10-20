@@ -9,6 +9,7 @@ import { acceptInvitationViaUi, adminApiData, inviteNewMember, newUserContext, u
  * 届くこと（snapshotの取り直しで回復する）を**実ブラウザの画面で**確かめる。オフラインの捏造はしない。
  */
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("incident_detail_receives_remote_updates_and_resyncs_after_role_change", async ({ browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const viewport = testInfo.project.use.viewport!;

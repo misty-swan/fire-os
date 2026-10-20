@@ -7,6 +7,7 @@ import { adminApiData } from "./helpers";
  * 異常あり → 異常の報告が作られる（T029）。
  */
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("inspection_form_preserves_values_after_failed_submission", async ({ page, context }) => {
   const tag = crypto.randomUUID().slice(0, 6);
   // 施設と承認済み様式を用意（API）

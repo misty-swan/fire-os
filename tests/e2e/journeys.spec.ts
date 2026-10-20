@@ -58,6 +58,7 @@ const localInput = (offsetMs: number) => {
 // =====================================================================================
 // J1 点検 → 異常 → AI → タスク → 通知
 // =====================================================================================
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("journey_inspection_anomaly_ai_task_notification", async ({ page, browser, request }, testInfo) => {
   test.setTimeout(420_000);
   const viewport = testInfo.project.use.viewport!;
@@ -181,6 +182,7 @@ test("journey_inspection_anomaly_ai_task_notification", async ({ page, browser, 
 // =====================================================================================
 // J2 活動・出動 → 使用 → 集計 → 帳票
 // =====================================================================================
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("journey_activity_incident_usage_analytics_report", async ({ page, request }) => {
   test.setTimeout(420_000);
   const tag = crypto.randomUUID().slice(0, 6);
@@ -288,6 +290,7 @@ test("journey_activity_incident_usage_analytics_report", async ({ page, request 
 // =====================================================================================
 // J3 文書 → 引用 → 失効
 // =====================================================================================
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("journey_document_citation_withdrawal", async ({ page, request }) => {
   test.setTimeout(420_000);
   const tag = crypto.randomUUID().slice(0, 6);
@@ -371,6 +374,7 @@ test("journey_document_citation_withdrawal", async ({ page, request }) => {
 // =====================================================================================
 // J4 offline → 競合 → 復旧（点検の訂正。T033の訂正画面とT077の同期をつなぐ）
 // =====================================================================================
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("journey_offline_correction_conflict_recovery", async ({ browser, request }, testInfo) => {
   test.setTimeout(420_000);
   const viewport = testInfo.project.use.viewport!;

@@ -36,6 +36,7 @@ async function loseNextResponse(page: Page, pattern: string): Promise<() => numb
   return () => forwarded;
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original", async ({ page }) => {
   const tag = crypto.randomUUID().slice(0, 6);
   const facility = await adminApiData<{ id: string }>(page.request, "POST", "/api/v1/facilities", {
@@ -129,6 +130,7 @@ test("inspection_retry_after_lost_response_registers_once_and_correction_keeps_t
   expect(await issuesOf()).toBe(1);
 });
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("asset_inspection_records_photo_and_corrects_from_history_without_overwriting", async ({ page }, info) => {
   const tag = crypto.randomUUID().slice(0, 6);
   const vehicle = await adminApiData<{ id: string }>(page.request, "POST", "/api/v1/vehicles", { assetCode: `V-${tag}`, name: `架空ポンプ車 ${tag}`, status: "運用" });

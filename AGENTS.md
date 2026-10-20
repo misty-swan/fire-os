@@ -32,8 +32,9 @@ npm run test:e2e -- --project=setup --project=phone-360 --project=desktop-1280 -
 - manifestを直したら `npm run check:coverage` → `npx tsx scripts/collect-evidence.ts --report-only`（acceptance-results.mdの作り直し。manifestはhashの対象外なので再収集は不要）
 
 - 単一テスト: `npx vitest --run tests/members.test.ts -t "ケース名"` / e2e単独: `npm run test:e2e -- tests/e2e/auth.spec.ts --grep ケース名`
+- `npm run test:e2e:smoke`: 開発中の反復用の縮小セット（setup＋journeys＋auth＋shell をdesktop-1280だけ）。フルe2eの代わりにはしない（コミット前はフルで確認）
 - API/DTOを変えたら `npm run generate:contracts` で `openapi/fireos.json` を再生成（check:contractsが古い生成物を検出する）
-- `npm run test:e2e` の webServer は D1再作成→migration→初期管理者作成→`wrangler dev`（**:8797**。inspectorは9239）まで自動で行う。ポートは `scripts/e2e-port.ts` が正本で、環境変数 `FIREOS_E2E_PORT`（inspectorは `FIREOS_E2E_INSPECTOR_PORT`）で変えられる。demo（`npm run demo`）は従来どおり8787で、別プロジェクトの8787と並行できるようe2eは別番号にしている。e2eの前にそのポートが空いていることを確かめ、手動のwrangler devを同じ番号で先に上げない。workers=1固定。phone-360 / desktop-1280 の両プロジェクトで画面を確認する
+- `npm run test:e2e` の webServer は D1再作成→migration→初期管理者作成→`wrangler dev`（**:8797**。inspectorは9239）まで自動で行う。ポートは `scripts/e2e-port.ts` が正本で、環境変数 `FIREOS_E2E_PORT`（inspectorは `FIREOS_E2E_INSPECTOR_PORT`）で変えられる。demo（`npm run demo`）は従来どおり8787で、別プロジェクトの8787と並行できるようe2eは別番号にしている。e2eの前にそのポートが空いていることを確かめ、手動のwrangler devを同じ番号で先に上げない。workers=2（T085b。試験ごとの架空データ分離が前提）。幅の絞り込み（T085b）: 各試験の宣言直上の「幅:」マーカーが正本で、幅で変わる断言（isPhone分岐・押下領域44px・ナビ構成・はみ出し・prototype寸法）のある試験だけ両幅で走り、他はdesktop-1280だけ。仕分け表は docs/evidence/e2e-speed.md。新規試験には必ずマーカーを付ける（無いと設定の読み込みが落ちる）
 - `npm run test:live` は実Cloudflare(staging)向け。`LIVE_BASE_URL` `LIVE_BOOTSTRAP_TOKEN` `LIVE_BOOTSTRAP_EMAIL` が必要
 - `npm run migrate` はローカルD1のみ。`--remote` には `--env <名前> --yes-i-know` が必須（本番誤適用ガード）
 - `npm run demo` / `demo:reset` で手元の画面確認。初回の管理者招待リンクは一度しか表示されない。デモのログイン情報はGit管理外の `.env.demo-login`

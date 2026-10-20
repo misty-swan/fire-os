@@ -37,6 +37,7 @@ function pngBytes(fill = 1): Buffer {
   return Buffer.concat(parts);
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("checking_file_is_not_submitted_as_ready", async ({ page }) => {
   test.setTimeout(90_000); // 写真の検査（job）の完了を画面で待つため
   const tag = crypto.randomUUID().slice(0, 6);

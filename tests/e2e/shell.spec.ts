@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 // 期待値は prototype（FireOS Prototype/Desktop.dc.html）の寸法・構成。
 const isPhone = (viewport: { width: number } | null) => (viewport?.width ?? 0) < 1024;
 
+// 幅: 両方（ボトムナビ84px・サイドバー248pxなど、幅で変わる構成そのもの）
 test("shell_layout_matches_the_viewport", async ({ page }, info) => {
   await page.goto("/app");
   const phone = isPhone(page.viewportSize());
@@ -48,6 +49,7 @@ test("shell_layout_matches_the_viewport", async ({ page }, info) => {
   if (process.env.SAVE_EVIDENCE === "1") await page.screenshot({ path: `docs/evidence/ph0/shell-${info.project.name}.png`, fullPage: false });
 });
 
+// 幅: 両方（操作対象がボトムナビ(スマホ)/サイドバー(PC)で分岐）
 test("keyboard_navigation_changes_screens_and_moves_focus_to_main", async ({ page }) => {
   await page.goto("/app");
   const phone = isPhone(page.viewportSize());
@@ -63,8 +65,8 @@ test("keyboard_navigation_changes_screens_and_moves_focus_to_main", async ({ pag
   await expect(page.getByRole("heading", { level: phone ? 2 : 1, name: "施設の詳細" })).toBeVisible();
 });
 
+// 幅: phone限定（メニュータブはスマホ幅のみの画面。desktopでは実行しない＝T085b設定側の仕分け）
 test("mobile_menu_tab_shows_profile_and_tiles", async ({ page }) => {
-  test.skip(!isPhone(page.viewportSize()), "メニュータブはスマホ幅のみ");
   await page.goto("/app");
   await page.getByTestId("bottom-nav").getByRole("link", { name: "メニュー" }).click();
   await expect(page).toHaveURL(/\/app\/menu$/);
@@ -80,6 +82,7 @@ test("mobile_menu_tab_shows_profile_and_tiles", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("api_paths_return_json_never_the_spa", async ({ request }) => {
   // 末尾スラッシュなしの /api も、assetsのSPA fallbackより先にWorkerへ届く（run_worker_first）
   const bare = await request.get("/api");

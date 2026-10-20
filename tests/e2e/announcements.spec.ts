@@ -39,6 +39,7 @@ function pngBytes(): Buffer {
   return Buffer.concat(parts);
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("edited_announcement_requires_new_read", async ({ page, browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const viewport = testInfo.project.use.viewport!;

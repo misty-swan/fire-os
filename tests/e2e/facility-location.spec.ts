@@ -12,6 +12,7 @@ const isPhone = (viewport: { width: number } | null) => (viewport?.width ?? 0) <
 const LAT = "35.123456";
 const LNG = "139.123456";
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("gps_denial_allows_manual_entry_without_tracking", async ({ page, context }, info) => {
   // 位置情報は拒否されている（grantPermissionsをしない）。watchPositionは一度も呼ばれないこと
   await context.addInitScript(() => {

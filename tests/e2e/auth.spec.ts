@@ -4,6 +4,7 @@ import { BASE, PASSWORD, acceptInvitationViaUi, adminApi, apiHeaders, inviteNewM
 // 実際のCookie・実際のログイン画面で、招待受領→二要素認証→別端末のログイン→回復コード→ログアウトを通す。
 // 管理者のセッションは auth.setup.ts が作った storageState（招待tokenからの本物の経路）。fixtureのCookie注入は使わない。
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("mfa_recovery_code_cannot_be_reused", async ({ browser, request }, info) => {
   const viewport = info.project.use.viewport!;
   const email = uniqueEmail("e2e-mfa");
@@ -54,6 +55,7 @@ test("mfa_recovery_code_cannot_be_reused", async ({ browser, request }, info) =>
   for (const c of [ctxA, ctxB, ctxC, ctxD]) await c.close();
 });
 
+// 幅: 両方（prototypeの寸法断言＋360pxではみ出さない確認）
 test("login_screen_matches_the_prototype_and_offers_no_public_signup", async ({ browser }, info) => {
   const ctx = await newUserContext(browser, info.project.use.viewport!);
   const page = await ctx.newPage();
@@ -88,6 +90,7 @@ test("login_screen_matches_the_prototype_and_offers_no_public_signup", async ({ 
   await ctx.close();
 });
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("unauthenticated_visit_goes_to_login_and_returns_after_login", async ({ browser, request }, info) => {
   const viewport = info.project.use.viewport!;
   const email = uniqueEmail("e2e-next");
@@ -109,6 +112,7 @@ test("unauthenticated_visit_goes_to_login_and_returns_after_login", async ({ bro
   await setup.close();
 });
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("invitation_that_cannot_be_used_explains_why_without_leaking_state", async ({ browser, request }, info) => {
   const viewport = info.project.use.viewport!;
   const email = uniqueEmail("e2e-cancelled");

@@ -148,6 +148,7 @@ test.afterEach(async () => {
   expect(failures, "演習の管理者を一般の団員へ戻せなかった（共有D1に管理者が残る）").toEqual([]);
 });
 
+// 幅: 両方（scenario1のGoogle全断時の代替経路がスマホ/PCで導線違い）
 test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, request }, testInfo) => {
   const viewport = testInfo.project.use.viewport!;
   const phone = isPhone(viewport);

@@ -22,6 +22,7 @@ import { acceptInvitationViaUi, adminApiData, BASE, inviteNewMember, newUserCont
 async function runLocalCron(request: APIRequestContext): Promise<void> {
   await request.fetch(`${BASE}/cdn-cgi/local/scheduled`);
 }
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const viewport = testInfo.project.use.viewport!;
@@ -188,6 +189,7 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
  * ダイアログは開いたまま（成功と失敗を区別しない画面はdocs/03 §1「conflictを区別」に反する）。
  * draftのid/version/hashは作成応答（API-63）から拾う（送信者の一覧を読むAPIは無いため。docs/03 §1.1-14⑥）。
  */
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("notification_approval_shows_conflict_when_already_approved_elsewhere", async ({ browser, request }, testInfo) => {
   test.setTimeout(180_000);
   const tag = crypto.randomUUID().slice(0, 6);

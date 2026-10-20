@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { adminApiData, apiHeaders, BASE, isPhone, randomIp } from "./helpers";
+import { adminApiData, apiHeaders, BASE, randomIp } from "./helpers";
 
 /**
  * AIアシスタント（T070、SCR-28 /app/assistant。docs/03 §2 SCR-28「権限付き横断検索/RAG、引用原文、
@@ -89,6 +89,7 @@ async function ask(page: Page, question: string): Promise<void> {
   await page.getByRole("button", { name: "送信" }).click();
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("assistant_proposal_requires_explicit_review_of_effects", async ({ page, request }) => {
   test.setTimeout(420_000);
   const tag = crypto.randomUUID().slice(0, 6);
@@ -283,8 +284,8 @@ test("assistant_proposal_requires_explicit_review_of_effects", async ({ page, re
  * と同じ。チップは `h-9 … max-lg:min-h-11`〔ReportDraftPage.tsx:751の前例〕、送信ボタンは
  * `size-11 lg:size-10`〔巡回の上下移動と同じ流儀。PCはprototypeどおり40pxが正のためモバイルだけで検査する〕）。
  */
-test("assistant_input_controls_meet_touch_target_on_mobile", async ({ page, request }, info) => {
-  test.skip(!isPhone(info.project.use.viewport ?? page.viewportSize()), "押下領域44pxの規則はモバイル。PCはprototypeのコンパクト寸法が正のため対象外");
+// 幅: phone限定（押下領域44pxの規則はモバイルのみ。PCはprototypeのコンパクト寸法が正＝T085b設定側の仕分け）
+test("assistant_input_controls_meet_touch_target_on_mobile", async ({ page, request }) => {
   test.setTimeout(120_000);
   const tag = crypto.randomUUID().slice(0, 6);
   // チップ行（記録を添える）はこれからの予定があるときだけ現れるため、本体試験と同じseedの最小版をAPIで1件作る

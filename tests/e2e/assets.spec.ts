@@ -6,6 +6,7 @@ import { adminApiData } from "./helpers";
  * 保管先は1つだけ送る。施設保管→車両保管への変更→数量編集→履歴参照（点検はT033で接続）。
  */
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("asset_detail_displays_quantity_unit_and_storage", async ({ page }) => {
   const tag = crypto.randomUUID().slice(0, 6);
   // 施設を1件（保管先に使う）

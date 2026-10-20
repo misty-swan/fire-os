@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { inviteNewMember, uniqueEmail } from "./helpers";
 
+// 幅: 両方（監査ログが360pxで横にはみ出さない確認）
 test("audit_panel_shows_who_changed_what_without_bodies", async ({ page, request }) => {
   const email = uniqueEmail("audit-secret");
   const name = `架空 監査表示 ${crypto.randomUUID().slice(0, 4)}`;

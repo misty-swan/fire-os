@@ -43,6 +43,7 @@ import {
  * coreTaskSuccessRateの閾値0.9はdocs/14 D18の開発案値（操作成功率90%以上案）であって、
  * 承認済みの合格値ではない（docs/03・docs/13の合格値はD18承認まで確定しない）。
  */
+// 幅: 両方（地図障害の一覧代替がスマホ/PCで導線違い（T083端末matrix。tablet-768でも実行））
 test("returning_user_finishes_inspection_and_attendance_without_hidden_controls", async ({ browser, request }, testInfo) => {
   test.setTimeout(540_000);
   const viewport = testInfo.project.use.viewport!;
@@ -235,6 +236,7 @@ test("returning_user_finishes_inspection_and_attendance_without_hidden_controls"
  * 制約クラス（w-full min-w-0）が無いとグリッドの最小幅が固有幅に引きずられ、検索カードから
  * はみ出す（240pxで+6px）。200pxまで狭めるとページ全体が横スクロールになる。
  */
+// 幅: phone限定（試験自身が240/200pxへ幅を変える（実行幅は問わず意味は同じためphone-360だけ））
 test("inputs_stay_inside_the_search_card_at_narrow_widths", async ({ page }) => {
   const overshootOf = () =>
     page.evaluate(() => {
@@ -291,6 +293,7 @@ test("inputs_stay_inside_the_search_card_at_narrow_widths", async ({ page }) => 
  * 無効になり、padding込みの幅計算が誤ってカードからはみ出す。アプリ共通のフィールド様式で描画させる
  * ため、date入力はappearance: noneになる（docs/03 §1.1-24）。修正前はappearance=autoで落ちる。
  */
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("date_inputs_render_with_the_app_field_style_on_ios_browsers", async ({ page }) => {
   await page.goto("/app/activities");
   const from = page.locator('input[name="filter-from"]');
@@ -312,6 +315,7 @@ test("date_inputs_render_with_the_app_field_style_on_ios_browsers", async ({ pag
  * 親幅を超えなくする。はみ出すチップだけが日本語の既定の折り返し（文字単位）で複数行のpillになり、
  * 短いチップは1行のまま（prototypeどおりの見た目は不変）。
  */
+// 幅: phone限定（チップのはみ出しは約406px未満でしか起きない（768/1280では恒真））
 test("analytics_conditions_stay_inside_the_screen_at_phone_width", async ({ browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const viewport = testInfo.project.use.viewport!;

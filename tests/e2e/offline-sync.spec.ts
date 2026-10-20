@@ -212,6 +212,7 @@ function blockedWrite(mode: "form" | "block", method: string, path: string): boo
   return op || (method === "POST" && /^\/api\/v1\/attachments\/[^/]+\/completion$/.test(path));
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("offline_conflict_never_uses_last_write_wins", async ({ browser, request }, testInfo) => {
   const viewport = testInfo.project.use.viewport!;
   // shellが描けた（=API-01が終わった）ことの確認。スマホはh2、PCはh1（pwa-cache.specと同じ区別）

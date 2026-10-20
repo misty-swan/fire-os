@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
  * 編集で新しい下書き版を作り、申請→承認で現在版が切り替わる。承認済みの版は変わらない。
  */
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("template_edit_creates_new_draft_version", async ({ page }) => {
   await page.goto("/app/admin");
   const panel = page.getByLabel("点検様式");

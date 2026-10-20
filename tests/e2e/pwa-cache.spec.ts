@@ -37,6 +37,7 @@ function collectCacheUrls(page: Page): Promise<string[]> {
   });
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("offline_cache_contains_no_api_response_or_google_tiles", async ({ page }) => {
   const phone = isPhone(page.viewportSize());
   const heading = (h2: string, h1: string) => (phone ? { level: 2 as const, name: h2 } : { level: 1 as const, name: h1 });
@@ -80,6 +81,7 @@ test("offline_cache_contains_no_api_response_or_google_tiles", async ({ page }) 
   await page.context().setOffline(false);
 });
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("sw_update_notifies_and_does_not_destroy_unsaved_input", async ({ page, context }) => {
   // 「新しい版」を作る。dist/clientを書き換えるとwrangler devがworkerごと再読み込みし、直後の
   // 他の試験の要求が「Your worker is reloading」に当たる。またsw.jsのupdate()での再取得は

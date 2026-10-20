@@ -7,6 +7,7 @@ import { adminApiData } from "./helpers";
  * 異常対応を混同しない（docs/16: issue_state_does_not_appear_as_location_verified）。
  */
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("issue_state_does_not_appear_as_location_verified", async ({ page }) => {
   test.setTimeout(120_000);
   const tag = crypto.randomUUID().slice(0, 6);

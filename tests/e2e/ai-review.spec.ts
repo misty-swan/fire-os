@@ -23,6 +23,7 @@ async function runLocalCron(request: APIRequestContext): Promise<void> {
   await request.fetch(`${BASE}/cdn-cgi/local/scheduled`);
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("stale_proposal_requires_regeneration_not_forced_approval", async ({ page }) => {
   test.setTimeout(300_000);
   const tag = crypto.randomUUID().slice(0, 6);

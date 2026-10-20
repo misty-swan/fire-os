@@ -39,6 +39,7 @@ async function seedOf(page: import("@playwright/test").Page): Promise<{ hydrant:
   };
 }
 
+// 幅: 両方（マーカー(スマホ)/一覧行(PC)の表示が分岐）
 test("old_map_response_cannot_replace_new_viewport", async ({ page }) => {
   const seed = await seedOf(page);
   // 最初の読み込み（旧世代）を遅らせ、その応答には条件外の「消えたはずの施設」を混ぜる。
@@ -103,6 +104,7 @@ test("old_map_response_cannot_replace_new_viewport", async ({ page }) => {
   await oldGenerationSettled;
 });
 
+// 幅: 両方（スマホ=選択シート/PC=右パネルと導線が分岐）
 test("map_selection_sheet_matches_prototype_and_opens_detail", async ({ page }) => {
   test.setTimeout(90_000); // 全体試験では負荷が上がるため（単独では数秒。ph1のruntime.test.tsと同じ扱い）
   const seed = await seedOf(page);
@@ -142,6 +144,7 @@ test("map_selection_sheet_matches_prototype_and_opens_detail", async ({ page }) 
  * 各施設のマーカー（スマホ）・一覧の行（PC）は「種別名＋番号」のaccessible nameを持ち、種別チップ（凡例を兼ねる絞り込み）は
  * 3種とも文字ラベルで出る。地図面はプレースホルダー（実Google Mapsは未接続＝X-V05）。
  */
+// 幅: 両方（一覧切替(スマホ)の分岐があり狭幅の代替を読む）
 test("three_facility_types_are_identified_by_text_not_color_only", async ({ page }) => {
   test.setTimeout(90_000);
   const seed = await seedOf(page);

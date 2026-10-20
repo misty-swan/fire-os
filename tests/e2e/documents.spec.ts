@@ -79,6 +79,7 @@ async function clickCreateUntilPosted(page: Page, title: string, classification:
   return null;
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("withdrawn_document_disappears_from_search_and_citation", async ({ page, request }) => {
   test.setTimeout(300_000);
   const tag = crypto.randomUUID().slice(0, 6);
@@ -209,6 +210,7 @@ test("withdrawn_document_disappears_from_search_and_citation", async ({ page, re
  * 「抽出不能（error_codeの日本語）」を出す（DocumentVersionPanel.tsxのJOB_ERROR_LABELS）。
  * この画面で版を作るため依頼job（API-86）を追跡でき、表示分岐の回帰（「抽出済み」等への誤表示）を検知する。
  */
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("image_only_pdf_version_shows_unextractable_reason", async ({ page, request }) => {
   test.setTimeout(180_000);
   const tag = crypto.randomUUID().slice(0, 6);

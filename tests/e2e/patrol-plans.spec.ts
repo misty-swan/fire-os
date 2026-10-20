@@ -15,6 +15,7 @@ import { adminApiData, apiHeaders, BASE } from "./helpers";
  * - seedはAPI経由（施設3件。他の試験が作った施設もあるため、管理番号に試験固有のタグを含めて識別する）。
  */
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch", async ({ page }) => {
   test.setTimeout(300_000);
   const tag = crypto.randomUUID().slice(0, 6);

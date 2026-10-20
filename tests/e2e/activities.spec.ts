@@ -45,6 +45,7 @@ async function seedProxyScope(officerMemberId: string, targetMemberId: string): 
   throw new Error(`代理回答scope（D05）のseedに失敗: ${lastError}`);
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("planned_answer_and_actual_presence_have_separate_labels", async ({ browser, request }, testInfo) => {
   test.setTimeout(240_000);
   const viewport = testInfo.project.use.viewport!;
@@ -180,6 +181,7 @@ test("planned_answer_and_actual_presence_have_separate_labels", async ({ browser
   await expect(officerPage.getByText(/未回答 1/)).toBeVisible();
 });
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("proxy_answer_form_resets_after_save_and_leaves_without_warning", async ({ browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const viewport = testInfo.project.use.viewport!;

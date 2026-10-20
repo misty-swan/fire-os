@@ -35,6 +35,7 @@ async function walkAll<T>(session: APIRequestContext, path: string, query: Recor
   throw new Error("一覧の読み切りが50ページで終わりません");
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("home_metrics_drill_down_to_matching_lists", async ({ browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const viewport = testInfo.project.use.viewport!;

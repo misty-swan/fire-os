@@ -32,6 +32,7 @@ interface ReportHistoryForTest {
   }[];
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("report_ui_shows_missing_fields_and_only_exports_approved_version", async ({ page }) => {
   test.setTimeout(300_000);
   const tag = crypto.randomUUID().slice(0, 6);
@@ -212,6 +213,7 @@ test("report_ui_shows_missing_fields_and_only_exports_approved_version", async (
  *   押下領域の検査はモバイルプロジェクトだけでよい（PCはコンパクト寸法が正のため）。
  * seedは実APIのみ（AI生成を待たないため、手動作成の経路だけを短時間で確認する）。
  */
+// 幅: 両方（モバイル44pxの押下領域断言を含む）
 test("report_forms_warn_on_unsaved_leave_and_links_meet_touch_target", async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   const tag = crypto.randomUUID().slice(0, 6);

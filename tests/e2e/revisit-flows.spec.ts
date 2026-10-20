@@ -39,6 +39,7 @@ const OPERATION_CAPS: Record<string, number> = {
   sync_recover: 5, // 「未定」→同期の状況を開く→（必要なら）「もう一度送る」＋余裕
 };
 
+// 幅: 両方（T083端末matrixの中核（360/768/1280で測定））
 test("revisit_core_flows_complete_in_few_operations_after_relogin", async ({ browser, request }, testInfo) => {
   test.setTimeout(480_000);
   const viewport = testInfo.project.use.viewport!;

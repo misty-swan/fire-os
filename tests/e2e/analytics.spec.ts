@@ -15,6 +15,7 @@ interface AnalyticsApiShape {
   sources: { activities: { id: string }[]; incidents: { id: string }[] };
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("analytics_shows_conditions_and_traces_sources", async ({ browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const viewport = testInfo.project.use.viewport!;

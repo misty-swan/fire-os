@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test --project=setup --project=desktop-1280 tests/e2e/journeys.spec.ts tests/e2e/auth.spec.ts tests/e2e/shell.spec.ts",
     "test:live": "vitest --run --config vitest.live.config.ts",
     "test:load": "vitest --run --config vitest.load.config.ts",
     "check:contracts": "tsx scripts/check-contracts.ts",

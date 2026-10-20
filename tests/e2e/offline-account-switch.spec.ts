@@ -125,6 +125,7 @@ function remainingRows(page: Page, userId: string): Promise<{ drafts: number; bl
   }, userId);
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("account_switch_never_leaves_or_shows_another_users_offline_draft", async ({ browser, request }, testInfo) => {
   test.setTimeout(300_000); // 招待受領×2＋ログイン×2のUI操作を含む（notifications.specと同じ扱い）
   const viewport = testInfo.project.use.viewport!;

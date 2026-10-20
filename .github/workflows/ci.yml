@@ -32,5 +32,7 @@ jobs:
       - run: npm run check:environment
       - run: npx vitest --run
       - run: npx playwright install --with-deps chromium
-      # 業務のe2eだけ（受入ゲート〔project acceptance〕は証跡indexの照合でフルe2eの結果に依存するためCIでは流さない＝T085裁定R10）
+      # 業務のe2eだけ（受入ゲート〔project acceptance〕は証跡indexの照合でフルe2eの結果に依存するためCIでは流さない＝T085裁定R10）。
+      # workers=2と幅の絞り込み（「幅:」マーカー）はplaywright.config.ts側で効く。CIは4プロジェクト全部を指定する
+      # （絞り込み後もどの試験も最低1プロジェクトで実行される。仕分けの根拠: docs/evidence/e2e-speed.md）
       - run: npm run test:e2e -- --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768

@@ -9,8 +9,8 @@
     "tests/invitations.test.ts::招待 (T009) > invitation_has_one_consumer_and_bound_identity",
     "tests/invitations.test.ts::招待 (T009) > expired_cancelled_and_reissued_invitations_cannot_be_used",
     "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > auth_works_in_workers_without_public_signup",
-    "tests/e2e/auth.spec.ts::invitation_that_cannot_be_used_explains_why_without_leaking_state",
-    "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login"
+    "tests/e2e/auth.spec.ts::invitation_that_cannot_be_used_explains_why_without_leaking_state@desktop-1280",
+    "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -53,7 +53,7 @@
     "tests/authorization.test.ts::認可 (T008) > admin_role_does_not_bypass_sensitive_scope",
     "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions",
     "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > role_replacement_bumps_authz_version_and_rejects_unsafe_changes",
-    "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history"
+    "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -91,8 +91,8 @@
     "tests/members.test.ts::名簿 (T011) > private_fields_never_leak_to_roster",
     "tests/members.test.ts::名簿 (T011) > who_may_change_what_is_enforced_by_the_server",
     "tests/members.test.ts::名簿 (T011) > list_filters_and_keyset_paging_are_applied_on_the_server",
-    "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history",
-    "tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown"
+    "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history@desktop-1280",
+    "tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -125,7 +125,7 @@
     "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > disabled_user_is_denied_even_if_library_revoke_fails",
     "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > stop_without_fault_revokes_sessions_immediately_and_records_the_reason_on_the_row",
     "tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > session_revocation_api_revokes_all_sessions_and_bumps_authz_version",
-    "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history"
+    "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -144,13 +144,13 @@
     "CT-10": {
      "tests": [
       "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
-      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins"
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins@desktop-1280"
      ]
     },
     "CT-12": {
      "tests": [
       "tests/events.test.ts::認可済snapshot・イベント再開cursor・差分取得 (T072) > snapshot_to_subscription_gap_never_loses_committed_event",
-      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change@desktop-1280"
      ]
     }
    }
@@ -162,7 +162,7 @@
     "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > totp_second_factor_and_one_time_backup_codes",
     "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > mfa_cannot_be_turned_off_or_bypassed_and_enabling_it_revokes_older_sessions",
     "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > password_reset_token_is_hashed_one_time_and_revokes_old_sessions",
-    "tests/e2e/auth.spec.ts::mfa_recovery_code_cannot_be_reused"
+    "tests/e2e/auth.spec.ts::mfa_recovery_code_cannot_be_reused@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -181,7 +181,7 @@
      "tests": [
       "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > totp_second_factor_and_one_time_backup_codes",
       "tests/auth-adapter.test.ts::認証ライブラリ (T007 / V01) > verify_totp_only_revokes_other_sessions_when_it_actually_enables_mfa",
-      "tests/e2e/auth.spec.ts::mfa_recovery_code_cannot_be_reused"
+      "tests/e2e/auth.spec.ts::mfa_recovery_code_cannot_be_reused@desktop-1280"
      ]
     },
     "CT-07": {
@@ -202,7 +202,7 @@
    "reqId": "ACT-01",
    "tests": [
     "tests/activities.test.ts::活動（予定）の公開・変更・中止 (T035) > activity_cancellation_preserves_answers_and_audience",
-    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -234,8 +234,8 @@
    "reqId": "ACT-02",
    "tests": [
     "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer",
-    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels",
-    "tests/e2e/activities.spec.ts::proxy_answer_form_resets_after_save_and_leaves_without_warning"
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280",
+    "tests/e2e/activities.spec.ts::proxy_answer_form_resets_after_save_and_leaves_without_warning@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -262,7 +262,7 @@
     "CT-10": {
      "tests": [
       "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
-      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins"
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins@desktop-1280"
      ]
     }
    }
@@ -272,7 +272,7 @@
    "reqId": "ACT-03",
    "tests": [
     "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance",
-    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -307,7 +307,7 @@
    "reqId": "ACT-04",
    "tests": [
     "tests/activity-history.test.ts::活動履歴の検索 (T038) > history_filters_actual_participants_and_half_open_time_range",
-    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -333,7 +333,7 @@
    "tests": [
     "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience",
     "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_draft_proposals_from_announcement_and_inspection_due",
-    "tests/e2e/notifications.spec.ts::notification_ui_distinguishes_accepted_unknown_and_read"
+    "tests/e2e/notifications.spec.ts::notification_ui_distinguishes_accepted_unknown_and_read@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -344,7 +344,7 @@
     "CT-03": {
      "tests": [
       "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience",
-      "tests/e2e/notifications.spec.ts::notification_approval_shows_conflict_when_already_approved_elsewhere"
+      "tests/e2e/notifications.spec.ts::notification_approval_shows_conflict_when_already_approved_elsewhere@desktop-1280"
      ]
     },
     "CT-04": {
@@ -374,9 +374,9 @@
    "tests": [
     "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once",
     "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval",
-    "tests/e2e/analytics.spec.ts::analytics_shows_conditions_and_traces_sources",
-    "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version",
-    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+    "tests/e2e/analytics.spec.ts::analytics_shows_conditions_and_traces_sources@desktop-1280",
+    "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version@desktop-1280",
+    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -400,7 +400,7 @@
     "CT-14": {
      "tests": [
       "tests/load/api-load.test.ts::代表件数・30端末の性能 (T082) > ordinary_api_p95_is_measured_separately_from_map_and_ai",
-      "tests/e2e/accessibility.spec.ts::analytics_conditions_stay_inside_the_screen_at_phone_width"
+      "tests/e2e/accessibility.spec.ts::analytics_conditions_stay_inside_the_screen_at_phone_width@phone-360"
      ]
     }
    },
@@ -419,7 +419,7 @@
    "ct": {
     "CT-01": {
      "tests": [
-      "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login",
+      "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login@desktop-1280",
       "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions"
      ]
     },
@@ -474,7 +474,7 @@
    "reqId": "MAP-03",
    "tests": [
     "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
-    "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking"
+    "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -585,8 +585,8 @@
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_issue_and_photo_link_commit_together",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > two_corrections_cannot_fork_same_original",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)",
-    "tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission",
-    "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+    "tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission@desktop-1280",
+    "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -605,7 +605,7 @@
     },
     "CT-04": {
      "tests": [
-      "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original",
+      "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original@desktop-1280",
       "tests/sync.test.ts::保留操作の同期 (T076) > sync_reuses_original_handler_authorization_for_inspection_correction_and_mobilization"
      ]
     },
@@ -628,7 +628,7 @@
    "id": "AT-MAP-07",
    "reqId": "MAP-07",
    "tests": [
-    "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified",
+    "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified@desktop-1280",
     "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason"
    ],
@@ -665,7 +665,7 @@
    "tests": [
     "tests/csv-preview.test.ts::CSV取り込みのプレビュー (T023) > preview_changes_no_facility_even_with_valid_rows",
     "tests/csv-commit.test.ts::CSVの確定と書き出し (T024) > import_commit_detects_master_change_and_escapes_formula",
-    "tests/e2e/csv.spec.ts::csv_import_preview_then_commit_updates_master"
+    "tests/e2e/csv.spec.ts::csv_import_preview_then_commit_updates_master@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -709,19 +709,19 @@
    "id": "AT-MAP-09",
    "reqId": "MAP-09",
    "tests": [
-    "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking",
+    "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking@desktop-1280",
     "tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail"
    ],
    "ct": {
     "CT-01": {
      "tests": [
       "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
-      "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking"
+      "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking@desktop-1280"
      ]
     },
     "CT-07": {
      "tests": [
-      "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking",
+      "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking@desktop-1280",
       "tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success"
      ]
     },
@@ -741,7 +741,7 @@
    "tests": [
     "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > patrol_plan_stays_a_draft_until_human_confirms",
     "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > candidate_order_excludes_archived_facilities_and_keeps_positions_unique",
-    "tests/e2e/patrol-plans.spec.ts::patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch"
+    "tests/e2e/patrol-plans.spec.ts::patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -763,7 +763,7 @@
     "CT-06": {
      "tests": [
       "tests/patrol-plans.test.ts::巡回計画の案・順序編集・人の確定 (T071) > patrol_plan_stays_a_draft_until_human_confirms",
-      "tests/e2e/patrol-plans.spec.ts::patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch"
+      "tests/e2e/patrol-plans.spec.ts::patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch@desktop-1280"
      ]
     },
     "CT-09": {
@@ -778,7 +778,7 @@
    "reqId": "AST-01",
    "tests": [
     "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
-    "tests/e2e/assets.spec.ts::asset_detail_displays_quantity_unit_and_storage"
+    "tests/e2e/assets.spec.ts::asset_detail_displays_quantity_unit_and_storage@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -810,7 +810,7 @@
    "tests": [
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)",
-    "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+    "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -828,7 +828,7 @@
     "CT-04": {
      "tests": [
       "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)",
-      "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+      "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting@desktop-1280"
      ]
     },
     "CT-05": {
@@ -841,7 +841,7 @@
     "CT-16": {
      "tests": [
       "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_resend_has_one_effect_and_links_only_ready_photos (T085)",
-      "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+      "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting@desktop-1280"
      ]
     }
    }
@@ -851,7 +851,7 @@
    "reqId": "AST-03",
    "tests": [
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > issue_close_and_reopen_require_current_version_and_reason",
-    "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified"
+    "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -891,7 +891,7 @@
    "tests": [
     "tests/inspection-due.test.ts::点検期限のJST日付判定と重複検出防止 (T048) > due_detection_uses_japan_date_and_is_idempotent",
     "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > inspection_due_metric_matches_overdue_asset_lists (T048)",
-    "tests/e2e/dashboard.spec.ts::home_metrics_drill_down_to_matching_lists"
+    "tests/e2e/dashboard.spec.ts::home_metrics_drill_down_to_matching_lists@desktop-1280"
    ],
    "ct": {
     "CT-02": {
@@ -924,8 +924,8 @@
    "tests": [
     "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_replacement_cancels_missing_rows_without_reducing_stock",
     "tests/resource-usages.test.ts::車両/機材の使用履歴と訂正 (T042) > usage_history_is_reachable_from_assets_and_shared_with_activities",
-    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment",
-    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280",
+    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -961,7 +961,7 @@
    "reqId": "DSP-01",
    "tests": [
     "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches",
-    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -991,7 +991,7 @@
    "reqId": "DSP-02",
    "tests": [
     "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time",
-    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1019,7 +1019,7 @@
      "tests": [
       "tests/sync.test.ts::保留操作の同期 (T076) > sync_reuses_original_handler_authorization_for_inspection_correction_and_mobilization",
       "tests/offline-store.test.ts::通信断下書きの写像 (T077・capture.planFor) > proxy_mobilization_is_never_captured_as_a_draft_but_self_mobilization_is",
-      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins"
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins@desktop-1280"
      ]
     }
    },
@@ -1034,8 +1034,8 @@
     "tests/operation-link.test.ts::出動と活動を一つの出来事へ関連付け (T043) > link_locks_both_roots_and_preserves_all_resource_usages",
     "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches",
     "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once",
-    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment",
-    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280",
+    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1066,7 +1066,7 @@
    "tests": [
     "tests/realtime.test.ts::30端末の更新配信と切断後snapshot回復 (T073) > reconnect_ignores_old_entity_versions_and_resyncs_expired_cursor",
     "tests/events.test.ts::認可済snapshot・イベント再開cursor・差分取得 (T072) > snapshot_to_subscription_gap_never_loses_committed_event",
-    "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+    "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1086,7 +1086,7 @@
       "tests/realtime.test.ts::30端末の更新配信と切断後snapshot回復 (T073) > reconnect_ignores_old_entity_versions_and_resyncs_expired_cursor",
       "tests/realtime-client.test.tsx::useIncidentUpdates (T073) > remote_newer_version_advances_and_old_version_does_not_regress",
       "tests/realtime-client.test.tsx::useIncidentUpdates (T073) > resync_required_recovers_via_snapshot_and_continues_with_new_cursor",
-      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change@desktop-1280"
      ]
     },
     "CT-14": {
@@ -1107,9 +1107,9 @@
    "id": "AT-DSP-05",
    "reqId": "DSP-05",
    "tests": [
-    "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
+    "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins@desktop-1280",
     "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
-    "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery"
+    "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1121,8 +1121,8 @@
     "CT-03": {
      "tests": [
       "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
-      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
-      "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery"
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins@desktop-1280",
+      "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery@desktop-1280"
      ]
     },
     "CT-04": {
@@ -1133,7 +1133,7 @@
     },
     "CT-07": {
      "tests": [
-      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins@desktop-1280",
       "tests/client-shell.test.tsx::client shell (T005) > network_failure_and_5xx_mean_unknown_result_and_retry_reuses_the_same_key"
      ]
     },
@@ -1141,13 +1141,13 @@
      "tests": [
       "tests/offline-store.test.ts::端末下書き store (T075) > account_switch_and_expiry_never_restore_another_users_draft",
       "tests/offline-store.test.ts::端末下書き store (T075) > login_sweeps_drafts_left_by_another_user_even_after_a_crash_skipped_logout",
-      "tests/e2e/offline-account-switch.spec.ts::account_switch_never_leaves_or_shows_another_users_offline_draft"
+      "tests/e2e/offline-account-switch.spec.ts::account_switch_never_leaves_or_shows_another_users_offline_draft@desktop-1280"
      ]
     },
     "CT-12": {
      "tests": [
       "tests/realtime-client.test.tsx::useIncidentUpdates (T073) > offline_pauses_polling_and_reports_offline_then_resumes",
-      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change@desktop-1280"
      ]
     }
    },
@@ -1161,7 +1161,7 @@
    "tests": [
     "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
     "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > announcement_response_carries_author_my_read_state_and_linked_attachments (T046)",
-    "tests/e2e/announcements.spec.ts::edited_announcement_requires_new_read"
+    "tests/e2e/announcements.spec.ts::edited_announcement_requires_new_read@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1195,8 +1195,8 @@
     "tests/notification-delivery.test.ts::通知の実配送と再送安全性 (T051) > unknown_delivery_is_not_blindly_retried",
     "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > approved_unsent_cancel_via_api_unread_list_and_unknown_convention",
     "tests/announcements.test.ts::お知らせの公開対象・版・本人既読 (T045) > read_receipt_is_bound_to_member_and_revision",
-    "tests/e2e/notifications.spec.ts::notification_ui_distinguishes_accepted_unknown_and_read",
-    "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+    "tests/e2e/notifications.spec.ts::notification_ui_distinguishes_accepted_unknown_and_read@desktop-1280",
+    "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1206,7 +1206,7 @@
     },
     "CT-03": {
      "tests": [
-      "tests/e2e/notifications.spec.ts::notification_approval_shows_conflict_when_already_approved_elsewhere",
+      "tests/e2e/notifications.spec.ts::notification_approval_shows_conflict_when_already_approved_elsewhere@desktop-1280",
       "tests/notification-approval.test.ts::通知の明示承認・本人既読 (T050) > notification_cannot_dispatch_unapproved_or_changed_audience"
      ]
     },
@@ -1242,7 +1242,7 @@
    "tests": [
     "tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload",
     "tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads",
-    "tests/e2e/attachments.spec.ts::checking_file_is_not_submitted_as_ready"
+    "tests/e2e/attachments.spec.ts::checking_file_is_not_submitted_as_ready@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1283,7 +1283,7 @@
      "tests": [
       "tests/file-inspection.test.ts::ファイル検査とready確定 (T016) > forged_mime_or_scanner_failure_never_becomes_ready",
       "tests/file-inspection.test.ts::ファイル検査とready確定 (T016) > checking_attachment_is_retried_until_limit_not_staled",
-      "tests/e2e/attachments.spec.ts::checking_file_is_not_submitted_as_ready"
+      "tests/e2e/attachments.spec.ts::checking_file_is_not_submitted_as_ready@desktop-1280"
      ]
     }
    },
@@ -1298,7 +1298,7 @@
     "tests/reports.test.ts::帳票様式artifactと手動下書き・不変版 (T056) > report_template_is_allowlisted_and_old_versions_immutable",
     "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > submission_does_not_consume_final_decision_and_export_requires_approval",
     "tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > second_approval_supersedes_previous_approved_version",
-    "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version"
+    "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1348,7 +1348,7 @@
     "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > dashboard_counts_match_authorized_drilldown_lists",
     "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > inspection_due_metric_matches_overdue_asset_lists (T048)",
     "tests/dashboard.test.ts::ホームの指標と同じ条件の一覧への遷移 (T047) > dashboard_task_and_notification_metrics_match_their_lists (T052)",
-    "tests/e2e/dashboard.spec.ts::home_metrics_drill_down_to_matching_lists"
+    "tests/e2e/dashboard.spec.ts::home_metrics_drill_down_to_matching_lists@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1381,8 +1381,8 @@
    "reqId": "DASH-02",
    "tests": [
     "tests/analytics.test.ts::月次・年度・団員別集計 (T060) > linked_incident_and_activity_are_counted_once",
-    "tests/e2e/analytics.spec.ts::analytics_shows_conditions_and_traces_sources",
-    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+    "tests/e2e/analytics.spec.ts::analytics_shows_conditions_and_traces_sources@desktop-1280",
+    "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1398,7 +1398,7 @@
     "CT-14": {
      "tests": [
       "tests/load/api-load.test.ts::代表件数・30端末の性能 (T082) > ordinary_api_p95_is_measured_separately_from_map_and_ai",
-      "tests/e2e/accessibility.spec.ts::analytics_conditions_stay_inside_the_screen_at_phone_width"
+      "tests/e2e/accessibility.spec.ts::analytics_conditions_stay_inside_the_screen_at_phone_width@phone-360"
      ]
     }
    }
@@ -1409,8 +1409,8 @@
    "tests": [
     "tests/jev.test.ts::Jev分類 (T053) > jev_noul_value_is_not_a_confidence_field",
     "tests/ai-evaluation.test.ts::AI評価の固定holdout実行と品質ゲート (T061) > quality_gate_fails_on_one_abnormal_to_no_issue_case",
-    "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval",
-    "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+    "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval@desktop-1280",
+    "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1422,7 +1422,7 @@
     "CT-06": {
      "tests": [
       "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
-      "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval"
+      "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval@desktop-1280"
      ]
     },
     "CT-07": {
@@ -1488,7 +1488,7 @@
    "reqId": "AI-03",
    "tests": [
     "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > missing_times_and_injected_notes_do_not_create_facts",
-    "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version"
+    "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1504,7 +1504,7 @@
     "CT-07": {
      "tests": [
       "tests/report-generation.test.ts::LLMによる報告書下書き生成 (T057) > report_draft_job_without_ai_binding_lands_in_manual_review",
-      "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version"
+      "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version@desktop-1280"
      ]
     },
     "CT-17": {
@@ -1528,8 +1528,8 @@
     "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
     "tests/ai-decisions.test.ts::AI提案の決定 (T054) > inspection_candidate_approval_targets_the_linked_issue_once",
     "tests/tasks.test.ts::業務タスク (T049) > ai_originated_task_tracks_status_changes_assignee_and_reason",
-    "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval",
-    "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+    "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval@desktop-1280",
+    "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1557,13 +1557,13 @@
     "CT-06": {
      "tests": [
       "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
-      "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval"
+      "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval@desktop-1280"
      ]
     },
     "CT-11": {
      "tests": [
       "tests/ai-decisions.test.ts::AI提案の決定 (T054) > approval_after_source_or_permission_change_has_zero_effect",
-      "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+      "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280"
      ]
     },
     "CT-17": {
@@ -1612,8 +1612,8 @@
     "tests/rag-holdout.test.ts::固定dataset55問の全件回帰 (T067・B低3) > all_55_questions_answer_with_expected_sources_or_abstain",
     "tests/document-policy.test.ts::文書の承認・撤回・ACL変更と即時検索遮断 (T063) > withdrawal_blocks_search_before_index_cleanup",
     "tests/document-extract.test.ts::文書抽出・ページ/段落/offset付きchunk (T064) > chunk_citation_can_be_resolved_to_exact_original_span",
-    "tests/e2e/documents.spec.ts::withdrawn_document_disappears_from_search_and_citation",
-    "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+    "tests/e2e/documents.spec.ts::withdrawn_document_disappears_from_search_and_citation@desktop-1280",
+    "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1632,15 +1632,15 @@
      "tests": [
       "tests/rag.test.ts::出典付きRAG回答・原文一致・根拠不足保留 (T067) > answer_citations_remain_authorized_and_exact",
       "tests/budget.test.ts::メトリクス・課金予兆・上限停止 (T080) > rag_and_assistant_are_metered_and_stopped_by_budget",
-      "tests/e2e/documents.spec.ts::image_only_pdf_version_shows_unextractable_reason"
+      "tests/e2e/documents.spec.ts::image_only_pdf_version_shows_unextractable_reason@desktop-1280"
      ]
     },
     "CT-13": {
      "tests": [
       "tests/document-policy.test.ts::文書の承認・撤回・ACL変更と即時検索遮断 (T063) > withdrawal_blocks_search_before_index_cleanup",
       "tests/retrieval.test.ts::選定した索引の投入・検索・失効回収 (T066) > index_hit_is_filtered_by_current_d1_acl_and_version",
-      "tests/e2e/documents.spec.ts::withdrawn_document_disappears_from_search_and_citation",
-      "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+      "tests/e2e/documents.spec.ts::withdrawn_document_disappears_from_search_and_citation@desktop-1280",
+      "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal@desktop-1280"
      ]
     },
     "CT-17": {
@@ -1664,7 +1664,7 @@
     "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > prompt_injection_cannot_write_or_send_notification",
     "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > assistant_proposal_approves_through_api_31_and_stale_references_are_rejected",
     "tests/assistant-context-chips.test.tsx::AssistantPage 記録を添える (T085 D5) > newest_reported_issue_is_offered_when_more_than_five_are_waiting",
-    "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects"
+    "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects@desktop-1280"
    ],
    "ct": {
     "CT-01": {
@@ -1691,8 +1691,8 @@
     "CT-13": {
      "tests": [
       "tests/assistant.test.ts::業務横断AIの読取と承認前の書込提案 (T068) > api_30_masks_read_results_of_documents_the_viewer_cannot_see",
-      "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects",
-      "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+      "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects@desktop-1280",
+      "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal@desktop-1280"
      ]
     },
     "CT-17": {
@@ -1716,20 +1716,20 @@
     "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls",
     "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls@tablet-768",
     "tests/e2e/revisit-flows.spec.ts::revisit_core_flows_complete_in_few_operations_after_relogin@tablet-768",
-    "tests/e2e/accessibility.spec.ts::inputs_stay_inside_the_search_card_at_narrow_widths",
-    "tests/e2e/accessibility.spec.ts::date_inputs_render_with_the_app_field_style_on_ios_browsers"
+    "tests/e2e/accessibility.spec.ts::inputs_stay_inside_the_search_card_at_narrow_widths@phone-360",
+    "tests/e2e/accessibility.spec.ts::date_inputs_render_with_the_app_field_style_on_ios_browsers@desktop-1280"
    ],
    "ct": {
     "CT-10": {
      "tests": [
-      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
-      "tests/e2e/pwa-cache.spec.ts::offline_cache_contains_no_api_response_or_google_tiles",
-      "tests/e2e/pwa-cache.spec.ts::sw_update_notifies_and_does_not_destroy_unsaved_input"
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins@desktop-1280",
+      "tests/e2e/pwa-cache.spec.ts::offline_cache_contains_no_api_response_or_google_tiles@desktop-1280",
+      "tests/e2e/pwa-cache.spec.ts::sw_update_notifies_and_does_not_destroy_unsaved_input@desktop-1280"
      ]
     },
     "CT-12": {
      "tests": [
-      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change"
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change@desktop-1280"
      ]
     },
     "CT-14": {
@@ -1789,7 +1789,7 @@
     },
     "CT-15": {
      "tests": [
-      "tests/e2e/shell.spec.ts::api_paths_return_json_never_the_spa",
+      "tests/e2e/shell.spec.ts::api_paths_return_json_never_the_spa@desktop-1280",
       "tests/runtime.test.ts::runtime (T001) > api_route_never_returns_spa",
       "tests/deploy-config.test.ts::deploy-config (T078) > clean_environment_and_staged_expand_backfill_contract_pass"
      ]
@@ -1831,7 +1831,7 @@
     },
     "CT-12": {
      "tests": [
-      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change",
+      "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change@desktop-1280",
       "tests/realtime-client.test.tsx::useIncidentUpdates (T073) > offline_pauses_polling_and_reports_offline_then_resumes"
      ]
     }
@@ -1857,7 +1857,7 @@
     "tests/mutation.test.ts::executeMutation (T004) > failure_at_every_sql_position_rolls_back_everything",
     "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
     "tests/client-shell.test.tsx::client shell (T005) > double_tap_while_saving_sends_one_request",
-    "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+    "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original@desktop-1280"
    ],
    "ct": {
     "CT-03": {
@@ -1873,7 +1873,7 @@
       "tests/mutation.test.ts::executeMutation (T004) > same_key_concurrent_requests_apply_the_effect_once",
       "tests/mutation.test.ts::executeMutation (T004) > key_older_than_7_days_is_rejected_and_never_reexecuted",
       "tests/client-shell.test.tsx::client shell (T005) > the_key_survives_401_and_429_after_an_unknown_result_so_a_retry_cannot_double_register",
-      "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+      "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original@desktop-1280"
      ]
     },
     "CT-05": {
@@ -1893,8 +1893,8 @@
     "CT-10": {
      "tests": [
       "tests/sync.test.ts::保留操作の同期 (T076) > sync_replay_after_lost_response_has_one_effect_and_same_result",
-      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
-      "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery"
+      "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins@desktop-1280",
+      "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery@desktop-1280"
      ]
     }
    }
@@ -2015,7 +2015,7 @@
     "CT-14": {
      "tests": [
       "tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls",
-      "tests/e2e/member-admin.spec.ts::keyboard_only_can_filter_open_and_close_the_member_drawer",
+      "tests/e2e/member-admin.spec.ts::keyboard_only_can_filter_open_and_close_the_member_drawer@desktop-1280",
       "tests/e2e/shell.spec.ts::keyboard_navigation_changes_screens_and_moves_focus_to_main",
       "tests/client-shell.test.tsx::client shell (T005) > keyboard_can_reach_and_operate_the_main_navigation"
      ]
@@ -2072,7 +2072,7 @@
    "tests": [
     "tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions",
     "tests/authorization.test.ts::認可 (T008) > unlinked_identity_and_forged_test_header_never_get_business_access",
-    "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login"
+    "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login@desktop-1280"
    ],
    "note": "未ログインで施設一覧（API-10）を含む全業務routeが401等で拒否（matrixの未認証主体）"
   },
@@ -2094,7 +2094,7 @@
    ],
    "tests": [
     "tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer",
-    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280"
    ]
   },
   {
@@ -2104,7 +2104,7 @@
    ],
    "tests": [
     "tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance",
-    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+    "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280"
    ]
   },
   {
@@ -2130,7 +2130,7 @@
    ],
    "tests": [
     "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation",
-    "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking"
+    "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking@desktop-1280"
    ]
   },
   {
@@ -2163,7 +2163,7 @@
    "tests": [
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_links_ready_attachments_and_rejects_uninspected_ones",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)",
-    "tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission"
+    "tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission@desktop-1280"
    ]
   },
   {
@@ -2172,7 +2172,7 @@
     "MAP-07"
    ],
    "tests": [
-    "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified",
+    "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified@desktop-1280",
     "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation"
    ]
   },
@@ -2185,7 +2185,7 @@
    "tests": [
     "tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity",
     "tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target",
-    "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+    "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting@desktop-1280"
    ]
   },
   {
@@ -2197,7 +2197,7 @@
    "tests": [
     "tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches",
     "tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time",
-    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+    "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280"
    ]
   },
   {
@@ -2230,7 +2230,7 @@
    "tests": [
     "tests/mutation.test.ts::executeMutation (T004) > same_key_concurrent_requests_apply_the_effect_once",
     "tests/client-shell.test.tsx::client shell (T005) > double_tap_while_saving_sends_one_request",
-    "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+    "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original@desktop-1280"
    ]
   },
   {
@@ -2240,7 +2240,7 @@
    ],
    "tests": [
     "tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)",
-    "tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown"
+    "tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown@desktop-1280"
    ]
   },
   {
@@ -2655,11 +2655,11 @@
  "screens": {
   "SCR-01": [
    "tests/e2e/auth.spec.ts::login_screen_matches_the_prototype_and_offers_no_public_signup",
-   "tests/e2e/auth.spec.ts::invitation_that_cannot_be_used_explains_why_without_leaking_state",
-   "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login"
+   "tests/e2e/auth.spec.ts::invitation_that_cannot_be_used_explains_why_without_leaking_state@desktop-1280",
+   "tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login@desktop-1280"
   ],
   "SCR-02": [
-   "tests/e2e/dashboard.spec.ts::home_metrics_drill_down_to_matching_lists",
+   "tests/e2e/dashboard.spec.ts::home_metrics_drill_down_to_matching_lists@desktop-1280",
    "tests/e2e/shell.spec.ts::shell_layout_matches_the_viewport"
   ],
   "SCR-03": [
@@ -2667,106 +2667,106 @@
    "tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport"
   ],
   "SCR-04": [
-   "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking",
-   "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified",
-   "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original"
+   "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking@desktop-1280",
+   "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified@desktop-1280",
+   "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original@desktop-1280"
   ],
   "SCR-05": [
-   "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking"
+   "tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking@desktop-1280"
   ],
   "SCR-06": [
-   "tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission",
-   "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original",
-   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+   "tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission@desktop-1280",
+   "tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280"
   ],
   "SCR-07": [
-   "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified",
-   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+   "tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280"
   ],
   "SCR-08": [
-   "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels"
+   "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280"
   ],
   "SCR-09": [
-   "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels",
-   "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version"
+   "tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280",
+   "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version@desktop-1280"
   ],
   "SCR-10": [
-   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280"
   ],
   "SCR-11": [
-   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment"
+   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280"
   ],
   "SCR-12": [
-   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment",
-   "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change",
-   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280",
+   "tests/e2e/realtime.spec.ts::incident_detail_receives_remote_updates_and_resyncs_after_role_change@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280"
   ],
   "SCR-13": [
-   "tests/e2e/assets.spec.ts::asset_detail_displays_quantity_unit_and_storage"
+   "tests/e2e/assets.spec.ts::asset_detail_displays_quantity_unit_and_storage@desktop-1280"
   ],
   "SCR-14": [
-   "tests/e2e/assets.spec.ts::asset_detail_displays_quantity_unit_and_storage",
-   "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+   "tests/e2e/assets.spec.ts::asset_detail_displays_quantity_unit_and_storage@desktop-1280",
+   "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting@desktop-1280"
   ],
   "SCR-15": [
    "tests/e2e/member-admin.spec.ts::members_screen_matches_the_prototype_structure",
-   "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history"
+   "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history@desktop-1280"
   ],
   "SCR-16": [
-   "tests/e2e/announcements.spec.ts::edited_announcement_requires_new_read"
+   "tests/e2e/announcements.spec.ts::edited_announcement_requires_new_read@desktop-1280"
   ],
   "SCR-17": [
-   "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history",
-   "tests/e2e/inspection-templates.spec.ts::template_edit_creates_new_draft_version",
+   "tests/e2e/member-admin.spec.ts::stop_requires_reason_and_preserves_member_history@desktop-1280",
+   "tests/e2e/inspection-templates.spec.ts::template_edit_creates_new_draft_version@desktop-1280",
    "tests/e2e/audit.spec.ts::audit_panel_shows_who_changed_what_without_bodies"
   ],
   "SCR-18": [
-   "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval",
-   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+   "tests/e2e/ai-review.spec.ts::stale_proposal_requires_regeneration_not_forced_approval@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280"
   ],
   "SCR-19": [
-   "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version",
-   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+   "tests/e2e/reports.spec.ts::report_ui_shows_missing_fields_and_only_exports_approved_version@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280"
   ],
   "SCR-20": [
-   "tests/e2e/csv.spec.ts::csv_import_preview_then_commit_updates_master"
+   "tests/e2e/csv.spec.ts::csv_import_preview_then_commit_updates_master@desktop-1280"
   ],
   "SCR-21": [
-   "tests/e2e/notifications.spec.ts::notification_ui_distinguishes_accepted_unknown_and_read",
-   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification"
+   "tests/e2e/notifications.spec.ts::notification_ui_distinguishes_accepted_unknown_and_read@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280"
   ],
   "SCR-22": [
-   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment",
-   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+   "tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280"
   ],
   "SCR-23": [
-   "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting"
+   "tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting@desktop-1280"
   ],
   "SCR-24": [
-   "tests/e2e/documents.spec.ts::withdrawn_document_disappears_from_search_and_citation",
-   "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+   "tests/e2e/documents.spec.ts::withdrawn_document_disappears_from_search_and_citation@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal@desktop-1280"
   ],
   "SCR-25": [
-   "tests/e2e/patrol-plans.spec.ts::patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch"
+   "tests/e2e/patrol-plans.spec.ts::patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch@desktop-1280"
   ],
   "SCR-26": [
-   "tests/e2e/analytics.spec.ts::analytics_shows_conditions_and_traces_sources",
-   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report"
+   "tests/e2e/analytics.spec.ts::analytics_shows_conditions_and_traces_sources@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280"
   ],
   "SCR-27": [
-   "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins",
-   "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery"
+   "tests/e2e/offline-sync.spec.ts::offline_conflict_never_uses_last_write_wins@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery@desktop-1280"
   ],
   "SCR-28": [
-   "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects",
-   "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal"
+   "tests/e2e/assistant.spec.ts::assistant_proposal_requires_explicit_review_of_effects@desktop-1280",
+   "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal@desktop-1280"
   ]
  },
  "journeys": [
   {
    "id": "J1",
    "name": "点検→異常→AI→task→通知",
-   "test": "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification",
+   "test": "tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280",
    "covers": [
     "MAP-06",
     "MAP-07",
@@ -2779,7 +2779,7 @@
   {
    "id": "J2",
    "name": "活動/出動→使用→集計→帳票",
-   "test": "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report",
+   "test": "tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280",
    "covers": [
     "ACT-03",
     "DSP-01",
@@ -2793,7 +2793,7 @@
   {
    "id": "J3",
    "name": "文書→引用→失効",
-   "test": "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal",
+   "test": "tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal@desktop-1280",
    "covers": [
     "AI-06",
     "AI-07",
@@ -2803,7 +2803,7 @@
   {
    "id": "J4",
    "name": "offline→競合→復旧（点検の訂正）",
-   "test": "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery",
+   "test": "tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery@desktop-1280",
    "covers": [
     "DSP-05",
     "MAP-06",
@@ -3376,24 +3376,5 @@
    "owner": "未割当"
   }
  ],
- "knownSkips": [
-  {
-   "test": "tests/e2e/shell.spec.ts::mobile_menu_tab_shows_profile_and_tiles",
-   "project": "desktop-1280",
-   "reason": "メニュータブはスマホ幅のみの画面（test.skip(!isPhone)）",
-   "evidenceProject": "phone-360"
-  },
-  {
-   "test": "tests/e2e/member-admin.spec.ts::ai_evaluation_buttons_meet_touch_target_on_mobile",
-   "project": "desktop-1280",
-   "reason": "押下領域44pxの規則はモバイル。PCはprototypeのコンパクト寸法が正",
-   "evidenceProject": "phone-360"
-  },
-  {
-   "test": "tests/e2e/assistant.spec.ts::assistant_input_controls_meet_touch_target_on_mobile",
-   "project": "desktop-1280",
-   "reason": "押下領域44pxの規則はモバイル。PCはprototypeのコンパクト寸法が正",
-   "evidenceProject": "phone-360"
-  }
- ]
+ "knownSkips": []
 }

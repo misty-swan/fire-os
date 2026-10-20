@@ -16,6 +16,7 @@ const localInput = (offsetMs: number) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("incident_detail_traces_activity_vehicle_and_equipment", async ({ page, browser, request }, testInfo) => {
   test.setTimeout(300_000);
   const viewport = testInfo.project.use.viewport!;
@@ -159,6 +160,7 @@ test("incident_detail_traces_activity_vehicle_and_equipment", async ({ page, bro
   await expect(officerPage.getByText("模擬").first()).toBeVisible();
 });
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("incident_new_draft_usage_rows_are_guarded_by_leave_confirm", async ({ page, browser, request }, testInfo) => {
   test.setTimeout(240_000);
   const viewport = testInfo.project.use.viewport!;

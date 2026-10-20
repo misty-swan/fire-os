@@ -13,6 +13,7 @@ function csvFile(rows: string[]): Buffer {
   return Buffer.from([CSV_HEADER, ...rows].join("\r\n"), "utf8");
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("csv_import_preview_then_commit_updates_master", async ({ page }) => {
   test.setTimeout(120_000);
   const tag = crypto.randomUUID().slice(0, 6);

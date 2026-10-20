@@ -10,6 +10,7 @@ async function selectMember(page: Page, name: string) {
   await expect(page.getByRole("heading", { name: new RegExp(`${name}.*の管理`) })).toBeVisible();
 }
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("stop_requires_reason_and_preserves_member_history", async ({ page, browser, request }, info) => {
   const viewport = info.project.use.viewport!;
   const name = `架空 停止確認 ${crypto.randomUUID().slice(0, 4)}`;
@@ -147,6 +148,7 @@ test("stop_requires_reason_and_preserves_member_history", async ({ page, browser
   for (const c of [invitee, memberCtx]) await c.close();
 });
 
+// 幅: 両方（検索欄320×42・ドロワー440px(PC)/360px(スマホ)の寸法断言）
 test("members_screen_matches_the_prototype_structure", async ({ page }, info) => {
   await page.goto("/app/members");
   const phone = isPhone(page.viewportSize());
@@ -184,6 +186,7 @@ test("members_screen_matches_the_prototype_structure", async ({ page }, info) =>
   if (process.env.SAVE_EVIDENCE === "1") await page.screenshot({ path: `docs/evidence/ph1/admin-${info.project.name}.png`, fullPage: true });
 });
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("keyboard_only_can_filter_open_and_close_the_member_drawer", async ({ page }) => {
   await page.goto("/app/members");
   await page.getByPlaceholder("氏名・班・資格で絞り込み").fill("管理者");
@@ -198,6 +201,7 @@ test("keyboard_only_can_filter_open_and_close_the_member_drawer", async ({ page 
   await expect(row).toBeFocused(); // 開いた操作へフォーカスが戻る
 });
 
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown", async ({ page, browser, request }, info) => {
   const viewport = info.project.use.viewport!;
   // 1) 入力途中でEscを押しても、確認なしには閉じない（確認は最前面で、既定は「戻る」）
@@ -275,8 +279,8 @@ test("unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_ar
  * モバイル（360px）で44px以上の押下領域を持つ（docs/03 §1.1-5。MembersPage.tsx:221の
  * `h-[42px] max-lg:min-h-11` と同じ流儀。PCはコンパクト寸法42pxが正のためモバイルだけで検査する）。
  */
-test("ai_evaluation_buttons_meet_touch_target_on_mobile", async ({ page }, info) => {
-  test.skip(!isPhone(info.project.use.viewport ?? page.viewportSize()), "押下領域44pxの規則はモバイル。PCはコンパクト寸法が正のため対象外");
+// 幅: phone限定（押下領域44pxの規則はモバイルのみ。PCはコンパクト寸法が正＝T085b設定側の仕分け）
+test("ai_evaluation_buttons_meet_touch_target_on_mobile", async ({ page }) => {
   await page.goto("/app/admin");
   for (const name of ["分類holdout（300件）を評価する", "報告書holdout（50件）を評価する", "実行履歴を再読み込み"]) {
     const button = page.getByRole("button", { name });
