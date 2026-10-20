@@ -3021,7 +3021,7 @@
    "summary": "fill値の消失で文書作成のPOSTが送られず30秒で落ちる（稀。引き金未特定）",
    "severity": "medium",
    "status": "open",
-   "basis": "試験の不安定さ。R8の調査（ph8.md）: 検証エラー「題名を入力してください」が残る＝fillの値が背景の再レンダリングで消えて作成POSTが出ない（データ破壊なし・単独実行は緑・引き金は未特定）。T085のcollect:evidenceではe2eのフル走行3回中2回発火（T084は3回中1回）",
+   "basis": "試験の不安定さ。R8の調査（ph8.md）: 検証エラー「題名を入力してください」が残る＝fillの値が背景の再レンダリングで消えて作成POSTが出ない（データ破壊なし・単独実行は緑・引き金は未特定）。T085のcollect:evidenceではe2eのフル走行3回中2回発火（T084は3回中1回）。T085b: 押下後POST不発なら検証エラー確認→再fill・再押下×3の回復ループ＋ACL追加の先出し＋ドロップ吸収ヘルパで抑止。**根因（再マウント/再レンダリング競合の引き金）は未特定**。M0基準3回中3回発火→M3'（4ad6883）以降は未発火",
    "owner": "T085b"
   },
   {
@@ -3029,9 +3029,18 @@
    "source": "docs/evidence/ph8.md「既知フレーキー」継続観察",
    "summary": "reports.spec desktop／facility-location.spec desktop／notifications.spec phone の1回off",
    "severity": "low",
-   "status": "open",
-   "basis": "フル走行15回で各1回。単独実行は常に緑",
+   "status": "resolved",
+   "basis": "reports・journeysは根因を同定（ReportDraftPage.tsx:905の常時表示「承認済みの版が無いため…」への部分一致が先取りし確定前のGETが走る）→API-60のwaitForResponse＋exact一致へ。facility-locationはpopup URL直後読み〔review r0 Minorの実発火〕→要求イベント待ちへ。notificationsは待機化〔元失敗行は特定できず〕。M3'以降のフル走行で未発火",
    "owner": "T085b"
+  },
+  {
+   "id": "T085b-W1",
+   "source": "T085b M3計測〔issues.spec desktopが実発火。同種ログはM0/M2にも〜1回/回〕",
+   "summary": "wrangler 4.150のdevサーバーがProxyWorker→UserWorker接続を希に切断し〔kj keep-alive約5秒境界・「Network connection lost」。#14926/#15252〕、awaitedな書き込み要求の応答を失って試験が赤になり得る",
+   "severity": "low",
+   "status": "open",
+   "basis": "GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。対策は署名限定・有界3回・同一冪等鍵の再送ヘルパ〔issues 6書き込み＋documents作成に適用済み〕。他specのawaited書き込みには残存。docs/evidence/e2e-speed.md「残存クラス」",
+   "owner": "T086"
   },
   {
    "id": "FLAKE-3",
@@ -3317,8 +3326,8 @@
    "source": "docs/evidence/ph3-review.md 第3回",
    "summary": "activities.specの死に変数・先取り断言・wrangler d1 executeのseed",
    "severity": "low",
-   "status": "open",
-   "basis": "ph3-review表「低・方針で残す」",
+   "status": "resolved",
+   "basis": "ph3-review表「低・方針で残す」。T085bで整理（死に変数削除・「不参加」断言をフォーム閉鎖確定→チップの順に強化・seedをSQLITE_BUSY有界再試行のseedProxyScopeへ）。4ad6883以降のフル走行で未発火",
    "owner": "T085b"
   },
   {
