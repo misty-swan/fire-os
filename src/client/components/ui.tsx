@@ -184,10 +184,15 @@ interface FieldBase {
   label: string;
   error?: string;
   hint?: string;
+  /**
+   * フォーム全体の誤り（ログイン失敗など欄ごとでない誤り）のid。誤りの文（role="alert"）と
+   * 入力欄を関連付ける（PH1-C）。渡すとaria-invalid/aria-describedbyに載る。
+   */
+  describedBy?: string;
 }
 
 /** 入力欄。idは `field-<name>`：FormErrorsが最初の誤り欄へフォーカスを移すために使う。 */
-export function TextField({ name, label, error, hint, className, type, ...rest }: FieldBase & Omit<ComponentProps<"input">, "name">) {
+export function TextField({ name, label, error, hint, describedBy, className, type, ...rest }: FieldBase & Omit<ComponentProps<"input">, "name">) {
   const hintId = useId();
   const errorId = `field-${name}-error`;
   // iOS Safariは appearance:auto のdate入力でauthorのbox-sizing（box-border）を無視してcontent-boxにするため、
@@ -205,8 +210,8 @@ export function TextField({ name, label, error, hint, className, type, ...rest }
         type={type}
         id={`field-${name}`}
         name={name}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={clsx(error && errorId, hint && hintId) || undefined}
+        aria-invalid={error || describedBy ? true : undefined}
+        aria-describedby={clsx(error && errorId, hint && hintId, describedBy) || undefined}
         className={clsx(
           "h-[54px] w-full min-w-0 box-border rounded-field border-0 bg-white/[.06] px-4 text-[16px] font-medium text-ink placeholder:text-ink-dim",
           iosDateFix,

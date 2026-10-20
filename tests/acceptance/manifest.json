@@ -3254,8 +3254,8 @@
    "source": "docs/evidence/ph1-review.md C",
    "summary": "フォーカス循環の細部・寸法の微差",
    "severity": "low",
-   "status": "open",
-   "basis": "ph1-review表「低・方針で残す」",
+   "status": "resolved",
+   "basis": "T086（low対応）でバンドルを分解して個別判定。修正1: ログインのエラーとaria関連付け=フォーム全体の誤り（未入力・認証失敗・再設定失敗）のp（role=\"alert\"）にidを付け、TextFieldへ追加したdescribedBy propで入力欄にaria-invalid/aria-describedbyで関連付け（docs/03 SCR-01の変え方④に記録。未入力送信で両入力欄の関連付けを断言するjsdom試験tests/login-aria.test.tsxを旧実装で赤→緑）。現状確認でコード不变2: ①無効ボタンの理由=「生体認証でログイン」はdisabled＋title=\"生体認証（パスキー）は後続で対応します\"で理由が付き、他のdisabledボタン（再設定・認証コードの送信）は入力欄が空の間だけの無効で理由自明②フォーカス循環=Overlay.tsxのuseOverlayがEscスタック（最前面の面だけ処理）・Tabトラップ・閉じた後のフォーカス復帰を実装済み（PH1レビュー第2回の修正）で、T083のaccessibility.specがTab実走査・keyboard到達不可0で合格済み。記録で決着2: ①ボタン影・文字サイズの微差=docs/03 §1.1-5等の意図した差（prototype寸法優先。Buttonはprototype Design Systemどおり56/52px・影）として維持②aria-label等の細部=T083でaxe走査4画面（WCAG 2.1 A/AA）とマーカーのテキストラベル断言は合格済みで、全SCR走査・実スクリーンリーダーでの確認はops/device-test-matrix.md §2の番号付き残手順として追跡中",
    "owner": "T086"
   },
   {

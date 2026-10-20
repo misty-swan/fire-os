@@ -77,8 +77,9 @@ function RecoveryPanel({ token, onBack }: { token: string | null; onBack: () => 
       </>
     );
   }
+  // フォーム全体の誤り。idで入力欄に関連付ける（PH1-C。欄ごとの誤りではないためTextFieldのerror propは使わない）
   const errorLine = error && (
-    <p role="alert" className="flex items-center gap-2 text-[13px] font-medium text-alert">
+    <p id="recovery-form-error" role="alert" className="flex items-center gap-2 text-[13px] font-medium text-alert">
       <Icon name="error" className="text-[18px]" />
       {error}
     </p>
@@ -90,8 +91,8 @@ function RecoveryPanel({ token, onBack }: { token: string | null; onBack: () => 
       </StepHeading>
       {haveToken ? (
         <form onSubmit={reset} noValidate className="flex flex-col gap-3.5">
-          <TextField name="reset-token" label="再設定コード" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} className={monoField} />
-          <TextField name="password" label="新しいパスワード（12文字以上）" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={monoField} />
+          <TextField name="reset-token" label="再設定コード" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} describedBy={error ? "recovery-form-error" : undefined} className={monoField} />
+          <TextField name="password" label="新しいパスワード（12文字以上）" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} describedBy={error ? "recovery-form-error" : undefined} className={monoField} />
           {errorLine}
           <Button type="submit" busy={busy} disabled={!tokenInput || !password}>
             {busy ? "処理しています…" : "再設定する"}
@@ -99,7 +100,7 @@ function RecoveryPanel({ token, onBack }: { token: string | null; onBack: () => 
         </form>
       ) : (
         <form onSubmit={request} noValidate className="flex flex-col gap-3.5">
-          <TextField name="email" label="登録したメールアドレス" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} className={monoField} />
+          <TextField name="email" label="登録したメールアドレス" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} describedBy={error ? "recovery-form-error" : undefined} className={monoField} />
           {sent && (
             <Notice tone="info" icon="mark_email_read" role="status">
               登録されている場合は、再設定の案内を手配します。届かないときは分団の管理者へ連絡してください。
@@ -192,8 +193,9 @@ export function LoginPage() {
       setBusy(false);
     }
   }
+  // フォーム全体の誤り。idで入力欄に関連付ける（PH1-C。欄ごとの誤りではないためTextFieldのerror propは使わない）
   const errorLine = error && (
-    <p role="alert" className="flex items-center gap-2 text-[13px] font-medium text-alert">
+    <p id="login-form-error" role="alert" className="flex items-center gap-2 text-[13px] font-medium text-alert">
       <Icon name="error" className="text-[18px]" />
       {error}
     </p>
@@ -256,6 +258,7 @@ export function LoginPage() {
             autoFocus
             value={code}
             onChange={(e) => setCode(backup ? e.target.value : e.target.value.replace(/\D/g, ""))}
+            describedBy={error ? "login-form-error" : undefined}
             className={`${monoField} tracking-[.2em]`}
           />
           {errorLine}
@@ -276,7 +279,7 @@ export function LoginPage() {
   return (
     <AuthLayout>
       <form onSubmit={submitPassword} noValidate className="flex flex-col gap-3.5">
-        <TextField name="email" label="メールアドレス" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} className={monoField} />
+        <TextField name="email" label="メールアドレス" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} describedBy={error ? "login-form-error" : undefined} className={monoField} />
         <TextField
           name="password"
           label="パスワード"
@@ -285,6 +288,7 @@ export function LoginPage() {
           placeholder="パスワードを入力"
           value={password}
           onChange={(e) => { setPassword(e.target.value); setError(""); }}
+          describedBy={error ? "login-form-error" : undefined}
           className={monoField}
         />
         {errorLine}
