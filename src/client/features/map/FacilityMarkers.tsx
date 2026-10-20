@@ -1,4 +1,5 @@
 import { clsx } from "clsx";
+import { useOverlay } from "../../components/Overlay";
 import { FACILITY_TYPES, facilityName, locationStatusLabel, type FacilityItem, type FacilityType } from "./useFacilities";
 
 /**
@@ -99,7 +100,9 @@ export function TypeChip({
   );
 }
 
-/** 選択シート（スマホ）。prototype の bottom sheet（角丸28・状態3列・主ボタン52px） */
+/** 選択シート（スマホ）。prototype の bottom sheet（角丸28・状態3列・主ボタン52px）。
+ *  Escで閉じる・開いたら閉じるボタンへフォーカス・閉じたらマーカーへ戻す（PH2-C19。Overlayと同じ
+ *  挙動）。地図は操作できるままの非モーダルのためTabトラップは持たない（PCの右パネルと同じ前提） */
 export function SelectionSheet({
   facility,
   onClose,
@@ -113,11 +116,12 @@ export function SelectionSheet({
   onDetail: () => void;
   mapsUrl: string;
 }) {
+  const ref = useOverlay(onClose, '[aria-label="閉じる"]', { trapFocus: false });
   const t = FACILITY_TYPES[facility.type as FacilityType];
   const status = locationStatusLabel[facility.verificationStatus];
   const statusTone = { neutral: "text-ink", attention: "text-attention", ok: "text-ok", alert: "text-alert" }[status.tone];
   return (
-    <div className="max-lg:absolute inset-x-2.5 bottom-[94px] lg:hidden" role="dialog" aria-label={facilityName(facility)}>
+    <div ref={ref} tabIndex={-1} className="max-lg:absolute inset-x-2.5 bottom-[94px] lg:hidden" role="dialog" aria-label={facilityName(facility)}>
       <div className="rounded-[28px] bg-[rgba(14,22,38,.97)] px-[18px] pb-[18px] pt-[10px] shadow-[inset_0_0_0_1px_rgba(255,255,255,.1),0_-10px_40px_rgba(0,0,0,.5)]">
         <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-[2px] bg-white/[.18]" />
         <div className="flex items-start gap-3">

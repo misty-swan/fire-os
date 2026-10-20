@@ -3272,8 +3272,8 @@
    "source": "docs/evidence/ph2-review.md C19〜C21",
    "summary": "選択シートのEsc・フォーカス、語彙の微差",
    "severity": "low",
-   "status": "open",
-   "basis": "ph2-review表「低・方針で残す」",
+   "status": "resolved",
+   "basis": "T086（low対応）で3項目を個別判定。修正（C19）: 選択シート（SelectionSheet）のEsc非対応・フォーカス移動なし=Overlay.tsxのuseOverlayをexportして選択シートでも使い、Escで閉じる（overlayStackで最前面の面だけ反応）・開いたら「閉じる」ボタンへフォーカス・閉じたら開いたマーカーへ戻す、を実装（ドロワー/モーダルと同じ挙動。地図は操作できるままの非モーダルのためtrapFocus=falseでTabトラップだけ持たせない）。docs/03 SCR-03⑥を更新。jsdom試験（tests/map-facilities.test.tsxに選択シートのdescribeを追加）は旧実装で赤（フォーカスが動かない・Escで閉じない）→緑。e2e map.specのphone幅へEscで閉じる断言を追加し両幅7件緑。記録で決着2: C20（ステップ進行の語彙）=docs/03 SCR-06変え方②に記録済みの意図した差（「写真・メモへ進む/確認へ進む」とprototypeの「次へ：」形式との微差）として維持・C21（写真追加ボタンの構成）=prototypeは写真トグル（1枚/なし）だが実装はAttachmentUploader（写真を追加＋転送/検査/拒否の別状態。docs/03 SCR-06「写真は検査済み(ready)だけ添付」）で実装上の必然として維持",
    "owner": "T086"
   },
   {

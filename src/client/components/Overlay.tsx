@@ -9,7 +9,13 @@ import { Button, Icon } from "./ui";
 /** 重なっている面の並び。Esc・Tabは最前面（最後に開いたもの）だけが処理する */
 const overlayStack: object[] = [];
 
-function useOverlay(onClose: () => void, initialFocus?: string) {
+/**
+ * 重ねて出す面（ドロワー/モーダル/選択シート）の共通の挙動。Escで閉じる（最前面の面だけ）・
+ * 開いたら中へフォーカス・閉じたら開いた操作へ戻す。trapFocus=false は非モーダルの面
+ * （地図は操作できるままの選択シート）で、Tabの循環だけ持たない（Esc・フォーカス移動は同じ）。
+ */
+export function useOverlay(onClose: () => void, initialFocus?: string, opts: { trapFocus?: boolean } = {}) {
+  const trapFocus = opts.trapFocus !== false;
   const ref = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
   // Escで呼ぶ onClose は常に最新のもの（入力途中かどうかの確認を含む）にする。初回の関数を握り続けない
@@ -24,8 +30,8 @@ function useOverlay(onClose: () => void, initialFocus?: string) {
     const onKey = (e: KeyboardEvent) => {
       if (overlayStack[overlayStack.length - 1] !== me) return; // 背面の面は反応しない
       if (e.key === "Escape") latestClose.current();
-      // フォーカスを面の外へ出さない（Tabの循環）
-      if (e.key === "Tab" && ref.current) {
+      // フォーカスを面の外へ出さない（Tabの循環。非モーダルの面では背景も操作のため行わない）
+      if (trapFocus && e.key === "Tab" && ref.current) {
         const items = [...ref.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')];
         if (items.length === 0) return;
         const first = items[0]!;

@@ -127,8 +127,13 @@ test("map_selection_sheet_matches_prototype_and_opens_detail", async ({ page }) 
     await expect(sheet.getByRole("button", { name: /点検する/ })).toBeVisible();
     await expect(sheet.getByRole("button", { name: "詳細" })).toBeVisible();
     await expect(sheet.getByRole("link", { name: "Googleマップで経路を開く" })).toBeVisible();
-    // 閉じると消える
+    // 閉じるボタンで消える
     await sheet.getByRole("button", { name: "閉じる" }).click();
+    await expect(sheet).toBeHidden();
+    // Escでも閉じる（PH2-C19。シートはdialogのためOverlay〔ドロワー/モーダル〕と同じ挙動に揃えた）
+    await target.first().click({ force: true });
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
   } else {
     // PCは右パネルに詳細（一覧に戻れる）。CTAは「点検を依頼」（prototype Desktop。点検登録へ進む）
