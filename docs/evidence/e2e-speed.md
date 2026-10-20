@@ -29,11 +29,11 @@
 
 ### M3の失敗2件と安定化（fix round 1・4ad6883）
 
-- **run1: issues.spec（desktop）** — wrangler 4.150 のProxyWorker→UserWorker接続のkj keep-alive約5秒境界で、awaited PATCH が "Network connection lost" で喪失（GET/HEADは即時+250ms再試行で吸収＝"recovered on attempt 2" の正体。PATCH/POSTは非冪等のため再試行されず当該要求だけ失敗。cloudflare/workers-sdk #14926 等。同種ログはbaseline/M2にも〜1回/回で既存）→ `tests/e2e/helpers.ts` に**署名限定**（4xx・無署名5xxは再送しない）・有界3回・**同一冪等鍵で再送**する `clickUntilWriteArrives` を新設し、issues.specの全書き込み6箇所とdocuments.specの作成押下へ適用（鍵の再利用は製品側 useMutation.ts:60-76・execute.ts:140-141 で同一内容1回だけ適用が担保される）。
+- **run1: issues.spec（desktop）** — wrangler 4.150 のProxyWorker→UserWorker接続のkj keep-alive約5秒境界で、awaited PATCH が "Network connection lost" で喪失（GET/HEADは即時+250ms再試行で吸収＝"recovered on attempt 2" の正体。PATCH/POSTは非冪等のため再試行されず当該要求だけ失敗。cloudflare/workers-sdk #14926 等。同種ログはbaseline/M2にも〜1回/回で既存）→ `tests/e2e/helpers.ts` に**署名限定**（4xx・無署名5xxは再送しない）・有界3回・**同一冪等鍵で再送**する `clickUntilWriteArrives` を新設し、issues.specの全書き込み6箇所とdocuments.specの作成押下へ適用（鍵の再利用は製品側 useMutation.ts:60-76・execute.ts:220 で同一内容1回だけ適用が担保される（状態錯誤は:236-237/:278で拒否））。
 - **run3: facility-location.spec（desktop）** — `popup.url()` の直後読みが about:blank（遷移Commit前）で null になる実発火（review r0で繰り延べたMinor）→ popupの**最初の要求イベント**（送出時・Commit不要）を待って `isNavigationRequest` と要求URLのdestinationで断言する形へ置換。
 - **run3の壁時間38分** — 試験後のwebServer停止滞留（Playwright 1.64はgracefulShutdown無指定時、子processのcloseを無制限に待つ。workerdの子孫がstdioパイプを掴むとcloseが来ない）。以後の4走行（焦点2・暫定spec・フル1）とM3′3走行では壁時間≈報告時間で**未再現＝経過観察**。
 - **残存クラス（既知として記録）**: 上記2spec以外の待ち合わせた書き込み（通知承認POST・出欠回答・実績保存等）にも同型の落下が稀（〜1/3走行・大半はGET自動回復で無害）に起き得る。署名・頻度・切り分け手順は task-85b-report.md「fix round 1」のとおり。被害試験を `clickUntilWriteArrives` で包むのが常設対処。
-- 補足: acceptance（受入ゲート）はM0・M1では75p（当時の証跡indexと一致＝緑）、69279d7でtests/が変わって以降（M2〜M3′）はcodeHash不一致で2p/73f＝赤（設計どおり・collect:evidence再実行待ち）。acceptance自体の実行は約14秒で所要への寄与は小さい。
+- 補足: acceptance（受入ゲート）はM0・M1では75p（当時の証跡indexと一致＝緑）、69279d7でtests/が変わって以降（M2〜M3′）はcodeHash不一致で2p/73f＝赤（設計どおり・collect:evidence再実行待ち）。acceptance自体の実行は約9.4〜12.1秒（実ログ実測）で所要への寄与は小さい。
 
 ## 負荷の係数（本タスクの検証走行の読み方）
 
@@ -46,8 +46,8 @@
 | ①smokeセット | `npm run test:e2e:smoke`（setup＋auth4＋journeys4＋shell3＝12試験・desktop-1280）: **65秒 / 53秒 / 52秒 → 中央値53秒・3回とも緑** | **採用**。開発中の反復用。フルe2eの代わりにしない（AGENTS.mdに明記） |
 | ②幅の絞り込み | 業務の実行数 122件（119p＋3s）→ **73件（73p/0s）**（−49件・−40%）。M2証跡の試験別時間からの業務合計は 875秒→572秒（−35%） | **採用**（仕分け表は下記。マーカー`// 幅:`が正本で、scripts/e2e-width-triage.ts が設定へ反映。マーカーと宣言数が崩れると設定の読み込みが落ちる） |
 | ③workers≥2 | M1赤（干渉2件）→ 分離後にM2で3回緑。前提: 試験ごとの架空データ分離（69279d7）・共有D1前提の監査・直接seedのSQLITE_BUSYを限定再試行で吸収 | **採用**（`workers: 2` を設定に既定化。setup依存は維持＝検証走行で全試験が管理者セッションを使用） |
-| ④tablet-768の統合 | 単独実行（webServer起動込み）**78秒**（6試験）。フル走行内の実時間 **61.9秒→59.5秒**（絞り込み後）。T083実機matrix由来の5試験のうち3試験は768幅で意味を持たない（下記） | **維持＋絞り込み**（統合・廃止せず）。`@tablet-768` のmanifest参照が指す2試験（returning_user / revisit_core_flows）だけ768で実行。accessibility残り3試験は除外: inputs_stay は試験自身が240/200pxへ幅を変える（768の起点幅は無関係）・date_inputs は幅非依存のCSS断言・analytics_conditions はチップ幅406px未満でしか起きない回帰（768では恒真） |
-| ⑤起動時ビルドの省略 | `npm run build` 3回: **0.88秒 / 約1秒 / 約1秒**（vite 8・313モジュール）。`scripts/e2e-prepare.ts`（D1再作成+migration）: **12.5秒** | **不採用**。削減効果が約1秒で存在せず、古い成果物を試験する危険と 新規判定ロジック（mtime比較）の複雑さだけが残る。prepareの12.5秒（約2%）も、毎回のD1再作成が試験間分離の基礎（状態の持ち越しを構造的に断つ）のため維持 |
+| ④tablet-768の統合 | 単独実行（webServer起動込み）**78秒**（6試験）。フル走行内の実時間 **61.9秒→59.5秒**（絞り込み後）。T083実機matrix由来の5試験のうち3試験は768幅で意味を持たない（下記） | **維持＋絞り込み**（統合・廃止せず）。`@tablet-768` のmanifest参照が指す2試験（returning_user / revisit_core_flows）だけ768で実行。accessibility残り3試験は除外: inputs_stay は試験自身が240/200pxへ幅を変える（768の起点幅は無関係）・date_inputs は幅非依存のCSS断言・analytics_conditions はチップ幅406px未満でしか起きない回帰（768では恒真。406px未満でしか起きない回帰の性質上、はみ出しは幅について単調。768実測でなく360実測と単調性からの推論） |
+| ⑤起動時ビルドの省略 | `npm run build` 3回: **0.88秒 / 約1秒 / 約1秒**（vite 8・313モジュール。再計測×3では **0.78〜0.89秒**＝t085b-smoke-build-timing.log）。`scripts/e2e-prepare.ts`（D1再作成+migration）: **12.5秒** | **不採用**。削減効果が約1秒で存在せず、古い成果物を試験する危険と 新規判定ロジック（mtime比較）の複雑さだけが残る。prepareの12.5秒（約2%）も、毎回のD1再作成が試験間分離の基礎（状態の持ち越しを構造的に断つ）のため維持 |
 
 ## 絞り込み後の内訳と検証走行（負荷あり・ポート8798）
 
@@ -55,7 +55,7 @@
 |---|---|---|---|
 | 全プロジェクト | `npm run test:e2e -- --workers=2` | **403秒（6.7分）** | 業務 **73p/0f/0s**＋acceptance 2p/73f（codeHash不一致＝設計どおり） |
 | 業務のみ（CIと同じ4プロジェクト指定） | `npm run test:e2e -- --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --workers=2` | **343秒（5.7分）** | **73 passed / 0 failed / 0 skipped** |
-| smoke ×3 | `npm run test:e2e:smoke` | 65 / 53 / 52秒 | 12 passed ×3 |
+| smoke ×3 | `npm run test:e2e:smoke` | 65 / 53 / 52秒（負荷あり・実装者計測）。**静かな環境での再計測×3は 46.0〜47.3秒・12 passed×3**（t085b-smoke-run{1,2,3}.log） | 12 passed ×3（計6回） |
 
 - プロジェクト別の試験数: setup 1 / phone-360 **17**（両幅12＋phone限定5）/ desktop-1280 **53**（両幅12＋desktop限定41）/ tablet-768 **2** / acceptance 75。
 - skip件数は **3→0**（旧・本文内 `test.skip(!isPhone)` 3件〔shell mobile_menu・member-admin ai_evaluation・assistant touch targets〕を設定側の phone限定仕分けへ移行。断言の意味は不変。manifestの該当knownSkips 3件を刈り取り）。
@@ -130,7 +130,7 @@
 | offline-account-switch.spec.ts | `account_switch_never_leaves_or_shows_another_users_offline_draft` | desktop限定 | 幅で変わる断言なし（流れ・データの断言）。isPhone分岐は描画待ちの見出しレベルの吸収のみで断言対象外 |
 | offline-sync.spec.ts | `offline_conflict_never_uses_last_write_wins` | desktop限定 | 幅で変わる断言なし（流れ・データの断言）。isPhone分岐は描画待ちの見出しレベルの吸収のみで断言対象外 |
 | patrol-plans.spec.ts | `patrol_ui_completes_draft_order_and_human_confirm_without_auto_dispatch` | desktop限定 | 幅で変わる断言なし（流れ・データの断言） |
-| pwa-cache.spec.ts | `offline_cache_contains_no_api_response_or_google_tiles` | desktop限定 | 幅で変わる断言なし（流れ・データの断言）。isPhone分岐は描画待ちの見出しレベルの吸収のみで断言対象外 |
+| pwa-cache.spec.ts | `offline_cache_contains_no_api_response_or_google_tiles` | desktop限定 | 幅で変わる断言なし（流れ・データの断言）。isPhone分岐は描画待ちの見出しレベルの吸収のみで断言対象外。phone幅見出し語彙（マップ・団員名簿・お知らせ）はdesktop限定化で断言先が無い＝将来この語彙を変えるときは phone幅の確認を別途入れる |
 | pwa-cache.spec.ts | `sw_update_notifies_and_does_not_destroy_unsaved_input` | desktop限定 | 幅で変わる断言なし（流れ・データの断言） |
 | realtime.spec.ts | `incident_detail_receives_remote_updates_and_resyncs_after_role_change` | desktop限定 | 幅で変わる断言なし（流れ・データの断言） |
 | reports.spec.ts | `report_ui_shows_missing_fields_and_only_exports_approved_version` | desktop限定 | 幅で変わる断言なし（流れ・データの断言） |
@@ -138,7 +138,9 @@
 
 ## 正直な記録
 
-- 初回の検証走行（1回目）は `grepInvert` の正規表現を `^タイトル$` で全面アンカーしたため**除外が一切効かず**、phone 55件・desktop 53件が走ってphone限定3試験がdesktopで失敗した（skip撤去済みのため実行されて赤）。上記のgrep仕様の確認後に境界つき正規表現へ修正し、再走行で業務73件緑・skip 0を確認した。失敗走行のログは破棄していない（/tmp/opencode/e2e-verify.log）。
+- 初回の検証走行（1回目）は `grepInvert` の正規表現を `^タイトル$` で全面アンカーしたため**除外が一切効かず**、phone 58件・desktop 58件が走ってphone限定3試験がdesktopで失敗した（skip撤去済みのため実行されて赤）。上記のgrep仕様の確認後に境界つき正規表現へ修正し、再走行で業務73件緑・skip 0を確認した。失敗走行のログは破棄していない（.superpowers/sdd/16_実装タスク一覧/e2e-verify.log に保全）。
+- 補助数値の証跡: 検証走行（403秒/343秒・負荷係数1.10倍 n=66・初回grep失敗走行）は実装者の検証走行で、生ログは .superpowers/sdd/16_実装タスク一覧/e2e-verify.log に保存済み。smoke・buildの静かな環境での再計測の生ログは同フォルダの t085b-smoke-run{1,2,3}.log と t085b-smoke-build-timing.log。
+- 残作業: documents「題名消失」の根因（引き金）は未特定（回復ループで抑止）。ProxyWorkerドロップの残存クラスとwebServer停止滞留の経過観察は「M3の失敗2件と安定化」節のとおり（manifest issues台帳のT085b-W1〔owner=T086〕も参照）。
 - 実装時の予測は「静かな環境で5.3〜6.1分・境界付近」で**この時点では達成を主張しない**と記録した。実際、M3（コントローラ計測・静かな環境）は中央値**6.2分で目標超過**（失敗2件と停止滞留1回を含む）。fix round 1（4ad6883・安定化）を挟んだM3′で中央値**5.7分・3回とも業務0f**となり目標達成。予測を実測で確定させた（予測値の書き換えはしていない）。
 - 検証走行（403秒/343秒）は並行負荷あり（負荷の係数参照）。コントローラ計測のM3・M3′（静かな環境・Playwright報告値）が正である。
 - tablet-768の残り2試験（returning_user・revisit_core_flows）はmanifestの@tablet-768参照が要求する768幅の証拠であり、削除すれば更に約30秒（wall）稼げるが**T083実機matrixの768証拠を失う**ため維持した（採否表④）。

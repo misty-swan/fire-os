@@ -64,7 +64,7 @@
 
 ## 既知フレーキー（コントローラの最終検証で判明・対応済みと継続観察）
 
-- **documents.spec desktop「題名消失」— 根因ごと修正〔ラウンド3〕**: コントローラの最終検証でフル走行4回連続失敗。エラースナップショット（「題名を入力してください」の検証エラー・分類は生存）＋サーバーログ（desktopの作成POSTが到達せず）から、`fill(題名)`の入力がReact状態へ反映されずクライアント検証で送信中止になっていたことを特定。**旧来の「既知フレーキー〔トースト断言〕」（ph5/ph6/ph7）の実体はこの題名消失だった可能性が高い**。対応: 粘着fill（fill→toHaveValue→再fill計3回）＋2つの`waitForResponse`に30秒の明示タイムアウト（サーバー実測約60ms。根因再発時も300秒でなく30秒で明確に落ちる）＝**38922d4**。粘着fill導入後のフル走行12回中3回発火〔導入直後の2回＋ラウンド4後の1回〕で、最終4回連続は緑。発火時は検証エラーの画面が残るため切り分けは容易
+- **documents.spec desktop「題名消失」— 根因ごと修正〔ラウンド3〕**: コントローラの最終検証でフル走行4回連続失敗。エラースナップショット（「題名を入力してください」の検証エラー・分類は生存）＋サーバーログ（desktopの作成POSTが到達せず）から、`fill(題名)`の入力がReact状態へ反映されずクライアント検証で送信中止になっていたことを特定。**旧来の「既知フレーキー〔トースト断言〕」（ph5/ph6/ph7）の実体はこの題名消失だった可能性が高い**。対応: 粘着fill（fill→toHaveValue→再fill計3回）＋2つの`waitForResponse`に30秒の明示タイムアウト（サーバー実測約60ms。根因再発時も300秒でなく30秒で明確に落ちる）＝**38922d4**。粘着fill導入後のフル走行12回中3回発火〔導入直後の2回＋ラウンド4後の1回〕で、最終4回連続は緑。発火時は検証エラーの画面が残るため切り分けは容易〔T085b追記: 粘着fillに加え回復ループ＋ドロップ吸収で抑止。根本の引き金は依然未特定。T085b節参照〕
 - **inspection-templates.spec phone — 根因ごと修正〔ラウンド4〕**: トースト直後に`body.textContent.includes("rev2")`を1回だけ評価する非ポーリング断言が、rev2ラベルの描画遅延でfalseになる（フル走行15回中5回）。`expect(card.getByText("rev2")).toBeVisible()`のポーリング断言へ置換（カードスコープ化で旧body全文検索の誤マッチ弱点も解消）＝**3b8a56a**。修正後のフル走行4回で未発火
 - **継続観察（1回off・いずれも単独実行は常に緑。次に触る際の作り直し候補）**: reports.spec desktop〔承認トースト直後の即時GET断言。1/15回〕／facility-location.spec desktop〔`page.evaluate`のnull参照。1/15回〕／notifications.spec phone〔1/15回。未調査〕。フル走行15回の観測ベース
 - **T084最終検証での再発記録（2026-10-19）**: documents.spec desktop `withdrawn_document_disappears_from_search_and_citation` が114a32cのフル走行3回中1回、作成POSTの`waitForResponse` 30秒タイムアウトで失敗（=「題名消失」の稀な再発。30秒で明確に落ちる設計どおり）。T084の差分とは無関係・残り2回は緑。引き金は引き続き未特定＝T085（統合試験整備）の作り直し候補
@@ -255,7 +255,7 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 
 ### 目標と結果（目標は基準計測の後に決めて固定。R5）
 
-- **基準（M0・0d21ca3・workers=1・フルe2e＝全プロジェクト×3回）: 中央値14.8分**（15.5/14.8/14.8。フル合算193p/3s＝業務118p/3s/1f＋acceptance 75p。**3回とも既知フレーキーが1件発火**〔FLAKE-1 documents×1・FLAKE-2 reports×2〕）
+- **基準（M0・0d21ca3・workers=1・フルe2e＝全プロジェクト×3回）: 中央値14.8分**（15.5/14.8/14.8。フル合算193p/1f/3s＝業務118p/3s/1f＋acceptance 75p。**3回とも既知フレーキーが1件発火**〔FLAKE-1 documents×1・FLAKE-2 reports×2〕）
 - **目標: フルe2e中央値 ≤ 6.0分**（-59%以上）
 - **結果（M3'・4ad6883・workers=2・フル×3）: 中央値5.7分（5.7/5.8/5.6）・3回とも業務73p/0f/0s＝目標達成・-61.5%（2.60倍）**。所要時間の正はPlaywright報告値（壁時間にはwebServer停止滞留等の環境事象が混入し得るため）
 - 途中計測: M1（0d21ca3・workers=2の赤観測）8.6分で干渉2件が発火／M2（69279d7・分離後）中央値9.3分・0f×3＝③workersの効果と分離の効用を実証／M3（68b5328・絞り込み直後）中央値6.2分で新たな不安定さ2件が発火（下記）→ 4ad6883で解消してM3'
@@ -265,7 +265,7 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 1. **activities.spec**: D05承認フロー未実装のための `wrangler d1 execute` 直接seedが、稼働中のwrangler devとD1を取り合い **SQLITE_BUSY** → 有界再試行つきの `seedProxyScope` ヘルパへ（SQLは旧と等価）
 2. **inspection.spec**: 通信断の注入を page.route abort から **context.setOffline** へ構造化（並行負荷でrouteのfetch取り逃がしが起き、遮断したはずの保存が通って「結果を確認できません」が出ない競合）。断言とdocs/03の契約は不変
 
-### 既知フレーキーの作り直し（manifest issues の T085b 担当3件＋PH3-T）
+### 既知フレーキーの作り直し（manifest issues の T085b 担当3件〔FLAKE-1・FLAKE-2・PH3-T〕）
 
 - **FLAKE-1 documents「題名消失」**: 押下後に作成POST不発なら検証エラー確認→再fill・再押下×3の回復ループ＋ACL追加を先に済ませfill→押下の間を最小化。**根因（再マウント/再レンダリング競合の引き金）は未特定のまま**（M3'以降3回＋fix検証で未発火）。後続の4ad6883で作成押下はドロップ吸収ヘルパ経由に
 - **FLAKE-2**: reports「承認トースト直後の即時GET」は**根因を同定**（承認前の常時表示「承認済みの版が無いため…」への部分一致が先取りし、確定前のGETが404/旧値を掴む）→ API-60のwaitForResponse＋承認記録のexact一致へ。facility-locationのpopup URL直後読みは要求イベント待ちへ（M3 run3で実発火した繰り延べMinor）。notificationsは待機化（元失敗行は特定できず）
@@ -273,7 +273,7 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 
 ### M3で判明した安定性の欠陥と修正（4ad6883）
 
-- issues.spec の awaited PATCH が **wrangler 4.150 のProxyWorker→UserWorker接続ドロップ**（kj keep-alive約5秒境界・「Network connection lost」。GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。wrangler #14926/#15252。CLIの調整 knobs 無し。ファイル監視説は再読み込み0行により棄却）で喪失。同種ログはM0/M2にも〜1回/回存在した無害ノイズ。→ **署名限定**（requestfailed または本文が `network connection lost` の5xxのみ。4xx・無署名5xxは再送しない＝本物の不具合は赤のまま）・**有界3回**・**同一冪等鍵**（useMutation.ts:60-76が結果不明の間鍵を保持し、execute.ts:140-141が一件化）の再送ヘルパをissues 6書き込み＋documents作成へ適用。陽性対照（route.abort＋署名入り500の注入→再送1回・適用1回）つき。**他specのawaited書き込みには依然同じクラスが残る**＝残存クラス・署名・切り分け手順はe2e-speed.mdに記録（wrangler修正リリースで再検討）
+- issues.spec の awaited PATCH が **wrangler 4.150 のProxyWorker→UserWorker接続ドロップ**（kj keep-alive約5秒境界・「Network connection lost」。GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。wrangler #14926/#15252。CLIの調整 knobs 無し。ファイル監視説は再読み込み0行により棄却）で喪失。同種ログはM0/M2にも〜1回/回存在した無害ノイズ。→ **署名限定**（requestfailed または本文が `network connection lost` の5xxのみ。4xx・無署名5xxは再送しない＝本物の不具合は赤のまま）・**有界3回**・**同一冪等鍵**（useMutation.ts:60-76が結果不明の間鍵を保持し、execute.ts:220が一件化（状態錯誤は:236-237/:278で拒否））の再送ヘルパをissues 6書き込み＋documents作成へ適用。陽性対照（route.abort＋署名入り500の注入→再送1回・適用1回）つき。**他specのawaited書き込みには依然同じクラスが残る**＝残存クラス・署名・切り分け手順はe2e-speed.mdに記録（wrangler修正リリースで再検討）
 - webServer停止滞留（M3 run3のみ実経過38分＝試験後のPlaywright→wrangler終了待ち。T085申し送り「取り残し」の同族だが通常完走での初観測）はその後4走行で未再現＝**経過観察**（再現時は壁時間と報告値の差で検知）
 
 ### 候補①〜⑤の採否（計測値と根拠は e2e-speed.md）
