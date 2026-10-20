@@ -1,6 +1,6 @@
 # PH8 実行証跡（2026-10-18〜。T083・T084）
 
-対象: **T083 実端末・アクセシビリティ・再訪操作の検証修正**（PH8の最初の1タスク）と **T084 外部障害・通信断・管理者不在の代替運用**（「T084」節）と **T085 全54受入・17共通・18継続シナリオの統合**（末尾の「T085」節。T085b以降は未着手）。実行環境はローカル（Node v26 / workerd / wrangler 4.x / vitest / Playwright chromium）。**実Cloudflare・実staging・実端末（iOS/Android実機）・実スクリーンリーダー・実PWA install環境は使っていない**（PH0〜PH7から継続で未接続・実端末は本環境に存在しない）。データはすべて架空。実装はsubagent-driven（実装サブエージェント1体→コントローラ検証→4体並行レビュー〔docs/evidence/ph8-review.md〕）で遂行。実装コミットは **7bb8d08** `feat: complete T083 ux`（25ファイル・実装・試験・契約3点セット・docsを同一コミットに。BASE=f8f0c4d）。
+対象: **T083 実端末・アクセシビリティ・再訪操作の検証修正**（PH8の最初の1タスク）と **T084 外部障害・通信断・管理者不在の代替運用**（「T084」節）と **T085 全54受入・17共通・18継続シナリオの統合**（末尾の「T085」節）と **T085b e2e試験の高速化と試験間の分離**（末尾の「T085b」節）。実行環境はローカル（Node v26 / workerd / wrangler 4.x / vitest / Playwright chromium）。**実Cloudflare・実staging・実端末（iOS/Android実機）・実スクリーンリーダー・実PWA install環境は使っていない**（PH0〜PH7から継続で未接続・実端末は本環境に存在しない）。データはすべて架空。実装はsubagent-driven（実装サブエージェント1体→コントローラ検証→4体並行レビュー〔docs/evidence/ph8-review.md〕）で遂行。実装コミットは **7bb8d08** `feat: complete T083 ux`（25ファイル・実装・試験・契約3点セット・docsを同一コミットに。BASE=f8f0c4d）。
 
 ## 実行結果
 
@@ -248,3 +248,53 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 - **待ち方の不具合**: 実装担当が `until ! pgrep -f "collect-evidence"; do sleep 15; done` で待つと、自分自身のコマンド文に一致して永久に終わらない（最長11時間半残留→コントローラが停止）。待機はPIDで行う、または `pgrep -f "[c]ollect-evidence"` の形にする
 - **wrangler devの取り残し**: 中断した実行の `wrangler dev` が親を失って2回残った（8787を占有はしていなかったがファイル変更で再起動していた）。webServerの後始末・`--only` 再実行時のサーバーの扱いを見直す材料
 - **ポートの共用**: 利用者は別プロジェクトの開発サーバーを8787で動かす。e2eは `scripts/e2e-port.ts`（`FIREOS_E2E_PORT`・既定8797／inspector 9239）へ集約済み＝workers≥2のときプロセスごとのポート割当の土台に使える
+
+## T085b e2e試験の高速化と試験間の分離（2026-10-20）
+
+実行環境はT083〜T085と同じローカル（Node v26 / workerd / wrangler 4.150 / Playwright 1.64 chromium）。**業務機能・migration・契約の変更なし（src/は1行も変更していない）**。実装はsubagent-driven（実装サブエージェント2体〔分離＋フレーキー作り直し／高速化〕→コントローラが計測と裁定→fix round 2回→スコープ付き再レビュー2回→4体並行レビュー〔docs/evidence/ph8-review.md「T085b」〕）。コミットは **69279d7** `fix: harden T085b e2e isolation and rework known flakes`（7spec・テストのみ）→ **68b5328** `feat: add T085b e2e speedup`（39ファイル）→ **4ad6883** `fix: absorb wrangler dev proxy drops in T085b e2e writes` → **4c2f176** `fix: harden T085b width tripwire` → **39fcef1** `docs: finalize T085b e2e speed evidence`。計測・採否の正本は **docs/evidence/e2e-speed.md**。
+
+### 目標と結果（目標は基準計測の後に決めて固定。R5）
+
+- **基準（M0・0d21ca3・workers=1・フルe2e＝全プロジェクト×3回）: 中央値14.8分**（15.5/14.8/14.8。フル合算193p/3s＝業務118p/3s/1f＋acceptance 75p。**3回とも既知フレーキーが1件発火**〔FLAKE-1 documents×1・FLAKE-2 reports×2〕）
+- **目標: フルe2e中央値 ≤ 6.0分**（-59%以上）
+- **結果（M3'・4ad6883・workers=2・フル×3）: 中央値5.7分（5.7/5.8/5.6）・3回とも業務73p/0f/0s＝目標達成・-61.5%（2.60倍）**。所要時間の正はPlaywright報告値（壁時間にはwebServer停止滞留等の環境事象が混入し得るため）
+- 途中計測: M1（0d21ca3・workers=2の赤観測）8.6分で干渉2件が発火／M2（69279d7・分離後）中央値9.3分・0f×3＝③workersの効果と分離の効用を実証／M3（68b5328・絞り込み直後）中央値6.2分で新たな不安定さ2件が発火（下記）→ 4ad6883で解消してM3'
+
+### 干渉の解消（M1赤の2件 → 69279d7）
+
+1. **activities.spec**: D05承認フロー未実装のための `wrangler d1 execute` 直接seedが、稼働中のwrangler devとD1を取り合い **SQLITE_BUSY** → 有界再試行つきの `seedProxyScope` ヘルパへ（SQLは旧と等価）
+2. **inspection.spec**: 通信断の注入を page.route abort から **context.setOffline** へ構造化（並行負荷でrouteのfetch取り逃がしが起き、遮断したはずの保存が通って「結果を確認できません」が出ない競合）。断言とdocs/03の契約は不変
+
+### 既知フレーキーの作り直し（manifest issues の T085b 担当3件＋PH3-T）
+
+- **FLAKE-1 documents「題名消失」**: 押下後に作成POST不発なら検証エラー確認→再fill・再押下×3の回復ループ＋ACL追加を先に済ませfill→押下の間を最小化。**根因（再マウント/再レンダリング競合の引き金）は未特定のまま**（M3'以降3回＋fix検証で未発火）。後続の4ad6883で作成押下はドロップ吸収ヘルパ経由に
+- **FLAKE-2**: reports「承認トースト直後の即時GET」は**根因を同定**（承認前の常時表示「承認済みの版が無いため…」への部分一致が先取りし、確定前のGETが404/旧値を掴む）→ API-60のwaitForResponse＋承認記録のexact一致へ。facility-locationのpopup URL直後読みは要求イベント待ちへ（M3 run3で実発火した繰り延べMinor）。notificationsは待機化（元失敗行は特定できず）
+- **PH3-T**: activities.specの死に変数・先取り断言の整理（「不参加」断言はフォーム閉鎖確定→チップの順へ）
+
+### M3で判明した安定性の欠陥と修正（4ad6883）
+
+- issues.spec の awaited PATCH が **wrangler 4.150 のProxyWorker→UserWorker接続ドロップ**（kj keep-alive約5秒境界・「Network connection lost」。GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。wrangler #14926/#15252。CLIの調整 knobs 無し。ファイル監視説は再読み込み0行により棄却）で喪失。同種ログはM0/M2にも〜1回/回存在した無害ノイズ。→ **署名限定**（requestfailed または本文が `network connection lost` の5xxのみ。4xx・無署名5xxは再送しない＝本物の不具合は赤のまま）・**有界3回**・**同一冪等鍵**（useMutation.ts:60-76が結果不明の間鍵を保持し、execute.ts:140-141が一件化）の再送ヘルパをissues 6書き込み＋documents作成へ適用。陽性対照（route.abort＋署名入り500の注入→再送1回・適用1回）つき。**他specのawaited書き込みには依然同じクラスが残る**＝残存クラス・署名・切り分け手順はe2e-speed.mdに記録（wrangler修正リリースで再検討）
+- webServer停止滞留（M3 run3のみ実経過38分＝試験後のPlaywright→wrangler終了待ち。T085申し送り「取り残し」の同族だが通常完走での初観測）はその後4走行で未再現＝**経過観察**（再現時は壁時間と報告値の差で検知）
+
+### 候補①〜⑤の採否（計測値と根拠は e2e-speed.md）
+
+| 候補 | 採否 | 要約 |
+|---|---|---|
+| ①smokeセット | **採用** | `npm run test:e2e:smoke`（setup＋auth＋journeys＋shell・desktopのみ）。53秒×3緑。フルの代用にしない |
+| ②幅の絞り込み | **採用** | 各試験宣言直上の `// 幅:` マーカーが正本（無いと設定読み込みが例外で落ちるtripwire。孤立・未消費マーカーも4c2f176で例外化）。両幅12・phone限定5・desktop限定41＝実行122→73件・skip 3→0。仕分け表58行（e2e-speed.md） |
+| ③workers≥2 | **採用** | `workers: 2` 既定化。前提=試験ごとの架空データ分離（69279d7）＋直接seedのSQLITE_BUSY吸収 |
+| ④tablet-768 | **維持＋絞り込み** | @tablet-768のmanifest参照が指す2試験だけ768で実行（残3試験は768で恒真/無関係）。統合・廃止はしない |
+| ⑤起動時ビルド省略 | **不採用** | `npm run build` 実測0.8〜0.9秒×3（vite 8）のため効果なし。e2e-prepareの12.5秒（D1再作成）も分離の基礎のため維持 |
+
+- manifest: 絞り込みで実行プロジェクトが減った参照に@project付与（@desktop-1280 154件ほか）・knownSkips 3→0。`npm run check:coverage` は緑のまま（参照テスト272件）＝**網羅を欠かない**
+- AGENTS.md 検証コマンド節・CI（ci.yml）・collect:evidence はコマンド形状不変（設定の既定を継承）
+
+### T085b 未解決・残作業
+
+- documents「題名消失」の根因（引き金）は未特定（回復ループで実害を抑止。次にDocumentEditorへ触る際の調査継続）
+- wrangler devのProxyWorkerドロップはwrangler側の既知問題のため吸収は一部specのみ（残存クラスをe2e-speed.mdに記録。T086/T088のフル走行で新規発火時は同ヘルパの適用を検討）
+- webServer停止滞留は経過観察（未再現）
+
+### 最終検証（コントローラ実行）— 完了時に追記
+
+### レビュー — docs/evidence/ph8-review.md「T085b」節 — 完了時に追記
