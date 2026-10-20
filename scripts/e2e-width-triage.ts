@@ -17,7 +17,7 @@ export type WidthScope = "both" | "desktop" | "phone";
 
 const E2E_DIR = join(import.meta.dirname, "..", "tests", "e2e");
 const MARKER = /^\s*\/\/\s*幅:\s*(両方|desktop限定|phone限定)/;
-const DECL = /^\s*test\((["'])(.*?)\1/;
+const DECL = /^\s*test\((["'`])(.*?)\1/;
 
 const scopeOf = (marker: string): WidthScope | null => {
   if (marker.includes("両方")) return "both";
