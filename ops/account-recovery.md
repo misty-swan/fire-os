@@ -15,7 +15,7 @@
 2. 別の管理者が当該管理者の全セッションを失効（管理画面の「全セッション失効」＝API-38）。
 3. 本人は再設定コードで新しいパスワードを設定する（**配送が未実装の間は成立しない**。上の表のとおり）。**二要素認証の解除機能は提供しない**（API・画面とも。回復コードの再発行はログイン後にパスワード再確認で行える）。回復コードも失った場合の復旧は**未確定**：停止した団員は同じメールアドレスで再登録できない（認証側のメールが一意で旧アカウントが残る）ため、暫定として別のメールアドレスで新しい団員として招待し直す。同じメールでの再オンボードはD04の決定後に設計する。
 4. 作業は監査に残る（`user.sessions.revoke` / `member.disable` / `invitation.create`）。実施者・立会者・日時を運用記録に残す。
-5. 管理者が一人もいなくなった場合（全員が回復不能）は、`ops/bootstrap-admin.md` の再発行は使えない（初期招待は受領済みのため）。環境を管理するアカウント（Cloudflare側）での復旧（D1の復元・初期管理者の再作成）が要るが、**その手順は未整備（未実施・担当T086。docs/evidence/V07-outage.md「未実施」9）**。`ops/backup-restore.md` の復元は新しい別環境への復元のみで、この状況の手順ではない。それまでは管理者を2名以上に保ってこの状態を作らない（ops/admin-handover.md §1）。発生したら分団長へ報告し、実施前に管理主体の承認を得る（docs/07 §7、D17）。
+5. 管理者が一人もいなくなった場合（全員が回復不能）は、`ops/bootstrap-admin.md` の再発行は使えない（初期招待は受領済みのため）。環境を管理するアカウント（Cloudflare側）での復旧（D1の復元→初期管理者の再作成）になる。**手順は §5 に整備した（T086・X-OUT-9）**。実際のstagingでの演習はまだ未実施（docs/evidence/V07-outage.md「未実施」9。§5末尾の未実施一覧）。`ops/backup-restore.md` の復元は新しい別環境への復元のみで、この状況では復元点の選択から必要。それまでは管理者を2名以上に保ってこの状態を作らない（ops/admin-handover.md §1）。発生したら分団長へ報告し、実施前に管理主体の承認を得る（docs/07 §7、D17）。
 
 ## 3. 配送手段が未決の間の扱い（検証環境）
 - 招待tokenと再設定コードは、画面にもAPI応答（再送時）にも再表示されない。発行時にだけ取得できるので、管理者が控えて本人へ安全な経路で渡す。
@@ -26,3 +26,52 @@
 - 本人確認なしでの二要素認証の解除・パスワードの代理設定
 - 招待token・再設定コード・回復コードのチャット/メール本文/Gitへの貼り付け
 - 管理画面を使わないD1の直接更新による権限付与（監査に残らない）
+
+## 5. 管理者全員が回復不能になったときのCloudflare側復旧手順（T086で整備・X-OUT-9）
+
+§2-5の状況（有効な管理者が全員パスワード・認証アプリ・回復コードを失い、アプリ内のどの手順も成立しない）での最後の手段。**Cloudflareダッシュボード側（D1を操作できる権限）を使う**。整備はT086で行ったが、**実際の環境での演習は未実施**（下の「未実施」）。実施前に、必ず分団長等の管理主体の承認を得る（docs/07 §7・D17）。この手順はデータを過去の時点へ戻す操作を含むため、承認を取るときに「戻した時点より後の記録は失われる」ことを必ず説明する。
+
+### 5.1 前提の確認（他の手段が本当に使えないこと）
+
+1. §1・§2の手段（回復コード・パスワード再設定・別の管理者による全セッション失効）がすべて成立しないことを、管理者の名簿と照らして確認する。
+2. 環境を管理するCloudflareアカウントにログインできること。**そのアカウント自体の紛失・乗っ取りへの対応はこの文書の範囲外**（ops/security-response.md §7・Google/Cloudflare側のアカウント回復経路。鍵の漏洩は ops/security-response.md §4）。
+
+### 5.2 現状の確認（D1の読み取りだけ）
+
+```bash
+npx wrangler d1 execute DB --env <環境名> --remote --json \
+  --command "SELECT id, kind, status, expires_at FROM invitations"
+# → kind='bootstrap' で status='pending'（未使用）の初期招待が残っていないか
+npx wrangler d1 execute DB --env <環境名> --remote --json \
+  --command "SELECT m.display_name, m.status FROM member_roles mr JOIN roles r ON r.id = mr.role_id JOIN members m ON m.id = mr.member_id AND m.unit_id = mr.unit_id WHERE r.code = 'admin' AND mr.revoked_at IS NULL"
+# → 現在有効な管理者の一覧（この時点で「いない」または「全員回復不能」であること）
+```
+
+### 5.3 手段の選択（現状確認の結果で分岐）
+
+- **a) 未使用の初期招待（bootstrap・pending）が残っている場合** — D1を戻さずに済む:
+  1. `npm run bootstrap:admin -- --env <環境名> --remote --confirm <環境名> --reissue --unit-name <もとの分団名> --admin-name <もとの管理者名> --email <新しい管理者のメール>` を実行する（ops/bootstrap-admin.md「無効化と再実行」。管理者が一人もリンクされていないことが条件で、 assertionが条件を検査する）。旧招待は取消され、新しい招待が発行される。
+  2. §5.4へ。
+- **b) 招待がすべて受領済みの場合（典型）** — D1を「管理者がまだリンクされていない時点」へ戻す復元が必要:
+  1. **demo環境なら作り直しが最短**（中身は架空データだけのため）: D1を作り直し（削除→作成→wrangler.jsoncのdatabase_idを更新→migration→§5.3-a初回のbootstrap→`ops/demo-deploy.md` §5のとおりseed）。失うものはない。
+  2. **staging/productionでは復元点の選定から**: `ops/backup-restore.md` §2の論理ダンプ（manifest＋d1-data.sql＋R2複製）のうち「初期管理者の招待が未使用の時点」に近いものを選ぶ。**復元先は新しい別環境のみ**（追記専用表〔監査・履歴〕は上書きINSERTを拒否するため、既存環境への復元はできない。ops/backup-restore.md §0の表）。復元手順は同書 §4（`scripts/restore-verify.ts`。照合まで含む）。
+  3. D1 Time Travel（Free 7日/Paid 30日）で同じdatabaseを過去へ戻す経路もあるが、**本プロジェクトでは実測していない**（docs/evidence/V07-restore.md「未実施」1。`wrangler d1 export` のFTS5制約と併せ、実環境での確認が残る）。本番で検討するときは先にstagingで演習し、結果をdocs/14 D10へ記録する。
+  4. 復元した環境で初期管理者を作る: 空の環境なら初回実行 `npm run bootstrap:admin -- --env <環境名> --remote --confirm <環境名> --unit-name ... --admin-name ... --email ...`（未使用の初期招待がpendingで残っているなら上のaの`--reissue`）。
+  5. 元の環境から新しい環境へ業務を戻す判断（データの移行・失う期間の受け入れ）は管理主体の承認で行う（ops/backup-restore.md §5の復旧runbookの順）。
+
+### 5.4 受領とアクセス確認
+
+1. 標準出力に一度だけ表示される招待tokenを安全な経路で本人へ渡す（チャット・メール本文・Gitに貼らない）。
+2. 本人が `https://<環境のURL>/login#invite=<token>` を開き、招待先メールとパスワード（12文字以上）で登録し、**二要素認証（認証アプリ）と回復コード8個**を設定する（管理操作は二要素が有効になるまで拒否される）。
+3. アクセス確認: ①管理画面が開く ②新しい招待の発行（団員の追加）ができる ③監査に `bootstrap.issue`（システム主体）と `invitation.accept` が記録されている ④復元した環境では、業務データが復元点の状態であること（件数・代表する記録）を確認する。
+
+### 5.5 記録と再発防止
+
+1. 実施者・立会者（管理主体）・承認者・日時・戻した復元点・失われた期間を運用記録へ残す。**復元で監査も過去へ戻るため、この記録が実施の唯一の証跡になる**。
+2. 管理者を2名以上に保ち、回復コードの保管を各自に確認する（ops/admin-handover.md §1。この状況を作らないことが第一の対策）。
+
+### 未実施（整備のみ。検証済みとして扱わない）
+
+1. **stagingでの演習**（docs/evidence/V07-outage.md「未実施」9。6 scenarioのstaging演習〔X-OUT-1〕と併せて実施する）。
+2. **Time Travel・実D1への復元の実測**（docs/evidence/V07-restore.md「未実施」1〜3。ops/backup-restore.md §3）。
+3. 論理ダンプからの別環境復元の実環境演習（ops/backup-restore.md §7。ローカルの workers試験〔tests/restore-consistency.test.ts〕と手順は実施済み）。
