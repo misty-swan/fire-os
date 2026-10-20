@@ -187,7 +187,8 @@ test("notification_ui_distinguishes_accepted_unknown_and_read", async ({ page, b
  * 承認ダイアログを開いたまま、同じ下書きを別経路（管理者のAPI直操作）で先に承認済みにすると、
  * 画面の承認は409（競合）で拒否される。拒否されたときは「他の操作で更新されています」の案内が出て、
  * ダイアログは開いたまま（成功と失敗を区別しない画面はdocs/03 §1「conflictを区別」に反する）。
- * draftのid/version/hashは作成応答（API-63）から拾う（送信者の一覧を読むAPIは無いため。docs/03 §1.1-14⑥）。
+ * draftのid/version/hashは作成応答（API-63）から拾う（送信者の一覧はAPI-67 sent=trueで読めるが、
+ * この試験は承認競合の表示が主題のため作成応答から直接拾う。docs/03 §1.1-14⑥）。
  */
 // 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
 test("notification_approval_shows_conflict_when_already_approved_elsewhere", async ({ browser, request }, testInfo) => {
@@ -254,4 +255,94 @@ test("notification_approval_shows_conflict_when_already_approved_elsewhere", asy
   await approveDialog.getByRole("button", { name: "承認する" }).click();
   await expect(officerPage.getByText("他の操作で更新されています")).toBeVisible({ timeout: 15_000 });
   await expect(approveDialog).toBeVisible(); // 失敗したので承認は進まず、ダイアログは開いたまま案内する
+});
+
+/**
+ * 承認せずに離れた下書きが、送信者の一覧（「送信した通知」= API-67 sent=true。PH4-B2・T086）に現れ、
+ * そこから承認前確認を再開して承認・配送まで出来る（docs/03 §1.1-14⑥）。受信箱（切替なし）には
+ * 下書きは現れないまま（draft/cancelledは対象者に非公開。T050の裁定不変）。
+ */
+// 幅: desktop限定（幅で変わる断言なし（流れ・データの断言））
+test("pending_draft_appears_in_sent_list_and_can_be_resumed_to_send", async ({ browser, request }, testInfo) => {
+  test.setTimeout(240_000);
+  const tag = crypto.randomUUID().slice(0, 6);
+
+  // --- seed: 幹部（PER-12保持）・対象者1名・だれも回答しない予定（未回答抽出の対象=対象者1人） ---
+  const officerEmail = uniqueEmail(`e2e-ntf-s-${tag}`);
+  const officer = await inviteNewMember(request, `架空 幹部 ${tag}`, officerEmail);
+  const memberEmail = uniqueEmail(`e2e-ntf-sm-${tag}`);
+  const member = await inviteNewMember(request, `架空 団員 ${tag}`, memberEmail);
+  const startsAt = new Date(Date.now() + 7 * 86_400_000).toISOString();
+  const activity = await adminApiData<{ id: string }>(request, "POST", "/api/v1/activities", {
+    title: `再開確認の訓練 ${tag}`, kind: "訓練", plannedStartsAt: startsAt, locationText: "架空市中央公園",
+    ownerMemberId: officer.memberId, audienceMemberIds: [member.memberId],
+  });
+  expect(activity.status).toBe(201);
+  const publish = await adminApiData(request, "PATCH", `/api/v1/activities/${activity.data.data.id}`, {
+    version: 1, status: "scheduled", reason: "e2e: 対象を確定して公開",
+  });
+  expect(publish.status).toBe(200);
+
+  const officerCtx = await newUserContext(browser, testInfo.project.use.viewport!);
+  const officerPage = await officerCtx.newPage();
+  await acceptInvitationViaUi(officerPage, officerEmail, officer.token, { mfa: false });
+  const rows = (
+    await adminApiData(request, "GET", "/api/v1/members?limit=200")
+  ).data.data as { id: string; version: number; account: { authzVersion: number } | null }[];
+  const officerRow = rows.find((r) => r.id === officer.memberId)!;
+  const roles = await adminApiData(request, "PUT", `/api/v1/members/${officer.memberId}/roles`, {
+    version: officerRow.version,
+    expectedAuthzVersion: officerRow.account?.authzVersion ?? 1,
+    roleCodes: ["officer"],
+    reason: "e2e: 幹部（PER-12保持）として下書きを残して戻る",
+    scopes: [],
+  });
+  expect(roles.status).toBe(200);
+
+  // --- 1) 下書きを作り、承認しないまま一覧へ戻る（PH4-B2の状況） ---
+  await officerPage.goto("/app/tasks-notifications/notifications/new");
+  await officerPage.getByLabel("通知の源").selectOption("activity");
+  const sourceSelect = officerPage.getByLabel("抽出する予定");
+  await sourceSelect.selectOption((await sourceSelect.locator("option", { hasText: `再開確認の訓練 ${tag}` }).getAttribute("value"))!);
+  await expect(officerPage.getByText(/対象者（1人/).first()).toBeVisible({ timeout: 15_000 });
+  await officerPage.getByLabel("本文").fill(`再開して送る下書き ${tag}`);
+  await officerPage.getByRole("button", { name: "下書きを作成" }).click();
+  const preview = officerPage.getByLabel("承認前の確認");
+  await expect(preview.getByText(`再開して送る下書き ${tag}`)).toBeVisible({ timeout: 15_000 });
+  await officerPage.getByRole("link", { name: "戻る" }).click();
+  await expect(officerPage).toHaveURL(/\/app\/tasks-notifications$/);
+
+  // --- 2) 受信箱（切替なし）には下書きは現れない（送信者は対象ではない。T050の裁定不変） ---
+  await expect(officerPage.getByText(`再開して送る下書き ${tag}`)).toHaveCount(0);
+
+  // --- 3) 「送信した通知」に切り替えると、承認待ちの下書きが現れる（API-67 sent=true） ---
+  await officerPage.getByRole("button", { name: "送信した通知" }).click();
+  const sentRow = officerPage.getByRole("list", { name: "送信した通知" }).getByRole("listitem")
+    .filter({ hasText: `再開して送る下書き ${tag}` });
+  await expect(sentRow).toBeVisible({ timeout: 15_000 });
+  await expect(sentRow.getByText("下書き", { exact: true })).toBeVisible();
+
+  // --- 4) 開き直すと承認前確認が再開され、承認して送信できる（対象は1人。明示の確認ダイアログを通る） ---
+  await sentRow.getByRole("link").click();
+  await expect(officerPage).toHaveURL(/\/app\/tasks-notifications\/notifications\/[^/]+$/);
+  const resumed = officerPage.getByLabel("承認前の確認");
+  await expect(resumed.getByText(`再開して送る下書き ${tag}`)).toBeVisible({ timeout: 15_000 });
+  await officerPage.getByRole("button", { name: "承認する" }).click();
+  const approveDialog = officerPage.getByRole("dialog", { name: "この通知を承認して送信しますか" });
+  await expect(approveDialog.getByText(`再開して送る下書き ${tag}`)).toBeVisible();
+  await approveDialog.getByRole("button", { name: "承認する" }).click();
+  await expect(officerPage.getByText(/処理中/).first()).toBeVisible({ timeout: 15_000 });
+
+  // --- 5) 配送jobを開発用トリガで回収し、対象者に届く（受付。docs/11「受付≠到達≠既読」） ---
+  const results = officerPage.getByLabel("配送結果");
+  await expect(async () => {
+    await runLocalCron(request);
+    await expect(results.getByText("受付済み").first()).toBeVisible();
+  }).toPass({ timeout: 30_000 });
+
+  const memberCtx = await newUserContext(browser, testInfo.project.use.viewport!);
+  const memberPage = await memberCtx.newPage();
+  await acceptInvitationViaUi(memberPage, memberEmail, member.token, { mfa: false });
+  await memberPage.goto("/app/tasks-notifications");
+  await expect(memberPage.getByText(`再開して送る下書き ${tag}`).first()).toBeVisible({ timeout: 15_000 });
 });

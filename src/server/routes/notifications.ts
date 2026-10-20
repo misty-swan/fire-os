@@ -533,15 +533,30 @@ export function registerNotificationRoutes(app: ApiApp): void {
     const { query } = await parseApiRequest(c, "API-67");
     requirePermission(p, "PER-01", { unitId: p.unitId, type: "notification" });
 
-    // 本人がrecipientの通知だけ（送信者でもrecipientでなければ現れない。API-67は「本人のみ」）
-    const where = ["n.unit_id = ?", "r.member_id = ?", `n.status IN ${RECIPIENT_VISIBLE_SQL}`];
-    const binds: unknown[] = [p.unitId, p.memberId];
+    // 送信者（作成者）側の一覧（sent=true。T086・PH4-B2）: draft/cancelledを含む自分の作成分の全状態。
+    // 未読（受信箱の条件）との併用は意味が無いため400（黙って無視しない）
+    if (query.sent === true && query.unread === true) {
+      throw new HttpError("VALIDATION_ERROR", undefined, [{ field: "sent", reason: "sent_and_unread_exclusive" }]);
+    }
+
+    // WHERE句（カーソル条件も後でここへ追加する。recipient系の列は全てnの実列=GROUP BYの前で効く）
+    const where: string[] = ["n.unit_id = ?"];
+    const binds: unknown[] = [p.unitId];
+    if (query.sent === true) {
+      // 作成者本人の分だけ（他人の送信分は見せない）。myReadAt/myDeliveryは対象者行が無ければnull
+      where.push("n.created_by = ?");
+      binds.push(p.userId);
+    } else {
+      // 本人がrecipientの通知だけ（送信者でもrecipientでなければ現れない。API-67は「本人のみ」）
+      where.push("r.member_id = ?", `n.status IN ${RECIPIENT_VISIBLE_SQL}`);
+      binds.push(p.memberId);
+    }
     if (query.status) {
       where.push("n.status = ?");
       binds.push(query.status);
     }
-    // 未読だけ（T052。API-28のnotifications指標＝自分宛・未読の件数と同じ条件。docs/05 API-67行）
     if (query.unread === true) {
+      // 未読だけ（T052。API-28のnotifications指標＝自分宛・未読の件数と同じ条件。docs/05 API-67行）
       where.push("r.read_at IS NULL");
     }
 
@@ -556,11 +571,15 @@ export function registerNotificationRoutes(app: ApiApp): void {
       binds.push(cursor.createdAt, cursor.createdAt, cursor.id);
     }
 
+    // sent=trueではrecipient行とのJOINが要らない（作成者の分だけを並べる。対象者行が無いdraftも載る）
+    const fromJoin = query.sent === true ? "" : " JOIN notification_recipients r ON r.notification_id = n.id AND r.unit_id = n.unit_id";
+    const groupBy = query.sent === true ? "" : " GROUP BY n.id";
+
     // SELECT派生列（myReadAt/myDelivery）のbindが最も先（SQLの並び順）。WHERE句のbindはそのあと
     const rows = (
       await c.env.DB.prepare(
-        `SELECT ${MY_OBJECT_SQL} FROM notifications n JOIN notification_recipients r ON r.notification_id = n.id AND r.unit_id = n.unit_id ` +
-          `WHERE ${where.join(" AND ")} GROUP BY n.id ORDER BY n.created_at DESC, n.id DESC LIMIT ?`,
+        `SELECT ${MY_OBJECT_SQL} FROM notifications n${fromJoin} ` +
+          `WHERE ${where.join(" AND ")}${groupBy} ORDER BY n.created_at DESC, n.id DESC LIMIT ?`,
       ).bind(p.memberId, p.memberId, ...binds, query.limit + 1).all<{ j: string }>()
     ).results;
 

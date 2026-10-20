@@ -3209,9 +3209,9 @@
    "source": "docs/evidence/ph4-review.md B2（中・方針で残す）",
    "summary": "承認待ち通知draftが送信者の一覧に現れない（送信者一覧APIが契約に無い）",
    "severity": "medium",
-   "status": "open",
-   "basis": "ph4-review表の重大度「中」。未送信・対象者非表示に害が限定",
-   "owner": "T086（画面改善。T088で再確認）"
+   "status": "resolved",
+   "basis": "新規endpointは作らず既存API-67（GET /notifications/me）へ sent=true の要求拡張（契約3点セット: registry・docs/05・OpenAPI再生成。T085のAPI-44/51と同じ前例）。自分が作った通知（draft/cancelled含む全状態）を新しい順に返し、受信箱（sent無し）とAPI-28指標との一致は不変。sent×unread併用は400。画面は通知タブの「送信した通知」切替（?sent=true）で未承認draftを開き直し承認前確認（承認/取消）を再開（ResumeDraftStep）。旧実装で赤: サーバー試験sent_view_lists_senders_own_drafts…はsent未知queryの400（tests/notification-approval.test.ts）・e2e pending_draft_appears_in_sent_list_and_can_be_resumed_to_sendは「送信した通知」ボタン不在のタイムアウト（実装退避で確認）→両方緑",
+   "owner": "T086"
   },
   {
    "id": "PH4-B3",

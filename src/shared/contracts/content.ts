@@ -359,8 +359,15 @@ export const contentApis = {
   "API-67": defineApi({
     method: "GET", path: "/notifications/me", permission: "PER-01", kind: "list", success: [200],
     // unread=true（T052）: 自分の分のうち未読（recipients.read_at IS NULL）だけ。docs/05 API-28の
-    // notifications指標（自分宛・未読の件数）と同じ条件で、href先の一覧の件数と一致させる
-    request: obj({ query: listQuery({ status: z.enum(notificationApprovalStates).optional(), unread: z.stringbool().optional() }) }),
+    // notifications指標（自分宛・未読の件数）と同じ条件で、href先の一覧の件数と一致させる。
+    // sent=true（T086・PH4-B2）: 自分が作った通知（送信者側）の一覧。draft/cancelledを含む全状態を
+    // 新しい順に返す（承認を待つdraftが一覧から辿れない問題の解消。新規endpointではなく既存APIの
+    // 要求拡張）。未読（受信箱の条件）との併用は400（黙って無視しない）
+    request: obj({ query: listQuery({
+      status: z.enum(notificationApprovalStates).optional(),
+      unread: z.stringbool().optional(),
+      sent: z.stringbool().optional(),
+    }) }),
     response: Page(MyNotification),
   }),
   "API-100": defineApi({

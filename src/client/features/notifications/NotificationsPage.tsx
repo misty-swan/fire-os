@@ -9,7 +9,7 @@ import { useMe } from "../../me";
 import { useMutation } from "../../useMutation";
 import { fmtInstant } from "../activities/time";
 import { TasksPanel } from "../tasks/TasksPanel";
-import { FormalContactNotice, NotificationApproval, SenderNotificationDetail, isSenderProjection } from "./NotificationApproval";
+import { APPROVAL_LABEL, FormalContactNotice, NotificationApproval, ResumeDraftStep, SenderNotificationDetail, isSenderProjection } from "./NotificationApproval";
 import { useMemberNames } from "./names";
 
 /**
@@ -18,10 +18,11 @@ import { useMemberNames } from "./names";
  *
  * 1画面を3つの入口（別入口=aliases。お知らせSCR-16と同じ方式）で扱う:
  *  - 一覧（このcomponent）: 通知タブ（自分宛の通知。API-67。?unread=trueで未読だけ＝ホームの通知指標と
- *    同じ条件）とタスクタブ（TasksPanel。API-102）をURLクエリ ?tab= で切り替える
+ *    同じ条件/?sent=trueで自分が作った通知〔送信者側。draft含む。PH4-B2・T086〕）とタスクタブ（TasksPanel。API-102）をURLクエリ ?tab= で切り替える
  *  - 通知を作成（/notifications/new）: NotificationApproval（源の選択→承認前確認→承認/取消→配送結果）
  *  - 詳細（/notifications/:id）: API-65は呼び出し者で投影が変わる（送信者=全体、対象者=自分の分だけ）ため、
- *    応答を実行値で区別して送信者视图（SenderNotificationDetail）と対象者视图（本人既読）を出し分ける
+ *    応答を実行値で区別して送信者视图（SenderNotificationDetail。未承認の下書きは承認前確認を再開する
+ *    ResumeDraftStep）と対象者视图（本人既読）を出し分ける
  *
  * 本人既読（API-100）は自動でなく明示操作（docs/11「既読を参加/配送完了と混同しない」）。お知らせ（T046）と同じ流儀。
  */
@@ -96,15 +97,18 @@ function NotificationsTabPage() {
   );
 }
 
-/** 自分宛の通知の一覧（API-67。?unread=true=未読だけ。ホームの通知指標と同じ条件。docs/05 API-67） */
+/** 自分宛の通知の一覧（API-67。?unread=true=未読だけ。ホームの通知指標と同じ条件。docs/05 API-67）。
+ *  送信者（PER-12）は ?sent=true で自分が作った通知（draft/cancelledを含む）の一覧に切り替えられる
+ *  （PH4-B2・T086。承認を待つ下書きを一覧から開き直すための入口） */
 function NotificationsList({ canManage }: { canManage: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const unreadOnly = searchParams.get("unread") === "true";
+  const sentOnly = searchParams.get("sent") === "true";
   const [items, setItems] = useState<MyNotificationDto[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
 
-  // 再取得の起点は未読絞りだけ（依存配列に未読絞り以外を置かない。関数を毎レンダーで作って依存に置くと
+  // 再取得の起点は絞りだけ（依存配列に絞り以外を置かない。関数を毎レンダーで作って依存に置くと
   // 無限再取得になるため、クエリは効果の中で組み立てる。AnnouncementsPageと同じ構成）
   useEffect(() => {
     const ctrl = new AbortController();
@@ -114,7 +118,7 @@ function NotificationsList({ canManage }: { canManage: boolean }) {
     void (async () => {
       try {
         const res = await apiCall("API-67", {
-          query: { limit: 50, ...(unreadOnly ? { unread: "true" } : {}) } as ApiInput<"API-67">["query"],
+          query: { limit: 50, ...(sentOnly ? { sent: "true" } : {}), ...(!sentOnly && unreadOnly ? { unread: "true" } : {}) } as ApiInput<"API-67">["query"],
         }, { signal: ctrl.signal });
         if (!alive) return;
         setItems(res.data as unknown as MyNotificationDto[]);
@@ -128,14 +132,14 @@ function NotificationsList({ canManage }: { canManage: boolean }) {
       alive = false;
       ctrl.abort();
     };
-  }, [unreadOnly]);
+  }, [unreadOnly, sentOnly]);
 
   const loadMore = async () => {
     if (!cursor) return;
     setPhase("loading");
     try {
       const res = await apiCall("API-67", {
-        query: { limit: 50, ...(unreadOnly ? { unread: "true" } : {}), cursor } as ApiInput<"API-67">["query"],
+        query: { limit: 50, ...(sentOnly ? { sent: "true" } : {}), ...(!sentOnly && unreadOnly ? { unread: "true" } : {}), cursor } as ApiInput<"API-67">["query"],
       });
       setItems((prev) => [...prev, ...(res.data as unknown as MyNotificationDto[])]);
       setCursor(res.nextCursor ?? null);
@@ -145,29 +149,59 @@ function NotificationsList({ canManage }: { canManage: boolean }) {
     }
   };
 
+  // 未読（受信箱の条件）と送信した通知（送信者の一覧）は排他的（API-67も併用を400にする）
   const toggleUnread = () => {
     const next = new URLSearchParams(searchParams);
     if (unreadOnly) next.delete("unread");
-    else next.set("unread", "true");
+    else {
+      next.set("unread", "true");
+      next.delete("sent");
+    }
+    setSearchParams(next, { replace: true });
+  };
+  const toggleSent = () => {
+    const next = new URLSearchParams(searchParams);
+    if (sentOnly) next.delete("sent");
+    else {
+      next.set("sent", "true");
+      next.delete("unread");
+    }
     setSearchParams(next, { replace: true });
   };
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        {/* 未読だけ（ホームの通知指標と同じ条件。docs/05 API-28「countはその一覧の件数と必ず一致」） */}
-        <button
-          type="button"
-          aria-pressed={unreadOnly}
-          onClick={toggleUnread}
-          className={
-            "inline-flex min-h-11 items-center gap-1.5 rounded-pill px-4 text-[13px] font-bold " +
-            (unreadOnly ? "bg-attention/[.16] text-attention" : "bg-white/[.06] text-ink-sub hover:bg-white/[.1]")
-          }
-        >
-          <Icon name={unreadOnly ? "mark_email_unread" : "mark_email_read"} className="text-[17px]" />
-          未読のみ
-        </button>
+        {/* 未読だけ（ホームの通知指標と同じ条件。docs/05 API-28「countはその一覧の件数と必ず一致」）。送信した通知の間は出さない */}
+        {!sentOnly && (
+          <button
+            type="button"
+            aria-pressed={unreadOnly}
+            onClick={toggleUnread}
+            className={
+              "inline-flex min-h-11 items-center gap-1.5 rounded-pill px-4 text-[13px] font-bold " +
+              (unreadOnly ? "bg-attention/[.16] text-attention" : "bg-white/[.06] text-ink-sub hover:bg-white/[.1]")
+            }
+          >
+            <Icon name={unreadOnly ? "mark_email_unread" : "mark_email_read"} className="text-[17px]" />
+            未読のみ
+          </button>
+        )}
+        {/* 送信した通知（自分が作った分。draft/cancelledを含む。PH4-B2・T086）。作成できる役割のときだけ出す */}
+        {canManage && (
+          <button
+            type="button"
+            aria-pressed={sentOnly}
+            onClick={toggleSent}
+            className={
+              "inline-flex min-h-11 items-center gap-1.5 rounded-pill px-4 text-[13px] font-bold " +
+              (sentOnly ? "bg-white/[.12] text-ink" : "bg-white/[.06] text-ink-sub hover:bg-white/[.1]")
+            }
+          >
+            <Icon name="campaign" className="text-[17px]" />
+            送信した通知
+          </button>
+        )}
         {canManage && (
           <Link
             to="/app/tasks-notifications/notifications/new"
@@ -192,31 +226,45 @@ function NotificationsList({ canManage }: { canManage: boolean }) {
         </Banner>
       )}
       {phase === "ready" && items.length === 0 && (
-        <Banner tone="info" eyebrow="EMPTY" title={unreadOnly ? "未読の通知はありません" : "自分宛の通知はまだありません"}>
-          {unreadOnly ? "やることはすべて完了しています。" : "対象の通知が承認・送信されると、ここに現れます。"}
+        <Banner tone="info" eyebrow="EMPTY" title={sentOnly ? "送信した通知はまだありません" : unreadOnly ? "未読の通知はありません" : "自分宛の通知はまだありません"}>
+          {sentOnly
+            ? "作成した下書きや送信済みの通知が、ここに現れます（承認待ちの下書きも開けます）。"
+            : unreadOnly
+              ? "やることはすべて完了しています。"
+              : "対象の通知が承認・送信されると、ここに現れます。"}
         </Banner>
       )}
 
-      {/* prototype ホームのお知らせ欄と同じ行の構成（状態札・本文・日付・未読/既読） */}
-      <ul className="flex flex-col gap-2" aria-label="自分宛の通知">
-        {items.map((n) => (
-          <li key={n.id}>
-            <Link
-              to={`/app/tasks-notifications/notifications/${n.id}`}
-              className="flex items-center gap-3 rounded-[20px] bg-white/[.04] p-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,.07)] hover:bg-white/[.07]"
-            >
-              <span className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  {n.myReadAt ? <Chip tone="neutral">既読</Chip> : <Chip tone="alert">未読</Chip>}
-                  <MyDeliveryChip n={n} />
+      {/* 送信した通知は承認状態の札（下書き/承認済み/配送処理済み等。APPROVAL_LABEL）で並べる。
+          受信箱はprototypeホームのお知らせ欄と同じ行の構成（未読/既読・配送・本文・日付） */}
+      <ul className="flex flex-col gap-2" aria-label={sentOnly ? "送信した通知" : "自分宛の通知"}>
+        {items.map((n) => {
+          const approval = sentOnly ? APPROVAL_LABEL[n.status] : null;
+          return (
+            <li key={n.id}>
+              <Link
+                to={`/app/tasks-notifications/notifications/${n.id}`}
+                className="flex items-center gap-3 rounded-[20px] bg-white/[.04] p-3.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,.07)] hover:bg-white/[.07]"
+              >
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    {approval ? (
+                      <Chip tone={approval.tone}>{approval.label}</Chip>
+                    ) : (
+                      <>
+                        {n.myReadAt ? <Chip tone="neutral">既読</Chip> : <Chip tone="alert">未読</Chip>}
+                        <MyDeliveryChip n={n} />
+                      </>
+                    )}
+                  </span>
+                  <span className="line-clamp-2 whitespace-pre-wrap text-[14px] font-bold leading-[1.5]">{n.body}</span>
+                  <span className="font-mono text-[11px] text-ink-muted">{fmtInstant(n.createdAt)}</span>
                 </span>
-                <span className="line-clamp-2 whitespace-pre-wrap text-[14px] font-bold leading-[1.5]">{n.body}</span>
-                <span className="font-mono text-[11px] text-ink-muted">{fmtInstant(n.createdAt)}</span>
-              </span>
-              <Icon name="chevron_right" className="flex-none text-[20px] text-ink-dim" />
-            </Link>
-          </li>
-        ))}
+                <Icon name="chevron_right" className="flex-none text-[20px] text-ink-dim" />
+              </Link>
+            </li>
+          );
+        })}
       </ul>
 
       {cursor && (
@@ -286,7 +334,11 @@ function NotificationDetailRoute({ id }: { id: string }) {
       </div>
     );
   }
-  if (isSenderProjection(data)) return <SenderNotificationDetail initial={data} />;
+  if (isSenderProjection(data)) {
+    // 未承認の下書きは承認前確認から再開（承認・取消。PH4-B2・T086。送信した通知の一覧からの導線）
+    if (data.status === "draft") return <ResumeDraftStep initial={data} />;
+    return <SenderNotificationDetail initial={data} />;
+  }
   return <MyNotificationDetail data={data} names={names} onRead={reload} />;}
 
 /**

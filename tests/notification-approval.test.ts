@@ -496,6 +496,67 @@ describe("通知の明示承認・本人既読 (T050)", () => {
     // 再送で2件目のdraftは作られない（同じ源の通知は1件）
     expect(await fx.rows("notifications", { source_id: activityId })).toHaveLength(1);
   });
+
+  /**
+   * 送信者（作成者）の一覧（PH4-B2・T086。docs/evidence/ph4-review.md B2）。API-67の
+   * `sent=true`（既存endpointの要求拡張。新規endpointは作らない）で、自分が作った通知
+   * （draft/cancelledを含む全状態）が新しい順に読める。承認を待つdraftが一覧から辿れず
+   * 溜まっていた問題の解消。対象者の受信箱（sent無し）は変わらない（API-28指標との一致も不変）。
+   */
+  it("sent_view_lists_senders_own_drafts_and_keeps_recipient_inbox_unchanged", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin; // 送信者（PER-12）
+    const officer = a.people.officer; // 別のPER-12保持者（他人のdraftは見えない）
+    const member = a.people.member; // 対象者
+    const activityId = await createActivity([member.memberId!]);
+
+    // draftを作って承認せずに離れる（PH4-B2の状況）
+    const createRes = await fx.client(admin).request("POST", "/api/v1/notifications/drafts", {
+      source: { type: "activity", id: activityId }, channels: ["inapp"],
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const draft = (await json(createRes)).data! as { id: string; status: string; version: number };
+
+    // 送信者の一覧（sent=true）: 承認待ちのdraftが現れる（draftは対象者の受信箱には出ないため、
+    // これまでどの一覧にも現れなかった）
+    const sent = await fx.client(admin).request("GET", "/api/v1/notifications/me?sent=true&limit=200");
+    expect(sent.status).toBe(200);
+    const sentRows = (await json(sent)).data as unknown as { id: string; status: string }[];
+    expect(sentRows.some((r) => r.id === draft.id && r.status === "draft")).toBe(true);
+    // status絞り込み（承認待ちだけ）も同じ契約のqueryで出来る
+    const draftsOnly = await fx.client(admin).request("GET", "/api/v1/notifications/me?sent=true&status=draft&limit=200");
+    expect(draftsOnly.status).toBe(200);
+    expect(((await json(draftsOnly)).data as unknown as { id: string }[]).some((r) => r.id === draft.id)).toBe(true);
+
+    // 他人の送信分は見えない（作成者本人の分だけ）
+    const officerSent = await fx.client(officer).request("GET", "/api/v1/notifications/me?sent=true&limit=200");
+    expect(officerSent.status).toBe(200);
+    expect(((await json(officerSent)).data as unknown as { id: string }[]).some((r) => r.id === draft.id)).toBe(false);
+
+    // 対象者の受信箱（sent無し）は変わらない: draftは依然として現れない（draft/cancelledは対象者に非公開）
+    const inbox = await fx.client(member).request("GET", "/api/v1/notifications/me?limit=200");
+    expect(inbox.status).toBe(200);
+    expect(((await json(inbox)).data as unknown as { id: string }[]).some((r) => r.id === draft.id)).toBe(false);
+    // 送信者自身の受信箱（sent無し。送信者は対象ではない）にも現れない
+    const adminInbox = await fx.client(admin).request("GET", "/api/v1/notifications/me?limit=200");
+    expect(((await json(adminInbox)).data as unknown as { id: string }[]).some((r) => r.id === draft.id)).toBe(false);
+
+    // sent=true と unread=true の併用は400（未読は対象者の受信箱の条件で、送信者一覧には意味が無い。
+    // 黙って無視しない）
+    const both = await fx.client(admin).request("GET", "/api/v1/notifications/me?sent=true&unread=true");
+    expect(both.status).toBe(400);
+
+    // 取消すると status絞り込みから消える（一覧から辿って取消まで出来る）
+    const cancel = await fx.client(admin).request("POST", `/api/v1/notifications/${draft.id}/approval`, {
+      version: draft.version, decision: "cancel",
+    }, idem());
+    expect(cancel.status).toBe(200);
+    const afterCancel = await fx.client(admin).request("GET", "/api/v1/notifications/me?sent=true&status=draft&limit=200");
+    expect(((await json(afterCancel)).data as unknown as { id: string }[]).some((r) => r.id === draft.id)).toBe(false);
+    // 取消済みも全件（status無し）には残る（記録）
+    const afterCancelAll = await fx.client(admin).request("GET", "/api/v1/notifications/me?sent=true&limit=200");
+    expect(((await json(afterCancelAll)).data as unknown as { id: string; status: string }[]).some((r) => r.id === draft.id && r.status === "cancelled")).toBe(true);
+  });
 });
 
 /** テスト内で幹部（officer）のmemberIdを取るヘルパー */

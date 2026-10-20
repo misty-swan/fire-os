@@ -27,8 +27,9 @@ import { useMemberNames } from "./names";
  *  ⑤配送結果（API-65のrecipients。受付済み/失敗/到達不明/取消を別表示。docs/11「受付≠到達≠既読」）。
  *    到達不明は「結果を確認」で対象を開く。未送分の取消（cancel_unsent）は対象を明示してから行う。
  *
- * 既知の制限（docs/03 §1.1-14に記録）: 承認せずに離れた下書きは、送信者の一覧を読むAPIが無いため
- * この画面に戻れない（未承認のまま配送されず、対象者にも見えない。入力途中の離脱はLeaveConfirmで確認する）。
+ * 既知の制限の解消（PH4-B2・T086。docs/03 §1.1-14に記録）: 承認せずに離れた下書きは、送信した通知の
+ * 一覧（API-67 sent=true。画面は一覧の「送信した通知」の切替）から開き直して承認・取消を再開できる
+ * （ResumeDraftStep）。対象の変更は新draftを作り直す（通知のUPDATEは無い。入力途中の離脱はLeaveConfirmで確認する）。
  */
 
 /** 配送状態の表示語彙（docs/11 配送。色はDesign Systemの状態トークン。受付≠到達≠既読を混同しない） */
@@ -330,8 +331,10 @@ export function NotificationApproval({ mode }: { mode: "create" }) {
   );
 }
 
-/** 承認前確認＋配送結果（create modeの後半。docs/03「本文/対象/人数の承認前確認→承認→取消→配送結果」） */
-function ConfirmStep({
+/** 承認前確認＋配送結果（create modeの後半。docs/03「本文/対象/人数の承認前確認→承認→取消→配送結果」）。
+ *  作成flow（NotificationApproval）と、承認せずに離れた下書きを送信者一覧から開き直したとき
+ *  （ResumeDraftStep。PH4-B2・T086）の両方で使う */
+export function ConfirmStep({
   draft, names, approvalState, approvalSaving, runApproval, onApprove, onCancel, dialogKind, onDialogClose, onApproved, onCancelled,
 }: {
   draft: NotificationDto;
@@ -471,6 +474,49 @@ function ConfirmStep({
         )
       )}
     </div>
+  );
+}
+
+/**
+ * 承認せずに離れた下書きを、送信した通知の一覧（API-67 sent=true。PH4-B2・T086）から開き直して
+ * 承認・取消を再開する。API-65の送信者投影に承認固定のhash（bodyHash/audienceHash）と版が載るため、
+ * 作成flowと同じ確認ステップ（ConfirmStep）をそのまま通す。対象の変更は「あらためて作成」から
+ * （通知のUPDATEは無い。docs/05 API-63）。
+ */
+export function ResumeDraftStep({ initial }: { initial: NotificationDto }) {
+  const names = useMemberNames();
+  const approval = useMutation("API-64");
+  const [draft, setDraft] = useState(initial);
+  const [dialogKind, setDialogKind] = useState<"approve" | "cancel" | null>(null);
+  return (
+    <ConfirmStep
+      draft={draft}
+      names={names}
+      approvalState={approval.state}
+      approvalSaving={approval.saving}
+      runApproval={async (decision) => {
+        const r = await approval.run({
+          params: { id: draft.id },
+          body:
+            decision === "approve"
+              ? { version: draft.version, bodyHash: draft.bodyHash, audienceHash: draft.audienceHash, decision }
+              : { version: draft.version, decision },
+        });
+        return r ? (r.data as unknown as NotificationDto) : null;
+      }}
+      onApprove={() => setDialogKind("approve")}
+      onCancel={() => setDialogKind("cancel")}
+      dialogKind={dialogKind}
+      onDialogClose={() => setDialogKind(null)}
+      onApproved={(updated) => {
+        setDialogKind(null);
+        setDraft(updated);
+      }}
+      onCancelled={(updated) => {
+        setDialogKind(null);
+        setDraft(updated);
+      }}
+    />
   );
 }
 
