@@ -1,8 +1,9 @@
 import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { loginAs } from "./helpers/auth";
+import { GOOD_PASSWORD, directAuth, directBrowser, loginAs, signInAnotherDevice, workerBrowser } from "./helpers/auth";
 import { createFixture, type Identity, type TestFixture } from "./helpers/fixture";
+import { secretFromUri, totpCode } from "./helpers/totp";
 
 beforeAll(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
@@ -124,5 +125,70 @@ describe("監査 (T014)", () => {
     const withMfa = await loginAs(admin, { mfa: true });
     const r = await withMfa.json<{ data: unknown[] }>("GET", "/api/v1/audit-logs");
     expect(r.status).toBe(200);
+  });
+
+  /**
+   * 認証イベント（サインイン成功/失敗・二要素の設定変更・パスワード再設定）が監査に残る（PH1-A2。T086）。
+   * T014の設計に従う: 追記のみ・本文を複製しない（パスワード・再設定token・TOTPの秘密・セッションtokenは
+   * 載せない）・管理者は監査APIの既存フィルタ（entityType/entityId）で読める。帰属できない試行
+   * （未登録メールなど）はunit帰属が必須のため書かれない（その防御はIP単位の回数制限が担う）。
+   */
+  it("authentication_events_are_recorded_in_audit_without_secrets", async () => {
+    const fx = await createFixture("two-units");
+    const { admin, member } = fx.units.a.people;
+    // 一般団員の業務userに実セッションを持たせる（loginAsは招待→登録→users.auth_id結び付けまで行う）
+    const first = await loginAs(member);
+    // 別端末でのサインイン成功 → auth.sign_in (result=success)
+    await signInAnotherDevice(first);
+    // 誤パスワードのサインイン失敗 → auth.sign_in (result=failure)
+    const wrong = await workerBrowser();
+    const failed = await wrong.json("POST", "/api/auth/sign-in/email", { email: first.email, password: "wrong-password-123" });
+    expect(failed.status).toBe(401);
+
+    // 二要素の設定変更（enable=秘密の発行 → verify-totp=有効化の確定）
+    const { service, captured } = directAuth();
+    const b = await directBrowser(service);
+    await b.json("POST", "/api/auth/sign-in/email", { email: first.email, password: GOOD_PASSWORD });
+    const enable = await b.json<{ totpURI: string }>("POST", "/api/auth/two-factor/enable", { password: GOOD_PASSWORD });
+    expect(enable.status).toBe(200);
+    const totpSecret = secretFromUri(enable.data.totpURI);
+    expect((await b.json("POST", "/api/auth/two-factor/verify-totp", { code: await totpCode(totpSecret) })).status).toBe(200);
+
+    // パスワード再設定（要求 → 完了。tokenは配送の捕捉だけで、監査には載せない）
+    await b.json("POST", "/api/auth/request-password-reset", { email: first.email });
+    expect(captured.length).toBeGreaterThan(0);
+    const resetToken = captured[0]!.token;
+    const done = await b.json("POST", "/api/auth/reset-password", { newPassword: "re-audited-strong-9", token: resetToken });
+    expect(done.status).toBe(200);
+
+    // 管理者が監査APIの既存フィルタ（entityType/entityId）で本人（user）単位の認証記録を読める
+    const mine = await listAudit(fx, admin, `?entityType=user&entityId=${member.userId}&limit=100`);
+    expect(mine.status).toBe(200);
+    const rows = mine.rows.map((r) => ({ action: r.action, meta: JSON.stringify(r.metadata) }));
+    const has = (action: string, ...needles: string[]) =>
+      rows.some((r) => r.action === action && needles.every((n) => r.meta.includes(n)));
+    expect(has("auth.sign_in", '"success"')).toBe(true);
+    expect(has("auth.sign_in", '"failure"')).toBe(true);
+    expect(has("auth.two_factor.setup_started")).toBe(true);
+    expect(has("auth.two_factor.enabled")).toBe(true);
+    expect(has("auth.password_reset_requested")).toBe(true);
+    expect(has("auth.password_reset_completed")).toBe(true);
+    // 行為者も対象も本人のuser行（actorIdフィルタでも辿れる）
+    expect(mine.rows.every((r) => r.entityType === "user" && r.entityId === member.userId)).toBe(true);
+    expect(mine.rows.every((r) => r.actorKind === "human" && r.actorId === member.userId)).toBe(true);
+
+    // 認証の秘密（パスワード・再設定token・TOTPの秘密）は監査に載せない
+    const all = JSON.stringify(mine.rows);
+    for (const s of [GOOD_PASSWORD, "wrong-password-123", "re-audited-strong-9", resetToken, totpSecret]) {
+      expect(all.includes(s)).toBe(false);
+    }
+
+    // 未登録メールのサインイン試行は書かない（unit帰属が無いため。防御はIP単位の回数制限）
+    const signInRows = async () =>
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM audit_logs WHERE unit_id = ? AND action = 'auth.sign_in'").bind(fx.units.a.id).first<{ n: number }>())!.n;
+    const before = await signInRows();
+    const unknown = await workerBrowser();
+    await unknown.json("POST", "/api/auth/sign-in/email", { email: `nobody-${crypto.randomUUID().slice(0, 8)}@example.test`, password: "wrong-password-123" });
+    expect(await signInRows()).toBe(before);
   });
 });

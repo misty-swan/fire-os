@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins";
 import type { AppEnv } from "../env";
+import { authErrorCode, recordAuthAudit } from "./audit";
 import { sha256Hex } from "../mutations/hash";
 
 /**
@@ -113,6 +114,10 @@ export function createAuth(env: AuthEnv, deps: AuthDeps = {}) {
       sendResetPassword: async ({ user, token }) => {
         await deps.deliverReset?.({ email: user.email, token });
       },
+      // 再設定の完了を監査に残す（PH1-A2・T086。token・新パスワードは載せない。src/server/auth/audit.ts）
+      onPasswordReset: async ({ user }) => {
+        await recordAuthAudit(env.DB, { authId: user.id, action: "auth.password_reset_completed", result: "success" });
+      },
     },
     advanced: {
       useSecureCookies: secure,
@@ -160,18 +165,87 @@ export function createAuth(env: AuthEnv, deps: AuthDeps = {}) {
     hooks: {
       // 二要素の「有効化」を確定した成功のときだけ、それ以前に（パスワードだけで）作られた他のセッションを失効させる。
       // 誤ったコードや、有効化済みの利用者の呼び出し、ログイン時の二要素確認では何も消さない（他端末の強制ログアウトにしない）。
+      // あわせて認証イベントを監査へ残す（PH1-A2・T086。記録の設計は src/server/auth/audit.ts）。
       after: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== "/two-factor/verify-totp") return;
-        const token = ctx.context.session?.session.token;
-        const enabling = token ? enablingSessions.get(token) : undefined;
-        if (!token || enabling === undefined) return;
-        enablingSessions.delete(token);
-        const failed = ctx.context.returned instanceof Error || (ctx.context.returned as { status?: unknown } | undefined)?.status === "UNAUTHORIZED";
-        if (!enabling || failed) return;
-        // 確認後に新しいセッションへ切り替わる場合は、そちらを残す
-        const keep = ctx.context.newSession?.session.token ?? token;
-        const userId = ctx.context.session!.session.userId;
-        await env.DB.prepare("DELETE FROM auth_sessions WHERE user_id = ? AND token <> ?").bind(userId, keep).run();
+        const returned = ctx.context.returned;
+        const failed = returned instanceof Error || (returned as { status?: unknown } | undefined)?.status === "UNAUTHORIZED";
+        // --- 有効化確定時の他セッション失効（既存動作。監査用にenablingの値を先に控える） ---
+        let enabling: boolean | undefined;
+        if (ctx.path === "/two-factor/verify-totp") {
+          const token = ctx.context.session?.session.token;
+          enabling = token ? enablingSessions.get(token) : undefined;
+          if (token && enabling !== undefined) {
+            enablingSessions.delete(token);
+            if (enabling && !failed) {
+              // 確認後に新しいセッションへ切り替わる場合は、そちらを残す
+              const keep = ctx.context.newSession?.session.token ?? token;
+              const userId = ctx.context.session!.session.userId;
+              await env.DB.prepare("DELETE FROM auth_sessions WHERE user_id = ? AND token <> ?").bind(userId, keep).run();
+            }
+          }
+        }
+        // --- 認証イベントの監査（PH1-A2）。記録するのはサインイン成功/失敗・二要素の設定変更・パスワード再設定。
+        //     sign-upは業務usersと未結合（unit帰属が無い）のため書かない（招待受領の監査=invitation.acceptが対応）。
+        //     回数制限(429)で拒まれた要求はendpointのpipelineの外のためこのhookは走らない（計数はauth_rate_limits） ---
+        const sessionUserId = ctx.context.session?.session.userId ?? null;
+        switch (ctx.path) {
+          case "/sign-in/email": {
+            const email = (ctx.body as { email?: unknown } | undefined)?.email;
+            if (typeof email !== "string") break;
+            const redirect = !failed && Boolean((returned as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect);
+            await recordAuthAudit(env.DB, {
+              email: normalizeEmail(email),
+              action: "auth.sign_in",
+              result: failed ? "failure" : redirect ? "two_factor_required" : "success",
+              ...(failed ? { reason: authErrorCode(returned) } : {}),
+            });
+            break;
+          }
+          case "/two-factor/enable":
+            if (sessionUserId && !failed) {
+              await recordAuthAudit(env.DB, { authId: sessionUserId, action: "auth.two_factor.setup_started", result: "success" });
+            }
+            break;
+          case "/two-factor/verify-totp":
+            if (enabling === true) {
+              // 有効化の確定（成功）と、確定の試みが誤コードで失敗したこと（成功と同じ行為者の追跡）
+              await recordAuthAudit(env.DB, {
+                authId: sessionUserId ?? undefined,
+                action: "auth.two_factor.enabled",
+                result: failed ? "failure" : "success",
+                ...(failed ? { reason: authErrorCode(returned) } : {}),
+              });
+            } else if (!failed && ctx.context.newSession) {
+              // サインイン時の第二要素確認が通った（サインインの確定）
+              await recordAuthAudit(env.DB, {
+                authId: ctx.context.newSession.session.userId,
+                action: "auth.sign_in", result: "success", secondFactor: "totp",
+              });
+            }
+            break;
+          case "/two-factor/verify-backup-code":
+            if (!failed && ctx.context.newSession) {
+              await recordAuthAudit(env.DB, {
+                authId: ctx.context.newSession.session.userId,
+                action: "auth.sign_in", result: "success", secondFactor: "backup_code",
+              });
+            }
+            break;
+          case "/two-factor/generate-backup-codes":
+            if (sessionUserId && !failed) {
+              await recordAuthAudit(env.DB, { authId: sessionUserId, action: "auth.two_factor.backup_codes_regenerated", result: "success" });
+            }
+            break;
+          case "/request-password-reset": {
+            const email = (ctx.body as { email?: unknown } | undefined)?.email;
+            if (typeof email === "string") {
+              await recordAuthAudit(env.DB, { email: normalizeEmail(email), action: "auth.password_reset_requested", result: "success" });
+            }
+            break;
+          }
+          default:
+            break;
+        }
       }),
       before: createAuthMiddleware(async (ctx) => {
         // 有効化の確認かどうか（呼び出し時点で二要素が未有効）を、確認の前に控える

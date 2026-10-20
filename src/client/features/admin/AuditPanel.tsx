@@ -18,8 +18,15 @@ const ACTION_LABEL: Record<string, string> = {
   "invitation.accept": "招待を受領",
   "user.sessions.revoke": "全セッションを失効",
   "bootstrap.issue": "初期管理者の招待を発行",
+  // 認証イベント（PH1-A2・T086。docs/evidence/ph1-review.md A）。秘密（パスワード・token）は記録されない
+  "auth.sign_in": "サインイン（成功・失敗）",
+  "auth.two_factor.setup_started": "二要素認証の設定を開始",
+  "auth.two_factor.enabled": "二要素認証を有効化",
+  "auth.two_factor.backup_codes_regenerated": "回復コードを再発行",
+  "auth.password_reset_requested": "パスワード再設定を要求",
+  "auth.password_reset_completed": "パスワードを再設定",
 };
-const ENTITY_LABEL: Record<string, string> = { member: "団員", invitation: "招待" };
+const ENTITY_LABEL: Record<string, string> = { member: "団員", invitation: "招待", user: "利用者" };
 const jst = (iso: string) => new Date(iso).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const short = (id: string) => id.slice(0, 8);
 
