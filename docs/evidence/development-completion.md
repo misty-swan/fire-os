@@ -52,6 +52,8 @@ T086で実施した「できる範囲」の詳細と検証値は docs/evidence/p
 
 **T086で解消（resolved。6件）**: PH1-A2（認証イベントの監査記録）・PH2-C15（種別チップのトグルで一覧が点滅）・PH4-B2（承認待ち通知draftが送信者の一覧に現れない。API-67 sent=true拡張）・PH1-C（ログインの誤りと入力欄のaria関連付けほか）・PH2-C19（選択シートのEsc・フォーカス）・PH7-L（ai.calls計上位置・user次元429のRetry-After・budget_stoppedラベル等9項目）。各々の修正内容・赤→緑は manifestのbasis と ph8.md「T086」節に記録。
 
+**T087で解消（resolved。1件）**: PH2-A12（API-27の状態別応答・import解析中の固定等4項目を個別判定し、意図した設計として維持。判定の根拠は manifestのbasis を参照）。
+
 **T086で判定したが残る（open）**: PH3-C8（小見出し形式・複数LeaveConfirm等。現状確認の記録のみでowner未割当。構造判断が固まった時に再対応）・T085b-W1（wrangler 4.150 ProxyWorkerドロップの残存クラス。**状態確認はT086の最終検証フルe2eで行う**＝未発火ならbasisに記録。コントローラ実施）。
 
 **残るopen全体**: acceptance-results.md「課題台帳」の open 行（PH1-A1〔T088/D03〕・PH1-B1・PH0-BF07・PH2-B12〔T088で再確認〕・PH4-B3〔T033/T055〕・FLAKE-1〔T085b。根因未特定・抑止済み〕・T085b-W1〔上記〕・PH3-C8〔上記〕ほか low の未割当分・T085-O1）。highのopenは**0件**。

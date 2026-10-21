@@ -13,7 +13,7 @@
 | codeHash | f34406f31f4afbd9755580b62cc16fc1b06551c632acbe6129b95f4edff7de4c |
 | 設計版 | 08:v0.3 / 2026-10-13 12:v0.3 / 2026-10-15 |
 | 実行環境 | node v26.8.2 / linux-x64 / Playwright 1.64.0 / vitest/4.1.11 linux-x64 node-v26.8.2 / wrangler 4.150.0 |
-| ゲート判定 | **赤**（証跡indexが古い（collect時のcodeHash f34406f31f4a ≠ 現在 518193dadaee。コードが変わったので全件未実行扱い）） |
+| ゲート判定 | **赤**（証跡indexが古い（collect時のcodeHash f34406f31f4a ≠ 現在 12b3cee8a903。コードが変わったので全件未実行扱い）） |
 
 ## スイート
 
@@ -66,16 +66,16 @@
 | AT-COM-01 | COM-01 | **不合格/未実行**（1件） | 3 | 4 | - |
 | AT-COM-02 | COM-02 | **不合格/未実行**（1件） | 5 | 5 | X-V06-DELIVERY（実チャネル（Web Push/email。D13）での到達・不明・再送・T088）<br>X-OUT-3（実providerの到達不明（D13の了承後）・T088） |
 | AT-DOC-01 | DOC-01 | **不合格/未実行**（1件） | 3 | 6 | X-V02（実R2での検査・EXIF除去・ready不変（test:live file-inspection）・T086）<br>X-V07-RESTORE（実D1/R2での復元演習（別担当による実行を含む）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要）・T088） |
-| AT-DOC-02 | DOC-02 | **不合格/未実行**（1件） | 4 | 6 | X-V07-RENDER（PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render）・T086）<br>X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-DOC-02 | DOC-02 | **不合格/未実行**（1件） | 4 | 6 | X-V07-RENDER（PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render）・T086）<br>X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088） |
 | AT-DASH-01 | DASH-01 | **不合格/未実行**（1件） | 4 | 4 | - |
 | AT-DASH-02 | DASH-02 | **不合格/未実行**（1件） | 3 | 3 | - |
-| AT-AI-01 | AI-01 | **不合格/未実行**（1件） | 4 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
-| AT-AI-02 | AI-02 | **不合格/未実行**（1件） | 2 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
-| AT-AI-03 | AI-03 | **不合格/未実行**（1件） | 2 | 4 | X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-AI-01 | AI-01 | **不合格/未実行**（1件） | 4 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088） |
+| AT-AI-02 | AI-02 | **不合格/未実行**（1件） | 2 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088） |
+| AT-AI-03 | AI-03 | **不合格/未実行**（1件） | 2 | 4 | X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088） |
 | AT-AI-04 | AI-04 | **不合格/未実行**（1件） | 5 | 7 | - |
-| AT-AI-05 | AI-05 | **不合格/未実行**（1件） | 3 | 2 | X-AIEVAL（実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
-| AT-AI-06 | AI-06 | **不合格/未実行**（1件） | 6 | 5 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
-| AT-AI-07 | AI-07 | **不合格/未実行**（1件） | 4 | 6 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-AI-05 | AI-05 | **不合格/未実行**（1件） | 3 | 2 | X-AIEVAL（実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088） |
+| AT-AI-06 | AI-06 | **不合格/未実行**（1件） | 6 | 5 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088） |
+| AT-AI-07 | AI-07 | **不合格/未実行**（1件） | 4 | 6 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088） |
 | AT-NFR-01 | NFR-01 | **不合格/未実行**（1件） | 6 | 3 | X-DEV-1（iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線・T086）<br>X-DEV-2（VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認・T086）<br>X-DEV-3（axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施）・T086） |
 | AT-NFR-02 | NFR-02 | **不合格/未実行**（1件） | 3 | 1 | X-DEV-4（代表利用者（5名程度）による説明なし再訪の計測（D18の承認材料）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要）・T088） |
 | AT-NFR-03 | NFR-03 | **不合格/未実行**（1件） | 3 | 2 | X-V07-PERF（実staging・実D1 rows_read・実回線での通常API p95（D18承認材料）・T086） |
@@ -83,9 +83,9 @@
 | AT-NFR-05 | NFR-05 | **不合格/未実行**（1件） | 6 | 5 | - |
 | AT-NFR-06 | NFR-06 | **不合格/未実行**（1件） | 2 | 2 | X-V07-RESTORE（実D1/R2での復元演習（別担当による実行を含む）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要）・T088） |
 | AT-NFR-07 | NFR-07 | **不合格/未実行**（1件） | 3 | 4 | - |
-| AT-NFR-08 | NFR-08 | **不合格/未実行**（1件） | 3 | 3 | X-COST（実使用量・実請求との照合、実環境の停止・復帰演習（D11）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-NFR-08 | NFR-08 | **不合格/未実行**（1件） | 3 | 3 | X-COST（実使用量・実請求との照合、実環境の停止・復帰演習（D11）。T086分（デモへの費用上限適用とMaps割当手順の整備）は実施済み。実使用量・実請求との照合は未実施・T088・T088） |
 | AT-NFR-09 | NFR-09 | **不合格/未実行**（1件） | 3 | 2 | X-DEV-1（iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線・T086）<br>X-DEV-2（VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認・T086）<br>X-DEV-3（axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施）・T086） |
-| AT-NFR-10 | NFR-10 | **不合格/未実行**（1件） | 4 | 2 | X-AIEVAL（実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088）<br>X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088）<br>X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088）<br>X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-NFR-10 | NFR-10 | **不合格/未実行**（1件） | 4 | 2 | X-AIEVAL（実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088）<br>X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088）<br>X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088）<br>X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境）・T088） |
 
 ## 継続シナリオ（TC-01〜18）
 
@@ -129,10 +129,10 @@
 |---|---|---|---|
 | X-V01 | docs/evidence/V01-auth.md「未実施」1〜8 | 実Cloudflare（staging）での認証・CPU時間・Secure Cookie の実測（test:live auth-workers） | T086 |
 | X-V02 | docs/evidence/V02-files.md「未実施」1〜6 | 実R2での検査・EXIF除去・ready不変（test:live file-inspection） | T086 |
-| X-V04-JEV | docs/evidence/V04-jev.md「未実施」 | 実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
-| X-V04-LLM | docs/evidence/V04-llm.md「未実施」 | 実生成モデルの比較・固定・捏造検出精度（D12/D16）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
-| X-V04-RET | docs/evidence/V04-retrieval.md「未実施」「T066 限界・残手順」 | OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
-| X-AIEVAL | docs/evidence/ai-evaluation.md・docs/16 T061状態欄 | 実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
+| X-V04-JEV | docs/evidence/V04-jev.md「未実施」 | 実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境） | T088 |
+| X-V04-LLM | docs/evidence/V04-llm.md「未実施」 | 実生成モデルの比較・固定・捏造検出精度（D12/D16）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境） | T088 |
+| X-V04-RET | docs/evidence/V04-retrieval.md「未実施」「T066 限界・残手順」 | OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境） | T088 |
+| X-AIEVAL | docs/evidence/ai-evaluation.md・docs/16 T061状態欄 | 実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T087分（提案資料での未実施明記）は完了。実行は未実施・T088（実環境） | T088 |
 | X-V05 | docs/16 T021状態欄・docs/14 D22（V05） | 実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー） | T086 |
 | X-DEV-MAPS | ops/device-test-matrix.md §2.1/§2.2 | 実端末でのMapsアプリ起動（外部経路） | T086 |
 | X-V06-DELIVERY | docs/evidence/V06-delivery.md「未実施」 | 実チャネル（Web Push/email。D13）での到達・不明・再送 | T088 |
@@ -140,7 +140,7 @@
 | X-V07-PERF | docs/evidence/V07-performance.md「未実施」1〜4 | 実staging・実D1 rows_read・実回線での通常API p95（D18承認材料） | T086 |
 | X-V07-RESTORE | docs/evidence/V07-restore.md「未実施」1〜4 | 実D1/R2での復元演習（別担当による実行を含む）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要） | T088 |
 | X-V07-RENDER | docs/evidence/V07-report-render.md「未実施」1〜8 | PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render） | T086 |
-| X-COST | docs/evidence/cost-estimate.md「正直な限界」・ops/cost-alerts.md §4/§5 | 実使用量・実請求との照合、実環境の停止・復帰演習（D11）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
+| X-COST | docs/evidence/cost-estimate.md「正直な限界」・ops/cost-alerts.md §4/§5 | 実使用量・実請求との照合、実環境の停止・復帰演習（D11）。T086分（デモへの費用上限適用とMaps割当手順の整備）は実施済み。実使用量・実請求との照合は未実施・T088 | T088 |
 | X-DEV-1 | ops/device-test-matrix.md §2.1〜2.3 | iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線 | T086 |
 | X-DEV-2 | ops/device-test-matrix.md §2.1〜2.3 | VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認 | T086 |
 | X-DEV-3 | docs/evidence/ph8.md「未実施・未接続」 | axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施） | T086 |
@@ -208,4 +208,4 @@
 
 ## ゲートの不合格理由
 
-- 証跡indexが古い（collect時のcodeHash f34406f31f4a ≠ 現在 518193dadaee。コードが変わったので全件未実行扱い）
+- 証跡indexが古い（collect時のcodeHash f34406f31f4a ≠ 現在 12b3cee8a903。コードが変わったので全件未実行扱い）

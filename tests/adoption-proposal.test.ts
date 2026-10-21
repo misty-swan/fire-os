@@ -21,8 +21,8 @@ import proposalRaw from "../docs/ADOPTION_PROPOSAL.md?raw";
 import { checkAdoptionProposal, type PolicyExampleDocument } from "../scripts/check-adoption-proposal";
 
 /**
- * 導入提案資料・確認チェックリストの静的検査（T087、docs/09「完成後に消防団へ提案する順序」・
- * docs/13 RG-08/10・docs/14 §2 D01〜D20・docs/16 T087）。
+ * 導入提案資料・確認チェックリストの静的検査（T087、docs/09 §2・docs/13 §5・RG-08/10・
+ * docs/14 §2 D01〜D20・docs/16 T087）。
  *
  * - 開発は完了しているが正式リリースではない。提案資料が「実測・証跡つきの完成品」と
  *   「まだ承認されていない運用の値（D01〜D20の推奨案・検証設定）」を混ぜないこと、
@@ -36,6 +36,9 @@ import { checkAdoptionProposal, type PolicyExampleDocument } from "../scripts/ch
  * - fix round 1: 「承認済み」主張の検出はD-IDの有無にかかわらない全ての文が対象（包括文・変形語・否定形も拾う。
  *   例外は「…済みとは扱わない」形の明示的な否定だけ=陽性対照6）。docs/14 §2 の未決D見出しと
  *   DECISION_IDS の一致も検査する（=陽性対照7）。
+ * - review wave 1: 否定導入後に承認を述べる文・自然文体（を得ている/が済んだ/に至りました等）・断定語彙
+ *   （本決まり等）・英語承認語（approved等）・例示JSONの厳格な型（approvedはboolean false厳密一致・回答は空文字列）・
+ *   チェックリストの未知D行・チェックリスト↔例示JSONの質問一致 を検査する（=陽性対照9〜13）。
  */
 
 const existingFiles: Record<string, string> = {
@@ -164,5 +167,61 @@ describe("adoption-proposal (T087)", () => {
       proposal: `${proposalRaw}\n回答を記録し、運用方針（production-policy.json）として確定します。\n`,
     });
     expect(policyFinalization.unapprovedValuesPresentedAsApproved).toEqual([]);
+
+    // ---- 陽性対照9: 否定導入の後に承認を述べる文（review wave 1。「未承認ではなく$5に本決まり」型） ----
+    const negatedThenClaim = check({ proposal: `${proposalRaw}\n月額上限は未承認ではなく$5に本決まりです。\n` });
+    expect(negatedThenClaim.unapprovedValuesPresentedAsApproved.some((f) => f.includes("否定の後に承認"))).toBe(true);
+    // 否定随伴語（未承認ではなく…）は値ラベルとして数えない→$5の無Label検出も発火する
+    expect(negatedThenClaim.unapprovedValuesPresentedAsApproved.some((f) => f.includes("語なしで書いています"))).toBe(true);
+    // 語幹の単独形でも、否定導入の後なら主張とみなす（「検証設定ではなく確定です」）
+    const negatedBareStem = check({ proposal: `${proposalRaw}\nD11 の月額上限は検証設定ではなく確定です。\n` });
+    expect(negatedBareStem.unapprovedValuesPresentedAsApproved.some((f) => f.includes("否定の後に承認"))).toBe(true);
+
+    // ---- 陽性対照10: 自然文体の承認主張（review wave 1。を得ている/が済んだ/に至りました等） ----
+    const naturalClaims = [
+      "本件は承認を得ている。",
+      "D02 の扱いは了承が済んだ。",
+      "D17 の体制は合意に至りました。",
+      "D06 の様式は了承をいただいている。",
+      "本提案は合意に至る。",
+      "D03 の運用は決まっています。",
+    ];
+    for (const sentence of naturalClaims) {
+      const r = check({ proposal: `${proposalRaw}\n${sentence}\n` });
+      expect(r.unapprovedValuesPresentedAsApproved.some((f) => f.includes(sentence.replace("。", ""))), sentence).toBe(true);
+    }
+
+    // ---- 陽性対照11: 英語の承認語（review wave 1。approved/accepted/confirmed。例外は approved:false の参照のみ） ----
+    for (const sentence of ["D11 approved", "本提案は accepted です。", "The plan is confirmed."]) {
+      const r = check({ proposal: `${proposalRaw}\n${sentence}\n` });
+      expect(r.unapprovedValuesPresentedAsApproved.some((f) => f.includes("英語の承認語")), sentence).toBe(true);
+    }
+    const approvedFalseReference = check({
+      proposal: `${proposalRaw}\n月額上限は config/budget-development.json の approved:false のとおりです（未承認の開発設定）。\n`,
+    });
+    expect(approvedFalseReference.unapprovedValuesPresentedAsApproved).toEqual([]);
+    // docs/01 AI-06 の機能語「承認済み資料」（RAGの検索対象）は主張ではない（検出しない）
+    const ragFeatureTerm = check({ proposal: `${proposalRaw}\nAI-06は承認済み資料を出典付きで検索する機能です。\n` });
+    expect(ragFeatureTerm.unapprovedValuesPresentedAsApproved).toEqual([]);
+
+    // ---- 陽性対照12: 例示JSONの厳格な型（review wave 1。approvedはboolean false厳密一致・回答は空文字列のみ） ----
+    const approvedNumeric: PolicyExampleDocument = { ...policyExample, D03: { ...policyExample.D03, approved: 1 as unknown as boolean } };
+    expect(check({ policy: approvedNumeric }).unapprovedValuesPresentedAsApproved.some((f) => f.includes("D03") && f.includes("boolean の false"))).toBe(true);
+    const approvedString: PolicyExampleDocument = { ...policyExample, D13: { ...policyExample.D13, approved: "false" as unknown as boolean } };
+    expect(check({ policy: approvedString }).unapprovedValuesPresentedAsApproved.some((f) => f.includes("D13") && f.includes("boolean の false"))).toBe(true);
+    const answerNumeric: PolicyExampleDocument = { ...policyExample, D07: { ...policyExample.D07, 回答: 123 as unknown as string } };
+    expect(check({ policy: answerNumeric }).unapprovedValuesPresentedAsApproved.some((f) => f.includes("D07") && f.includes("空文字列"))).toBe(true);
+    const answerArray: PolicyExampleDocument = { ...policyExample, D20: { ...policyExample.D20, 回答: ["了承する"] as unknown as string } };
+    expect(check({ policy: answerArray }).unapprovedValuesPresentedAsApproved.some((f) => f.includes("D20") && f.includes("空文字列"))).toBe(true);
+
+    // ---- 陽性対照13: チェックリストの未知D行・チェックリスト↔例示JSONの質問一致（review wave 1） ----
+    const d20Row = checklistRaw.match(/^\| D20 \|.*$/m)![0];
+    const withExtraD21Row = checklistRaw.replace(
+      d20Row,
+      `${d20Row}\n| D21 | 台帳に無い追加項目 | （未承認の検証設定）試験 | 試験 | 試験 / 誰か | |`,
+    );
+    expect(check({ checklist: withExtraD21Row }).missingDecisionIds.some((f) => f.includes("D21"))).toBe(true);
+    const tamperedQuestion: PolicyExampleDocument = { ...policyExample, D02: { ...policyExample.D02, 質問: "別の質問文" } };
+    expect(check({ policy: tamperedQuestion }).missingDecisionIds.some((f) => f.includes("D02") && f.includes("一致しません"))).toBe(true);
   });
 });
