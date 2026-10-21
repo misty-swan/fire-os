@@ -5,13 +5,15 @@ import { PageTitle } from "../../components/Page";
 import { Notice } from "../../components/ui";
 import { Icon } from "../../components/ui";
 import { buildMapsUrl } from "../facilities/location";
-import { FacilityMarker, SelectionSheet, TypeChip, toMarkerBox, CITY_BBOX } from "./FacilityMarkers";
+import { SelectionSheet, TypeChip, CITY_BBOX } from "./FacilityMarkers";
+import { GoogleMapCanvas, PlaceholderMarkers } from "./GoogleMapCanvas";
 import { facilityName, locationStatusLabel, useFacilities, type FacilityItem, type FacilityType } from "./useFacilities";
 
 /**
  * マップ（T021、SCR-03。prototype FireOS Prototype マップ / FireOS Desktop Map）。
  * 検索＋地図/一覧切替、種別チップ（件数）、現在地、選択シート（スマホ）/右420pxの一覧と詳細（PC）。
- * 地図面は prototype と同じプレースホルダー。Google Maps実地図の接続はV05（docs/14）。
+ * 地図面はキー（VITE_GOOGLE_MAPS_API_KEY）がある環境だけGoogle Maps実地図（V05。docs/14。
+ * 読み込み中・失敗時は置き換え絵のまま）。無い環境はprototypeと同じプレースホルダー。
  * 応答は世代番号で管理し、全cursor完走まで「取得中」を表示する（docs/05 §5）。
  */
 export function MapPage() {
@@ -20,6 +22,9 @@ export function MapPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [types, setTypes] = useState<Record<FacilityType, boolean>>({ hydrant: true, cistern: true, box: true });
   const [q, setQ] = useState("");
+
+  // キーの有無でGoogleMapCanvas/現行置き換え絵を選ぶ（分岐はMapPageのこの1箇所。地図面の分岐だけ）
+  const mapsKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
   const { items, state, reload } = useFacilities({ bbox: `${CITY_BBOX.west},${CITY_BBOX.south},${CITY_BBOX.east},${CITY_BBOX.north}` });
 
@@ -149,10 +154,11 @@ export function MapPage() {
           {/* 地図/一覧の本体 */}
           {mapView === "map" ? (
             <>
-              {shown.map((f) => {
-                const box = toMarkerBox(f);
-                return <FacilityMarker key={f.id} {...box} facility={f} selected={selected === f.id} onSelect={select} />;
-              })}
+              {mapsKey ? (
+                <GoogleMapCanvas facilities={shown} selectedId={selected} onSelect={select} />
+              ) : (
+                <PlaceholderMarkers facilities={shown} selectedId={selected} onSelect={select} />
+              )}
               <button
                 type="button"
                 aria-label="現在地"

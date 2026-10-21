@@ -5,7 +5,8 @@ import { FACILITY_TYPES, facilityName, locationStatusLabel, type FacilityItem, t
 /**
  * 施設マーカー（T021）。種別ごとの形と色は prototype・docs/03 のトークンどおり
  * （消火栓=赤い円、防火水槽=青い丸角四角、格納箱=橙のひし形。色だけに頼らずアイコンも併記）。
- * 地図面は prototype と同じプレースホルダー（実地図の接続はV05。docs/14）。
+ * マーカーのDOM（FacilityMarkerFace）は置き換え絵と実地図（GoogleMapCanvasのOverlayView）の
+ * 両キャンバスで同じものを使う。
  */
 
 /** 種別チップの字形（prototype の chips の上書きどおり。マーカー(TYPES)より小さい専用の形: 防火水槽=4px・格納箱=3pxで45°） */
@@ -32,13 +33,25 @@ export function toMarkerBox(f: FacilityItem): MarkerBox {
   return { x: Math.min(97, Math.max(3, x)), y: Math.min(97, Math.max(3, y)), facility: f };
 }
 
-export function FacilityMarker({
+/**
+ * マーカーの本体（種別の形・色・管理番号のボタン。prototypeのTYPESどおり）。
+ * 位置（x/y）はCSSのleft/topとして受け取る: 置き換え絵は「12.3%」（CITY_BBOX基準）、
+ * 実地図はoverlayが画素位置を持つwrapperを置くので「0px」。両キャンバスで同じDOMを使う
+ * （google.maps.MarkerのSVG pinは使わない。色だけに頼らないようアイコンも併記）。
+ */
+export function FacilityMarkerFace({
   facility,
   x,
   y,
   selected,
   onSelect,
-}: MarkerBox & { selected: boolean; onSelect: (f: FacilityItem) => void }) {
+}: {
+  facility: FacilityItem;
+  x: string;
+  y: string;
+  selected: boolean;
+  onSelect: (f: FacilityItem) => void;
+}) {
   const t = FACILITY_TYPES[facility.type as FacilityType];
   return (
     <button
@@ -46,7 +59,7 @@ export function FacilityMarker({
       aria-label={facilityName(facility)}
       aria-pressed={selected}
       onClick={() => onSelect(facility)}
-      style={{ left: `${x}%`, top: `${y}%`, transform: `translate(-50%,-50%) scale(${selected ? 1.25 : 1})`, transition: "transform .25s cubic-bezier(.2,.8,.2,1)" }}
+      style={{ left: x, top: y, transform: `translate(-50%,-50%) scale(${selected ? 1.25 : 1})`, transition: "transform .25s cubic-bezier(.2,.8,.2,1)" }}
       className="absolute flex flex-col items-center gap-[5px] outline-none focus-visible:[&>span:first-child]:ring-2 focus-visible:[&>span:first-child]:ring-white/90"
     >
       <span className="relative flex size-10 items-center justify-center">
@@ -64,6 +77,17 @@ export function FacilityMarker({
       </span>
     </button>
   );
+}
+
+/** 置き換え絵のマーカー（0〜100%位置。実地図ではFacilityMarkerFaceをOverlayViewで緯度経度に載せる） */
+export function FacilityMarker({
+  facility,
+  x,
+  y,
+  selected,
+  onSelect,
+}: MarkerBox & { selected: boolean; onSelect: (f: FacilityItem) => void }) {
+  return <FacilityMarkerFace facility={facility} x={`${x}%`} y={`${y}%`} selected={selected} onSelect={onSelect} />;
 }
 
 /** 種別チップ（prototype: 形+色+件数。押すと表示/非表示を切り替える） */
