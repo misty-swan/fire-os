@@ -1,10 +1,10 @@
-# 開発完成の証跡（T086。2026-10-21時点〔レビューwave 1込み〕・実装完了・最終検証待ち）
+# 開発完成の証跡（T088。2026-10-21時点〔T088の判定機構と正式リリース不可の記録を含む〕・実装完了・最終検証待ち）
 
-T001〜T086（docs/16）の実装が揃った時点での「何が完成し、何が残っているか」の正本。**開発完成と正式運用開始は別物**（docs/16末尾の規定どおり）: この文書は架空データ・ローカル検証の範囲の完成を述べるもので、実データの投入・実団体の了承・docs/13の正式リリース判定（RG-01〜10）は含まない。数値はすべて docs/16 の各状態欄・証跡文書の実測を参照する（この文書では再計測しない。実行時点: docs/evidence/ph8.md「T086」の検証表＝2026-10-21）。
+T001〜T088（docs/16。T088は正式リリース判定の機構と現時点の判定の記録まで＝正式リリース・実データ・実団体の了承は含まない）の実装が揃った時点での「何が完成し、何が残っているか」の正本。**開発完成と正式運用開始は別物**（docs/16末尾の規定どおり）: この文書は架空データ・ローカル検証の範囲の完成を述べるもので、実データの投入・実団体の了承・docs/13の正式リリース判定（RG-01〜10）は含まない。数値はすべて docs/16 の各状態欄・証跡文書の実測を参照する（この文書では再計測しない。実行時点: docs/evidence/ph8.md「T086」の検証表＝2026-10-21）。
 
 ## 1. 完成の範囲
 
-- **タスク**: T001〜T086（89タスク: T001〜T088＋枝番T085b。T087〔提案資料〕の資料は2026-10-21に実装済み＝docs/ADOPTION_PROPOSAL.md・docs/ADOPTION_CHECKLIST.md〔回答欄は空欄で配布〕。T088〔正式判定〕は完成後の別タスク）。このうち完了・局所完了の内訳と各タスクの詳細は docs/16 の状態欄が正。
+- **タスク**: T001〜T088（89タスク: T001〜T088＋枝番T085b。T087〔提案資料〕の資料は2026-10-21に実装済み＝docs/ADOPTION_PROPOSAL.md・docs/ADOPTION_CHECKLIST.md〔回答欄は空欄で配布〕。T088〔正式判定〕は2026-10-21に**局所完了**＝判定機構〔`validateProductionPolicy`＋config/production-policy.json＋指定試験＋docs整合試験〕は完成し、現時点の正式判定は**正式リリース不可**〔全10ゲート不合格・D01〜D20未回答〕。判定記録の正本は docs/evidence/release-decision.md〔残作業①〜⑦番号付き〕で、実回答・実環境・人が要る部分はそこに帰属）。このうち完了・局所完了の内訳と各タスクの詳細は docs/16 の状態欄が正。
 - **受入の網羅（docs/evidence/acceptance-results.md の機械抽出どおり）**: 要件**54** / AT**54** / CT**17**（AT×CTの組220・うちnotApplicable 0） / 継続TC**18** / API**102** / 画面**SCR28** / 横断journey**4**。参照している実テスト272件。※docs/16のT085/T086本文にある「101 API」は陳腐な初期表記で、契約台帳・docs/05・OpenAPIの一致検査（`npm run check:contracts`）が**102 API**を正とする（T085裁定R9と同じ）。
 - **実装commitとテスト結果**: 各タスクの実装commitはdocs/16の該当行に記録済み。受入の全AT×CT×TC×journeyへの実テストの対応付けと実行結果は **docs/evidence/acceptance-index.json**（testId/reqIds/commit/codeHash/設計版/実行環境/結果/証跡。収集は `npm run collect:evidence`）と **docs/evidence/acceptance-results.md** が正。ゲート（`acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case`）がindexの新しさ（codeHash）とskip・未実施の無いことを機械的に検査する。
 - **画面**: 28画面（SCR-01〜28）すべてがプレースホルダーでなく実装済み（`src/client/routes.tsx` の screenElements。docs/03 が正本）。シェル画面も実装済み（`/app/menu` メニュー・`/app/help` 使い方ガイド〔SHELL-HELP。T086 da22779で実装。docs/03 §1.1-28〕）。
@@ -26,6 +26,8 @@ T001〜T086（docs/16）の実装が揃った時点での「何が完成し、�
 | e2e高速化・幅仕分け | e2e-speed.md（T085b） |
 | 公開デモ | ops/demo-deploy.md（T086。分離・seed・レート/費用上限・外部公開手順） |
 | 操作説明 | docs/USER_GUIDE.md（T086。導入/通常利用/点検/承認/通知/通信断/復旧）＋アプリ内「メニュー → 使い方ガイド」画面（da22779。docs/03 §1.1-28） |
+| 導入提案 | docs/ADOPTION_PROPOSAL.md・docs/ADOPTION_CHECKLIST.md（T087。D01〜D20一項目一回答・回答欄は空欄で配布。`npm run check:adoption-proposal` の機械検査つき） |
+| 正式リリース判定 | docs/evidence/release-decision.md（判定記録の正本。現時点＝正式リリース不可・残作業①〜⑦）＋ops/production-start.md（判定「許可」後のみ実行の手順）＋config/production-policy.json（T088。機械検証＝tests/production-policy.test.tsの実ファイルアンカー） |
 
 ## 3. 局所完了の明示（実環境・実端末・実キーが要るもの）
 
@@ -54,15 +56,19 @@ T086で実施した「できる範囲」の詳細と検証値は docs/evidence/p
 
 **T087で解消（resolved。1件）**: PH2-A12（API-27の状態別応答・import解析中の固定等4項目を個別判定し、意図した設計として維持。判定の根拠は manifestのbasis を参照）。
 
-**T086で判定したが残る（open）**: PH3-C8（小見出し形式・複数LeaveConfirm等。現状確認の記録のみでowner未割当。構造判断が固まった時に再対応）・T085b-W1（wrangler 4.150 ProxyWorkerドロップの残存クラス。**状態確認はT086の最終検証フルe2eで行う**＝未発火ならbasisに記録。コントローラ実施）。
+**T088で解消（resolved。3件）**: PH1-B1（実装先行タスクの赤の証跡・変異の再現手順が無い。scripts/mutate.sh・mutate-e2e.sh が防御解除→赤→自動復元として機能することを再確認し、「初期タスクの赤証跡は過去の工程記録で履歴の書換えはしない」の記録で決着）・PH0-BF07（試験名「効果が二重にならない」とhandler副作用の不一致。外部効果はhandlerの責務の方針維持を記録して決着）・PH2-B12（PH2のコミット境界。T083以降は1タスク区切りコミットで運用・本項は過去工程の記録として決着）。いずれも**正式判定前の再確認＝製品欠陥ではなく工程記録**としての決着で、コード不変。根拠は manifestのbasis。
 
-**残るopen全体**: acceptance-results.md「課題台帳」の open 行（PH1-A1〔T088/D03〕・PH1-B1・PH0-BF07・PH2-B12〔T088で再確認〕・PH4-B3〔T033/T055〕・FLAKE-1〔T085b。根因未特定・抑止済み〕・T085b-W1〔上記〕・PH3-C8〔上記〕ほか low の未割当分・T085-O1）。highのopenは**0件**。
+**T086で判定したが残る（open）**: PH3-C8（小見出し形式・複数LeaveConfirm等。現状確認の記録のみでowner未割当。構造判断が固まった時に再対応）・T085b-W1（wrangler 4.150 ProxyWorkerドロップの残存クラス。T086の最終検証フルe2e等4走行で失敗0＝上流〔wrangler #14926/#15252〕未解決のため**openのまま継続観察**〔manifest basis更新済み・ownerをT086から外す。docs/evidence/ph8.md「T086」最終検証〕）。
+
+**T088で判定したが残る（open）**: PH1-A1（medium。D03〔アクセス権〕の回答待ち。T088の正式判定で「回答待ちの阻害」として明記しopen維持＝release-decision.md §2 RG-04・§5⑤。D03回答後に個別判定で決着〔PH2-A12前例〕）。
+
+**残るopen全体**: acceptance-results.md「課題台帳」の open 行（**PH1-A1〔T088/D03回答待ち。上記〕**・PH4-B3〔T033/T055〕・FLAKE-1〔T085b。根因未特定・抑止済み〕・T085b-W1〔上記〕・PH3-C8〔上記〕ほか low の未割当分・T085-O1。PH1-B1・PH0-BF07・PH2-B12は上記のとおりT088でresolved）。highのopenは**0件**。
 
 ## 5. 既知の制限（完成と言わない部分の正直な一覧）
 
-1. **docs/13 の正式リリース判定（RG-01〜RG-10）はすべて未達**。上記の局所完了・実外部残手順・下記の了承待ちが解消されるまでは「合格」と主張しない（acceptance-results.md冒頭の注記と同じ規定）。
+1. **docs/13 の正式リリース判定（RG-01〜RG-10）はすべて未達＝正式リリース不可**。上記の局所完了・実外部残手順・下記の了承待ちが解消されるまでは「合格」と主張しない（acceptance-results.md冒頭の注記と同じ規定）。**T088（2026-10-21）で判定の正本は docs/evidence/release-decision.md に確定**（全10ゲート＝不可・D01〜D20未回答。`validateProductionPolicy` が実ファイルで allowed:false を出すことは実ファイルアンカー試験〔tests/production-policy.test.ts〕で機械強制＝回答の捏造なしに変わらない）。
 2. **実データ・実団体を一切使っていない**（AGENTS.md。名簿・出動・水利・写真は全部架空。公開デモも架空のみ＝RG-09）。
-3. **了承待ちの未決事項**（docs/09・docs/14のD台帳）: データ保存・実災害時の用途・配送手段（D04/D08/D13）・費用の了承（D11）・管理主体と代行（D17）等。**docs/ADOPTION_CHECKLIST.md（T087・2026-10-21）でD01〜D20を一項目一回答として確認する**（回答欄は空欄のまま配布し、回答の記録はT088。導入提案資料はdocs/ADOPTION_PROPOSAL.md）。
+3. **了承待ちの未決事項**（docs/09・docs/14のD台帳）: データ保存・実災害時の用途・配送手段（D04/D08/D13）・費用の了承（D11）・管理主体と代行（D17）等。**docs/ADOPTION_CHECKLIST.md（T087・2026-10-21）でD01〜D20を一項目一回答として確認する**（回答欄は空欄のまま配布。回答の記録先＝チェックリスト回答欄→config/production-policy.json→DecisionRecordの3ヶ所一致と、記録後の手順は docs/evidence/release-decision.md §3・§5〔T088で整備・機械検証つき。現時点は全20項目未回答・未承認〕。導入提案資料はdocs/ADOPTION_PROPOSAL.md）。
 4. **開発設定のままの値**: レート上限（DEVELOPMENT_SECURITY_POLICY/DEMO_SECURITY_POLICYとも未承認・docs/14 D11で確定予定）・費用上限（approved:false）・RTO/RPO 24時間案（D10未承認）。
 5. **アプリ内のレート計数はisolate内メモリ**であり、厳密な全体上限はCloudflareのWAF/Rate Limiting層の設定が要る（未実施。ops/demo-deploy.md §5.3）。
 6. **既知のフレーキー**: documents.spec「題名消失」の引き金は未特定（回復ループで抑止。FLAKE-1）。ProxyWorkerドロップの残存クラス（T085b-W1）。
@@ -70,4 +76,4 @@ T086で実施した「できる範囲」の詳細と検証値は docs/evidence/p
 
 ## 6. 最終検証
 
-T086最終検証の実測値は docs/evidence/ph8.md「T086」節「最終検証」（2026-10-21・コミット85681e4時点）が正。
+T086最終検証の実測値は docs/evidence/ph8.md「T086」節「最終検証」（2026-10-21・コミット85681e4時点）・T087最終検証は同「T087」節（2026-10-21・HEAD e6e13ce時点）が正。T088時点の最終検証〔全検証コマンド・`npm run collect:evidence`・受入ゲート・フルe2e×3〕はレビューサイクル後の最終コミットでコントローラが実行し、ph8.md「T088」節へ追記される（本節では数値を先書きしない）。

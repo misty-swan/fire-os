@@ -435,3 +435,62 @@ e2eは実施しない（UI・routeの変更が無いため）。D1〜D2で scrip
 ### レビューサイクル（2026-10-21。docs/evidence/ph8-review.md「T087」）
 
 タスクレビュー×3（D1コアTDD〔fix round 2回〕・D2台帳決着〔指摘0〕・D3docs統合〔指摘0〕）→ **4体並行レビュー**（85681e4..57a77a4。A正確さ/B完了条件/C prototype準拠/D docs整合。高1/中7/低19/要確認2→コントローラが高・中を全件実検証）→ **fix wave 1**（e6e13ce。F1=D01質問をdocs/01正本どおり〔MAP-10は「地域単位の点検巡回計画を支援する」が正で「地図の詳細表示」は誤り〕＋JSON↔チェックリスト一致検査新設/F2・F3=否定導入型（「未承認ではなく…本決まり」）と自然文体（「承認を得ている」「合意に至りました」等）の検出追加/F4=example.jsonの型検査（approved厳密boolean false・回答空文字列）/F5=全機能動線へ点検登録（SCR-06）・予定の登録（SCR-10）を追加/F6=manifest external注記の正確化（X-V04系/X-AIEVALからX-COST用のコピー句を除去）/F7=合格表現の時点限定/F8=低8件同梱）→ スコープ付き再レビューで**F1〜F8全ADDRESSED・新規Critical/Important無し**。確認済みの高・中の未解消0件。繰り延べMinorはph8-review.md「T087」「方針で残す」1〜5のとおり。
+
+## T088 導入回答の反映・再試験・正式リリース判定（2026-10-21。局所完了）
+
+実行環境はT083〜T087と同じローカル（Node v26 / workerd / vitest）。**実在の団体の回答は1件も存在せず、回答の捏造・連絡の捏造はしない**——判定機構を実装し、回答がない現時点の正直な判定（正式リリース不可・全ゲート不合格）を機械で固定するのが本タスクの局所でできる範囲。src/の変更は純関数1ファイルのみで、migration・API契約・画面の変更は無し（新規endpointなし）。
+
+実装コミット: **19c9430** `feat: complete T088 release`（validateProductionPolicy＋config/production-policy.json＋指定試験。正当な赤→緑）→ **ee067c9** `docs: record T088 release decision and production start runbook`（release-decision.md〔判定記録の正本〕＋ops/production-start.md〔判定後の手順〕＋docs整合試験の追加）→ **b8df963** `chore: settle T088 ledger items in acceptance manifest`（PH1-B1・PH0-BF07・PH2-B12＝resolved・PH1-A1＝open維持＋acceptance-results.mdを--report-onlyで再生成）→ **b72c290** `fix: keep production policy json current after ledger settlement`（RG-10根拠から件数を除去して正本参照へ〔台帳決着で陳腐化する書き方の除去〕・工程語の除去）。
+
+### 検証（実装時点。2026-10-21。最終検証はこの後）
+
+| 確認 | コマンド | 結果 |
+|---|---|---|
+| 型検査 | `npm run typecheck` | 成功 |
+| 指定試験 | `npm run test -- --run tests/production-policy.test.ts -t formal_release_is_denied_if_any_gate_or_required_decision_is_missing` | 1 passed（赤→緑。下記「赤→緑」） |
+| 指定試験＋docs整合 | `npx vitest --run tests/production-policy.test.ts` | **1ファイル2件成功**（D1の実ファイルアンカー＋D2のdocs整合。初回実行で緑） |
+| 導入提案の回帰 | `npx vitest --run tests/adoption-proposal.test.ts` ほか同時実行 | 2ファイル2件成功（T087検査に影響なし） |
+| 資料の静的検査 | `npm run check:adoption-proposal` | exit 0（T088で提案資料を変更していないことの確認） |
+| 網羅（静的） | `npm run check:coverage` | 成功（参照テスト272件。manifest台帳決着〔b8df963〕後に再実行） |
+| 証跡の再生成 | `npx tsx scripts/collect-evidence.ts --report-only` | acceptance-results.mdを再生成（課題台帳4件の反映。収集自体は行わない） |
+| 変異（恒真断言でないこと） | validate.tsの一時注入→赤→復元 | ゲート不合格検出の無効化・承認検査の無効化・D01暗黙対象外の無効化の3種すべて赤復帰 |
+
+- e2eは実施しない（UI・routeの変更が無いため）。**最終検証（全検証コマンド・`npm run collect:evidence`・受入ゲート・フルe2e×3）はレビューサイクル後の最終コミットでコントローラが実行し、本節「最終検証」として追記する**（数値は先書きしない）。
+- 19c9430（src/tests/config）とee067c9（tests）のため受入indexのcodeHashは陳腐化しており、コントローラの `npm run collect:evidence` 再実行で解消する（AGENTS.mdの規定どおり。T087前例）。--report-only再生成直後のacceptance-results.mdは「全件未実行扱い」の一時状態である（D2報告どおり手で直さない）。
+
+### 作ったもの
+
+| 部品 | 内容 |
+|---|---|
+| `src/server/policy/validate.ts` | `validateProductionPolicy(policy, decisions): PolicyValidation`（docs/16 T088のInterfacesどおり。同期・I/O・時計・乱数なしの純関数）。意味論はdocs/13 §2の全AND・例外なし: ①全10ゲートが「合格」かつ根拠付き ②D01〜D20全項目で決定記録が存在し approved:true・回答非空・運用方針側も承認かつ回答一致 ③D01が未決（または3機能の採否を明示しない）なら `implicitlyExcludedRequirements` に `["MAP-10","AI-06","AI-07"]` を載せて不可＝無断除外ではなく正式判定不可（docs/13 §1。明示除外は `adoptionScope.explicitlyExcluded` で型レベル区別）。失敗原因は短絡せず `reasons` に全列挙（日本語・各理由がRG-/D-IDを引用）。未知の決定ID・同一IDの重複（1項目1回答の破れ）も拒否。同一moduleで `ProductionPolicy`・`DecisionRecord`・`PolicyValidation` と `RG_GATE_IDS`・`DECISION_IDS` を定義 |
+| `config/production-policy.json` | 判定時点の運用方針（T087のexample.jsonから生成・D01〜D20は逐語コピー＝試験で完全一致を固定）。meta（版 production-policy-v1・日付2026-10-21・注記・判定時点）＋gates RG-01〜RG-10 **全て判定「不合格」**（根拠は実在する証跡パス＋X項目。b72c290で件数記載を正本参照へ置換し陳腐化しない形へ）＋D01〜D20は回答空欄・approved:false のまま（正直な根拠。回答の捏造をしない） |
+| `tests/production-policy.test.ts` | 指定試験 `formal_release_is_denied_if_any_gate_or_required_decision_is_missing`〔ブリーフの4断言を変数名含め原文どおり〕＋実ファイルアンカー（実configを`?raw`で読み全ゲート不合格・全RG/全Dがreasonsに列挙・implicit=3機能を固定＝回答の捏造なしに allowed:true へ変わらない）＋捏造防止（実configのD01〜D20がexampleと項目単位で完全一致・回答空欄・approved厳密false）＋陽性対照8系（ゲート反転10種・決定記録除外20種・承認/回答欠落・不一致・重複/未知ID・D01明示除外・部分的回答は暗黙対象外へ戻る・短絡しない）。D2追加分は **docs整合試験** `release_decision_and_production_start_docs_match_the_policy_judgment`（release-decision.md〔全10ゲートID・「正式リリース不可」の明示・暗黙対象外3要件ID・不合格ゲートの全件一致は実ファイルから動的ループでハードコードしない〕とproduction-start.md〔docs/13と判定機構への参照・「実行しない／実行禁止」を含む停止条件の文〕＋両文書の承認主張なし〔T087のtextApprovalIssuesを再利用〕＋陽性対照4系〔ゲートID削除・不可の文言弱化・了承済み主張の注入・実行ゲート文の緩和のいずれも各検出器が拾う〕） |
+| `docs/evidence/release-decision.md` | 正式リリース判定記録の**正本**（v1・2026-10-21）。§0判定時点〔docs/13 §3手順1。判定者＝開発側・管理主体の独立reviewと承認署名はD17未決で実施不能〕／§1結論＝**正式リリース不可**（全ゲートAND不成立。開発完成は取り消さない）／§2ゲート別判定〔RG-01〜10全て不可・根拠とproduction-policy.jsonのgatesを同一内容に揃える〕／§3 D01〜D20回答状況〔全20項目未回答・未承認。回答の記録先3ヶ所一致〕／§4 validateProductionPolicy実行結果〔allowed:false・reasons 31件＝ゲート10＋決定20＋採否1・implicit=MAP-10/AI-06/AI-07〕／§5残作業①〜⑦番号付き／§6本判定の限界 |
+| `ops/production-start.md` | 正式運用開始の手順（判定「許可」後のみ実行）。§0前提＝**絶対実行禁止**〔全ゲート合格＋D01〜D20全回答＋allowed:true確認まで〕／§1実行前の判定確認〔番号付き6項目〕／§2本番環境構築〔Secret・`--env production --yes-i-know`ガード・bootstrap-admin・deploy-production workflow〕／§3分離の実地確認（RG-09）／§4正式開始の宣言と記録〔release-decision.mdへ追記〕／§5開始後の観察／§6やってはいけないこと。ops/deploy.md・demo-deploy.mdと同じhouse style |
+| manifest台帳（b8df963） | **resolved 3件**（正式判定前の再確認＝工程記録として決着。製品欠陥ではない。根拠は各basis）: PH1-B1（実装先行タスクの赤の証跡・変異の再現手順。scripts/mutate.sh・mutate-e2e.shが防御解除→赤→自動復元として機能することを再確認。初期タスクの赤証跡は過去の工程記録で履歴書換えはしない）・PH0-BF07（試験名とhandler副作用の不一致。外部効果はhandlerの責務の方針維持を記録して決着）・PH2-B12（PH2のコミット境界。T083以降は1タスク区切りで運用・本項は過去工程の記録として決着）。**PH1-A1 はopen維持**（D03回答待ち。basisに再確認を記録＝release-decision.md §2 RG-04・§5⑤）。docs/evidence/acceptance-results.mdを--report-onlyで再生成 |
+
+### 赤→緑の扱い（正当な赤の記録）
+
+- **指定試験（手順2）**: 実装前に試験のみを実行し `Cannot find module '../src/server/policy/validate'`＝未実装moduleの解決失敗で赤（T086 seed-demo・T087 adoption-proposalと同じ正統な赤。runner故障ではない）。config/production-policy.jsonを検査データとして先行作成したため、赤の原因が未実装moduleに一点に絞れる。実装後の同一コマンドで緑。
+- **恒久化（捏造防止）**: 実ファイルアンカーが現状 allowed:false を機械固定するため、回答・承認の記録なしに判定を `true` へ変えるコード変更・config改変はこの試験を落とす。陽性対照8系＋docs整合試験の陽性対照4系が各検出器の能力を恒久的に検査し、validate.tsへの変異注入3種（ゲート検出・承認検査・暗黙対象外の無効化）がすべて赤復帰＝恒真断言ではないことを確認（終了後ファイル復元・緑再確認）。
+
+### 現時点の判定（正直な記録。正本＝docs/evidence/release-decision.md）
+
+- **正式リリース不可。** 全10ゲート（RG-01〜RG-10）＝不可。D01〜D20全項目が回答空欄・未承認（実在の団体の回答はまだ無い）。
+- `validateProductionPolicy` は実ファイル config/production-policy.json で **allowed:false**。reasons 31件（ゲート10＋決定20＋採否1）を短絡せず全列挙し、`implicitlyExcludedRequirements` は `["MAP-10","AI-06","AI-07"]`（D01未決による暗黙の対象外＝無断除外ではなく正式判定不可）。この挙動はdocs/13 §2・§4どおりの**正しい挙動**であり、失敗ではない。
+- **開発完成（T001〜T087）は取り消さない**（docs/16末尾の規定・release-decision.md §1）。正式リリースと開発完成は別物であり、回答がない間も開発完成は有効のまま扱う。
+
+### 未実施・残作業（検証済みとして扱わない。正はrelease-decision.md §5①〜⑦）
+
+1. **①** 実団体への提案資料（T087）の提出とD01〜D20回答の記録（団体の応答待ち。回答は1文1推奨・チェックリスト→config/production-policy.json→DecisionRecordの3ヶ所一致）と **②** 回答に応じた設定反映と差分再試験（対象変更は原文保全と明示決定を伴う）。
+2. **③** 実環境・実端末・人の残手順29件（正はacceptance-results.md「実外部・実端末・人の残手順」の表）。
+3. **④** T084から引き受けた残手順（V07-outage「未実施」3・4・5・6・10）は**全部未実施**（実環境・人・D08/D13/D17の回答待ちで実施不能。本節では代演習しない）。
+4. **⑤** PH1-A1（medium。D03回答待ちでopen維持）／ **⑥** 管理主体・開発責任者による独立reviewと承認署名（管理主体の存在＝D17待ちで実施不能）／ **⑦** 再判定の手順（回答記録後にpolicy.json更新→実ファイルアンカーの意図的更新→判定記録の改訂→docs/13 §3手順3〜4）。
+
+### 台帳決着（b8df963）
+
+上記「manifest台帳」行のとおり、PH1-B1・PH0-BF07・PH2-B12を**正式判定前の再確認**としてresolvedへ（いずれも製品欠陥ではなく工程記録。決着の根拠はmanifestのbasisに記録）。PH1-A1はD03回答待ちでopen維持し、RG-10の根拠（release-decision.md §2・production-policy.json）からは「回答待ちの阻害」として明記した。件数の正本はmanifestのissues（件数をdocs側に焼き込まない＝b72c290の非脆化）。
+
+### レビューサイクル（2026-10-21。docs/evidence/ph8-review.md「T088」へ記録予定）
+
+実装は分担制: D1（コアTDD・19c9430）→ D2（判定文書・runbook・台帳決着・ee067c9/b8df963＋fix b72c290）→ D3（docs統合＝docs/16・本節・development-completion.md）。この後 **4体並行レビュー→fix wave→再レビュー→最終検証**（全検証コマンド・collect:evidence・受入ゲート・フルe2e×3）をコントローラが実施し、結果は docs/evidence/ph8-review.md「T088」節と本節の「最終検証」へ記録される（数値は実測を待ち、本節では先書きしない）。
