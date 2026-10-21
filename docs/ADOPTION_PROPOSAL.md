@@ -66,12 +66,12 @@ docs/14_設計判断・未決事項.md §2 の設計判断20件（D01〜D20）�
 - 代替連絡（D08・D17）: 実災害時の正式な指令・連絡は、いままでどおり既存の系統（無線・電話・連絡網）が正であること
 - 正副担当（D17）: システムの正担当・副担当と、復旧などの重要操作は二人で確認する運用
 
-→ 全20件の質問・現在の検証設定（未承認）・代替案・影響と意思決定者・回答欄を **[確認チェックリスト](ADOPTION_CHECKLIST.md)**（docs/ADOPTION_CHECKLIST.md）に一項目一回答で用意しました。回答は T088（正式判定）で記録し、config/production-policy.example.json を埋めて運用方針（production-policy.json）として確定します。
+→ 全20件の質問・現在の検証設定（未承認）・代替案・影響と意思決定者・回答欄を **[確認チェックリスト](ADOPTION_CHECKLIST.md)**（docs/ADOPTION_CHECKLIST.md）に一項目一回答で用意しました。回答の記録は docs/evidence/release-decision.md §5①②（チェックリスト回答欄→config/production-policy.json→DecisionRecord の3ヶ所一致）のとおり行い、回答が揃った運用方針（production-policy.json）として確定します。
 
 ## 6. 正式運用までの流れ
 
 1. **この資料とチェックリストでご確認いただく**（T087＝本資料。ここから先は消防団の判断が必要です）
-2. **回答の記録と文書への反映**（T088。チェックリストの回答を docs/14・docs/13 へ反映し、D台帳を閉じる）
+2. **回答の記録と判定への反映**（記録手順の正本は docs/evidence/release-decision.md §5①②〔チェックリスト回答欄→config/production-policy.json→DecisionRecord の3ヶ所一致〕、再判定は同 §5⑦。docs/14・docs/13 への直接の反映手順はこの時点では確立していない）
 3. **実環境での残手順29件**（実Cloudflareへの配置・実Google Maps接続・実AIモデル評価・実端末での確認・実復元演習・実費用との照合・代表利用者5名による再訪計測など）〔出典: docs/evidence/acceptance-results.md「実外部・実端末・人の残手順」〕
 4. **正式リリース判定**（docs/13 のゲートRG-01〜10がすべて合格になること。未決・未実施を合格に数えません）〔出典: docs/13_リリース判定基準.md §2〕
 5. **実データ投入・正式運用開始**（実名簿等の投入は、上記の了承と設定の記録が済んだ後）

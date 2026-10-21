@@ -9,6 +9,7 @@ import productionStartRaw from "../ops/production-start.md?raw";
 import { textApprovalIssues } from "../scripts/check-adoption-proposal";
 import {
   DECISION_IDS,
+  GATE_NAMES,
   RG_GATE_IDS,
   validateProductionPolicy,
   type DecisionId,
@@ -130,6 +131,10 @@ describe("production-policy (T088)", () => {
       expect(realValidation.gateResults[id], id).toBe("不合格");
       expect(realValidation.reasons.some((r) => r.includes(id)), id).toBe(true);
     }
+    // 実ファイルの10ゲートの「名前」は validate.ts の GATE_NAMES と一致する（docs/13 §2の名前の重複の一致検査。F9/C-3）
+    for (const id of RG_GATE_IDS) {
+      expect(realPolicy.gates[id].名前, id).toBe(GATE_NAMES[id]);
+    }
     for (const id of DECISION_IDS) {
       expect(realValidation.reasons.some((r) => r.includes(id)), id).toBe(true);
     }
@@ -229,6 +234,30 @@ describe("production-policy (T088)", () => {
     expect(multiple.reasons.some((r) => r.includes("RG-05"))).toBe(true);
     expect(multiple.reasons.some((r) => r.includes("D10"))).toBe(true);
     expect(multiple.reasons.some((r) => r.includes("D11"))).toBe(true);
+
+    // ---- 陽性対照9: 列挙外の否定形（「対象にしません」「含めたくない」）は採用と読まず暗黙の対象外にする（F4/A-3。fail-closed） ----
+    for (const negatedAnswer of ["AI-06 は対象にしません。", "MAP-10 は含めたくない。"]) {
+      const negatedD01 = validateProductionPolicy(
+        withItem(passingPolicy, "D01", { 回答: negatedAnswer }),
+        withDecision(passingDecisions, "D01", { 回答: negatedAnswer }),
+      );
+      expect(negatedD01.allowed, negatedAnswer).toBe(false);
+      expect(negatedD01.adoptionScope.adopted, negatedAnswer).toEqual([]);
+      expect(negatedD01.adoptionScope.explicitlyExcluded, negatedAnswer).toEqual([]);
+      // 否定随伴語を含む文の機能も言及の無い機能も、どちらも暗黙の対象外（明示的な除外とは混ぜない）
+      expect(negatedD01.implicitlyExcludedRequirements, negatedAnswer).toEqual(["MAP-10", "AI-06", "AI-07"]);
+      expect(negatedD01.reasons.some((r) => r.includes("明示")), negatedAnswer).toBe(true);
+    }
+    // 対照: 普通の肯定文は従来どおり採用と読む（否定形の強化で肯定側を壊していないことの固定）
+    const affirmativeAnswer = "MAP-10・AI-06・AI-07の3機能を含めて採用します。";
+    const affirmativeD01 = validateProductionPolicy(
+      withItem(passingPolicy, "D01", { 回答: affirmativeAnswer }),
+      withDecision(passingDecisions, "D01", { 回答: affirmativeAnswer }),
+    );
+    expect(affirmativeD01.allowed).toBe(true);
+    expect(affirmativeD01.implicitlyExcludedRequirements).toEqual([]);
+    expect(affirmativeD01.adoptionScope.adopted).toEqual(["MAP-10", "AI-06", "AI-07"]);
+    expect(affirmativeD01.adoptionScope.explicitlyExcluded).toEqual([]);
   });
 });
 
@@ -256,8 +285,11 @@ describe("production-policy docs consistency (T088 D2)", () => {
   const missingGateIdsIn = (doc: string): RgGateId[] => failingGateIds().filter((id) => !doc.includes(id));
   // 検出器: 「正式リリース不可」の明示が無いときの違反
   const denialMissing = (doc: string): string[] => (doc.includes("正式リリース不可") ? [] : ["正式リリース不可"]);
-  // 検出器: T087と同じ規則での承認主張（両文書を別々に走査する）
-  const approvalClaimsIn = (docs: string[]): string[] => docs.flatMap((doc) => textApprovalIssues(doc, ""));
+  // 検出器: T087と同じ規則での承認主張（両文書を別々に走査する）。
+  // textApprovalIssues の失敗メッセージの文書名ラベルはT087の2文書前提（1引数が常に「提案資料」）のため、
+  // 1文書ずつ走査して実ファイル名のラベルへ付け替える（検出規則自体はT087と同じ。F9/D2 Minor2）
+  const approvalClaimsIn = (docLabel: string, doc: string): string[] =>
+    textApprovalIssues(doc, "").map((m) => (m.startsWith("提案資料: ") ? `${docLabel}${m.slice("提案資料: ".length)}` : m));
   // 検出器: production-start.md の実行ゲートの文（「実行しない」/「実行禁止」を含む文が1つも無いときの違反）
   const gatingSentenceMissing = (doc: string): string[] => {
     const sentences = doc
@@ -292,7 +324,10 @@ describe("production-policy docs consistency (T088 D2)", () => {
     expect(gatingSentenceMissing(productionStartRaw)).toEqual([]);
 
     // ---- 承認主張なし（T087と同じ検出器。両文書とも「了承済み」と読める文を含まない） ----
-    expect(approvalClaimsIn([releaseDecisionRaw, productionStartRaw])).toEqual([]);
+    expect([
+      ...approvalClaimsIn("docs/evidence/release-decision.md: ", releaseDecisionRaw),
+      ...approvalClaimsIn("ops/production-start.md: ", productionStartRaw),
+    ]).toEqual([]);
 
     // ---- 陽性対照: 注入した違反を各検出器が必ず拾う（恒真断言にしない） ----
     // 1. ゲートIDを1つ消す（RG-07 を別の字句へ置換）と一致検査が落ちる
@@ -301,11 +336,11 @@ describe("production-policy docs consistency (T088 D2)", () => {
     // 2. 「正式リリース不可」を消すと不可の明示が無いと落ちる
     const softened = releaseDecisionRaw.split("正式リリース不可").join("正式リリースは許可されない");
     expect(denialMissing(softened)).toEqual(["正式リリース不可"]);
-    // 3. 承認を装う文を注入するとT087の検出器が拾う
+    // 3. 承認を装う文を注入するとT087の検出器が拾う（失敗メッセージの文書名ラベルは実ファイル名に付け替わる）
     const claimed = releaseDecisionRaw.split("正式リリース不可").join("正式リリース可（D01〜D20を了承済み）");
-    const claims = approvalClaimsIn([claimed, productionStartRaw]);
+    const claims = approvalClaimsIn("docs/evidence/release-decision.md: ", claimed);
     expect(claims.length, "了承済みの注入は検出される").toBeGreaterThan(0);
-    expect(claims.some((m) => m.includes("了承済み"))).toBe(true);
+    expect(claims.some((m) => m.includes("了承済み") && m.startsWith("docs/evidence/release-decision.md: "))).toBe(true);
     // 4. 実行ゲートの文を消すと production-start.md の停止条件が無いと落ちる
     const ungated = productionStartRaw.split("実行しない").join("控える").split("実行禁止").join("控える");
     expect(gatingSentenceMissing(ungated)).toEqual(["実行しない／実行禁止を含む文がありません"]);

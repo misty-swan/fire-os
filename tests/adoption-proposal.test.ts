@@ -7,6 +7,9 @@ import costEstimateRaw from "../docs/evidence/cost-estimate.md?raw";
 import demoDeployRaw from "../ops/demo-deploy.md?raw";
 import decisionLedgerRaw from "../docs/14_設計判断・未決事項.md?raw";
 import developmentCompletionRaw from "../docs/evidence/development-completion.md?raw";
+// T088で提案資料・チェックリストから出典として参照されるようになった実在ファイル（存在の証明は ?raw で読めること）
+import productionPolicyRaw from "../config/production-policy.json?raw";
+import releaseDecisionRaw from "../docs/evidence/release-decision.md?raw";
 import releaseCriteriaRaw from "../docs/13_リリース判定基準.md?raw";
 import restoreEvidenceRaw from "../docs/evidence/V07-restore.md?raw";
 import performanceEvidenceRaw from "../docs/evidence/V07-performance.md?raw";
@@ -51,9 +54,11 @@ const existingFiles: Record<string, string> = {
   "docs/ADOPTION_CHECKLIST.md": checklistRaw,
   "config/budget-development.json": budgetDevelopmentRaw,
   "config/production-policy.example.json": policyExampleRaw,
+  "config/production-policy.json": productionPolicyRaw,
   "docs/evidence/acceptance-results.md": acceptanceResultsRaw,
   "docs/evidence/cost-estimate.md": costEstimateRaw,
   "docs/evidence/development-completion.md": developmentCompletionRaw,
+  "docs/evidence/release-decision.md": releaseDecisionRaw,
   "docs/evidence/V06-realtime.md": realtimeEvidenceRaw,
   "docs/evidence/V07-performance.md": performanceEvidenceRaw,
   "docs/evidence/V07-restore.md": restoreEvidenceRaw,

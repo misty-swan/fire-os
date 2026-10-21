@@ -32,7 +32,7 @@
 
 1. `npm run check:environment` が緑であること（4環境の必須binding・資源分離・demo→production参照の拒否・Secret混入なし。ops/deploy.md §1の5）。
 2. demo環境からproductionへの接続が拒否されることを実地で確認する（demoのtokenでproductionのAPIを呼べないこと。docs/13 RG-09行・CT-15）。
-3. 実データ（実名簿・実出動・非公開水利・現場写真）の投入はこの判定後の初回のみとし、Gitと公開画面に載せない（AGENTS.md）。公開デモは架空データのみ（実環境のdemo構築とseedの--remote対応は ops/demo-deploy.md §5）。
+3. 実データ（実名簿・実出動・非公開水利・現場写真）の投入は正式リリース判定（docs/13 §3 手順4の承認）後の初回のみとし、Gitと公開画面に載せない（AGENTS.md）。公開デモは架空データのみ（実環境のdemo構築とseedの--remote対応は ops/demo-deploy.md §5）。
 
 ## 4. 正式開始の宣言と記録
 

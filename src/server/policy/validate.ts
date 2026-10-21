@@ -14,8 +14,11 @@
  *   implicitlyExcludedRequirements には載せない（暗黙の除外と明示的な除外を混ぜない＝正直な型）。
  *   D01 の回答が3機能の採否を言い切っていない場合は、その分を暗黙の対象外に戻す（部分的な回答で通さない）。
  * - D01 回答の読み取りは文単位（。/改行で分割）の決定的な規則だけを使う: 各機能IDを含む文に除外語
- *   （含めない/除外/対象外/見送り等）があれば明示的な除外、なければ採用語（含め/採用/対象）で採用、
- *   どちらも無い（または言及自体が無い）場合は「明示されていない」として暗黙の対象外にする（閉じた側に倒す）。
+ *   （含めない/除外/対象外/見送り/外す等）があれば明示的な除外、次に否定随伴語（ません/ない/ぬ/不要/
+ *   却下/辞退/見合わせ/未決/未定/後日/検討）があれば採用語（含め/採用/対象）があっても採用と読まず
+ *   「明示されていない」扱いで暗黙の対象外にする（「対象にしません」「含めたくない」等の列挙外の否定形・
+ *   未確定形を採用側に倒さないfail-closed。T088レビューA-3）。その後で採用語があれば採用、
+ *   どれも無い（または言及自体が無い）場合も暗黙の対象外にする（閉じた側に倒す）。
  * - 現状の実ファイル（config/production-policy.json。回答空欄・approved:false・全ゲート不合格）を渡すと
  *   allowed:false・implicitlyExcludedRequirements=["MAP-10","AI-06","AI-07"] になる。これは docs/13 §4
  *   「現在の全RGは未達であり、本改訂をもって正式リリースを許可しない」どおりの正しい挙動であり不具合ではない。
@@ -36,8 +39,8 @@ export type DecisionId = (typeof DECISION_IDS)[number];
 /** docs/13 §1: D01 の採用確認待ちで除外しない3機能（D01未決の間は暗黙の対象外＝正式判定不可） */
 export const ADOPTION_PENDING_REQUIREMENT_IDS = ["MAP-10", "AI-06", "AI-07"] as const;
 
-/** docs/13 §2 のゲート名（理由文の引用に使う） */
-const GATE_NAMES: Record<RgGateId, string> = {
+/** docs/13 §2 のゲート名（理由文の引用と、config/production-policy.json の gates.*.名前 との一致検査に使う） */
+export const GATE_NAMES: Record<RgGateId, string> = {
   "RG-01": "全機能",
   "RG-02": "非機能",
   "RG-03": "全受入",
@@ -128,8 +131,11 @@ export type PolicyValidation = {
 };
 
 // D01 回答の文単位の採否判定語（docs/13 §1 の「明示的な訂正」を機械で確認できる形に限定する。
-// 曖昧な場合は採用と読まず暗黙の対象外に戻す＝閉じた側に倒す）
-const ADOPTION_EXCLUSION_PATTERN = /(含めない|含めません|含まない|除外|対象外|採用しない|採用しません|見送り|見送る)/;
+// 曖昧な場合は採用と読まず暗黙の対象外に戻す＝閉じた側に倒す）。判定の順序は 除外語 → 否定随伴語 → 採用語。
+const ADOPTION_EXCLUSION_PATTERN = /(含めない|含めません|含まない|除外|対象外|採用しない|採用しません|見送り|見送る|外す|外し|外さ)/;
+// 否定随伴語: これを含む文は採用語（含め/採用/対象）があっても採用と読まない（列挙外の否定形・未確定形の
+// 取りこぼしを閉じた側に倒す。除外語の明示的な列挙と重ならない形は暗黙の対象外＝曖昧扱い。T088レビューA-3/F4）。
+const ADOPTION_NEGATION_PATTERN = /(ません|ない|ぬ|不要|却下|辞退|見合わせ|未決|未定|後日|検討)/;
 const ADOPTION_INCLUSION_PATTERN = /(含め|採用|対象)/;
 
 function classifyAdoptionAnswer(answer: string): { adopted: string[]; explicitlyExcluded: string[]; ambiguous: string[] } {
@@ -146,6 +152,9 @@ function classifyAdoptionAnswer(answer: string): { adopted: string[]; explicitly
       ambiguous.push(reqId);
     } else if (ADOPTION_EXCLUSION_PATTERN.test(sentence)) {
       explicitlyExcluded.push(reqId);
+    } else if (ADOPTION_NEGATION_PATTERN.test(sentence)) {
+      // 「対象にしません」「含めたくない」「後日確定する」等の列挙外の否定形・未確定形は採用と読まず曖昧（暗黙の対象外）へ倒す
+      ambiguous.push(reqId);
     } else if (ADOPTION_INCLUSION_PATTERN.test(sentence)) {
       adopted.push(reqId);
     } else {

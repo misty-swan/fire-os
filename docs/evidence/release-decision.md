@@ -8,7 +8,7 @@
 |---|---|
 | 判定日 | 2026-10-21 |
 | 対象文書 | docs/13_リリース判定基準.md v0.3（RG-01〜10）／docs/14_設計判断・未決事項.md v0.3 §2（D01〜D20）／docs/evidence/acceptance-results.md（実外部・実端末・人の残手順29件・課題台帳。収集 2026-10-21T02:06Z）／docs/evidence/development-completion.md（開発完成の範囲） |
-| 対象版（Git commit） | 判定の機械検証を導入した commit `19c9430`（tests/production-policy.test.ts・src/server/policy/validate.ts・config/production-policy.json）〔出典: git log。config/production-policy.json の meta.判定時点.Git commit は「正式判定の時点で記録する」となっており、回答が揃った改訂版の判定時に記録する〕 |
+| 対象版（Git commit） | 判定の機械検証を導入した commit `19c9430`（tests/production-policy.test.ts・src/server/policy/validate.ts・config/production-policy.json）〔出典: git log。config/production-policy.json の meta.判定時点.Git commit はcommit範囲の記録を本記録へ委ねる旨を明記しており、回答が揃った改訂版の判定時に確定値を記録する〕 |
 | 判定の機械検証 | `npx vitest --run tests/production-policy.test.ts`（実ファイルアンカー。現状の実ファイルで allowed:false を機械固定する〔出典: tests/production-policy.test.ts・commit 19c9430〕） |
 | 判定者 | 開発側（この記録の作成者＝T088の実施者）。docs/13 §3 手順3・4 に定める独立review・承認の立場ではない |
 | 管理主体による独立reviewと承認署名 | **実施不能**。管理主体は docs/14 D17（正副担当・障害時の窓口）が未決のため存在せず、docs/13 §3 手順3（合格根拠とD/V完了の独立review）・手順4（開発責任者と管理主体によるリリース版/日/対象/環境/復旧点/runbookの承認）に定める署名をこの判定では付せない〔出典: docs/14_設計判断・未決事項.md §2 D17・docs/13_リリース判定基準.md §3〕 |
@@ -24,7 +24,7 @@ docs/13 §3 手順2どおり、未定義・未実装・未実施を合格に数�
 
 ## 2. ゲート別判定（docs/13 §2）
 
-全10ゲートの判定は **不可**。根拠と現状は config/production-policy.json の gates の該当ゲート（根拠・注記）と同一内容に揃えてある〔出典: config/production-policy.json・docs/13_リリース判定基準.md §2〕。
+全10ゲートの判定は **不可**。根拠と現状は config/production-policy.json の gates の該当ゲート（根拠・注記）と同一内容に揃えてある（ただし RG-10 の課題台帳の件数は tests/acceptance/manifest.json の issues が正本で、本表は判定時点の要旨である）〔出典: config/production-policy.json・docs/13_リリース判定基準.md §2〕。
 
 | ゲート | 合格条件（docs/13 §2） | 判定 | 根拠と現状 | 主な残作業 |
 |---|---|---|---|---|
@@ -35,7 +35,7 @@ docs/13 §3 手順2どおり、未定義・未実装・未実施を合格に数�
 | RG-05 整合性/復旧 | D1原子性/0行更新/競合/再送/外部境界/backup/復元が契約通り | 不可 | 開発版はローカルのD1/R2復元を実証済み〔出典: docs/evidence/V07-restore.md〕。実環境での復元演習（X-V07-RESTORE。別担当による実行を含む）と docs/16 T088 が引き受けた V07-outage「未実施」3・4・5・6・10 が残る＝復元未実施（RTO/RPOはD10の未承認の検証設定） | X-V07-RESTORE・X-OUT-3/4/5/6/10（§5 ③④）・D10 |
 | RG-06 AI品質 | Jev/LLM/採用RAG/横断がD12の固定評価・承認/権限・根拠条件を満たす | 不可 | 架空データでの評価の仕組みは実装済み（ローカル）〔出典: docs/evidence/ai-evaluation.md〕。実AI・実文書での品質評価（X-V04-JEV・X-V04-LLM・X-V04-RET・X-AIEVAL）が残る | 上記X項目・D12 |
 | RG-07 地図/通知/同期/PWA | 正式採用された各機能が実端末/障害/再接続を含め仕様通り | 不可 | 開発版はプレースホルダー地図・アプリ内通知（inapp）のみで実装・試験済み（架空データ・ローカル）。実Maps（X-V05）・実チャネル（X-V06-DELIVERY。D13）・実30端末（X-V06-RT）・実端末（X-DEV-1・X-DEV-MAPS）の確認が残る | 上記X項目・D13 |
-| RG-08 許諾/体制 | 管理主体/承認者/問い合わせが定まり、実データ/外部送信/地図契約/正式連絡/費用/代行の各判断（D02〜D20の該当決定）に団体側の回答が揃っていること | 不可 | config/production-policy.json の D01〜D20 が全項目回答空欄・approved:false（docs/14 §2が正本）。管理主体・意思決定者からの回答が1件も無い。運用runbook（ops/*.md）と演習の設計はあるが、実地演習（X-OUT-4・X-OUT-5）と署名が残る | D01〜D20（§3・§5 ①）・X-OUT-4・X-OUT-5 |
+| RG-08 許諾/体制 | 管理主体/承認者/問い合わせが定まり、実データ/外部送信/地図契約/正式連絡/費用/代行の各判断（D02〜D20の該当決定）に団体側の回答が揃っていること〔このセルはdocs/13 §2原文の言い換え（要旨）: 原文の「…費用/代行の承認」までの語尾を、docs整合試験の承認主張検出器への回避のため言い換えている（意味不変・T088レビューA-4・D2 Minor1）〕 | 不可 | config/production-policy.json の D01〜D20 が全項目回答空欄・approved:false（docs/14 §2が正本）。管理主体・意思決定者からの回答が1件も無い。運用runbook（ops/*.md）と演習の設計はあるが、実地演習（X-OUT-4・X-OUT-5）と署名が残る | D01〜D20（§3・§5 ①）・X-OUT-4・X-OUT-5 |
 | RG-09 本番/デモ分離 | 環境・binding・key・Secret・データ・画像が分離、公開は架空のみ | 不可 | 分離の設計と開発版の機械検査（`npm run check:environment`・`verifyDemoIsolation`・tests/demo-isolation.test.ts・TC-18）は実施済み〔出典: ops/deploy.md §0・ops/demo-deploy.md §1・docs/evidence/acceptance-results.md TC-18〕。実環境での分離の実地確認（X-DEMO）が残る | X-DEMO（§5 ③） |
 | RG-10 阻害ゼロ | 対象採否/業務規則/技術方式/品質閾値/許諾等に阻害未決なし | 不可 | D01〜D20 が全項目未回答。課題台帳の open は critical/high 0（medium は PH1-A1〔D03回答待ち〕・FLAKE-1〔フレーキー。抑止済み・根因未特定〕・PH4-B3〔T033/T055〕、ほか low。件数の正本は tests/acceptance/manifest.json の issues。PH1-B1・PH0-BF07・PH2-B12 は本判定〔T088〕で工程記録として決着し resolved へ更新）〔出典: tests/acceptance/manifest.json・docs/evidence/acceptance-results.md「課題台帳」〕。docs/13 RG-10行の「管理主体＋開発責任者署名」が無い | D01〜D20・署名（§5 ⑥） |
 
@@ -53,8 +53,8 @@ docs/13 §3 手順2どおり、未定義・未実装・未実施を合格に数�
 | D04 | 認証方式（招待メール・二要素認証・回復コード）と再設定案内の手段 | 開発者・管理主体 | 未回答（空欄） | 未承認（approved:false） |
 | D05 | 出欠の代理回答・時間の正本・年度開始月 | 活動管理責任者 | 未回答（空欄） | 未承認（approved:false） |
 | D06 | 点検様式と判定基準・期限の取込み | 点検責任者・台帳保有者 | 未回答（空欄） | 未承認（approved:false） |
-| D07 | 異常報告の二段階（対応実施→確認終了） | 点検・修繕管理責任者 | 未回答（空欄） | 未承認（approved:false） |
-| D08 | 実災害時の正式連絡は既存の系統を正とする用途の限定 | 管理主体・契約責任者 | 未回答（空欄） | 未承認（approved:false） |
+| D07 | 異常報告の二段階（対応実施→確認終了） | 点検/修繕管理責任者 | 未回答（空欄） | 未承認（approved:false） |
+| D08 | 実災害時の正式連絡は既存の系統を正とする用途の限定 | 管理主体・契約責任者（必要時Google窓口） | 未回答（空欄） | 未承認（approved:false） |
 | D09 | 消防水利データの入手と現地確認・許諾の記録 | 台帳保有者・分団管理主体 | 未回答（空欄） | 未承認（approved:false） |
 | D10 | 保存年限と日次バックアップ案（RTO/RPO） | 管理主体・運用責任者 | 未回答（空欄） | 未承認（approved:false） |
 | D11 | 費用の上限（月額$5案）と負担者・急増時の扱い | 費用負担者・プロダクト所有者 | 未回答（空欄） | 未承認（approved:false） |
@@ -92,7 +92,7 @@ docs/13 §3 手順2どおり、未定義・未実装・未実施を合格に数�
 - 記録は3ヶ所へ同じ文で行う: チェックリスト回答欄 → config/production-policy.json（「回答」欄の記入と承認の値） → DecisionRecord（本記録が台帳。docs/14 §2）。
 
 **② 回答に応じた設定反映と差分再試験**（回答の記録後）
-- 回答を config/production-policy.json へ記入したら、該当する実装・設定・文書の差分を反映する。docs/16 T088 手順3どおり**対象変更は原文保全と明示決定を伴う**（D01で明示的な除外が記録された場合も docs/13 §1 の「利用者が採用範囲を明示的に訂正する」手順に従い、無断除外にしない）。
+- 回答を config/production-policy.json へ記入したら、該当する実装・設定・文書の差分を反映する。docs/16 T088 手順3どおり**対象変更は原文保全と明示決定を伴う**（D01で明示的な除外が記録された場合も docs/13 §1 の「利用者が採用範囲を明示的に訂正する」手順に従い、無断除外にしない）。D01 で3機能のいずれかを明示除外した場合は、除外後の採用範囲（対象版の要件数・機能ID）と RG-01・RG-03 等のゲート根拠・注記の件数・範囲が一致していることを確認してから更新・再判定する（採用範囲と噛み合わない根拠のまま合格にしない。T088レビューA-8）。
 - 実役割・様式・保存・通知・AI条件の差分だけ関連試験を再実施し、RG-01〜10 を全ANDで判定し直す〔出典: docs/16 T088 手順3・docs/13 §3〕。
 
 **③ 実環境・実端末・人の残手順29件**（実環境・実端末・人の用意が必要。現環境では実施不能）
