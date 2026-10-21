@@ -8,21 +8,25 @@
 
 | 項目 | 値 |
 |---|---|
-| 収集日時 | 2026-10-21T06:46:51.382Z |
-| commit | b81b1228bc8650efdc2d1f626f46e0fc9c0b4d9c |
-| codeHash | 3262b142988e1c94beb3f315dc40b5bbb72e5463cb16b9fa30baa2c7557e1119 |
+| 収集日時 | 2026-10-21T08:05:22.005Z |
+| commit | abc64e7b34bd5a2df3171411227cb7ce4174d146（未コミットのコード変更 1件を含む作業木で実行。内容はcodeHashで固定） |
+| codeHash | 4677e09f9f1d8853dc25d3c626e6b5532ba1d9b7100b4f8c418ad2da5347adfd |
 | 設計版 | 08:v0.3 / 2026-10-13 12:v0.3 / 2026-10-15 |
 | 実行環境 | node v26.8.2 / linux-x64 / Playwright 1.64.0 / vitest/4.1.11 linux-x64 node-v26.8.2 / wrangler 4.150.0 |
-| ゲート判定 | **赤**（証跡indexが古い（collect時のcodeHash 3262b142988e ≠ 現在 4677e09f9f1d。コードが変わったので全件未実行扱い）） |
+| ゲート判定 | **赤**（証跡indexが古い（collect時のcodeHash 4677e09f9f1d ≠ 現在 e8a0bbcdffa1。コードが変わったので全件未実行扱い）） |
 
 ## スイート
 
 | スイート | 結果 | passed | failed | skipped | 開始 | 終了 | コマンド |
 |---|---|---|---|---|---|---|---|
-| vitest | passed | 337 | 0 | 0 | 2026-10-21T06:40:15.521Z | 2026-10-21T06:41:01.997Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-21T06-40-15-036Z/vitest.json` |
-| load | passed | 3 | 0 | 0 | 2026-10-21T06:41:01.997Z | 2026-10-21T06:41:32.745Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-21T06-40-15-036Z/load.json` |
-| e2e | passed | 75 | 0 | 0 | 2026-10-21T06:41:32.745Z | 2026-10-21T06:46:51.359Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
-| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-21T06:46:51.359Z | 2026-10-21T06:46:51.359Z | `npm run test:live` |
+| vitest | passed | 337 | 0 | 0 | 2026-10-21T07:36:54.559Z | 2026-10-21T07:37:34.597Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-21T07-36-54-095Z/vitest.json` |
+| load | passed | 3 | 0 | 0 | 2026-10-21T07:37:34.597Z | 2026-10-21T07:38:02.777Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-21T07-36-54-095Z/load.json` |
+| e2e | failed | 74 | 1 | 0 | 2026-10-21T07:59:38.813Z | 2026-10-21T08:05:21.978Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
+| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-21T08:05:21.978Z | 2026-10-21T08:05:21.978Z | `npm run test:live` |
+
+差し替えた過去の実行（同じコードでスイート全体を再実行した。フレーキーの記録として残す）:
+
+- e2e 2026-10-21T07:38:02.777Z: failed（passed 73 / failed 2 / skipped 0）
 
 ## 件数（正本から機械抽出）
 
@@ -166,8 +170,9 @@
 | T085-D3 | medium | resolved | SCR-23（資産点検）と点検訂正の画面が未実装、施設詳細の点検結果が現在版でなく最新日時の行 | docs/16 T033状態欄・ph2-review 第3回「点検結果表示が現在版でない」 | T033の残作業（画面の欠落）。T085でSCR-23・訂正モード・API-51点検履歴・API-44 isCurrentを接続しe2eで確認 | T033/T030 |
 | FLAKE-1 | medium | open | fill値の消失で文書作成のPOSTが送られず30秒で落ちる（稀。引き金未特定） | docs/evidence/ph8.md「既知フレーキー」documents.spec desktop「題名消失」 | 試験の不安定さ。R8の調査（ph8.md）: 検証エラー「題名を入力してください」が残る＝fillの値が背景の再レンダリングで消えて作成POSTが出ない（データ破壊なし・単独実行は緑・引き金は未特定）。T085のcollect:evidenceではe2eのフル走行3回中2回発火（T084は3回中1回）。T085b: 押下後POST不発なら検証エラー確認→再fill・再押下×3の回復ループ＋ACL追加の先出し＋ドロップ吸収ヘルパで抑止。**根因（再マウント/再レンダリング競合の引き金）は未特定**。M0基準3回中3回発火→M3'（4ad6883）以降は未発火 | T085b |
 | FLAKE-2 | low | resolved | reports.spec desktop／facility-location.spec desktop／notifications.spec phone の1回off | docs/evidence/ph8.md「既知フレーキー」継続観察 | reports・journeysは根因を同定（ReportDraftPage.tsx:905の常時表示「承認済みの版が無いため…」への部分一致が先取りし確定前のGETが走る）→API-60のwaitForResponse＋exact一致へ。facility-locationはpopup URL直後読み〔review r0 Minorの実発火〕→要求イベント待ちへ。notificationsは待機化〔元失敗行は特定できず〕。M3'以降のフル走行で未発火 | T085b |
-| T085b-W1 | low | open | wrangler 4.150のdevサーバーがProxyWorker→UserWorker接続を希に切断し〔kj keep-alive約5秒境界・「Network connection lost」。#14926/#15252〕、awaitedな書き込み要求の応答を失って試験が赤になり得る | T085b M3計測〔issues.spec desktopが実発火。同種ログはM0/M2にも〜1回/回〕 | GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。対策は署名限定・有界3回・同一冪等鍵の再送ヘルパ〔issues 6書き込み＋documents作成に適用済み〕。他specのawaited書き込みには残存。docs/evidence/e2e-speed.md「残存クラス」。T086最終検証（2026-10-21）: collect:evidenceのe2e＋フルe2e 3回＝計4走行（75〜150件/回）で失敗0・ヘルパ適用外specでの赤は観測されず。上流（wrangler #14926/#15252）は未解決のため継続観察。発火時はclickUntilWriteArrivesヘルパ適用を検討。T088最終検証（2026-10-21）: フルe2e第1バッチ3走行で3回発火（incidents.spec incident_new_draft_usage_rows…が2回・ai-review.spec stale_proposal…が1回。いずれも単独実行は緑・src・tests/e2eはT087の3回連続緑から不変・ai-reviewは再生成POST落下の署名〔v2候補が90秒待っても出現せず〕）。ai-review.specの再生成クリックへclickUntilWriteArrivesを適用。incidents側はUI上のawaited書き込みが無く失敗行を捕捉できていないため適用せず継続観察。発火時ログは .superpowers/sdd/16_実装タスク一覧/t088-final-e2e-firings.log | - |
+| T085b-W1 | low | open | wrangler 4.150のdevサーバーがProxyWorker→UserWorker接続を希に切断し〔kj keep-alive約5秒境界・「Network connection lost」。#14926/#15252〕、awaitedな書き込み要求の応答を失って試験が赤になり得る | T085b M3計測〔issues.spec desktopが実発火。同種ログはM0/M2にも〜1回/回〕 | GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。対策は署名限定・有界3回・同一冪等鍵の再送ヘルパ〔issues 6書き込み＋documents作成に適用済み〕。他specのawaited書き込みには残存。docs/evidence/e2e-speed.md「残存クラス」。T086最終検証（2026-10-21）: collect:evidenceのe2e＋フルe2e 3回＝計4走行（75〜150件/回）で失敗0・ヘルパ適用外specでの赤は観測されず。上流（wrangler #14926/#15252）は未解決のため継続観察。発火時はclickUntilWriteArrivesヘルパ適用を検討。T088最終検証（2026-10-21）: フルe2e第1バッチ3走行で3回発火（incidents.spec incident_new_draft_usage_rows…が2回・ai-review.spec stale_proposal…が1回。いずれも単独実行は緑・src・tests/e2eはT087の3回連続緑から不変・ai-reviewは再生成POST落下の署名〔v2候補が90秒待っても出現せず〕）。ai-review.specの再生成クリックへclickUntilWriteArrivesを適用。incidents側はUI上のawaited書き込みが無く失敗行を捕捉できていないため適用せず継続観察。発火時ログは .superpowers/sdd/16_実装タスク一覧/t088-final-e2e-firings.log。同日の続くcollect:evidence再収集（abc64e7・ヘルパ適用後の初collect）のe2eフェーズでも2回発火（journeys.spec journey_activity_incident_usage_analytics_report〔活動登録POST落下と推定・「夜間の放水訓練」のlinkが15秒で出現せず〕・asset-inspection.spec〔FLAKE-4として起票〕。error-contextを .superpowers/sdd/16_実装タスク一覧/t088-journeys-error-context へ保存）。いずれも単独・再走行で緑に復帰。本日の発火頻度はM0/M2期の同種ログ観察（〜1回/回）と同水準。journeysへのヘルパ適用は次の安定的な発火署名捕捉時に検討 | - |
 | FLAKE-3 | low | resolved | 完了確定済みの添付を背景のQueue consumerがreadyへ進め、「未検査は422」の断言が201で落ちた（試験側の競合） | T085の全スイート実行（tests/inspections-issues.test.ts manual_issue_links_ready_attachments_and_rejects_uninspected_ones） | collect-evidence 1回目でvitest 1件failed。完了確定前の添付（makeNotYetCompleted）へ変更し同型の2箇所も修正 | T029/T032（試験） |
+| FLAKE-4 | low | resolved | asset-inspection.spec inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original〔desktop-1280〕が応答消失を注入する試験で稀に落ちる（今回の失敗=「結果を確認できません」が20秒で出現せず。T087時の失敗とは別の断言点） | docs/evidence/ph8.md「T087」最終検証（2026-10-21・1回）＋T088最終検証のcollect:evidence再収集（2026-10-21・再発） | T087最終検証で1回（発火ログ無し・根拠未特定としてph8.md「T087」に記録し、再発時の起票を次担当へ申送り）→T088最終検証のcollect:evidence（abc64e7）で再発したため本起票。error-contextを保存（.superpowers/sdd/16_実装タスク一覧/t088-asset-inspection-error-context。失敗断言=getByText(/結果を確認できません/)のtoBeVisible 20秒タイムアウト）。T087時と合わせ2回/約12走行。試験自身が応答消失を注入するため、注入のタイミングとT085b-W1（wranglerのProxyWorker接続切断）の重なりで挙動が変わるタイミング依存の可能性が高いが、src・本試験は両発火時点で不変・単独実行は両回とも緑・根因は未特定。データ破壊は無し（0件更新の検証読みが主体）。再発時は単独再実行で緑になるかの確認と、失敗が同一断言点かの記録を継続。T088で対策: 注入が稀に漏れて応答が画面へ届く（失敗時のpage snapshot=施設詳細画面に遷移済み・登録は正しく1件）競合のため、docs.specの回復ループ前例と同じく『漏れを検出したら別内容で同じシナリオをやり直す（最大3回・成功するまで本 flowは実施済みを保証）』構造へ。製品側は全観測で正常（登録1件・冪等有効） | - |
 | T031-I3 | high | resolved | API-46の権限判定がクライアントの送るbody.inspectorMemberIdで行われ、一般団員が他人の点検を訂正し実施者を差し替えられた（T031の既存欠陥。T085の訂正画面で到達可能になった） | T085レビューA-I3（src/server/routes/inspection-corrections.ts） | 権限欠陥（Review Focus 1）。修正前は他人の点検の訂正が201（赤）→元の原本の実施者と新しい実施者の両方で判定して403（緑） | T031 |
 | T085-D8 | medium | resolved | 点検の記録の「訂正済み」を系列の現在版でないこと（isCurrent=false）で判定しており、新しい点検があるだけの古い記録まで訂正済みと表示した | T085レビューA-I1 | 表示の誤り（記録の意味を取り違える）。supersededByIdで判定し、2件以上の資産でe2eの赤（訂正済み2件）→緑 | T033 |
 | T085-D9 | medium | resolved | 異常ありの点検を訂正すると、異常が二重に起票された（訂正モードでcreateIssueを常に有効にしていた） | T085レビューA-I2 | docs/11 §3（既存異常と二重にしない）違反。良好→異常ありの訂正のときだけ起票に変更し、e2eの赤（異常2件）→緑 | T033 |
@@ -208,4 +213,4 @@
 
 ## ゲートの不合格理由
 
-- 証跡indexが古い（collect時のcodeHash 3262b142988e ≠ 現在 4677e09f9f1d。コードが変わったので全件未実行扱い）
+- 証跡indexが古い（collect時のcodeHash 4677e09f9f1d ≠ 現在 e8a0bbcdffa1。コードが変わったので全件未実行扱い）

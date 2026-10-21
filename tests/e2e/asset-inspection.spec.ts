@@ -21,7 +21,11 @@ async function approvedTemplate(request: APIRequestContext, targetType: "facilit
   return t;
 }
 
-/** 保存の応答だけを1回失わせる（サーバーには届いて適用される）。戻り値は届いた回数を数える関数 */
+/**
+ * 保存の応答だけを1回失わせる（サーバーには届いて適用される）。戻り値は届いた回数を数える関数。
+ * 注入は稀に漏れて失わせたはずの応答が画面へ届くことがある（FLAKE-4。abortと応答到達の競合）。
+ * 呼び出し側は漏れ（保存成功の遷移）を検出したら別の内容で同じシナリオをやり直すこと
+ */
 async function loseNextResponse(page: Page, pattern: string): Promise<() => number> {
   let forwarded = 0;
   let lost = false;
@@ -46,26 +50,54 @@ test("inspection_retry_after_lost_response_registers_once_and_correction_keeps_t
   await approvedTemplate(page.request, "facility", `再送様式 ${tag}`, "exterior", "本体の外観");
 
   // --- 1) 点検登録（SCR-06）。保存の応答だけが失われる ---
-  await page.goto(`/app/facilities/${facilityId}/inspections/new`);
-  await expect(page.getByRole("heading", { name: "点検登録" })).toBeVisible();
-  await page.getByRole("button", { name: `再送様式 ${tag}` }).click();
-  await page.getByRole("button", { name: "良好" }).click();
-  await page.getByRole("button", { name: /写真・メモへ進む/ }).click();
-  await page.getByLabel("メモ・特記事項").fill(`再送の確認 ${tag}`);
-  await page.getByRole("button", { name: /確認へ進む/ }).click();
-  const forwarded = await loseNextResponse(page, "**/api/v1/facilities/*/inspections");
-  await page.getByRole("button", { name: "点検を保存" }).click();
-  await expect(page.getByText(/結果を確認できません/)).toBeVisible({ timeout: 20_000 });
-  // 画面の案内どおり、同じ内容のまま送り直す（ここで二重登録が起きてはいけない）
-  await page.getByRole("button", { name: "点検を保存" }).click();
-  await expect(page).toHaveURL(new RegExp(`/app/facilities/${facilityId}$`), { timeout: 20_000 });
-  await page.unrouteAll({ behavior: "ignoreErrors" });
-  expect(forwarded()).toBe(2); // 2回とも届いている
-  const afterRetry = await adminApiData<{ id: string; isCurrent: boolean }[]>(page.request, "GET", `/api/v1/facilities/${facilityId}/inspections`);
-  expect(afterRetry.data.data).toHaveLength(1); // 業務効果は1回
+  // FLAKE-4（manifest起票）: 応答消失の注入は稀に漏れて、失わせたはずの応答が画面へ届く。T088の失敗時の
+  // page snapshot（t088-asset-inspection-error-context）では施設詳細へ遷移済み・登録は正しく1件で、製品側は
+  // 全観測で正常。そこでdocuments.specの回復ループ前例（FLAKE-1）と同じく、漏れを検出したら**別の内容**
+  // （＝別の送信鍵で独立したシナリオ）で同じシナリオをやり直す（高々3回。案内から再送まで成功して初めて
+  // 本テストの主題である再送の検証が済んだことになる）
+  let leaked = 0; // 漏れた試行の回数（漏れた保存もサーバーでは1回適用済み）
+  let registered: { id: string; isCurrent: boolean } | null = null;
+  for (let attempt = 1; attempt <= 3 && registered === null; attempt++) {
+    await page.goto(`/app/facilities/${facilityId}/inspections/new`);
+    await expect(page.getByRole("heading", { name: "点検登録" })).toBeVisible();
+    await page.getByRole("button", { name: `再送様式 ${tag}` }).click();
+    await page.getByRole("button", { name: "良好" }).click();
+    await page.getByRole("button", { name: /写真・メモへ進む/ }).click();
+    await page.getByLabel("メモ・特記事項").fill(`再送の確認 ${tag}#${attempt}`); // 試行ごとに別内容＝別の送信鍵
+    await page.getByRole("button", { name: /確認へ進む/ }).click();
+    const forwarded = await loseNextResponse(page, "**/api/v1/facilities/*/inspections");
+    await page.getByRole("button", { name: "点検を保存" }).click();
+    // 案内が出る（本来の経路）か、注入が漏れて保存が成功し詳細へ遷移するか（FLAKE-4の漏れ）を待つ。
+    // どちらも20秒で出ないときは下の既存の断言が赤にする（想定外を握りつぶさない）
+    const outcome = await Promise.race([
+      page.getByText(/結果を確認できません/).waitFor({ state: "visible", timeout: 20_000 }).then(() => "banner" as const),
+      page.waitForURL(new RegExp(`/app/facilities/${facilityId}$`), { timeout: 20_000 }).then(() => "leak" as const),
+    ].map((p) => p.catch(() => "neither" as const)));
+    if (outcome === "leak") {
+      // 漏れた保存はサーバーで適用済み。台帳で1件だけ登録されたことを確認してから、別内容でやり直す
+      await page.unrouteAll({ behavior: "ignoreErrors" });
+      const leakedRows = await adminApiData<{ id: string }[]>(page.request, "GET", `/api/v1/facilities/${facilityId}/inspections`);
+      expect(leakedRows.data.data).toHaveLength(leaked + 1); // 漏れた保存も業務効果は1回（冪等は効いている）
+      leaked++;
+      continue;
+    }
+    if (outcome === "neither") {
+      // 案内も遷移も無い＝想定外（保存のPOSTすら出ていない等）。既存の断言で素直に赤にする
+      await expect(page.getByText(/結果を確認できません/)).toBeVisible({ timeout: 20_000 });
+    }
+    // 画面の案内どおり、同じ内容のまま送り直す（ここで二重登録が起きてはいけない）
+    await page.getByRole("button", { name: "点検を保存" }).click();
+    await expect(page).toHaveURL(new RegExp(`/app/facilities/${facilityId}$`), { timeout: 20_000 });
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    expect(forwarded()).toBe(2); // 2回とも届いている
+    const afterRetry = await adminApiData<{ id: string; isCurrent: boolean }[]>(page.request, "GET", `/api/v1/facilities/${facilityId}/inspections`);
+    expect(afterRetry.data.data).toHaveLength(leaked + 1); // 業務効果は1回（漏れの試行があればそのぶん増える）
+    registered = afterRetry.data.data.find((r) => r.isCurrent)!;
+  }
+  expect(registered, "3回の試行でも応答消失の案内から送り直しが完了しなかった（回復不能）").not.toBeNull();
+  const original = registered!;
 
   // --- 2) 施設詳細（SCR-04）から現在の点検を訂正する（SCR-06の訂正モード。API-46） ---
-  const original = afterRetry.data.data[0]!;
   await expect(page.getByRole("link", { name: "点検を訂正する" })).toBeVisible();
   await page.getByRole("link", { name: "点検を訂正する" }).click();
   await expect(page.getByRole("main").getByText("点検の訂正", { exact: true })).toBeVisible();
@@ -84,7 +116,7 @@ test("inspection_retry_after_lost_response_registers_once_and_correction_keeps_t
   // 保存後、実際に起票したかを詳細画面で示す（応答のcreatedIssueId。R20）
   await expect(page.getByText("異常の報告を作成しました。点検管理で確認できます。")).toBeVisible();
   const afterFix = await adminApiData<{ id: string; isCurrent: boolean; supersedesId: string | null; result: string }[]>(page.request, "GET", `/api/v1/facilities/${facilityId}/inspections`);
-  expect(afterFix.data.data).toHaveLength(2);
+  expect(afterFix.data.data).toHaveLength(2 + leaked); // 訂正で増えた1件（漏れの試行があればそのぶん増える）
   const current = afterFix.data.data.find((r) => r.isCurrent)!;
   expect(current).toMatchObject({ supersedesId: original.id, result: "needs_review" });
   expect(afterFix.data.data.find((r) => r.id === original.id)).toMatchObject({ isCurrent: false, result: "ok" }); // 原本は不変
@@ -92,7 +124,7 @@ test("inspection_retry_after_lost_response_registers_once_and_correction_keeps_t
   await expect(page.getByLabel("状態").getByText("異常あり")).toBeVisible();
   // 施設詳細に点検の記録が時系列で出る（訂正前の原本は「訂正済み」として残る。MAP-06）
   const facilityHistory = page.getByRole("list", { name: "点検の記録" });
-  await expect(facilityHistory.getByRole("listitem")).toHaveCount(2);
+  await expect(facilityHistory.getByRole("listitem")).toHaveCount(2 + leaked); // 訂正の2件（漏れの試行があればそのぶん増える）
   await expect(facilityHistory.getByText("訂正済み")).toBeVisible();
   await expect(facilityHistory.getByText("訂正後の記録")).toBeVisible();
 

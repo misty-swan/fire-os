@@ -3039,7 +3039,7 @@
    "summary": "wrangler 4.150のdevサーバーがProxyWorker→UserWorker接続を希に切断し〔kj keep-alive約5秒境界・「Network connection lost」。#14926/#15252〕、awaitedな書き込み要求の応答を失って試験が赤になり得る",
    "severity": "low",
    "status": "open",
-   "basis": "GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。対策は署名限定・有界3回・同一冪等鍵の再送ヘルパ〔issues 6書き込み＋documents作成に適用済み〕。他specのawaited書き込みには残存。docs/evidence/e2e-speed.md「残存クラス」。T086最終検証（2026-10-21）: collect:evidenceのe2e＋フルe2e 3回＝計4走行（75〜150件/回）で失敗0・ヘルパ適用外specでの赤は観測されず。上流（wrangler #14926/#15252）は未解決のため継続観察。発火時はclickUntilWriteArrivesヘルパ適用を検討。T088最終検証（2026-10-21）: フルe2e第1バッチ3走行で3回発火（incidents.spec incident_new_draft_usage_rows…が2回・ai-review.spec stale_proposal…が1回。いずれも単独実行は緑・src・tests/e2eはT087の3回連続緑から不変・ai-reviewは再生成POST落下の署名〔v2候補が90秒待っても出現せず〕）。ai-review.specの再生成クリックへclickUntilWriteArrivesを適用。incidents側はUI上のawaited書き込みが無く失敗行を捕捉できていないため適用せず継続観察。発火時ログは .superpowers/sdd/16_実装タスク一覧/t088-final-e2e-firings.log",
+   "basis": "GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。対策は署名限定・有界3回・同一冪等鍵の再送ヘルパ〔issues 6書き込み＋documents作成に適用済み〕。他specのawaited書き込みには残存。docs/evidence/e2e-speed.md「残存クラス」。T086最終検証（2026-10-21）: collect:evidenceのe2e＋フルe2e 3回＝計4走行（75〜150件/回）で失敗0・ヘルパ適用外specでの赤は観測されず。上流（wrangler #14926/#15252）は未解決のため継続観察。発火時はclickUntilWriteArrivesヘルパ適用を検討。T088最終検証（2026-10-21）: フルe2e第1バッチ3走行で3回発火（incidents.spec incident_new_draft_usage_rows…が2回・ai-review.spec stale_proposal…が1回。いずれも単独実行は緑・src・tests/e2eはT087の3回連続緑から不変・ai-reviewは再生成POST落下の署名〔v2候補が90秒待っても出現せず〕）。ai-review.specの再生成クリックへclickUntilWriteArrivesを適用。incidents側はUI上のawaited書き込みが無く失敗行を捕捉できていないため適用せず継続観察。発火時ログは .superpowers/sdd/16_実装タスク一覧/t088-final-e2e-firings.log。同日の続くcollect:evidence再収集（abc64e7・ヘルパ適用後の初collect）のe2eフェーズでも2回発火（journeys.spec journey_activity_incident_usage_analytics_report〔活動登録POST落下と推定・「夜間の放水訓練」のlinkが15秒で出現せず〕・asset-inspection.spec〔FLAKE-4として起票〕。error-contextを .superpowers/sdd/16_実装タスク一覧/t088-journeys-error-context へ保存）。いずれも単独・再走行で緑に復帰。本日の発火頻度はM0/M2期の同種ログ観察（〜1回/回）と同水準。journeysへのヘルパ適用は次の安定的な発火署名捕捉時に検討",
    "owner": "-"
   },
   {
@@ -3050,6 +3050,15 @@
    "status": "resolved",
    "basis": "collect-evidence 1回目でvitest 1件failed。完了確定前の添付（makeNotYetCompleted）へ変更し同型の2箇所も修正",
    "owner": "T029/T032（試験）"
+  },
+  {
+   "id": "FLAKE-4",
+   "source": "docs/evidence/ph8.md「T087」最終検証（2026-10-21・1回）＋T088最終検証のcollect:evidence再収集（2026-10-21・再発）",
+   "summary": "asset-inspection.spec inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original〔desktop-1280〕が応答消失を注入する試験で稀に落ちる（今回の失敗=「結果を確認できません」が20秒で出現せず。T087時の失敗とは別の断言点）",
+   "severity": "low",
+   "status": "resolved",
+   "basis": "T087最終検証で1回（発火ログ無し・根拠未特定としてph8.md「T087」に記録し、再発時の起票を次担当へ申送り）→T088最終検証のcollect:evidence（abc64e7）で再発したため本起票。error-contextを保存（.superpowers/sdd/16_実装タスク一覧/t088-asset-inspection-error-context。失敗断言=getByText(/結果を確認できません/)のtoBeVisible 20秒タイムアウト）。T087時と合わせ2回/約12走行。試験自身が応答消失を注入するため、注入のタイミングとT085b-W1（wranglerのProxyWorker接続切断）の重なりで挙動が変わるタイミング依存の可能性が高いが、src・本試験は両発火時点で不変・単独実行は両回とも緑・根因は未特定。データ破壊は無し（0件更新の検証読みが主体）。再発時は単独再実行で緑になるかの確認と、失敗が同一断言点かの記録を継続。T088で対策: 注入が稀に漏れて応答が画面へ届く（失敗時のpage snapshot=施設詳細画面に遷移済み・登録は正しく1件）競合のため、docs.specの回復ループ前例と同じく『漏れを検出したら別内容で同じシナリオをやり直す（最大3回・成功するまで本 flowは実施済みを保証）』構造へ。製品側は全観測で正常（登録1件・冪等有効）",
+   "owner": "-"
   },
   {
    "id": "T031-I3",
