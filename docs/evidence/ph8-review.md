@@ -314,3 +314,45 @@ A=正確さ・セキュリティ／B=完了条件・試験妥当性／C=prototyp
 - コミット: **fd7bc72**（本体・指定試験）・**99a05b8**（fix1: 検出器の包括文・変形・否定形）・**c54b58d**（fix2: 丁寧形・受動形・します形）・**a157696**（manifest: PH2-A12 resolved・external 7件）・**57a77a4**（docs/16・ph8.md・development-completion）・**e6e13ce**（fix wave 1）
 - 最終全検証（コントローラ実行・2026-10-21）: typecheck成功／check:contracts「102 API / docs/05 102行 / OpenAPI一致」／check:coverage成功（参照テスト272件）／build成功（precache 9 entries）／check:adoption-proposal exit 0／collect:evidence〔vitest **72ファイル335件**・load 3・**e2e 75 passed / 0 failed / 0 skipped**・live未実施〕＋**受入ゲート 1 passed**／**フルe2e 3回連続緑〔150 passed ×3＝5.3/5.3/5.5分〕**（業務75＋受入75。計測過程でasset-inspection 1件の一過性失敗あり＝単独緑・以後4走行で未再発・ph8.md「T087」最終検証節に記録）
 - T087は**完了**（資料作成タスクで実環境手順はT088/実環境帰属のため局所完了ではない）。提案資料2点とテンプレート・検査・指定試験が揃い、D01〜20を一項目一回答で確認できる。実団体への提出・回答記録・正式リリース判定（RG-08・RG-10）はT088
+
+# T088 レビュー・修正サイクル（2026-10-21）
+
+T083〜T087と同じ手順。対象はT088「導入回答の反映・再試験・正式リリース判定」。範囲は **a897ad2**（T087完了）〜 **925da08**（実装19c9430〔本体・指定試験〕・ee067c9〔判定文書・runbook・docs整合試験〕・b8df963〔manifest台帳決着〕・b72c290〔production-policy.json陳腐化修正〕・925da08〔docs統合〕）と関連docs。レビュー担当は読み取りのみ。指摘はコントローラが実ファイル・実コードで確かめてから分類した（A-3の否定形経路は実コード読みで本物と確認）。作業記録の副本はworkspace（.superpowers/sdd/16_実装タスク一覧/task-88-*.md・review-*.diff・ph8-review-t088-{A,B,C,D}.md・task-88-findings-r0.md）。
+
+## 工程と実装者サブエージェントの役割分担
+
+実装はサブエージェント3体（①コアTDD〔D1〕＝19c9430＋JSON陳腐化の再開修正b72c290、②判定文書と台帳〔D2〕＝ee067c9＋b8df963、③docs統合〔D3〕＝925da08）。コントローラが裁定（プリフライトスキャン9項目）・タスクレビュー×3の⚠️解決・4体並行レビューの実検証・fix wave 1の指摘統合（F1〜F9）・最終検証（フレーク2件の診断と対策dispatchを含む）を担当。
+
+## 開始時の裁定（コントローラ。プリフライトスキャンより）
+
+R1 実回答が存在しないため、指定試験は合成入力で恒久化し実ファイル（回答空欄+全ゲート不合格+decisions空）はallowed:falseを断言する正直アンカーとして追加／R2 production-policy.json新設はadoption検査（exampleのみ走査）と干渉なし。捏造防止は「D01〜D20がexampleと完全一致」を試験で機械強制／R3 X-OUT-10（代理の参集記録担当画面）はD08未決のため実装しない（無断採用の逆の仮実装を避ける）／R4 PH1-B1・PH0-BF07・PH2-B12は正式判定前の再確認としてresolved、PH1-A1はD03回答待ちでopen維持／R5 新規試験はmanifestに登録しない（T087 R5前例）／R6 判定時点のGit commitはrelease-decision.md側に記録しJSONの自己言及を避ける／R7 docs/13現状列（v0.3時点）とT088判定は別物。判定は現時点実態で行い「開発版で実施済みの範囲」と「実環境・回答待ち」を分けて記録／R8 validate.tsはworkerd環境で走るため純関数のみ・CLIはFilesに無いため作らない／R9 ADOPTION_PROPOSAL/CHECKLIST/exampleはT088では変更しない（fix waveのF8で初めて触る・検出器green維持を条件に）
+
+## 第1回（4体並行。a897ad2..925da08）
+
+A=正確さ／B=完了条件／C=prototype準拠／D=docs整合。合計: **高0 / 中1 / 低18 / 要確認3**（中1と要確認のうちA-3・A-9・B-4・D-6はコントローラが実コード・実行計画で確認）。指摘統合と裁定は workspace の task-88-findings-r0.md、修正はb81b122、再レビューで**F1〜F9全てADDRESSED**。
+
+| 指摘 | 内容（代表） | 対応（b81b122） |
+|---|---|---|
+| F1（D-中1） | development-completion.md §3の局所完了列挙がT086止まり（タイトル・§1と文書内不整合） | T088の行を追加+導入段落の時点表記を更新 |
+| F2（B/D-低） | docs/16 §1年表（:40）にT088の文が無い（T086/T087最終コミットの前例に反する） | 年表末尾へ1文追加（:78と矛盾なく・外科的） |
+| F3（A-低1） | production-policy.json RG-03根拠「X-V01〜X-OUT-10の29件」はX-COSTが範囲外で28件に読める | 「X-V01〜X-OUT-10・X-COSTの29件」へ |
+| F4（A-低3・コントローラ実証） | classifyAdoptionAnswer の採用語が広く「対象にしません」「含めたくない」等の列挙外否定形が採用側に倒く | 否定随伴語を含む文は採用と読まず暗黙対象外へ（fail-closed）。対照9で固定 |
+| F5〜F7（A-低4・D2-Minor1/3・D-低4） | RG-08合格条件の言い換え注記が報告書側のみ／「この判定後」が文脈依存／config文言の引用が不正確 | 行内注記+RG-10限定句／「正式リリース判定（docs/13 §3 手順4の承認）後」へ／要約として正確化 |
+| F8（D-要確認6・C-低2・A-低2/8・D-低5） | チェックリストにD01の1文1ID記入案内が無い／D01質問文がdocs/01正本の「地域単位の」を欠く／D07・D08意思決定者がdocs/14正本と微差／PROPOSAL §6の「回答の記録はT088」が実手順とずれる／明示排除時の一致確認が§5②に無い | 案内行追加+D01質問3点一致+D07/D08をdocs/14正本へ4点同期+§6を実手順参照へ+§5②へ文言追加。adoption検出器green維持（試験へ出典実在2ファイルを追加） |
+| F9（A-低6・C-低3・D2-Minor2） | ゲート名が3箇所に重複し一致検査が無い／失敗メッセージの文書名ラベルが常に「提案資料」 | GATE_NAMESをexport+10ゲート名一致断言+ラベル改善 |
+
+## 方針で残す（Rulingつきの全リスト）
+
+1. **A-低7 manifest PH2-B12 basisの「docs/16 §1に記録」が実体より強い言い方** — Ruling: resolved済みの工程記録のbasis文言であり製品影響なし。次にmanifestを触る際に正確化 — コスト: なし
+2. **A-低8の機械試験部分（D01明示排除時の対象版×ゲート根拠の整合試験）** — Ruling: 実回答が揃うまで検査対象が存在しない。release-decision.md §5②へ確認文言を追加した（F8）で十分。回答記録時に試験化を検討 — コスト: 回答記録時の作業
+3. **F4の否定語彙の「外さない」型（除外の否定=採用寄り）が除外側に倒く** — Ruling: fail-closed方向（通しすぎない側）でD01回答は1文1ID記入案内（F8）で語彙を規定するため実害は限定的。次回wave候補 — コスト: 稀な語形で誤分類の可能性（安全側）
+4. **Ruling W2 journeys.specへのヘルパ適用見送り** — Ruling: 発火1回・link不出現のみでどの書き込みが落ちたかの直接証拠が無く、適用点を確定できない。T085b-W1のbasisどおり継続観察（次の安定署名捕捉時に適用） — コスト: 次回発火時に検証やり直しが必要になり得る
+5. **B-3 D3が割当外に修正したT085b-W1注記の書き換え** — Ruling: ph8.md「T086」の実績（4走行失敗0・basis更新済み）と一致する事実修正のため承認。遡及はしない — コスト: なし
+
+## 最終検証（コントローラ実行・2026-10-21）
+
+- 確認済みの高・中の未解消: **0件**（タスクレビュー×3＋4体並行レビュー→fix wave 1→再レビューF1〜F9全ADDRESSED・新規Critical/Important無し）
+- コミット: **19c9430**（本体・指定試験・production-policy.json）・**ee067c9**（release-decision.md・production-start.md・docs整合試験）・**b8df963**（manifest: PH1-B1/PH0-BF07/PH2-B12 resolved・PH1-A1 open維持）・**b72c290**（production-policy.json陳腐化修正）・**925da08**（docs/16・ph8.md・development-completion）・**b81b122**（fix wave 1）・**abc64e7**（ai-review.specへドロップ吸収ヘルパ・T085b-W1 basis）・**7badd95**（FLAKE-4回復ループ・manifest resolved）
+- 最終検証の過程で発火したフレーク: ①フルe2e第1バッチ3走行で各1件（incidents×2・ai-review×1＝T085b-W1残存クラス。ai-reviewへヘルパ適用） ②collect:evidence再収集で2件（journeys＝T085b-W1・asset-inspection＝**FLAKE-4起票**→保存page snapshotから根因特定〔注入の応答漏れ＝試験インフラの競合・製品は正常〕→回復ループ構造へ修正）。詳細はph8.md「T088」最終検証節
+- 最終全検証（7badd95時点）: typecheck成功／check:contracts「102 API / docs/05 102行 / OpenAPI一致」／check:coverage成功（参照テスト272件）／build成功（precache 9 entries）／check:adoption-proposal exit 0／collect:evidence〔vitest **73ファイル337件**・load 3・**e2e 75 passed / 0 failed / 0 skipped**・live未実施〕＋**受入ゲート 1 passed**／**フルe2e 3回連続緑〔75 passed ×3＝5.4/5.2/5.2分〕**
+- T088は**局所完了**。正式リリース判定の機構（validateProductionPolicy・production-policy.json・指定試験・release-decision.md・production-start.md）が完成し、現時点の正しい判定＝**正式リリース不可**（全ゲート不合格・D01〜D20未回答・暗黙対象外3機能）を機械強制する。実回答・実環境・人待ちの残作業は release-decision.md §5①〜⑦。**全89タスク（T001〜T088＋T085b）完了。PH8完了**

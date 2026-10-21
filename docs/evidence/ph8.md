@@ -442,7 +442,7 @@ e2eは実施しない（UI・routeの変更が無いため）。D1〜D2で scrip
 
 実装コミット: **19c9430** `feat: complete T088 release`（validateProductionPolicy＋config/production-policy.json＋指定試験。正当な赤→緑）→ **ee067c9** `docs: record T088 release decision and production start runbook`（release-decision.md〔判定記録の正本〕＋ops/production-start.md〔判定後の手順〕＋docs整合試験の追加）→ **b8df963** `chore: settle T088 ledger items in acceptance manifest`（PH1-B1・PH0-BF07・PH2-B12＝resolved・PH1-A1＝open維持＋acceptance-results.mdを--report-onlyで再生成）→ **b72c290** `fix: keep production policy json current after ledger settlement`（RG-10根拠から件数を除去して正本参照へ〔台帳決着で陳腐化する書き方の除去〕・工程語の除去）。
 
-### 検証（実装時点。2026-10-21。最終検証はこの後）
+### 検証（実装時点。2026-10-21。最終検証は後節のとおり確定済み）
 
 | 確認 | コマンド | 結果 |
 |---|---|---|
@@ -491,6 +491,22 @@ e2eは実施しない（UI・routeの変更が無いため）。D1〜D2で scrip
 
 上記「manifest台帳」行のとおり、PH1-B1・PH0-BF07・PH2-B12を**正式判定前の再確認**としてresolvedへ（いずれも製品欠陥ではなく工程記録。決着の根拠はmanifestのbasisに記録）。PH1-A1はD03回答待ちでopen維持し、RG-10の根拠（release-decision.md §2・production-policy.json）からは「回答待ちの阻害」として明記した。件数の正本はmanifestのissues（件数をdocs側に焼き込まない＝b72c290の非脆化）。
 
-### レビューサイクル（2026-10-21。docs/evidence/ph8-review.md「T088」へ記録予定）
+### レビューサイクル（2026-10-21完了。docs/evidence/ph8-review.md「T088」節）
 
-実装は分担制: D1（コアTDD・19c9430）→ D2（判定文書・runbook・台帳決着・ee067c9/b8df963＋fix b72c290）→ D3（docs統合＝docs/16・本節・development-completion.md）。この後 **4体並行レビュー→fix wave→再レビュー→最終検証**（全検証コマンド・collect:evidence・受入ゲート・フルe2e×3）をコントローラが実施し、結果は docs/evidence/ph8-review.md「T088」節と本節の「最終検証」へ記録される（数値は実測を待ち、本節では先書きしない）。
+実装は分担制: D1（コアTDD・19c9430）→ D2（判定文書・runbook・台帳決着・ee067c9/b8df963＋fix b72c290）→ D3（docs統合＝docs/16・本節・development-completion.md）。**4体並行レビュー（A正確さ/B完了条件/C prototype準拠/D docs整合）→ fix wave 1（b81b122・F1〜F9）→ スコープ付き再レビュー全件ADDRESSED**（確認済みの高・中の未解消0件。詳細はph8-review.md「T088」節）。
+
+### 最終検証（コントローラ実行・7badd95時点。2026-10-21）
+
+| 確認 | 結果 |
+|---|---|
+| typecheck／build | 成功／成功（precache 9 entries） |
+| check:contracts | **102 API / docs/05 102行 / OpenAPI一致** |
+| check:coverage | 成功（参照テスト272件） |
+| check:adoption-proposal | exit 0 |
+| collect:evidence | vitest **73ファイル337件**（T087最終335＋production-policy 2）・load 3・**e2e 75 passed / 0 failed / 0 skipped**・live未実施（Secret未設定）・ゲート内訳全0 |
+| 受入ゲート | **1 passed** |
+| フルe2e 3回連続 | **75 passed ×3＝5.4/5.2/5.2分**（業務75＋受入75。skip 0） |
+
+**最終検証の過程で発火したフレークと対応（正直な記録）**: ①フルe2e第1バッチ（b81b122）3走行で各1件失敗（incidents.spec出動下書きの離脱確認×2・ai-review.spec再生成候補×1）— いずれも単独緑・src/業務試験はT087の3回連続緑から不変・ai-reviewは再生成POST落下の署名（T085b-W1残存クラス）→ **ai-review.specの再生成クリックへclickUntilWriteArrivesを適用（abc64e7）**。incidentsはUI上のawaited書き込みが無く失敗行未捕捉のため適用せず継続観察（T085b-W1のbasisに発火記録・ログ保存）。②collect:evidence再収集（abc64e7）のe2eフェーズで2件失敗（journeys.spec活動登録〔T085b-W1〕・**asset-inspection.spec応答消失注入〔T087時1回→再発＝FLAKE-4として起票**〕）→ FLAKE-4は保存したpage snapshotから根因を特定（**注入したはずの応答が画面へ漏れて成功扱いで遷移する試験インフラの競合。製品側は全観測で正常・登録1件・冪等有効**）→ **漏れを検出したら別内容で同じシナリオをやり直す回復ループ構造へ修正（7badd95・docs.spec FLAKE-1前例）**。変異（注入を必ず1回漏らす）で回復ループの実効を確認済み。FLAKE-4はresolved。③最終検証（上表）は7badd95で全緑・3回連続緑。
+
+**T088は局所完了**（判定機構〔validate.ts・production-policy.json・指定試験・release-decision.md・ops/production-start.md〕が完成し、現時点の判定=正式リリース不可を機械強制。実回答・実環境・人待ちの残作業は release-decision.md §5①〜⑦ が正。開発完成〔T001〜T087〕は取り消さない）。
