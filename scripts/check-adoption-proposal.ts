@@ -3,6 +3,15 @@
 // - 検査の趣旨: 開発は完了しているが正式リリースではない。提案資料が「実測・証跡つきの完成品」と「まだ承認されて
 //   いない運用の値（docs/14 D01〜D20の推奨案・検証設定）」を混ぜないこと、D01〜D20が一項目一回答で確認できることを
 //   機械的に守る。連絡・送信・了承の捏造を防ぐ（ブリーフの規定どおり）。
+// - 「承認済み」主張の検出規則（fix round 1）: 語幹{承認,了承,決定,確定,合意}＋活用{済(み), した, している,
+//   されている, を得た, が得られた, いただいた, 頂いた}の形を、D-IDの有無にかかわらず両文書の全ての「文」で
+//   検出する（包括文「すべて了承済み」・変形「承認済」「確定している」・否定形「未承認ではなく承認されている」を拾う）。
+//   例外は明示的な否定「…済みとは扱わない／…済みとして扱わ…」（docs/14 §2の正直な言い回し）だけであり、
+//   「未承認」「検証設定」などの語が同じ文にあっても主張を相殺しない。語幹のみ（「承認」「決定」等の単独形）は
+//   主張としない——この2文書では機能説明の正当な語（「承認後」「承認版」「点検様式の版承認」「人の確定」）と
+//   固定語「意思決定者」に語幹が現れるため（この除外は意図的な検出範囲として文書化してある）。
+// - docs/14 §2 の未決D見出し（D01〜D20。D21以降の「確定した詳細設計」は対象外）と DECISION_IDS の一致も検査する
+//   （将来のD追加・改名でチェックリスト側の更新を強制する）。
 // - 純関数（checkAdoptionProposal）は試験（tests/adoption-proposal.test.ts）から直接呼ぶ。CLI
 //   （`npm run check:adoption-proposal`）は実ファイル（docs/ADOPTION_PROPOSAL.md・docs/ADOPTION_CHECKLIST.md・
 //   config/production-policy.example.json）を読んで同じ純関数に渡す（scripts/check-environment.tsと同じ構成）。
@@ -45,10 +54,12 @@ export const REQUIRED_NOT_IMPLEMENTED = [
 const UNAPPROVED_VALUE_TOKENS = ["$5", "RTO", "RPO", "保持7日", "500回/日", "2,000通/日"] as const;
 const UNAPPROVED_LABELS = ["未承認", "検証設定", "承認待ち", "開発設定", "未決"] as const;
 
-// 「決定済み」と読める語。D01〜D20を扱う行に添えてはならない（了承を得たことにしない）。
-const DECIDED_MARKERS = [
-  "承認済み", "了承済み", "決定済み", "確定済み", "了承を得た", "承認を得た", "了承した", "承認した", "決定した",
-] as const;
+// 「承認・了承が済んでいる」と読える主張の形（上のヘッダーコメントの規則どおり。語幹＋活用）。
+const APPROVAL_CLAIM_PATTERN = /(承認|了承|決定|確定|合意)(済|した|している|されている|を得た|が得られた|いただいた|頂いた)/;
+// 例外とする明示的な否定（docs/14 §2の正直な言い回し「…済みとは扱わない」「…済みとして扱っていません」等。
+// 扱うの否定形: 扱わない／扱わず／扱いません／扱っていません／扱っていない を含む）。
+// 「未承認」「検証設定」などの語の存在では例外にしない（「未承認ではなく承認されている」を拾うため）。
+const APPROVAL_CLAIM_WHITELIST = /(承認|了承|決定|確定|合意)済(み)?(とは|として)扱(わ|いませ|っていませ|っていな)/;
 
 // 実測値らしき数値（この単位を伴う提案資料の行には出典と実在ファイルが要る）
 const MEASURED_VALUE_PATTERN = /\$\s*\d|\d[\d,.]*\s*(?:ms|秒|分|時間|円|ドル|USD)/i;
@@ -60,6 +71,15 @@ type ParsedChecklist = { headerColumns: string[]; rows: ChecklistRow[] };
 
 function splitCells(line: string): string[] {
   return line.split("|").slice(1, -1).map((c) => c.trim());
+}
+
+// 文単位に分割する（改行と。！？）。表の行（。を含まない行）は1文として扱う。
+function sentencesOf(text: string): string[] {
+  return text
+    .split(/\n/)
+    .flatMap((line) => line.split(/。|！|？/))
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
 }
 
 // チェックリストの最初の表（| 区切りの連続する行）を読む。見出し行→区切り行→D行の構成を仮定する。
@@ -146,20 +166,24 @@ export function policyApprovalIssues(policy: unknown): string[] {
   return failures;
 }
 
-/** 文書の本文: D01〜D20に「決定済み」と読める語を添えない・未承認の値を無Labelで出さない。 */
+/** 文書の本文: 「承認済み」主張（全ての文が対象。包括文・変形語・否定形も拾う）と未承認値の無Label検出。 */
 export function textApprovalIssues(proposal: string, checklist: string): string[] {
   const failures: string[] = [];
   for (const [docName, text] of [["提案資料", proposal], ["確認チェックリスト", checklist]] as const) {
+    // (1) 承認済み主張: D-IDの有無にかかわらず全ての文を走査する（D-IDを含まない包括文も、
+    //     「未承認」などの語で否定したつもりの文も同じ扱い。例外は明示的な否定のホワイトリストだけ）
+    for (const sentence of sentencesOf(text)) {
+      const claim = APPROVAL_CLAIM_PATTERN.exec(sentence);
+      if (!claim || APPROVAL_CLAIM_WHITELIST.test(sentence)) continue;
+      const decisionId = DECISION_IDS.find((id) => sentence.includes(id));
+      failures.push(
+        `${docName}: ${decisionId ? `${decisionId} について` : "D-IDを含まない包括文で"}「${claim[0]}」は承認済みと読める主張です（実測の了承はまだ無い。「未承認」「承認待ち」と書くか、「…済みとは扱わない」形の明示的な否定にする。「未承認」などの語が同じ文にあっても相殺しない）: ${sentence.slice(0, 120)}`,
+      );
+    }
+    // (2) 未承認の値トークンには未承認である旨の語の併記が要る（行単位）
     for (const rawLine of text.split("\n")) {
       const line = rawLine.trim();
       if (line === "") continue;
-      const decisionId = DECISION_IDS.find((id) => line.includes(id));
-      if (decisionId) {
-        const marker = DECIDED_MARKERS.find((m) => line.includes(m));
-        if (marker) {
-          failures.push(`${docName}: ${decisionId} に「${marker}」を添えています（D01〜D20は未承認。「未承認」「承認待ち」と書く）: ${line.slice(0, 120)}`);
-        }
-      }
       const token = UNAPPROVED_VALUE_TOKENS.find((t) => line.includes(t));
       if (token && !UNAPPROVED_LABELS.some((l) => line.includes(l))) {
         failures.push(`${docName}: 未承認の値「${token}」を、未承認である旨の語なしで書いています: ${line.slice(0, 120)}`);
@@ -208,6 +232,36 @@ function checklistAnswerIssues(checklist: string): string[] {
   return failures;
 }
 
+/**
+ * docs/14 §2 の未決D見出しと DECISION_IDS の一致（F2）。
+ * §2「設計提案と完成後の確認事項」の `### Dnn` 見出しのうち、最初の「確定した詳細設計」（D21〜）より前を
+ * 未決項目とみなし、DECISION_IDS と集合として一致させる。将来 docs/14 へ未決Dを追加したときは
+ * チェックリスト・例示JSON・DECISION_IDS の更新を強制する（Dnn の改名・削除も同様）。
+ */
+export function ledgerDecisionIssues(decisionLedger: string): string[] {
+  const sectionStart = decisionLedger.indexOf("## 2. 設計提案と完成後の確認事項");
+  if (sectionStart < 0) {
+    return ["docs/14 §2（設計提案と完成後の確認事項）の見出しが見つかりません（DECISION_IDSとの対応検査ができない）"];
+  }
+  const pending: string[] = [];
+  for (const match of decisionLedger.slice(sectionStart).matchAll(/^### (D\d{2}) (.*)$/gm)) {
+    if (match[2]!.includes("確定した詳細設計")) break; // D21以降（実装で確定した記録）は確認対象外
+    pending.push(match[1]!);
+  }
+  const failures: string[] = [];
+  for (const id of DECISION_IDS) {
+    if (!pending.includes(id)) {
+      failures.push(`docs/14 §2 に ${id} の未決項目の見出しが見つかりません（台帳とチェックリスト（DECISION_IDS）の対応を確認してください）`);
+    }
+  }
+  for (const id of pending) {
+    if (!(DECISION_IDS as readonly string[]).includes(id)) {
+      failures.push(`docs/14 §2 に未決項目 ${id} がありますが DECISION_IDS（チェックリストの対象）に含まれていません。チェックリスト・例示JSON・DECISION_IDS へ追加してください`);
+    }
+  }
+  return failures;
+}
+
 /** 提案資料の完成品根拠: 必須要素・出典の実在・実測値への出典・未実施の明記。 */
 export function productEvidenceIssues(
   proposal: string,
@@ -241,6 +295,8 @@ export type AdoptionCheckInput = {
   checklist: string;
   policy: unknown;
   pathExists: (path: string) => boolean;
+  /** docs/14_設計判断・未決事項.md の本文（§2の未決D見出しとDECISION_IDSの一致検査に使う。無い場合はその検査を省略） */
+  decisionLedger?: string;
 };
 
 export type AdoptionCheckResult = {
@@ -261,6 +317,7 @@ export function checkAdoptionProposal(input: AdoptionCheckInput): AdoptionCheckR
   const missingDecisionIds = [
     ...checklistStructureIssues(input.checklist),
     ...policyStructureIssues(input.policy),
+    ...(input.decisionLedger !== undefined ? ledgerDecisionIssues(input.decisionLedger) : []),
   ];
   const productEvidenceMissing = productEvidenceIssues(input.proposal, input.checklist, input.pathExists);
   const failures = [...unapprovedValuesPresentedAsApproved, ...missingDecisionIds, ...productEvidenceMissing];
@@ -280,8 +337,10 @@ async function main(): Promise<number> {
   const proposalPath = "docs/ADOPTION_PROPOSAL.md";
   const checklistPath = "docs/ADOPTION_CHECKLIST.md";
   const policyPath = "config/production-policy.example.json";
+  const ledgerPath = "docs/14_設計判断・未決事項.md";
   const proposal = fs.readFileSync(proposalPath, "utf8");
   const checklist = fs.readFileSync(checklistPath, "utf8");
+  const decisionLedger = fs.readFileSync(ledgerPath, "utf8");
   const policyRaw = fs.readFileSync(policyPath, "utf8");
   // JSONとして壊れている場合は生テキストを渡す（構造検査が1件の失敗として報告する）
   const policy: unknown = (() => {
@@ -291,13 +350,13 @@ async function main(): Promise<number> {
       return policyRaw;
     }
   })();
-  const result = checkAdoptionProposal({ proposal, checklist, policy, pathExists: (p) => fs.existsSync(p) });
+  const result = checkAdoptionProposal({ proposal, checklist, policy, pathExists: (p) => fs.existsSync(p), decisionLedger });
   if (!result.ok) {
     console.error(`導入提案資料の検査に失敗（${result.failures.length}件）:\n- ${result.failures.join("\n- ")}`);
     return 1;
   }
   console.log(
-    `導入提案資料検査OK: 必須要素${REQUIRED_PROPOSAL_ELEMENTS.length}項目・D01〜D20一項目一回答・未承認値の無Label化なし・出典は実在ファイルのみ（未実施${REQUIRED_NOT_IMPLEMENTED.length}項目の明記あり）`,
+    `導入提案資料検査OK: 必須要素${REQUIRED_PROPOSAL_ELEMENTS.length}項目・D01〜D20一項目一回答（docs/14 §2の未決D見出しと一致）・承認済み主張なし（未承認値の無Label化もなし）・出典は実在ファイルのみ（未実施${REQUIRED_NOT_IMPLEMENTED.length}項目の明記あり）`,
   );
   return 0;
 }

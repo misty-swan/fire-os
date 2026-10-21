@@ -33,6 +33,9 @@ import { checkAdoptionProposal, type PolicyExampleDocument } from "../scripts/ch
  * - 陽性対照: 各検出器は「注入した違反」を必ず拾うことをその場で試す（恒真断言にしない）。
  *   実ファイルへの一時的な違反注入（文書・approved:true・記入済み回答）での赤は
  *   task-87-d1-report.md に記録したとおり（注入後に戻している）。
+ * - fix round 1: 「承認済み」主張の検出はD-IDの有無にかかわらない全ての文が対象（包括文・変形語・否定形も拾う。
+ *   例外は「…済みとは扱わない」形の明示的な否定だけ=陽性対照6）。docs/14 §2 の未決D見出しと
+ *   DECISION_IDS の一致も検査する（=陽性対照7）。
  */
 
 const existingFiles: Record<string, string> = {
@@ -63,6 +66,7 @@ const check = (overrides: Partial<Parameters<typeof checkAdoptionProposal>[0]> =
     checklist: checklistRaw,
     policy: policyExample,
     pathExists: (p) => existingPaths.has(p),
+    decisionLedger: decisionLedgerRaw,
     ...overrides,
   });
 
@@ -116,5 +120,25 @@ describe("adoption-proposal (T087)", () => {
     expect(unsourced.productEvidenceMissing.some((f) => f.includes("999ms"))).toBe(true);
     const hiddenNotImplemented = proposalRaw.replace("実環境のデモURLは未実施", "実環境のデモURLは準備中");
     expect(check({ proposal: hiddenNotImplemented }).productEvidenceMissing.some((f) => f.includes("デモURL"))).toBe(true);
+
+    // ---- 陽性対照6: 包括文・変形語・否定形（fix round 1。D-IDが無くても承認済み主張は検出する） ----
+    const blanketClaim = check({ proposal: `${proposalRaw}\n本提案の内容は確定している。\n` });
+    expect(blanketClaim.unapprovedValuesPresentedAsApproved.some((f) => f.includes("確定している"))).toBe(true);
+    const blanketAll = check({ proposal: `${proposalRaw}\n上記20件の確認事項はすべて了承済みである。\n` });
+    expect(blanketAll.unapprovedValuesPresentedAsApproved.some((f) => f.includes("了承済"))).toBe(true);
+    const variantZu = check({ proposal: `${proposalRaw}\n本件は承認済で進めます。\n` });
+    expect(variantZu.unapprovedValuesPresentedAsApproved.some((f) => f.includes("承認済"))).toBe(true);
+    // 否定形: 「未承認」などの語が同じ文にあっても主張を相殺させない
+    const negatedClaim = check({ proposal: `${proposalRaw}\nD11 の月額上限は未承認ではなく承認されている。\n` });
+    expect(negatedClaim.unapprovedValuesPresentedAsApproved.some((f) => f.includes("D11") && f.includes("承認されている"))).toBe(true);
+    // 明示的な否定（docs/14流の「…済みとは扱わない」）は検出しない（過剰検出の防止。ホワイトリストを外すとこの断言が落ちる）
+    const honestNegation = check({ proposal: `${proposalRaw}\nこの設定は承認済みとは扱いません。\n` });
+    expect(honestNegation.unapprovedValuesPresentedAsApproved).toEqual([]);
+
+    // ---- 陽性対照7: docs/14 §2 の未決D見出しとDECISION_IDSの一致（F2。将来のD追加・改名で更新を強制する） ----
+    const ledgerWithoutD13 = decisionLedgerRaw.replace(/^### D13 .*$/m, "");
+    expect(check({ decisionLedger: ledgerWithoutD13 }).missingDecisionIds.some((f) => f.includes("D13"))).toBe(true);
+    const ledgerWithD99 = decisionLedgerRaw.replace(/^### D21 /m, "### D99 試験の未決項目\n### D21 ");
+    expect(check({ decisionLedger: ledgerWithD99 }).missingDecisionIds.some((f) => f.includes("D99"))).toBe(true);
   });
 });
