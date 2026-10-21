@@ -13,7 +13,7 @@
 | codeHash | f34406f31f4afbd9755580b62cc16fc1b06551c632acbe6129b95f4edff7de4c |
 | 設計版 | 08:v0.3 / 2026-10-13 12:v0.3 / 2026-10-15 |
 | 実行環境 | node v26.8.2 / linux-x64 / Playwright 1.64.0 / vitest/4.1.11 linux-x64 node-v26.8.2 / wrangler 4.150.0 |
-| ゲート判定 | **緑**（開発版の範囲） |
+| ゲート判定 | **赤**（証跡indexが古い（collect時のcodeHash f34406f31f4a ≠ 現在 518193dadaee。コードが変わったので全件未実行扱い）） |
 
 ## スイート
 
@@ -32,92 +32,92 @@
 
 | AT | 要件 | 開発版の判定 | シナリオの実テスト | CT（組数／notApplicable） | 未実施（実外部・実端末・人） |
 |---|---|---|---|---|---|
-| AT-AUTH-01 | AUTH-01 | 合格（局所） | 5 | 4 | X-V01（実Cloudflare（staging）での認証・CPU時間・Secure Cookie の実測（test:live auth-workers）・T086） |
-| AT-AUTH-02 | AUTH-02 | 合格（局所） | 4 | 4 | - |
-| AT-AUTH-03 | AUTH-03 | 合格（局所） | 5 | 3 | - |
-| AT-AUTH-04 | AUTH-04 | 合格（局所） | 4 | 4 | - |
-| AT-AUTH-05 | AUTH-05 | 合格（局所） | 4 | 4 | X-V01（実Cloudflare（staging）での認証・CPU時間・Secure Cookie の実測（test:live auth-workers）・T086）<br>X-DEV-2（VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認・T086）<br>X-OUT-4（実在の正副担当の交代（ops/admin-handover.md §3）・T088） |
-| AT-ACT-01 | ACT-01 | 合格（局所） | 2 | 4 | - |
-| AT-ACT-02 | ACT-02 | 合格（局所） | 3 | 5 | - |
-| AT-ACT-03 | ACT-03 | 合格（局所） | 2 | 5 | - |
-| AT-ACT-04 | ACT-04 | 合格（局所） | 2 | 3 | - |
-| AT-ACT-05 | ACT-05 | 合格（局所） | 3 | 5 | X-V06-DELIVERY（実チャネル（Web Push/email。D13）での到達・不明・再送・T088） |
-| AT-ACT-06 | ACT-06 | 合格（局所） | 5 | 4 | X-V07-RENDER（PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render）・T086） |
-| AT-MAP-01 | MAP-01 | 合格（局所） | 3 | 3 | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
-| AT-MAP-02 | MAP-02 | 合格（局所） | 3 | 2 | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
-| AT-MAP-03 | MAP-03 | 合格（局所） | 2 | 5 | - |
-| AT-MAP-04 | MAP-04 | 合格（局所） | 3 | 4 | X-V07-PERF（実staging・実D1 rows_read・実回線での通常API p95（D18承認材料）・T086） |
-| AT-MAP-05 | MAP-05 | 合格（局所） | 3 | 4 | - |
-| AT-MAP-06 | MAP-06 | 合格（局所） | 8 | 5 | - |
-| AT-MAP-07 | MAP-07 | 合格（局所） | 3 | 4 | - |
-| AT-MAP-08 | MAP-08 | 合格（局所） | 3 | 6 | - |
-| AT-MAP-09 | MAP-09 | 合格（局所） | 2 | 3 | X-DEV-MAPS（実端末でのMapsアプリ起動（外部経路）・T086） |
-| AT-MAP-10 | MAP-10 | 合格（局所） | 3 | 5 | - |
-| AT-AST-01 | AST-01 | 合格（局所） | 2 | 4 | - |
-| AT-AST-02 | AST-02 | 合格（局所） | 3 | 5 | - |
-| AT-AST-03 | AST-03 | 合格（局所） | 2 | 5 | - |
-| AT-AST-04 | AST-04 | 合格（局所） | 3 | 4 | - |
-| AT-AST-05 | AST-05 | 合格（局所） | 4 | 5 | - |
-| AT-DSP-01 | DSP-01 | 合格（局所） | 2 | 4 | - |
-| AT-DSP-02 | DSP-02 | 合格（局所） | 2 | 5 | X-OUT-10（代理の参集記録の担当を付ける画面（D08）・T088） |
-| AT-DSP-03 | DSP-03 | 合格（局所） | 5 | 4 | - |
-| AT-DSP-04 | DSP-04 | 合格（局所） | 3 | 4 | X-V06-RT（実30端末・実回線での更新反映遅延（test:live realtime-load）・T086） |
-| AT-DSP-05 | DSP-05 | 合格（局所） | 3 | 6 | X-DEV-1（iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線・T086） |
-| AT-COM-01 | COM-01 | 合格（局所） | 3 | 4 | - |
-| AT-COM-02 | COM-02 | 合格（局所） | 5 | 5 | X-V06-DELIVERY（実チャネル（Web Push/email。D13）での到達・不明・再送・T088）<br>X-OUT-3（実providerの到達不明（D13の了承後）・T088） |
-| AT-DOC-01 | DOC-01 | 合格（局所） | 3 | 6 | X-V02（実R2での検査・EXIF除去・ready不変（test:live file-inspection）・T086）<br>X-V07-RESTORE（実D1/R2での復元演習（別担当による実行を含む）・T087/T088） |
-| AT-DOC-02 | DOC-02 | 合格（局所） | 4 | 6 | X-V07-RENDER（PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render）・T086）<br>X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）・T086/T088） |
-| AT-DASH-01 | DASH-01 | 合格（局所） | 4 | 4 | - |
-| AT-DASH-02 | DASH-02 | 合格（局所） | 3 | 3 | - |
-| AT-AI-01 | AI-01 | 合格（局所） | 4 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）・T086/T088） |
-| AT-AI-02 | AI-02 | 合格（局所） | 2 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）・T086/T088） |
-| AT-AI-03 | AI-03 | 合格（局所） | 2 | 4 | X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）・T086/T088） |
-| AT-AI-04 | AI-04 | 合格（局所） | 5 | 7 | - |
-| AT-AI-05 | AI-05 | 合格（局所） | 3 | 2 | X-AIEVAL（実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）・T086/T088） |
-| AT-AI-06 | AI-06 | 合格（局所） | 6 | 5 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価・T086/T088） |
-| AT-AI-07 | AI-07 | 合格（局所） | 4 | 6 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価・T086/T088） |
-| AT-NFR-01 | NFR-01 | 合格（局所） | 6 | 3 | X-DEV-1（iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線・T086）<br>X-DEV-2（VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認・T086）<br>X-DEV-3（axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施）・T086） |
-| AT-NFR-02 | NFR-02 | 合格（局所） | 3 | 1 | X-DEV-4（代表利用者（5名程度）による説明なし再訪の計測（D18の承認材料）・T087/T088） |
-| AT-NFR-03 | NFR-03 | 合格（局所） | 3 | 2 | X-V07-PERF（実staging・実D1 rows_read・実回線での通常API p95（D18承認材料）・T086） |
-| AT-NFR-04 | NFR-04 | 合格（局所） | 3 | 4 | X-OUT-1（staging演習（6 scenarioを実Workers/D1/Queuesで）・T086）<br>X-OUT-2（実Googleキーの停止で一覧代替を確認・T086）<br>X-OUT-3（実providerの到達不明（D13の了承後）・T088）<br>X-OUT-4（実在の正副担当の交代（ops/admin-handover.md §3）・T088）<br>X-OUT-5（別担当（人）によるrunbookの再現・T088）<br>X-OUT-6（紙/既存電話への切替と復帰照合の実地演習・T088）<br>X-OUT-7（遮断・鍵rotationの演習（ops/security-response.md §7）・T086）<br>X-OUT-8（Queue送信失敗の実環境観測・T086）<br>X-OUT-9（管理者全員回復不能時のCloudflare側復旧手順の整備はT086で実施（ops/account-recovery.md §5）。stagingでの演習が残る（X-OUT-1と併せて実施）・T086）<br>X-V07-RESTORE（実D1/R2での復元演習（別担当による実行を含む）・T087/T088） |
-| AT-NFR-05 | NFR-05 | 合格（局所） | 6 | 5 | - |
-| AT-NFR-06 | NFR-06 | 合格（局所） | 2 | 2 | X-V07-RESTORE（実D1/R2での復元演習（別担当による実行を含む）・T087/T088） |
-| AT-NFR-07 | NFR-07 | 合格（局所） | 3 | 4 | - |
-| AT-NFR-08 | NFR-08 | 合格（局所） | 3 | 3 | X-COST（実使用量・実請求との照合、実環境の停止・復帰演習（D11）・T086/T088） |
-| AT-NFR-09 | NFR-09 | 合格（局所） | 3 | 2 | X-DEV-1（iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線・T086）<br>X-DEV-2（VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認・T086）<br>X-DEV-3（axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施）・T086） |
-| AT-NFR-10 | NFR-10 | 合格（局所） | 4 | 2 | X-AIEVAL（実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）・T086/T088）<br>X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）・T086/T088）<br>X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）・T086/T088）<br>X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価・T086/T088） |
+| AT-AUTH-01 | AUTH-01 | **不合格/未実行**（1件） | 5 | 4 | X-V01（実Cloudflare（staging）での認証・CPU時間・Secure Cookie の実測（test:live auth-workers）・T086） |
+| AT-AUTH-02 | AUTH-02 | **不合格/未実行**（1件） | 4 | 4 | - |
+| AT-AUTH-03 | AUTH-03 | **不合格/未実行**（1件） | 5 | 3 | - |
+| AT-AUTH-04 | AUTH-04 | **不合格/未実行**（1件） | 4 | 4 | - |
+| AT-AUTH-05 | AUTH-05 | **不合格/未実行**（1件） | 4 | 4 | X-V01（実Cloudflare（staging）での認証・CPU時間・Secure Cookie の実測（test:live auth-workers）・T086）<br>X-DEV-2（VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認・T086）<br>X-OUT-4（実在の正副担当の交代（ops/admin-handover.md §3）・T088） |
+| AT-ACT-01 | ACT-01 | **不合格/未実行**（1件） | 2 | 4 | - |
+| AT-ACT-02 | ACT-02 | **不合格/未実行**（1件） | 3 | 5 | - |
+| AT-ACT-03 | ACT-03 | **不合格/未実行**（1件） | 2 | 5 | - |
+| AT-ACT-04 | ACT-04 | **不合格/未実行**（1件） | 2 | 3 | - |
+| AT-ACT-05 | ACT-05 | **不合格/未実行**（1件） | 3 | 5 | X-V06-DELIVERY（実チャネル（Web Push/email。D13）での到達・不明・再送・T088） |
+| AT-ACT-06 | ACT-06 | **不合格/未実行**（1件） | 5 | 4 | X-V07-RENDER（PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render）・T086） |
+| AT-MAP-01 | MAP-01 | **不合格/未実行**（1件） | 3 | 3 | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
+| AT-MAP-02 | MAP-02 | **不合格/未実行**（1件） | 3 | 2 | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
+| AT-MAP-03 | MAP-03 | **不合格/未実行**（1件） | 2 | 5 | - |
+| AT-MAP-04 | MAP-04 | **不合格/未実行**（1件） | 3 | 4 | X-V07-PERF（実staging・実D1 rows_read・実回線での通常API p95（D18承認材料）・T086） |
+| AT-MAP-05 | MAP-05 | **不合格/未実行**（1件） | 3 | 4 | - |
+| AT-MAP-06 | MAP-06 | **不合格/未実行**（1件） | 8 | 5 | - |
+| AT-MAP-07 | MAP-07 | **不合格/未実行**（1件） | 3 | 4 | - |
+| AT-MAP-08 | MAP-08 | **不合格/未実行**（1件） | 3 | 6 | - |
+| AT-MAP-09 | MAP-09 | **不合格/未実行**（1件） | 2 | 3 | X-DEV-MAPS（実端末でのMapsアプリ起動（外部経路）・T086） |
+| AT-MAP-10 | MAP-10 | **不合格/未実行**（1件） | 3 | 5 | - |
+| AT-AST-01 | AST-01 | **不合格/未実行**（1件） | 2 | 4 | - |
+| AT-AST-02 | AST-02 | **不合格/未実行**（1件） | 3 | 5 | - |
+| AT-AST-03 | AST-03 | **不合格/未実行**（1件） | 2 | 5 | - |
+| AT-AST-04 | AST-04 | **不合格/未実行**（1件） | 3 | 4 | - |
+| AT-AST-05 | AST-05 | **不合格/未実行**（1件） | 4 | 5 | - |
+| AT-DSP-01 | DSP-01 | **不合格/未実行**（1件） | 2 | 4 | - |
+| AT-DSP-02 | DSP-02 | **不合格/未実行**（1件） | 2 | 5 | X-OUT-10（代理の参集記録の担当を付ける画面（D08）・T088） |
+| AT-DSP-03 | DSP-03 | **不合格/未実行**（1件） | 5 | 4 | - |
+| AT-DSP-04 | DSP-04 | **不合格/未実行**（1件） | 3 | 4 | X-V06-RT（実30端末・実回線での更新反映遅延（test:live realtime-load）・T086） |
+| AT-DSP-05 | DSP-05 | **不合格/未実行**（1件） | 3 | 6 | X-DEV-1（iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線・T086） |
+| AT-COM-01 | COM-01 | **不合格/未実行**（1件） | 3 | 4 | - |
+| AT-COM-02 | COM-02 | **不合格/未実行**（1件） | 5 | 5 | X-V06-DELIVERY（実チャネル（Web Push/email。D13）での到達・不明・再送・T088）<br>X-OUT-3（実providerの到達不明（D13の了承後）・T088） |
+| AT-DOC-01 | DOC-01 | **不合格/未実行**（1件） | 3 | 6 | X-V02（実R2での検査・EXIF除去・ready不変（test:live file-inspection）・T086）<br>X-V07-RESTORE（実D1/R2での復元演習（別担当による実行を含む）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要）・T088） |
+| AT-DOC-02 | DOC-02 | **不合格/未実行**（1件） | 4 | 6 | X-V07-RENDER（PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render）・T086）<br>X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-DASH-01 | DASH-01 | **不合格/未実行**（1件） | 4 | 4 | - |
+| AT-DASH-02 | DASH-02 | **不合格/未実行**（1件） | 3 | 3 | - |
+| AT-AI-01 | AI-01 | **不合格/未実行**（1件） | 4 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-AI-02 | AI-02 | **不合格/未実行**（1件） | 2 | 4 | X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-AI-03 | AI-03 | **不合格/未実行**（1件） | 2 | 4 | X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-AI-04 | AI-04 | **不合格/未実行**（1件） | 5 | 7 | - |
+| AT-AI-05 | AI-05 | **不合格/未実行**（1件） | 3 | 2 | X-AIEVAL（実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-AI-06 | AI-06 | **不合格/未実行**（1件） | 6 | 5 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-AI-07 | AI-07 | **不合格/未実行**（1件） | 4 | 6 | X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-NFR-01 | NFR-01 | **不合格/未実行**（1件） | 6 | 3 | X-DEV-1（iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線・T086）<br>X-DEV-2（VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認・T086）<br>X-DEV-3（axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施）・T086） |
+| AT-NFR-02 | NFR-02 | **不合格/未実行**（1件） | 3 | 1 | X-DEV-4（代表利用者（5名程度）による説明なし再訪の計測（D18の承認材料）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要）・T088） |
+| AT-NFR-03 | NFR-03 | **不合格/未実行**（1件） | 3 | 2 | X-V07-PERF（実staging・実D1 rows_read・実回線での通常API p95（D18承認材料）・T086） |
+| AT-NFR-04 | NFR-04 | **不合格/未実行**（1件） | 3 | 4 | X-OUT-1（staging演習（6 scenarioを実Workers/D1/Queuesで）・T086）<br>X-OUT-2（実Googleキーの停止で一覧代替を確認・T086）<br>X-OUT-3（実providerの到達不明（D13の了承後）・T088）<br>X-OUT-4（実在の正副担当の交代（ops/admin-handover.md §3）・T088）<br>X-OUT-5（別担当（人）によるrunbookの再現・T088）<br>X-OUT-6（紙/既存電話への切替と復帰照合の実地演習・T088）<br>X-OUT-7（遮断・鍵rotationの演習（ops/security-response.md §7）・T086）<br>X-OUT-8（Queue送信失敗の実環境観測・T086）<br>X-OUT-9（管理者全員回復不能時のCloudflare側復旧手順の整備はT086で実施（ops/account-recovery.md §5）。stagingでの演習が残る（X-OUT-1と併せて実施）・T086）<br>X-V07-RESTORE（実D1/R2での復元演習（別担当による実行を含む）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要）・T088） |
+| AT-NFR-05 | NFR-05 | **不合格/未実行**（1件） | 6 | 5 | - |
+| AT-NFR-06 | NFR-06 | **不合格/未実行**（1件） | 2 | 2 | X-V07-RESTORE（実D1/R2での復元演習（別担当による実行を含む）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要）・T088） |
+| AT-NFR-07 | NFR-07 | **不合格/未実行**（1件） | 3 | 4 | - |
+| AT-NFR-08 | NFR-08 | **不合格/未実行**（1件） | 3 | 3 | X-COST（実使用量・実請求との照合、実環境の停止・復帰演習（D11）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
+| AT-NFR-09 | NFR-09 | **不合格/未実行**（1件） | 3 | 2 | X-DEV-1（iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線・T086）<br>X-DEV-2（VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認・T086）<br>X-DEV-3（axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施）・T086） |
+| AT-NFR-10 | NFR-10 | **不合格/未実行**（1件） | 4 | 2 | X-AIEVAL（実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088）<br>X-V04-JEV（実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088）<br>X-V04-LLM（実生成モデルの比較・固定・捏造検出精度（D12/D16）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088）<br>X-V04-RET（OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）・T088） |
 
 ## 継続シナリオ（TC-01〜18）
 
 | TC | 対応要件 | 開発版の判定 | 実テスト | 未実施（実外部・実端末・人） |
 |---|---|---|---|---|
-| TC-01 | AUTH-01 | 合格（局所） | tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions<br>tests/authorization.test.ts::認可 (T008) > unlinked_identity_and_forged_test_header_never_get_business_access<br>tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login@desktop-1280 | - |
-| TC-02 | AUTH-02 | 合格（局所） | tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > role_replacement_bumps_authz_version_and_rejects_unsafe_changes<br>tests/members.test.ts::名簿 (T011) > who_may_change_what_is_enforced_by_the_server | - |
-| TC-03 | ACT-01,ACT-02 | 合格（局所） | tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer<br>tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280 | - |
-| TC-04 | ACT-03 | 合格（局所） | tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance<br>tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280 | - |
-| TC-05 | MAP-01,MAP-02 | 合格（局所） | tests/e2e/map.spec.ts::three_facility_types_are_identified_by_text_not_color_only<br>tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail<br>tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
-| TC-06 | MAP-03 | 合格（局所） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation<br>tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking@desktop-1280 | - |
-| TC-07 | MAP-03 | 合格（局所） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation<br>tests/gis-query.test.ts::施設の全件取得 (T020) > invalid_list_conditions_are_rejected_without_partial_results (T085) | - |
-| TC-08 | MAP-04 | 合格（局所） | tests/gis-query.test.ts::施設の全件取得 (T020) > filters_by_latest_inspection_result_and_open_issues<br>tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport | - |
-| TC-09 | MAP-05,MAP-06 | 合格（局所） | tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_links_ready_attachments_and_rejects_uninspected_ones<br>tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)<br>tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission@desktop-1280 | - |
-| TC-10 | MAP-07 | 合格（局所） | tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified@desktop-1280<br>tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation | - |
-| TC-11 | AST-01,AST-02 | 合格（局所） | tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity<br>tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target<br>tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting@desktop-1280 | - |
-| TC-12 | DSP-01,DSP-02 | 合格（局所） | tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches<br>tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time<br>tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280 | - |
-| TC-13 | DOC-01 | 合格（局所） | tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads<br>tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload | - |
-| TC-14 | NFR-07 | 合格（局所） | tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered<br>tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > second_approval_supersedes_previous_approved_version<br>tests/e2e/audit.spec.ts::audit_panel_shows_who_changed_what_without_bodies | - |
-| TC-15 | NFR-05 | 合格（局所） | tests/mutation.test.ts::executeMutation (T004) > same_key_concurrent_requests_apply_the_effect_once<br>tests/client-shell.test.tsx::client shell (T005) > double_tap_while_saving_sends_one_request<br>tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original@desktop-1280 | - |
-| TC-16 | NFR-05 | 合格（局所） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)<br>tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown@desktop-1280 | - |
-| TC-17 | NFR-04 | 合格（局所） | tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success<br>tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls | - |
-| TC-18 | RG-09 | 合格（局所） | tests/deploy-config.test.ts::deploy-config (T078) > demo_binding_or_incompatible_schema_blocks_deploy<br>tests/schema.test.ts::core schema (T003) > fixture_has_two_units_four_roles_suspended_and_scopes_with_fictional_names | X-DEMO（公開デモ（分離した実環境）の構築と本番データとの完全分離の実地確認（RG-09）・T086） |
+| TC-01 | AUTH-01 | **不合格/未実行**（1件） | tests/security/authorization-matrix.test.ts::T081 全APIの権限・入力・濫用matrix > every_business_route_rejects_cross_unit_and_stale_permissions<br>tests/authorization.test.ts::認可 (T008) > unlinked_identity_and_forged_test_header_never_get_business_access<br>tests/e2e/auth.spec.ts::unauthenticated_visit_goes_to_login_and_returns_after_login@desktop-1280 | - |
+| TC-02 | AUTH-02 | **不合格/未実行**（1件） | tests/revocation.test.ts::権限変更・利用停止・失効 (T012) > role_replacement_bumps_authz_version_and_rejects_unsafe_changes<br>tests/members.test.ts::名簿 (T011) > who_may_change_what_is_enforced_by_the_server | - |
+| TC-03 | ACT-01,ACT-02 | **不合格/未実行**（1件） | tests/attendance.test.ts::本人・許可代理の出欠 (T036) > old_attendance_retry_cannot_undo_later_answer<br>tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280 | - |
+| TC-04 | ACT-03 | **不合格/未実行**（1件） | tests/activity-results.test.ts::活動実績・実参加・訂正版 (T037) > actual_participants_do_not_follow_planned_attendance<br>tests/e2e/activities.spec.ts::planned_answer_and_actual_presence_have_separate_labels@desktop-1280 | - |
+| TC-05 | MAP-01,MAP-02 | **不合格/未実行**（1件） | tests/e2e/map.spec.ts::three_facility_types_are_identified_by_text_not_color_only<br>tests/e2e/map.spec.ts::map_selection_sheet_matches_prototype_and_opens_detail<br>tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls | X-V05（実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー）・T086） |
+| TC-06 | MAP-03 | **不合格/未実行**（1件） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation<br>tests/e2e/facility-location.spec.ts::gps_denial_allows_manual_entry_without_tracking@desktop-1280 | - |
+| TC-07 | MAP-03 | **不合格/未実行**（1件） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation<br>tests/gis-query.test.ts::施設の全件取得 (T020) > invalid_list_conditions_are_rejected_without_partial_results (T085) | - |
+| TC-08 | MAP-04 | **不合格/未実行**（1件） | tests/gis-query.test.ts::施設の全件取得 (T020) > filters_by_latest_inspection_result_and_open_issues<br>tests/e2e/map.spec.ts::old_map_response_cannot_replace_new_viewport | - |
+| TC-09 | MAP-05,MAP-06 | **不合格/未実行**（1件） | tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > inspection_links_ready_attachments_and_rejects_uninspected_ones<br>tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > facility_inspection_history_pages_every_version_once_and_keeps_the_original (T085)<br>tests/e2e/inspection.spec.ts::inspection_form_preserves_values_after_failed_submission@desktop-1280 | - |
+| TC-10 | MAP-07 | **不合格/未実行**（1件） | tests/e2e/issues.spec.ts::issue_state_does_not_appear_as_location_verified@desktop-1280<br>tests/facilities.test.ts::施設の台帳と位置確認 (T019) > coordinate_edit_invalidates_only_location_confirmation | - |
+| TC-11 | AST-01,AST-02 | **不合格/未実行**（1件） | tests/assets.test.ts::車両・資機材の台帳 (T025) > asset_has_one_storage_location_and_nonnegative_quantity<br>tests/inspections-issues.test.ts::点検と異常 (T029〜T032) > asset_inspection_accepts_exactly_one_matching_target<br>tests/e2e/asset-inspection.spec.ts::asset_inspection_records_photo_and_corrects_from_history_without_overwriting@desktop-1280 | - |
+| TC-12 | DSP-01,DSP-02 | **不合格/未実行**（1件） | tests/incidents.test.ts::模擬・訓練・実出動記録と状態API (T040) > incident_kind_is_separate_from_status_and_never_dispatches<br>tests/incident-participants.test.ts::参集・到着・帰還の本人/代理記録 (T041) > returned_status_preserves_unknown_arrival_time<br>tests/e2e/incidents.spec.ts::incident_detail_traces_activity_vehicle_and_equipment@desktop-1280 | - |
+| TC-13 | DOC-01 | **不合格/未実行**（1件） | tests/attachments.test.ts::添付のリンク・取得・削除 (T017) > unlink_and_permission_revocation_block_new_downloads<br>tests/upload.test.ts::添付の予約とアップロード (T015) > ready_object_cannot_be_overwritten_by_late_upload | - |
+| TC-14 | NFR-07 | **不合格/未実行**（1件） | tests/audit.test.ts::監査 (T014) > audit_is_append_only_and_scope_filtered<br>tests/report-approval.test.ts::報告書の申請・承認・差戻し・承認版出力 (T058) > second_approval_supersedes_previous_approved_version<br>tests/e2e/audit.spec.ts::audit_panel_shows_who_changed_what_without_bodies | - |
+| TC-15 | NFR-05 | **不合格/未実行**（1件） | tests/mutation.test.ts::executeMutation (T004) > same_key_concurrent_requests_apply_the_effect_once<br>tests/client-shell.test.tsx::client shell (T005) > double_tap_while_saving_sends_one_request<br>tests/e2e/asset-inspection.spec.ts::inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original@desktop-1280 | - |
+| TC-16 | NFR-05 | **不合格/未実行**（1件） | tests/facilities.test.ts::施設の台帳と位置確認 (T019) > same_key_resend_has_one_effect_and_two_devices_never_silently_overwrite (T085)<br>tests/e2e/member-admin.spec.ts::unsaved_input_is_confirmed_before_closing_and_conflicts_and_revocations_are_shown@desktop-1280 | - |
+| TC-17 | NFR-04 | **不合格/未実行**（1件） | tests/e2e/dependency-outages.spec.ts::outage_never_claims_dispatch_or_saved_success<br>tests/e2e/accessibility.spec.ts::returning_user_finishes_inspection_and_attendance_without_hidden_controls | - |
+| TC-18 | RG-09 | **不合格/未実行**（1件） | tests/deploy-config.test.ts::deploy-config (T078) > demo_binding_or_incompatible_schema_blocks_deploy<br>tests/schema.test.ts::core schema (T003) > fixture_has_two_units_four_roles_suspended_and_scopes_with_fictional_names | X-DEMO（公開デモ（分離した実環境）の構築と本番データとの完全分離の実地確認（RG-09）・T086） |
 
 ## 横断journey
 
 | id | 動線 | 判定 | 試験 |
 |---|---|---|---|
-| J1 | 点検→異常→AI→task→通知 | 合格（局所） | tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280 |
-| J2 | 活動/出動→使用→集計→帳票 | 合格（局所） | tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280 |
-| J3 | 文書→引用→失効 | 合格（局所） | tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal@desktop-1280 |
-| J4 | offline→競合→復旧（点検の訂正） | 合格（局所） | tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery@desktop-1280 |
+| J1 | 点検→異常→AI→task→通知 | **不合格/未実行** | tests/e2e/journeys.spec.ts::journey_inspection_anomaly_ai_task_notification@desktop-1280 |
+| J2 | 活動/出動→使用→集計→帳票 | **不合格/未実行** | tests/e2e/journeys.spec.ts::journey_activity_incident_usage_analytics_report@desktop-1280 |
+| J3 | 文書→引用→失効 | **不合格/未実行** | tests/e2e/journeys.spec.ts::journey_document_citation_withdrawal@desktop-1280 |
+| J4 | offline→競合→復旧（点検の訂正） | **不合格/未実行** | tests/e2e/journeys.spec.ts::journey_offline_correction_conflict_recovery@desktop-1280 |
 
 ## notApplicable（docs/08 §2: 読取専用・純表示に不要なmutation試験を実施したことにしない）
 
@@ -129,22 +129,22 @@
 |---|---|---|---|
 | X-V01 | docs/evidence/V01-auth.md「未実施」1〜8 | 実Cloudflare（staging）での認証・CPU時間・Secure Cookie の実測（test:live auth-workers） | T086 |
 | X-V02 | docs/evidence/V02-files.md「未実施」1〜6 | 実R2での検査・EXIF除去・ready不変（test:live file-inspection） | T086 |
-| X-V04-JEV | docs/evidence/V04-jev.md「未実施」 | 実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12） | T086/T088 |
-| X-V04-LLM | docs/evidence/V04-llm.md「未実施」 | 実生成モデルの比較・固定・捏造検出精度（D12/D16） | T086/T088 |
-| X-V04-RET | docs/evidence/V04-retrieval.md「未実施」「T066 限界・残手順」 | OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価 | T086/T088 |
-| X-AIEVAL | docs/evidence/ai-evaluation.md・docs/16 T061状態欄 | 実モデルでの固定holdout評価（記録済み出力ではなく実呼出し） | T086/T088 |
+| X-V04-JEV | docs/evidence/V04-jev.md「未実施」 | 実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
+| X-V04-LLM | docs/evidence/V04-llm.md「未実施」 | 実生成モデルの比較・固定・捏造検出精度（D12/D16）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
+| X-V04-RET | docs/evidence/V04-retrieval.md「未実施」「T066 限界・残手順」 | OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
+| X-AIEVAL | docs/evidence/ai-evaluation.md・docs/16 T061状態欄 | 実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
 | X-V05 | docs/16 T021状態欄・docs/14 D22（V05） | 実Google Maps JavaScript APIの接続・キー制限・帰属表示の実地確認（地図面は現在プレースホルダー） | T086 |
 | X-DEV-MAPS | ops/device-test-matrix.md §2.1/§2.2 | 実端末でのMapsアプリ起動（外部経路） | T086 |
 | X-V06-DELIVERY | docs/evidence/V06-delivery.md「未実施」 | 実チャネル（Web Push/email。D13）での到達・不明・再送 | T088 |
 | X-V06-RT | docs/evidence/V06-realtime.md「未実施」1〜4 | 実30端末・実回線での更新反映遅延（test:live realtime-load） | T086 |
 | X-V07-PERF | docs/evidence/V07-performance.md「未実施」1〜4 | 実staging・実D1 rows_read・実回線での通常API p95（D18承認材料） | T086 |
-| X-V07-RESTORE | docs/evidence/V07-restore.md「未実施」1〜4 | 実D1/R2での復元演習（別担当による実行を含む） | T087/T088 |
+| X-V07-RESTORE | docs/evidence/V07-restore.md「未実施」1〜4 | 実D1/R2での復元演習（別担当による実行を含む）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要） | T088 |
 | X-V07-RENDER | docs/evidence/V07-report-render.md「未実施」1〜8 | PDF/CSVの実ビューア・実Excelでの表示確認（test:live report-render） | T086 |
-| X-COST | docs/evidence/cost-estimate.md「正直な限界」・ops/cost-alerts.md §4/§5 | 実使用量・実請求との照合、実環境の停止・復帰演習（D11） | T086/T088 |
+| X-COST | docs/evidence/cost-estimate.md「正直な限界」・ops/cost-alerts.md §4/§5 | 実使用量・実請求との照合、実環境の停止・復帰演習（D11）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境） | T088 |
 | X-DEV-1 | ops/device-test-matrix.md §2.1〜2.3 | iOS Safari／Android Chrome／PCの実機での主要動線・PWA install・quota・実回線 | T086 |
 | X-DEV-2 | ops/device-test-matrix.md §2.1〜2.3 | VoiceOver／TalkBack／NVDA の実スクリーンリーダー確認 | T086 |
 | X-DEV-3 | docs/evidence/ph8.md「未実施・未接続」 | axe走査は4画面＋WCAG 2.1 A/AA に限定（全SCRの走査は未実施） | T086 |
-| X-DEV-4 | ops/device-test-matrix.md §2.4 | 代表利用者（5名程度）による説明なし再訪の計測（D18の承認材料） | T087/T088 |
+| X-DEV-4 | ops/device-test-matrix.md §2.4 | 代表利用者（5名程度）による説明なし再訪の計測（D18の承認材料）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要） | T088 |
 | X-DEMO | docs/16 T086 | 公開デモ（分離した実環境）の構築と本番データとの完全分離の実地確認（RG-09） | T086 |
 | X-OUT-1 | docs/evidence/V07-outage.md「未実施」1 | staging演習（6 scenarioを実Workers/D1/Queuesで） | T086 |
 | X-OUT-2 | docs/evidence/V07-outage.md「未実施」2 | 実Googleキーの停止で一覧代替を確認 | T086 |
@@ -191,7 +191,7 @@
 | PH0-L | low | open | allowedStates二重管理ほか軽微5件 | docs/evidence/ph0-review.md L-2/L-3/L-5/L-7/L-8 | ph0-review表「方針で残す」（低） | - |
 | PH1-A3 | low | open | 冪等再送が認可版の増分後は403／停止済み再停止が409 | docs/evidence/ph1-review.md A | ph1-review表「低・方針で残す」 | - |
 | PH1-C | low | resolved | フォーカス循環の細部・寸法の微差 | docs/evidence/ph1-review.md C | T086（low対応）でバンドルを分解して個別判定。修正1: ログインのエラーとaria関連付け=フォーム全体の誤り（未入力・認証失敗・再設定失敗）のp（role="alert"）にidを付け、TextFieldへ追加したdescribedBy propで入力欄にaria-invalid/aria-describedbyで関連付け（docs/03 SCR-01の変え方④に記録。未入力送信で両入力欄の関連付けを断言するjsdom試験tests/login-aria.test.tsxを旧実装で赤→緑）。現状確認でコード不变2: ①無効ボタンの理由=「生体認証でログイン」はdisabled＋title="生体認証（パスキー）は後続で対応します"で理由が付き、他のdisabledボタン（再設定・認証コードの送信）は入力欄が空の間だけの無効で理由自明②フォーカス循環=Overlay.tsxのuseOverlayがEscスタック（最前面の面だけ処理）・Tabトラップ・閉じた後のフォーカス復帰を実装済み（PH1レビュー第2回の修正）で、T083のaccessibility.specがTab実走査・keyboard到達不可0で合格済み。記録で決着2: ①ボタン影・文字サイズの微差=docs/03 §1.1-5等の意図した差（prototype寸法優先。Buttonはprototype Design Systemどおり56/52px・影）として維持②aria-label等の細部=T083でaxe走査4画面（WCAG 2.1 A/AA）とマーカーのテキストラベル断言は合格済みで、全SCR走査・実スクリーンリーダーでの確認はops/device-test-matrix.md §2の番号付き残手順として追跡中 | T086 |
-| PH2-A12 | low | open | API-27が状態で422/404を区別／import解析中の固定・staging孤児 | docs/evidence/ph2-review.md A12 | ph2-review表「低・方針で残す」 | T087 |
+| PH2-A12 | low | resolved | API-27が状態で422/404を区別／import解析中の固定・staging孤児 | docs/evidence/ph2-review.md A12 | T087（low対応）で4項目を個別判定、コード不変。意図した設計で維持2: ①API-27の状態別応答=未完成（pending_upload/uploaded/checking）は422 ATTACHMENT_NOT_READY「未完成であることを返し」、拒否・削除済み・期限切れとリンク無し/閲覧不可は404「存在を明かさない／対象の存在と閲覧可否を分けない」（src/server/routes/attachments.ts:23-27・46にまさにそのコメント付き。docs/07 §3.6「検査済実体のみ配信」。試験tests/attachments.test.ts早期取得422・tests/inspections-issues.test.ts状態別断言が現行どおり）。「未完成を成果と見せない」意図（UUID総当たりは非現実的）で維持。②import解析中の固定=解析jobが版ガード付きUPDATEでpending→parsingへ（二重実行は1つだけ通る。src/server/jobs/handlers/import.ts:40-45）、解析は台帳revision（base_dataset_revision）を固定して版+状態ガードで確定（同:92-99）、確定API-54は台帳がプレビュー時と変わっていれば409 master_changed_after_previewで再プレビューを強制（src/server/routes/import-commit.ts:153-157。docs/03 SCR-20「同時変更時再プレビュー」）。再配送・並行変更はstaleで冪等（import.ts:17-20）。他タスクで解決済み2: ③staging孤児=T085-D7/N1で実装済み。sweepOrphanStagingObjectsがR2のstaging/一覧×台帳（upload_attempts/attachments）照合で参照されない実体を回収し、続き位置cursor（STAGING_SWEEP_CURSOR_KEY）・15分毎・1回500件の巡回で後ろの孤児に届く（src/server/jobs/handlers/attachment-cleanup.ts:75-83・92-131。試験tests/upload.test.ts「orphan_sweep_resumes_from_its_cursor_and_reaches_orphans_beyond_the_first_thousand_keys（T085 N1）」）。④0バイト等=申請API-26の契約がbyteSize min(1)（src/shared/contracts/assets.ts:276）、転送API-83は実測0バイトを400 empty_bodyでattemptを作らずDBもR2も汚さない（src/server/attachments/upload.ts:232-235）、上限超過は内容型別の実測検査（同:132-133・228-231。試験tests/upload.test.ts「0バイトの転送は400」）。なおAPI-85保持期間の猶予はdocs/05 API-85行に「D10未決のため未実装（tombstone後にjobで即時削除）」と記録済み | T087 |
 | PH2-C19 | low | resolved | 選択シートのEsc・フォーカス、語彙の微差 | docs/evidence/ph2-review.md C19〜C21 | T086（low対応）で3項目を個別判定。修正（C19）: 選択シート（SelectionSheet）のEsc非対応・フォーカス移動なし=Overlay.tsxのuseOverlayをexportして選択シートでも使い、Escで閉じる（overlayStackで最前面の面だけ反応）・開いたら「閉じる」ボタンへフォーカス・閉じたら開いたマーカーへ戻す、を実装（ドロワー/モーダルと同じ挙動。地図は操作できるままの非モーダルのためtrapFocus=falseでTabトラップだけ持たせない）。docs/03 SCR-03⑥を更新。jsdom試験（tests/map-facilities.test.tsxに選択シートのdescribeを追加）は旧実装で赤（フォーカスが動かない・Escで閉じない）→緑。e2e map.specのphone幅へEscで閉じる断言を追加し両幅7件緑。記録で決着2: C20（ステップ進行の語彙）=docs/03 SCR-06変え方②に記録済みの意図した差（「写真・メモへ進む/確認へ進む」とprototypeの「次へ：」形式との微差）として維持・C21（写真追加ボタンの構成）=prototypeは写真トグル（1枚/なし）だが実装はAttachmentUploader（写真を追加＋転送/検査/拒否の別状態。docs/03 SCR-06「写真は検査済み(ready)だけ添付」）で実装上の必然として維持 | T086 |
 | PH2-R1 | low | open | 系列一意409のAPI試験なし・分類変更イベントなし・表示の軽微差（CSV成功表示等） | docs/evidence/ph2-review.md 第2回①② | ph2-review表「低・方針で残す」 | - |
 | PH2-R3 | low | open | job自動リンクの監査・再リンク防止の明示試験なし | docs/evidence/ph2-review.md 第3回 | ph2-review表「低・方針で残す」 | - |
@@ -205,3 +205,7 @@
 | PH7-L | low | resolved | ai.calls計上位置・Retry-After固定・理由コード不統一・ラベル語彙ほか | docs/evidence/ph7-review.md「方針で残す」1〜9 | T086（low対応）で9項目を個別判定。修正4: ①A低1 ai.calls計上位置=classification.ts・report.tsともenv.AI存在確認より前で計上していたのを呼び出し可能を確認した後へ移動（RAG・アシスタントと同じ位置。AI無し環境のmanual_reviewで枠の母数が汚れない。jev.test.ts/report-generation.test.tsのai_unavailable試験へ「ai.callsが増えない」断言を追加し旧実装で赤→緑）②A低2 user次元429のRetry-After=enforceUserRateLimitが窓計算値をHttpErrorの追加headersで渡し、共通onError→errorResponseに出す（IP次元と同じ計算値。abuse.test.ts user次元試験の窓を5秒にして「Retry-After≤5秒」断言を追加し旧実装の包括既定60秒で赤→緑）③再レビュー軽微1 budget_stoppedラベル=「AIの月次上限に達したため」を中立語彙「AIの呼び出しが上限により停止されているため」へ（serverは全停止理由〔日次枠・通知枠・429許容・費用試算・手動停止〕で同コードを返すため理由を断定しない。client-job-error-labels.test.tsxへ「月次上限を含まない」断言を追加し赤→緑）④再レビュー軽微3 limits.ts開発設定コメントの「負荷検証」をdocs/05 §1・docs/07 §2と同じ「公開設定時の検証」へ統一。他タスクで既に解消2: C低4（OperationsPanelの403=FORBIDDEN Banner統一）はT083 R3で解消、#9（documents.specトースト断言のフレーク）はT083 R4で応答待ち＋role=statusスコープ待ちへ作り直し済み（T085b以降フルe2e 3回連続緑で未再発）。記録で決着3: B低2（報告書のtest:load数え間違い）はリポジトリ外のため修正しない（証跡正本はph7.md）・C低3（OperationsPanel内の理由コード扱い）は評価実行の失敗=生コード提示がAiEvaluationPanel前例・監査の停止理由=BUDGET_REASON_CODES閉集合の日本語化で領域別の整理として現状維持・再レビュー軽微2（docs/16 T086節対応行へのNFR-08追記）はdocs/16が本対応の対象外のためT086本体のdocs更新時に残す→T086 docs担当が追記済み（2026-10-20） | T086 |
 | PH8-L | low | open | sync_recoverの手動再送の非決定性・FORBIDDEN語彙・注記の文体差・Google Fonts停止時のアイコン表示ほか | docs/evidence/ph8-review.md「方針で残す」（T083・T084） | ph8-review「方針で残す」（低・軽微） | - |
 | T085-O1 | low | open | API-51の異常の子Pageは未接続（APIはT032で完了） | T085で観察 | docs/05 API-51行に残作業として記録 | 未割当 |
+
+## ゲートの不合格理由
+
+- 証跡indexが古い（collect時のcodeHash f34406f31f4a ≠ 現在 518193dadaee。コードが変わったので全件未実行扱い）

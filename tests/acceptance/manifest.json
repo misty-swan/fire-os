@@ -2827,26 +2827,26 @@
   {
    "id": "X-V04-JEV",
    "source": "docs/evidence/V04-jev.md「未実施」",
-   "summary": "実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）",
-   "owner": "T086/T088"
+   "summary": "実Workers AI（typesafe/jev）の実応答・モデル版固定・usage・日本語品質（D12）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）",
+   "owner": "T088"
   },
   {
    "id": "X-V04-LLM",
    "source": "docs/evidence/V04-llm.md「未実施」",
-   "summary": "実生成モデルの比較・固定・捏造検出精度（D12/D16）",
-   "owner": "T086/T088"
+   "summary": "実生成モデルの比較・固定・捏造検出精度（D12/D16）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）",
+   "owner": "T088"
   },
   {
    "id": "X-V04-RET",
    "source": "docs/evidence/V04-retrieval.md「未実施」「T066 限界・残手順」",
-   "summary": "OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価",
-   "owner": "T086/T088"
+   "summary": "OCR・実PDF集合の抽出率・Vectorize実測比較・実AIでのRAG/横断の品質評価。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）",
+   "owner": "T088"
   },
   {
    "id": "X-AIEVAL",
    "source": "docs/evidence/ai-evaluation.md・docs/16 T061状態欄",
-   "summary": "実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）",
-   "owner": "T086/T088"
+   "summary": "実モデルでの固定holdout評価（記録済み出力ではなく実呼出し）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）",
+   "owner": "T088"
   },
   {
    "id": "X-V05",
@@ -2881,8 +2881,8 @@
   {
    "id": "X-V07-RESTORE",
    "source": "docs/evidence/V07-restore.md「未実施」1〜4",
-   "summary": "実D1/R2での復元演習（別担当による実行を含む）",
-   "owner": "T087/T088"
+   "summary": "実D1/R2での復元演習（別担当による実行を含む）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要）",
+   "owner": "T088"
   },
   {
    "id": "X-V07-RENDER",
@@ -2893,8 +2893,8 @@
   {
    "id": "X-COST",
    "source": "docs/evidence/cost-estimate.md「正直な限界」・ops/cost-alerts.md §4/§5",
-   "summary": "実使用量・実請求との照合、実環境の停止・復帰演習（D11）",
-   "owner": "T086/T088"
+   "summary": "実使用量・実請求との照合、実環境の停止・復帰演習（D11）。T086分（デモ費用上限等）・T087分（提案資料での未実施明記）とも実施済み、実行はT088（実環境）",
+   "owner": "T088"
   },
   {
    "id": "X-DEV-1",
@@ -2917,8 +2917,8 @@
   {
    "id": "X-DEV-4",
    "source": "ops/device-test-matrix.md §2.4",
-   "summary": "代表利用者（5名程度）による説明なし再訪の計測（D18の承認材料）",
-   "owner": "T087/T088"
+   "summary": "代表利用者（5名程度）による説明なし再訪の計測（D18の承認材料）。T087の提案資料での棚卸しは実施済み（未実施の残手順として明記・実行には実環境/人が必要）",
+   "owner": "T088"
   },
   {
    "id": "X-DEMO",
@@ -3263,8 +3263,8 @@
    "source": "docs/evidence/ph2-review.md A12",
    "summary": "API-27が状態で422/404を区別／import解析中の固定・staging孤児",
    "severity": "low",
-   "status": "open",
-   "basis": "ph2-review表「低・方針で残す」",
+   "status": "resolved",
+   "basis": "T087（low対応）で4項目を個別判定、コード不変。意図した設計で維持2: ①API-27の状態別応答=未完成（pending_upload/uploaded/checking）は422 ATTACHMENT_NOT_READY「未完成であることを返し」、拒否・削除済み・期限切れとリンク無し/閲覧不可は404「存在を明かさない／対象の存在と閲覧可否を分けない」（src/server/routes/attachments.ts:23-27・46にまさにそのコメント付き。docs/07 §3.6「検査済実体のみ配信」。試験tests/attachments.test.ts早期取得422・tests/inspections-issues.test.ts状態別断言が現行どおり）。「未完成を成果と見せない」意図（UUID総当たりは非現実的）で維持。②import解析中の固定=解析jobが版ガード付きUPDATEでpending→parsingへ（二重実行は1つだけ通る。src/server/jobs/handlers/import.ts:40-45）、解析は台帳revision（base_dataset_revision）を固定して版+状態ガードで確定（同:92-99）、確定API-54は台帳がプレビュー時と変わっていれば409 master_changed_after_previewで再プレビューを強制（src/server/routes/import-commit.ts:153-157。docs/03 SCR-20「同時変更時再プレビュー」）。再配送・並行変更はstaleで冪等（import.ts:17-20）。他タスクで解決済み2: ③staging孤児=T085-D7/N1で実装済み。sweepOrphanStagingObjectsがR2のstaging/一覧×台帳（upload_attempts/attachments）照合で参照されない実体を回収し、続き位置cursor（STAGING_SWEEP_CURSOR_KEY）・15分毎・1回500件の巡回で後ろの孤児に届く（src/server/jobs/handlers/attachment-cleanup.ts:75-83・92-131。試験tests/upload.test.ts「orphan_sweep_resumes_from_its_cursor_and_reaches_orphans_beyond_the_first_thousand_keys（T085 N1）」）。④0バイト等=申請API-26の契約がbyteSize min(1)（src/shared/contracts/assets.ts:276）、転送API-83は実測0バイトを400 empty_bodyでattemptを作らずDBもR2も汚さない（src/server/attachments/upload.ts:232-235）、上限超過は内容型別の実測検査（同:132-133・228-231。試験tests/upload.test.ts「0バイトの転送は400」）。なおAPI-85保持期間の猶予はdocs/05 API-85行に「D10未決のため未実装（tombstone後にjobで即時削除）」と記録済み",
    "owner": "T087"
   },
   {
