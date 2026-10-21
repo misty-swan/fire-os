@@ -1024,6 +1024,7 @@ const inlineBinds = (sql: string, binds: unknown[]): string => {
 /** CLI引数の解析結果。usageErrorのときは使い方の誤り（標準エラー出力へ出して終了コード2で止める） */
 export type DemoSeedArgs =
   | { persist: string; fixedDemoPassword?: string }
+  /** remoteDemo: --wipe-only は wipe=true を伴う（DROP+migrationだけでseedしない。seedしないだけが--wipeとの違い） */
   | { remoteDemo: true; wipe: boolean; wipeOnly: boolean; fixedDemoPassword?: string }
   | { usageError: string };
 
@@ -1103,7 +1104,11 @@ export function parseDemoSeedArgs(args: readonly string[], envDemoPassword?: str
     }
     const password = fixedPassword();
     if ("usageError" in password) return password;
-    return { remoteDemo: true, wipe: args.includes("--wipe"), wipeOnly: args.includes("--wipe-only"), ...password };
+    // --wipe-only もwipe（全表DROP）を行う（ops/demo-deploy.md §3.1の復旧手順ステップ1）。
+    // --wipe との違いはseedまで行うかだけ。wipeOnlyを見ずに個別判定するとDROPが飛んで
+    // migrationだけが既存DBへ当たるため、wipeへ含めておく（mainは mode.wipe でDROPする）
+    const wipeOnly = args.includes("--wipe-only");
+    return { remoteDemo: true, wipe: args.includes("--wipe") || wipeOnly, wipeOnly, ...password };
   }
   if (args.includes("--env") || args.includes("--confirm") || args.includes("--wipe") || args.includes("--wipe-only")) {
     return {

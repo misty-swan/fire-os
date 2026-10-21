@@ -128,11 +128,17 @@ describe("demo-reset (営業デモTask5)", () => {
   });
 
   it("wipe_only_runs_wipe_and_migration_without_seed", () => {
-    // 復旧用wipe（ops/demo-deploy.md §3.1の実管理者作り直し手順）。--wipe-only はDROP+migrationだけでseedをしない
+    // 復旧用wipe（ops/demo-deploy.md §3.1の実管理者作り直し手順）。--wipe-only はDROP+migrationだけでseedをしない。
+    // wipeは--wipeと同じ経路（mode.wipeで全表DROP→migration）を通る。単独フラグでwipe=falseのままだと
+    // migrationだけが既存DBへ当たり、bootstrapがalready_bootstrappedで止まる（復旧手順が成立しない）
     const wipeOnly = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--wipe-only"]);
     if (!("remoteDemo" in wipeOnly)) throw new Error("--wipe-only付きのremoteは通るべき");
-    expect(wipeOnly.wipe).toBe(false);
-    expect(wipeOnly.wipeOnly).toBe(true);
+    expect(wipeOnly.wipe).toBe(true); // wipe SQL（全表DROP）を含む。migrationだけの既存DB更新にはしない
+    expect(wipeOnly.wipeOnly).toBe(true); // seed文は適用しない（mainがDROP→migration後にreturnする）
+    // 書込み規律のgateは--wipe-onlyでも必須（--env demo --confirm demoが無ければ拒否）
+    const noGate = parseDemoSeedArgs(["--remote", "--wipe-only"]);
+    if (!("usageError" in noGate)) throw new Error("--wipe-onlyでもgate欠けは拒否されるべき");
+    expect(noGate.usageError).toContain("--env demo --confirm demo");
     // --wipe（DROPからのseed再開）との併用は矛盾するため拒否
     const both = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--wipe", "--wipe-only"]);
     if (!("usageError" in both)) throw new Error("--wipeと--wipe-onlyの併用は拒否されるべき");
