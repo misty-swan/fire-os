@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AppEnv } from "../src/server/env";
+import { DEMO_ACCOUNTS, demoAccountStatements, generateDemoPassword } from "../src/server/auth/demo-accounts";
 import { canonicalJson, sha256Hex } from "../src/server/mutations/hash";
 import { stripJsonComments, type DeploymentConfig, type WranglerEnvConfig } from "./check-environment";
 import type { SeedStatement } from "./seed-load";
@@ -24,6 +25,9 @@ import type { SeedStatement } from "./seed-load";
  *   しないため、走査は表ごとの行数（tests/demo-isolation.test.tsがDEMO_PROFILEと照合）で裏付けられる。
  * - CLI: `npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo`（scripts/demo.ts の初回起動から呼ぶ）。
  *   workerd外ではenvが無いため、計画をSQLへ直列化して wrangler d1 execute / r2 object put で適用する。
+ *   seed末尾で体験アカウント3本（src/server/auth/demo-accounts.ts。Task4）を独立に冪等で投入し、
+ *   資格情報（生成したパスワード）を標準出力へ**一度だけ**JSONで表示する。`--demo-password <値>` で
+ *   3本とも既知のパスワードにできる（demo:reset後に同じ資格情報へ戻すための運用。値はGitに書かない）。
  */
 
 // ============================================================================
@@ -938,8 +942,15 @@ async function main(): Promise<void> {
   const persistIndex = args.indexOf("--persist-to");
   const persist = persistIndex >= 0 ? args[persistIndex + 1] : undefined;
   if (!persist) {
-    console.error("使い方: npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo");
-    console.error("実デモの初回起動（scripts/demo.ts）から自動で呼ばれる（架空データのみ。実データは入れない）");
+    console.error("使い方: npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo [--demo-password <12文字以上のパスワード>]");
+    console.error("実デモの初回起動（scripts/demo.ts）から自動で呼ばれる（架空データ＋体験アカウントのみ。実データは入れない）");
+    process.exitCode = 2;
+    return;
+  }
+  const demoPasswordIndex = args.indexOf("--demo-password");
+  const fixedDemoPassword = demoPasswordIndex >= 0 ? args[demoPasswordIndex + 1] : undefined;
+  if (fixedDemoPassword !== undefined && fixedDemoPassword.length < 12) {
+    console.error("--demo-password には12文字以上のパスワードを指定してください（better-authの下限）");
     process.exitCode = 2;
     return;
   }
@@ -950,11 +961,6 @@ async function main(): Promise<void> {
     return (JSON.parse(r.stdout) as { results: Record<string, unknown>[] }[])[0]?.results ?? [];
   };
 
-  // 冪等: seed済みなら何もしない
-  if (d1Json(`SELECT 1 AS x FROM members WHERE id = '${DEMO_OFFICER_MEMBER}'`).length > 0) {
-    console.log("デモデータは投入済みです（スキップ）");
-    return;
-  }
   const unitRow = d1Json(`SELECT id FROM units WHERE name = '${DEMO_UNIT_NAME}' LIMIT 1`)[0] as { id: string } | undefined;
   if (!unitRow) {
     console.error("宮之浦分団が見つかりません。npm run demo の初回起動（bootstrap-admin）より前です");
@@ -962,52 +968,81 @@ async function main(): Promise<void> {
     return;
   }
   const unitId = unitRow.id;
-  const adminRow =
-    (d1Json(
-      `SELECT m.id AS member_id FROM members m JOIN member_roles r ON r.unit_id = m.unit_id AND r.member_id = m.id ` +
-        `WHERE m.unit_id = '${unitId}' AND r.role_id = '${ROLE_IDS.admin}' LIMIT 1`,
-    )[0] as { member_id: string } | undefined) ??
-    (d1Json(`SELECT id AS member_id FROM members WHERE unit_id = '${unitId}' LIMIT 1`)[0] as { member_id: string } | undefined);
-  if (!adminRow) throw new Error("seed-demo: 宮之浦分団に団員がいません（bootstrap-adminを先に実行してください）");
-  const seqRow = d1Json(`SELECT event_sequence AS n FROM units WHERE id = '${unitId}'`)[0] as { n: number } | undefined;
-
-  const plan = await buildDemoSeedPlan({
-    unitId,
-    adminMemberId: adminRow.member_id,
-    createUnit: false,
-    sequenceStart: seqRow?.n ?? 0,
-  });
+  // 冪等: seed済みなら架空データの適用だけスキップする（体験アカウントは下で独立に判定する）
+  const officerSeeded = d1Json(`SELECT 1 AS x FROM members WHERE id = '${DEMO_OFFICER_MEMBER}'`).length > 0;
 
   // SQLへ直列化して適用（bindingの値は固定UUIDのためquote処理だけ）
   const dir = mkdtempSync(join(tmpdir(), "fireos-seed-demo-"));
   try {
-    const sqlFile = join(dir, "seed-demo.sql");
-    const lines = ["-- T086 デモの架空データseed（scripts/seed-demo.ts が生成。実データは含まない）", "BEGIN TRANSACTION;"];
-    for (const s of plan.groups.flat()) lines.push(inlineBinds(s.sql, s.binds) + ";");
-    lines.push("COMMIT;");
-    writeFileSync(sqlFile, lines.join("\n") + "\n");
-    const applied = sh("npx", ["wrangler", "d1", "execute", "DB", "--local", "--persist-to", persist, "--file", sqlFile]);
-    if (applied.status !== 0) throw new Error(`seed SQLの適用に失敗: ${applied.stderr || applied.stdout}`);
+    const applySql = async (name: string, stmts: readonly { sql: string; binds: unknown[] }[]): Promise<void> => {
+      const sqlFile = join(dir, name);
+      const lines = [`-- scripts/seed-demo.ts が生成（${name}。実データは含まない）`, "BEGIN TRANSACTION;"];
+      for (const s of stmts) lines.push(inlineBinds(s.sql, s.binds) + ";");
+      lines.push("COMMIT;");
+      writeFileSync(sqlFile, lines.join("\n") + "\n");
+      const applied = sh("npx", ["wrangler", "d1", "execute", "DB", "--local", "--persist-to", persist, "--file", sqlFile]);
+      if (applied.status !== 0) throw new Error(`seed SQLの適用に失敗（${name}）: ${applied.stderr || applied.stdout}`);
+    };
 
-    // 写真・文書原本の実体をローカルR2へ（bucketはwrangler.jsoncのlocal設定から読む）
-    const wrangler = JSON.parse(
-      stripJsonComments(readFileSync("wrangler.jsonc", "utf8")),
-    ) as WranglerEnvConfig & { env?: Record<string, WranglerEnvConfig> };
-    const bucket = wrangler.r2_buckets?.[0]?.bucket_name;
-    if (!bucket) throw new Error("wrangler.jsoncにlocalのR2 bucketがありません");
-    for (const obj of plan.objects) {
-      const file = join(dir, obj.key.replaceAll("/", "-"));
-      writeFileSync(file, obj.bytes);
-      const put = sh("npx", [
-        "wrangler", "r2", "object", "put", `${bucket}/${obj.key}`, "--local", "--persist-to", persist,
-        "--file", file, "--content-type", obj.contentType, "--force",
-      ]);
-      if (put.status !== 0) throw new Error(`R2への配置に失敗（${obj.key}）: ${put.stderr || put.stdout}`);
+    if (officerSeeded) {
+      console.log("デモデータは投入済みです（スキップ）");
+    } else {
+      const adminRow =
+        (d1Json(
+          `SELECT m.id AS member_id FROM members m JOIN member_roles r ON r.unit_id = m.unit_id AND r.member_id = m.id ` +
+            `WHERE m.unit_id = '${unitId}' AND r.role_id = '${ROLE_IDS.admin}' LIMIT 1`,
+        )[0] as { member_id: string } | undefined) ??
+        (d1Json(`SELECT id AS member_id FROM members WHERE unit_id = '${unitId}' LIMIT 1`)[0] as { member_id: string } | undefined);
+      if (!adminRow) throw new Error("seed-demo: 宮之浦分団に団員がいません（bootstrap-adminを先に実行してください）");
+      const seqRow = d1Json(`SELECT event_sequence AS n FROM units WHERE id = '${unitId}'`)[0] as { n: number } | undefined;
+
+      const plan = await buildDemoSeedPlan({
+        unitId,
+        adminMemberId: adminRow.member_id,
+        createUnit: false,
+        sequenceStart: seqRow?.n ?? 0,
+      });
+      await applySql("seed-demo.sql", plan.groups.flat());
+
+      // 写真・文書原本の実体をローカルR2へ（bucketはwrangler.jsoncのlocal設定から読む）
+      const wrangler = JSON.parse(
+        stripJsonComments(readFileSync("wrangler.jsonc", "utf8")),
+      ) as WranglerEnvConfig & { env?: Record<string, WranglerEnvConfig> };
+      const bucket = wrangler.r2_buckets?.[0]?.bucket_name;
+      if (!bucket) throw new Error("wrangler.jsoncにlocalのR2 bucketがありません");
+      for (const obj of plan.objects) {
+        const file = join(dir, obj.key.replaceAll("/", "-"));
+        writeFileSync(file, obj.bytes);
+        const put = sh("npx", [
+          "wrangler", "r2", "object", "put", `${bucket}/${obj.key}`, "--local", "--persist-to", persist,
+          "--file", file, "--content-type", obj.contentType, "--force",
+        ]);
+        if (put.status !== 0) throw new Error(`R2への配置に失敗（${obj.key}）: ${put.stderr || put.stdout}`);
+      }
+      console.log(`デモデータを投入しました（架空のみ）: ${JSON.stringify(plan.stats)}`);
+    }
+
+    // --- 体験アカウント3本（Task4。架空データと独立に冪等。資格情報は標準出力へ一度だけ出す） ---
+    const emailList = DEMO_ACCOUNTS.map((a) => `'${a.email}'`).join(", ");
+    const existing = d1Json(`SELECT email FROM auth_users WHERE email IN (${emailList})`) as { email: string }[];
+    if (existing.length === DEMO_ACCOUNTS.length) {
+      console.log("体験アカウントは投入済みです（スキップ。資格情報は `.env.demo-login` に控えた物を使ってください）");
+    } else if (existing.length > 0) {
+      throw new Error(`体験アカウントが一部だけ存在します（${existing.length}/${DEMO_ACCOUNTS.length}）。投入を中止しました`);
+    } else {
+      const credentials = DEMO_ACCOUNTS.map((a) => ({
+        email: a.email, memberName: a.memberName, role: a.role,
+        password: fixedDemoPassword ?? generateDemoPassword(),
+      }));
+      await applySql("demo-accounts.sql", await demoAccountStatements({ unitId, now: new Date(), credentials }));
+      console.log("体験アカウントを作りました（3役割・MFAなし）。下のログイン情報は**一度だけ**表示されます。");
+      console.log("Git管理外の `.env.demo-login` 等に控えてください（demo:reset後に同じ資格情報へ戻すには --demo-password を使う）:");
+      // 最後の行が資格情報のJSON（scripts/demo.ts がこの行だけを拾って表示する。パスワードをログへ複製しないため）
+      console.log(JSON.stringify({ "demo-accounts": credentials.map((c) => ({ email: c.email, password: c.password, role: c.role, displayName: c.memberName })) }));
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-  console.log(`デモデータを投入しました（架空のみ）: ${JSON.stringify(plan.stats)}`);
 }
 
 const runningAsCli = typeof process !== "undefined" && process.argv[1]?.includes("seed-demo");

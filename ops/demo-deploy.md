@@ -30,7 +30,7 @@
 1. `npx tsx scripts/ensure-dev-vars.ts` — `.dev.vars`（BETTER_AUTH_SECRET等・Git管理外）が無ければ生成。
 2. `npx wrangler d1 migrations apply DB --local --persist-to .wrangler/demo` — D1作成＋migration（起動のたび。適用済みは冪等）。
 3. 初回だけ: `npx tsx scripts/bootstrap-admin.ts --env local --persist-to .wrangler/demo --unit-name "宮之浦分団" --admin-name "架空 岳志" --email admin@example.test` — 初期管理者の招待リンク（`http://localhost:8787/login#invite=<token>`。**一度しか表示されない**・72時間有効）。
-4. 初回だけ: `npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo` — 架空データの完成版を投入（下の構成）。投入済みなら「スキップ」（冪等）。
+4. 初回だけ: `npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo` — 架空データの完成版＋**体験アカウント3本**（下の§2.1）を投入（下の構成）。投入済みなら「スキップ」（冪等）。
 5. `npm run build` → `npx wrangler dev --port 8787 --persist-to .wrangler/demo`。ログインは `http://localhost:8787/login`（メール admin@example.test・パスワード12文字以上→二要素認証を設定。手元のログイン情報はGit管理外の `.env.demo-login` に控えてある）。
 
 **seedが入れる架空データ**（`DEMO_PROFILE`。`seedDemo(env)` とCLIが同じ計画 `buildDemoSeedPlan` を使う）:
@@ -49,6 +49,20 @@
 | R2実体 | 2 | `demo/facility-photo-01.png`（架空PNG）・`demo/document-01/original.pdf`（架空PDF） |
 
 注意: `npm run demo` はAPP_ENV=**local**（wrangler devに`--env demo`を付けない）で動くため、この起動では§4の公開デモ用policy（DEMO_SECURITY_POLICY）は**効かない**。公開デモ用のレート値を手元で確認するときは `npx wrangler dev --env demo`（varsだけdemo・資源はローカル。AI binding付き）で起動する。
+
+### 2.1 体験アカウント3本（営業デモTask4・固定資格情報）
+
+お客さまに手を動かしてもらうための、パスワードだけのログイン（**MFA設定なし**）アカウント。seedが3役割ぶんを作る（`src/server/auth/demo-accounts.ts`。文は純関数 `demoAccountStatements`、CLIとworkerd試験が同じ物を使う。認証identity＋業務users/名簿/役割＋監査`demo.account_created`）:
+
+| メール | 氏名（架空） | 役割 | 権限の見え方 |
+|---|---|---|---|
+| `demo-admin@example.test` | 架空 体験管理者 | admin | 全員の閲覧・管理画面。ただし**二要素未設定のためPER-06/07/08の管理操作は`mfa_required`で拒否される**（認可規則は変えない。変更は体験アカウントの`/me`の二要素設定から可能） |
+| `demo-officer@example.test` | 架空 体験幹部 | officer | 幹部の閲覧・承認系 |
+| `demo-member@example.test` | 架空 体験団員 | member | 団員の閲覧と自分の操作 |
+
+- **パスワードの値はこの文書にもGitにも書かない。** seed実行時（`npm run demo`の初回）に標準出力へ`demo-accounts`のJSONで**一度だけ**表示されるので、その場でGit管理外の `.env.demo-login`（`.gitignore`の`.env*`）等に控える。表示を閉じた後に失くしたら§3のリセットで作り直す。
+- 生成されるパスワードは16文字以上の英数字（紛らわしい字を除く・実行ごとに新規）。**同じ資格情報を保って作り直したい**（リセット後も台紙を変えたくない）ときは `npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo --demo-password <12文字以上の値>` を使う（3本ともその値になる。`npm run demo`の初回起動からではなく直接CLIで投入するときに使う）。
+- アカウントは架空データと独立に冪等で判定する（3本とも既に在ればスキップ・一部だけ在れば中止して教える）。既存の初期管理者（admin@example.test・二要素必須）の運用は変わらない。
 
 ## 3. リセット手順（`npm run demo:reset`）
 
@@ -120,6 +134,7 @@ docs/07 §8の試算（本番30人×10ロード＋デモ2,000＝2,300/月）の�
 ## 6. やってはいけないこと
 
 - 実データ（実名簿・実出動・非公開水利・現場写真）をdemoへ入れること・Gitに載せること（AGENTS.md）
+- 体験アカウント（§2.1）のパスワードをGit・文書・チャットに載せること（seed標準出力の一度きりの表示で受取り、`.env*`に控える）
 - demoのtoken・Secret・招待リンクをチャット・メール本文・Gitに貼ること
 - 依頼が無いまま外部公開すること・productionの資源をdemoから参照すること（check:environmentが拒否する）
 - Google Mapsの課金上限を「予算アラートで担保した」として割当設定を省くこと（アラートは停止ではない）
