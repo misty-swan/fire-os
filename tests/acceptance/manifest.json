@@ -3156,7 +3156,7 @@
    "summary": "管理者がAPI-03で他人の許可列に初期値を書ける／担当付与で連絡先を読む迂回",
    "severity": "medium",
    "status": "open",
-   "basis": "ph1-review表の重大度「中」。設計（docs/10）。D03承認待ち・担当付与は監査とMFAで抑止",
+   "basis": "ph1-review表の重大度「中」。設計（docs/10）。D03承認待ち・担当付与は監査とMFAで抑止。T088（正式判定時点）に再確認: D03は未回答（config/production-policy.json回答欄空欄）のため決着不能。docs/evidence/release-decision.md §2 RG-04/§5 に回答待ちの阻害として明記。D03回答後に個別判定で決着（PH2-A12前例）",
    "owner": "T088（D03）"
   },
   {
@@ -3173,27 +3173,27 @@
    "source": "docs/evidence/ph1-review.md B（中〜低・方針で残す）",
    "summary": "実装先行タスクの赤の証跡・変異の再現手順が無い",
    "severity": "medium",
-   "status": "open",
-   "basis": "ph1-review表の重大度「中〜低」。scripts/mutate*.shを追加済みで記録のまま",
-   "owner": "T088（正式判定前に再確認）"
+   "status": "resolved",
+   "basis": "ph1-review表の重大度「中〜低」。scripts/mutate*.shを追加済みで記録のまま。T088（正式判定前）に再確認: scripts/mutate.sh・scripts/mutate-e2e.sh が存在し防御解除→赤→自動復元の手順として機能する（AGENTS.md検証コマンド節に記載）。初期タスクの赤証跡は過去の工程記録であり履歴の書換えをしない（PH2-B12と同判断・docs/16 §1）。製品欠陥ではなく工程記録であり、正式判定の阻害とはしない",
+   "owner": "T088"
   },
   {
    "id": "PH0-BF07",
    "source": "docs/evidence/ph0-review.md B-F07（中・方針で残す）",
    "summary": "試験名「効果が二重にならない」とhandler副作用の不一致（確定の一回性のみ保証）",
    "severity": "medium",
-   "status": "open",
-   "basis": "ph0-review表の重大度「中」。外部効果はhandlerの責務と明記",
-   "owner": "T088（正式判定前に再確認）"
+   "status": "resolved",
+   "basis": "ph0-review表の重大度「中」。外部効果はhandlerの責務と明記。T088（正式判定前）に再確認: 試験名と保証範囲の不一致はph0-review時点の指摘で、外部効果（通知送信等）はhandlerの責務である旨はdocs/02共通更新の規定・各handler実装コメント・ops/outage-runbook.md（到達不明の正直表示）で明記済み。確定の一回性はexecuteMutationのbatch原子性で保証（tests/mutation.test.ts）。方針として維持を記録し決着",
+   "owner": "T088"
   },
   {
    "id": "PH2-B12",
    "source": "docs/evidence/ph2-review.md B12（中・方針で残す）",
    "summary": "PH2のコミット境界が1タスク1コミットに従わない",
    "severity": "medium",
-   "status": "open",
-   "basis": "ph2-review表の重大度「中」。履歴の書換えはしない（docs/16 §1に記録）",
-   "owner": "T088（正式判定前に再確認。製品欠陥ではなく工程記録）"
+   "status": "resolved",
+   "basis": "ph2-review表の重大度「中」。履歴の書換えはしない（docs/16 §1に記録）。T088（正式判定前）に再確認: PH2期間のコミット境界は1タスク1コミットに従わない工程記録。履歴の書換えはしない（docs/16 §1・規定どおり）。T083以降は1タスク区切りコミットで運用し、本項は過去工程の記録として決着",
+   "owner": "T088"
   },
   {
    "id": "PH2-C15",
