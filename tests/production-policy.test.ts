@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 // 実ファイルごと機械で保証する（回答・承認の捏造を恒久的に防ぐ）。
 import policyRaw from "../config/production-policy.json?raw";
 import exampleRaw from "../config/production-policy.example.json?raw";
+import releaseDecisionRaw from "../docs/evidence/release-decision.md?raw";
+import productionStartRaw from "../ops/production-start.md?raw";
+import { textApprovalIssues } from "../scripts/check-adoption-proposal";
 import {
   DECISION_IDS,
   RG_GATE_IDS,
@@ -226,5 +229,85 @@ describe("production-policy (T088)", () => {
     expect(multiple.reasons.some((r) => r.includes("RG-05"))).toBe(true);
     expect(multiple.reasons.some((r) => r.includes("D10"))).toBe(true);
     expect(multiple.reasons.some((r) => r.includes("D11"))).toBe(true);
+  });
+});
+
+/**
+ * docs整合試験（T088 D2）: docs/evidence/release-decision.md と ops/production-start.md が
+ * config/production-policy.json の判定（全ゲート不合格＝正式リリース不可・D01〜D20回答空欄・approved:false）
+ * と整合していること、どちらの文書も承認を装う主張を含まないことを機械で守る。
+ * - 承認主張の検出は T087 の scripts/check-adoption-proposal.ts の textApprovalIssues を再利用する
+ *   （「未承認」等の語が同じ文にあっても主張を相殺しない・approved:false のフィールド参照だけが例外、
+ *   というT087と同じ正直な否定の規則。両文書はこの検出器の未承認値トークン〔$5・RTO/RPO等〕の
+ *   ラベル規約も同じく守る）。文書を直すときに正当な表現が拾われた場合は、検出器を緩めずに
+ *   T087のホワイトリスト前例〔scripts/check-adoption-proposal.ts APPROVAL_CLAIM_WHITELIST〕と同様に
+ *   ここへ例外の根拠をコメントで記録する。
+ * - この試験は「v1の正直な現状」を固定する。回答を記録して production-policy.json を更新する改訂では、
+ *   本試験と実ファイルアンカー（上のit）を docs/evidence/release-decision.md §5 ⑦ どおり一緒に更新する
+ *   （現状のままだと改訂後の文書が承認の記録を含んで赤になる。それは試験が仕事をしている）。
+ */
+describe("production-policy docs consistency (T088 D2)", () => {
+  // 運用方針で「不合格」のゲートID（ハードコードせず実ファイルから読む）
+  const failingGateIds = (): RgGateId[] => {
+    const policy = JSON.parse(policyRaw) as ProductionPolicy;
+    return RG_GATE_IDS.filter((id) => policy.gates[id].判定 === "不合格");
+  };
+  // 検出器: 不合格ゲートのうち判定記録に載っていないID
+  const missingGateIdsIn = (doc: string): RgGateId[] => failingGateIds().filter((id) => !doc.includes(id));
+  // 検出器: 「正式リリース不可」の明示が無いときの違反
+  const denialMissing = (doc: string): string[] => (doc.includes("正式リリース不可") ? [] : ["正式リリース不可"]);
+  // 検出器: T087と同じ規則での承認主張（両文書を別々に走査する）
+  const approvalClaimsIn = (docs: string[]): string[] => docs.flatMap((doc) => textApprovalIssues(doc, ""));
+  // 検出器: production-start.md の実行ゲートの文（「実行しない」/「実行禁止」を含む文が1つも無いときの違反）
+  const gatingSentenceMissing = (doc: string): string[] => {
+    const sentences = doc
+      .split(/\n/)
+      .flatMap((line) => line.split(/。|！|？/))
+      .map((s) => s.trim())
+      .filter((s) => s !== "");
+    return sentences.some((s) => s.includes("実行しない") || s.includes("実行禁止"))
+      ? []
+      : ["実行しない／実行禁止を含む文がありません"];
+  };
+
+  it("release_decision_and_production_start_docs_match_the_policy_judgment", () => {
+    // ---- docs/evidence/release-decision.md: 全10ゲートID・正式リリース不可・暗黙除外の3要件ID ----
+    for (const id of RG_GATE_IDS) {
+      expect(releaseDecisionRaw.includes(id), `${id} のゲート別判定`).toBe(true);
+    }
+    expect(denialMissing(releaseDecisionRaw)).toEqual([]);
+    for (const reqId of ["MAP-10", "AI-06", "AI-07"]) {
+      expect(releaseDecisionRaw.includes(reqId), `${reqId} の暗黙の対象外の明示`).toBe(true);
+    }
+    // 運用方針で不合格のゲートは全て判定記録に載っている（実ファイルからの一致検査。ハードコードしない）
+    expect(missingGateIdsIn(releaseDecisionRaw)).toEqual([]);
+
+    // ---- ops/production-start.md: 正本と機械検証への参照・実行ゲートの文 ----
+    expect(productionStartRaw.includes("docs/13_リリース判定基準.md")).toBe(true);
+    expect(productionStartRaw.includes("production-policy.json")).toBe(true);
+    expect(
+      productionStartRaw.includes("validateProductionPolicy") ||
+        productionStartRaw.includes("tests/production-policy.test.ts"),
+    ).toBe(true);
+    expect(gatingSentenceMissing(productionStartRaw)).toEqual([]);
+
+    // ---- 承認主張なし（T087と同じ検出器。両文書とも「了承済み」と読める文を含まない） ----
+    expect(approvalClaimsIn([releaseDecisionRaw, productionStartRaw])).toEqual([]);
+
+    // ---- 陽性対照: 注入した違反を各検出器が必ず拾う（恒真断言にしない） ----
+    // 1. ゲートIDを1つ消す（RG-07 を別の字句へ置換）と一致検査が落ちる
+    const strippedGate = releaseDecisionRaw.split("RG-07").join("RG-XX");
+    expect(missingGateIdsIn(strippedGate)).toEqual(["RG-07"]);
+    // 2. 「正式リリース不可」を消すと不可の明示が無いと落ちる
+    const softened = releaseDecisionRaw.split("正式リリース不可").join("正式リリースは許可されない");
+    expect(denialMissing(softened)).toEqual(["正式リリース不可"]);
+    // 3. 承認を装う文を注入するとT087の検出器が拾う
+    const claimed = releaseDecisionRaw.split("正式リリース不可").join("正式リリース可（D01〜D20を了承済み）");
+    const claims = approvalClaimsIn([claimed, productionStartRaw]);
+    expect(claims.length, "了承済みの注入は検出される").toBeGreaterThan(0);
+    expect(claims.some((m) => m.includes("了承済み"))).toBe(true);
+    // 4. 実行ゲートの文を消すと production-start.md の停止条件が無いと落ちる
+    const ungated = productionStartRaw.split("実行しない").join("控える").split("実行禁止").join("控える");
+    expect(gatingSentenceMissing(ungated)).toEqual(["実行しない／実行禁止を含む文がありません"]);
   });
 });
