@@ -45,13 +45,13 @@
 
 ## §3 Google Maps APIキー（有効化・請求先）
 
- キーは**本番用・他環境用と別に、このデモ専用のプロジェクトで作る**（docs/07 §6「環境別key」・ops/demo-deploy.md §4.3）。参照元（リファラ）制限はデモのURLが確定した**後**（Task 7のあと）に付ける。その旨はステップ19。
+ キーは**本番用・他環境用と別に、このデモ専用のプロジェクトで作る**（docs/07 §6「環境別key」・ops/demo-deploy.md §4.3）。参照元（リファラ）制限はデモのURLが確定した**後**（Task 7のあと）に付ける。その旨はステップ19。割当（クォータ）と参照元制限の考え方の正本はops/demo-deploy.md §4.3で、この手順が参照元制限をTask 7の**後**（ステップ19）に並べているのは、制限する先のURLが先に存在しないと地図が動かなくなるため。
 
 14. `https://console.cloud.google.com/projectselector2/home/dashboard` （プロジェクトセレクタ）を開き、**Create Project** で新しいGoogle Cloudプロジェクトを作る。名前は分かるものに（例: fireos-demo-map）。→ 何が起きるか: Mapsの鍵や課金をまとめておく入れ物ができる。
     出典: https://developers.google.com/maps/get-started （Step 1。2026-10-21確認）
 15. プロジェクトで**請求（billing）が有効になっていることを確認・設定する**。→ 何が起きるか: Maps Platformは課金アカウントの紐付けが前提（利用枠内は無料枠・トライアル扱いになる）。初めてGoogle Cloudを使う場合は同ページの **Get Started** の対話設定が案内に従って請求まで済ませてくれる（対象なら$300のトライアルクレジットの案内が出る）。カードの登録が必要。
     出典: https://developers.google.com/maps/get-started （Step 1。2026-10-21確認）
-16. Maps API Libraryページ（`https://console.cloud.google.com/project/_/google/maps-apis/api-list`）で **Maps JavaScript API** を開き **ENABLE** を選ぶ。→ 何が起きるか: このプロジェクトで地図を表示するAPIが使えるようになる（ENABLEと表示されていたら既に有効）。このAPI**以外**は有効にしない（使わないAPIは無効のままが安全）。
+16. Maps API Libraryページ（`https://console.cloud.google.com/project/_/google/maps-apis/api-list`）で **Maps JavaScript API** を開く。ボタンが **ENABLE** と表示されていたら**そのボタンを選んで有効化する**（押さないまま次のステップへ進まない）。**MANAGE** と表示されていたら既に有効なので押す必要はない。→ 何が起きるか: このプロジェクトで地図を表示するAPIが使えるようになる。このAPI**以外**は有効にしない（使わないAPIは無効のままが安全）。
     出典: https://developers.google.com/maps/get-started （Step 2。2026-10-21確認）
 17. **Google Maps Platform > Credentials**（`https://console.cloud.google.com/project/_/google/maps-apis/credentials`）で **Create credentials > API key** を選び、表示されたキーのダイアログを **Close** で閉じる。→ 何が起きるか: APIキーが作られ、Credentialsの一覧に出る。まだ制限は付いていない。
     出典: https://developers.google.com/maps/get-started （Step 3。2026-10-21確認）
