@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { createExecutionContext } from "cloudflare:test";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { stripJsonComments } from "../scripts/check-environment";
 import { createApp } from "../src/server/index";
 import { cspHeaderValue } from "../src/server/security/csp";
 import { createRuntime, type WorkerRuntime } from "./helpers/runtime";
@@ -112,13 +113,13 @@ describe("demo CSP (T089 計画Task 6)", () => {
     // CSPはWorkerの応答箇所で付く。既定（asset-first）ではHTML（/ もSPA fallbackも）がasset層から
     // 直接返りWorkerを通らない＝demo CSPが実要求に1つも付かない（workerd実測。run_worker_firstの
     // 「gating trap」）。demoだけ全経路をWorker-firstにしたことを設定面で固定する。
-    // （wrangler.jsoncはコメント付きJSONCなので、行コメントだけを落としてから読む）
-    const config = JSON.parse(
-      wranglerJsonc
-        .split("\n")
-        .filter((line) => !line.trim().startsWith("//"))
-        .join("\n"),
-    ) as { assets: { run_worker_first: string[] }; env: { demo: { assets: { run_worker_first: string[] } } } };
+    // （wrangler.jsoncはコメント付きJSONC。CLI〔check:environment〕と同じ正本のstripJsonCommentsで読む。
+    // 文字列リテラル内の`//`〔URL等〕・ブロックコメント・末尾カンマを正しく扱える〔T086でexport済み。
+    // demo-isolation.test.tsと同じ作法〕）
+    const config = JSON.parse(stripJsonComments(wranglerJsonc)) as {
+      assets: { run_worker_first: string[] };
+      env: { demo: { assets: { run_worker_first: string[] } } };
+    };
     // demoは全経路Worker-first（/*）。/api等との併記はwranglerがredundantで拒否するため単独の形
     expect(config.env.demo.assets.run_worker_first).toEqual(["/*"]);
     // local（=試験・e2eが使う既定env）はrouting不変（asset-firstのまま。CSP無しの配信経路）

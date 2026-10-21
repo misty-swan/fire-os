@@ -129,6 +129,8 @@ docs/07 §8の試算（本番30人×10ロード＋デモ2,000＝2,300/月）の�
 
 **外部公開の実行は、利用者からの明示的な依頼があるときだけ行う。** 依頼が無いまま §5.2 の配置・公開を進めない。資源の作成・Secretの設定だけを先に済ませることは妨げない。
 
+**demoの配信経路（T089計画Task 6）**: demo環境はwrangler.jsoncで `assets.run_worker_first ["/*"]` ＝**全経路Worker経由**で配信する（demo CSPをWorkerの応答箇所でHTML〔document〕へ付与するため。既定のasset-firstだとHTMLがasset層から直接返りWorkerを通らない＝CSPが1枚も付かない。local/staging/productionはrouting不変）。設定面はtests/demo-csp.test.tsが固定する。
+
 ### 5.1 初回構築手順（番号付き）
 
 1. 資源の作成: D1 `fireos-demo`・R2バケット `fireos-demo-files`・Queue `fireos-demo-jobs` をCloudflareに作成し、D1の実database_idをwrangler.jsoncのdemo環境へ反映する（仮値 …0002と置き換える。R2/Queuesは名前参照のため設定変更不要）。
@@ -138,7 +140,7 @@ docs/07 §8の試算（本番30人×10ロード＋デモ2,000＝2,300/月）の�
 5. 初期管理者: `npm run bootstrap:admin -- --env demo --remote --confirm demo --unit-name "宮之浦分団" --admin-name "架空 岳志" --email <管理者のメール>`。標準出力のJSONの `token` が招待token（一度だけ表示・72時間有効）。ops/bootstrap-admin.md参照。
 6. 架空データの投入: `npm run demo:seed:remote -- --confirm demo`（Task 5で実装。wipe無しの `--remote` seed。ステップ5のbootstrapが作ったunit〔実在のUUID・実在の管理者〕に架空データと体験アカウント3本を付け、R2 `fireos-demo-files` へも架空実体を置く。冪等なので再実行で重複しない。**初回の実行・確認はTask 7**）。週次の作り直し（全表DROPからのやり直し）は§3.1の `demo:reset:remote` を使う。
 7. 配置: ops/deploy.md §2と同じゲート（typecheck・check:contracts・check:migrations・build・check:environment・vitest・e2e）を通してから `npx wrangler deploy --env demo`。稼働versionを運用記録へ残す。
-8. 確認: ①招待リンク（`https://<URL>/login#invite=<token>`）で初期管理者の登録・二要素設定ができる ②主要動線（§1の3の⑤と同じ19動線）が動く ③未定義APIがJSON 404を返す ④監査に記録が残る ⑤`DEMO_SECURITY_POLICY` が効いている（AI連打が429）。
+8. 確認: ①招待リンク（`https://<URL>/login#invite=<token>`）で初期管理者の登録・二要素設定ができる ②主要動線（§1の3の⑤と同じ19動線）が動く ③未定義APIがJSON 404を返す ④監査に記録が残る ⑤`DEMO_SECURITY_POLICY` が効いている（AI連打が429） ⑥実URLで**地図ページのコンソールにCSP違反が出ないか**確認（特に `worker-src blob:`。Google公式のMaps CSP例は `worker-src blob:` を含む — 出典 https://developers.google.com/maps/documentation/javascript/content-security-policy。違反が出る場合は `cspHeaderValue`〔src/server/security/csp.ts〕の許可リストを見直してから再配置する）。
 9. Googleコンソール側の上限（§4.3）を設定する（Maps接続後でもよいが、公開前に済ませる）。
 
 ### 5.2 外部公開の実行（明示的な依頼があるときだけ）
