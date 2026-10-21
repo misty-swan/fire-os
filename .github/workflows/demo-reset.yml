@@ -1,0 +1,37 @@
+# demo環境の週次リセット（営業デモTask5）。書き込み先はdemo環境（fireos-demo）のD1/R2だけ。
+# GitHub ActionsのcronはUTCのみのためJST（UTC+9）換算で書く: 日曜 16:00 UTC ＝ 月曜 01:00 JST。
+# 手動起動（workflow_dispatch）でも同じ処理を行う（失敗時の再実行はActionsの画面から）。
+# --remote は --env demo --confirm demo が無いと scripts/seed-demo.ts が拒否する
+# （scripts/bootstrap-admin.tsと同じ確認規律。demo以外の環境名は --confirm が一致しても動かない）。
+# Secretの値はこのファイルに書かない。GitHubリポジトリSecretの CLOUDFLARE_API_TOKEN_DEMO
+# （demo環境のD1/R2/Workersだけに権限を狭したtoken）と CLOUDFLARE_ACCOUNT_ID_DEMO を参照する
+# （登録手順は ops/demo-provisioning.md §5、運用は ops/demo-deploy.md §3.1）。
+name: demo-reset
+on:
+  schedule:
+    - cron: "0 16 * * 0" # 日曜 16:00 UTC ＝ 月曜 01:00 JST
+  workflow_dispatch:
+# 同時実行の禁止（前のリセットが終わる前に次のwipeを始めない。cronと手動起動の重複も待機させる）
+concurrency:
+  group: demo-reset
+  cancel-in-progress: false
+# 権限は最小限（checkoutのみ）。CloudflareのtokenはSecret経由の参照だけで受け、wranglerが拾う環境変数へ渡す
+permissions:
+  contents: read
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: demo D1の全表wipe → migration → 架空データと体験アカウントの再seed（R2実体も上書き）
+        run: npm run demo:reset:remote -- --confirm demo
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_DEMO }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_DEMO }}
+      - name: 成功をジョブサマリーへ記録（失敗時はGitHubの既定の通知。再実行はworkflow_dispatchから）
+        run: echo "demo環境の週次リセットが完了しました（実行 ${{ github.run_id }}）。体験アカウントのログイン情報はこの実行のログに一度だけ表示されます" >> "$GITHUB_STEP_SUMMARY"

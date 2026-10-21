@@ -131,7 +131,7 @@ describe("seed-demo CLIの引数解析（parseDemoSeedArgs。純関数）", () =
 
   it("valid_args_parse_to_persist_and_fixed_password_and_omitting_the_flag_stays_random", () => {
     const fixed = parseDemoSeedArgs(["--persist-to", ".wrangler/demo", "--demo-password", TEST_PASSWORD]);
-    if ("usageError" in fixed) throw new Error("正常な引数は使い方の誤りになってはいけない");
+    if (!("persist" in fixed)) throw new Error("正常な引数は使い方の誤りになってはいけない"); // --remote経路（remoteDemo）でないことの絞り込みも兼ねる
     expect(fixed.persist).toBe(".wrangler/demo");
     expect(fixed.fixedDemoPassword).toBe(TEST_PASSWORD);
     const random = parseDemoSeedArgs(["--persist-to", ".wrangler/demo"]);

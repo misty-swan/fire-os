@@ -72,6 +72,23 @@
 3. 改めて `npm run demo` — 初回構築（§2の1〜5）を最初からやり直す（新しい招待リンクが出る）。
 4. 試験がこの射程を担保している: demo.tsの削除系呼び出し（rmSync等）を**全件列挙**して `["DEMO_PERSIST_DIR"]` だけであることを断言（他環境削除を1行足すと落ちる）。
 
+### 3.1 実環境demoの週次リセット（GitHub Actions。Task5。実行確認はTask 7）
+
+- workflow: `.github/workflows/demo-reset.yml`。毎週**月曜 01:00 JST**（cron `0 16 * * 0`＝日曜 16:00 UTC。GitHub ActionsのcronはUTCのみのためJST換算をworkflowのコメントに併記してある）に自動実行。Actionsの画面から手動でも起動できる（`workflow_dispatch`。失敗時の再実行もここから）。同時実行は `concurrency` で禁止している（cronと手動起動が重なると待機する）。
+- 前提（初回だけ。手順の正本はops/demo-provisioning.md §5ステップ22〜25）: GitHubリポジトリSecretの **`CLOUDFLARE_API_TOKEN_DEMO`**（demo環境のD1/R2/Workersだけに権限を狭したtoken）と **`CLOUDFLARE_ACCOUNT_ID_DEMO`** を登録しておく。
+- **account-idの答え（Task 1で「要否はTask 5で確定」としていた論点）: 必要。** wrangler.jsoncにはaccount_idを書いていない（設定に実値を書かない方針。database_idと同じ）ため、wranglerの実環境操作はaccountの指定が要る。staging/productionの配置workflow（deploy-staging.yml / deploy-production.yml）と同じ形で、workflowはSecret `CLOUDFLARE_ACCOUNT_ID_DEMO` を環境変数 `CLOUDFLARE_ACCOUNT_ID` へ渡す。アカウントIDは秘密値ではないがGitには載せない（登録先はtokenと同じリポジトリSecretでよい）。
+- workflowがやること（1コマンド。`npm run demo:reset:remote -- --confirm demo`）:
+  1. demo D1（`fireos-demo`）の**全表をDROP**（wipe。sqlite内部表〔`sqlite_%`〕とCloudflare管理の表〔`_`始まり〕を除く。`d1_migrations`も消えるため、直後のmigration適用でschemaを全件作り直す）
+  2. `wrangler d1 migrations apply DB --env demo --remote`
+  3. 架空データのseed（`buildDemoSeedPlan`と同じ計画。wipe直後の空DBなのでunit・架空の幹部も含めて作る）
+  4. R2バケット `fireos-demo-files` へ写真・文書の架空実体を上書きput（`--env demo --remote`。同じ2キーなので前週分は上書きされる）
+  5. 体験アカウント3本を作り、ログイン情報（パスワード）を**一度だけ**表示する
+- 書込み規律: `--remote` は `--env demo --confirm demo` が無いと動かない（scripts/bootstrap-admin.tsと同じ確認規律）。staging/productionは `--confirm` を揃えても拒否される（scripts/seed-demo.ts）。local/remoteのコマンド列の正本は純関数 `buildSeedCommands` で、tests/demo-reset.test.ts が配列ごと固定している。
+- 失敗時: GitHubの既定の失敗通知を受けたら、Actionsの画面からworkflowを手動起動（workflow_dispatch）して再実行する。データは架空なので最悪のケースは「デモが前週のまま／途中までの投入」で実害は無い。再実行は必ずwipeから始まるため冪等。
+- 体験アカウントのパスワード: 自動リセットでは**新しく生成**され、その実行のログに一度だけ表示される。営業台紙の資格情報を変えたくない週は、wranglerログイン済みの手元端末で `npm run demo:reset:remote -- --confirm demo --demo-password <12文字以上の値>` を実行して同じ資格情報へ戻す（§2.1と同じ規律。workflowへパスワードを渡さないのは、Secretをtokenとaccount-id以外に増やさないため）。
+- R2の残格納: seedは同じ2キーを上書きするため通常は蓄積しない。wranglerのCLIにprefix一括削除もobject一覧も無いため、キーを増やす変更をした週に古いキーが残っても掃除はできない（**残ってよい運用**とする。どうしても消すときはCloudflareのダッシュボードから）。
+- 初期管理者（bootstrap・二要素必須）のアカウントもwipeで消える。週次リセット後のデモは**体験アカウント3本だけで運用する**（§2.1。二要素必須の管理操作〔PER-06/07/08〕は実管理者の再作成まで行えない）。bootstrapはunitが既にあると `already_bootstrapped` で拒否されるため、実管理者は週次リセット後には作り直せない（初回構築〔§5.1ステップ5〕時に作った物が毎週消える。この限界は「正直な限界」として残し、実管理者での運用が必要になったらTask 7の構築手順を見直す）。
+
 ## 4. レート/費用上限の現設定と意図（いずれも**未承認の開発設定**）
 
 ### 4.1 レート上限（src/server/security/limits.ts）
@@ -113,7 +130,7 @@ docs/07 §8の試算（本番30人×10ロード＋デモ2,000＝2,300/月）の�
 3. migration: `npm run migrate -- --env demo --remote --yes-i-know`（`--env` と `--yes-i-know` が無いと実環境へ適用不可＝scripts/migrate.tsのガード）。
 4. AUTH_BASE_URL: wrangler.jsoncのdemo環境の `AUTH_BASE_URL` を実URL（例: `https://<デモのドメイン>`）へ置き換える（仮値 `https://fireos-demo.example.invalid` のまま）。
 5. 初期管理者: `npm run bootstrap:admin -- --env demo --remote --confirm demo --unit-name "宮之浦分団" --admin-name "架空 岳志" --email <管理者のメール>`。標準出力のJSONの `token` が招待token（一度だけ表示・72時間有効）。ops/bootstrap-admin.md参照。
-6. 架空データの投入: **未整備**（残作業3）。seed CLI（scripts/seed-demo.ts）は `--local` 専用（wrangler d1 execute / r2 object put が --local 固定）のため、実環境へ同じ計画（`buildDemoSeedPlan`）を適用する経路が無い。整備するまで実環境デモは初期管理者だけの空の状態で始まる。
+6. 架空データの投入: `npm run demo:seed:remote -- --confirm demo`（Task 5で実装。wipe無しの `--remote` seed。ステップ5のbootstrapが作ったunit〔実在のUUID・実在の管理者〕に架空データと体験アカウント3本を付け、R2 `fireos-demo-files` へも架空実体を置く。冪等なので再実行で重複しない。**初回の実行・確認はTask 7**）。週次の作り直し（全表DROPからのやり直し）は§3.1の `demo:reset:remote` を使う。
 7. 配置: ops/deploy.md §2と同じゲート（typecheck・check:contracts・check:migrations・build・check:environment・vitest・e2e）を通してから `npx wrangler deploy --env demo`。稼働versionを運用記録へ残す。
 8. 確認: ①招待リンク（`https://<URL>/login#invite=<token>`）で初期管理者の登録・二要素設定ができる ②主要動線（§1の3の⑤と同じ19動線）が動く ③未定義APIがJSON 404を返す ④監査に記録が残る ⑤`DEMO_SECURITY_POLICY` が効いている（AI連打が429）。
 9. Googleコンソール側の上限（§4.3）を設定する（Maps接続後でもよいが、公開前に済ませる）。
@@ -129,7 +146,7 @@ docs/07 §8の試算（本番30人×10ロード＋デモ2,000＝2,300/月）の�
 
 1. **WAF/Rate Limiting設定とレート上限値の実環境確定**（docs/05 §1・docs/07 §2・docs/evidence/security.md §6限界節）: アプリ内のisolate別計数は防衛線に過ぎないため、Cloudflareの製品層でIP/経路ごとの全体上限を設定し、実測で確定する。値はdocs/14 D11の承認材料にする。
 2. **security headers/CSPの実CDN設定判断**（docs/evidence/security.md §6）: API応答のsecurity headersは実装済み（T081）だが、SPAのHTML（ASSETS経由）へのCSPは未設定。実CDN/ホスティングの構成が確定してから判断する。
-3. **seed CLIの実環境（--remote）対応**（§5.1の6）。
+3. **seed CLIの実環境（--remote）対応**（§5.1の6）: 実装済み（Task 5。`npm run demo:seed:remote`〔投入〕と `npm run demo:reset:remote`〔週次リセット＝全表DROPからのやり直し〕。コマンド列と拒否規律は試験が静的に固定〔tests/demo-reset.test.ts〕）。この環境に実Cloudflareが無いため実行実績は無く、初回の実行・確認はTask 7（X-DEMOの実地確認と合わせる）。
 4. **X-DEMO（RG-09の実地確認）**: 公開デモ（分離した実環境）の構築と本番データとの完全分離の実地確認。未実施（acceptance-results.md「実外部の残手順」。この環境に実Cloudflareが無いため局所完了＝§1の3層の検査とローカル実測だけ実施）。
 
 ## 6. やってはいけないこと

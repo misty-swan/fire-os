@@ -28,6 +28,8 @@ import type { SeedStatement } from "./seed-load";
  *   seed末尾で体験アカウント3本（src/server/auth/demo-accounts.ts。Task4）を独立に冪等で投入し、
  *   資格情報（生成したパスワード）を標準出力へ**一度だけ**JSONで表示する。`--demo-password <値>` で
  *   3本とも既知のパスワードにできる（demo:reset後に同じ資格情報へ戻すための運用。値はGitに書かない）。
+ *   実環境（demo）への投入は `--remote --env demo --confirm demo`（Task5。`--wipe` で全表DROPからの
+ *   週次リセット。.github/workflows/demo-reset.yml が cronで実行する。実環境への接続はしない。実行はTask 7）。
  */
 
 // ============================================================================
@@ -916,7 +918,79 @@ export function verifyDemoIsolation(config: DeploymentConfig): IsolationResult {
 // CLI（`npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo`）。
 // scripts/demo.ts の初回起動（bootstrap-adminの直後）から呼ばれる。workerd外ではenvが無いため
 // 計画をSQLへ直列化して wrangler d1 execute / r2 object put で適用する（seed-load.tsのCLIと同じ方式）。
+// 実環境（demo）への投入は `npm run demo:seed:remote -- --confirm demo`、週次リセット（全表DROPからの
+// やり直し）は `npm run demo:reset:remote -- --confirm demo`（Task5。--remote は --env demo --confirm demo
+// が無いと動かない＝bootstrap-admin.tsと同じ規律。実環境への接続はしない。実行確認はTask 7）。
 // ============================================================================
+
+// ============================================================================
+// wranglerコマンド列の生成（純関数。実行はしない。local/remoteの差はここだけが知る）
+// ============================================================================
+
+/** seedの適用先。local=手元のpersist（`npm run demo`経路）。remote-demo=実Cloudflareのdemo環境（引数解析で--env demo --confirm demo確定済み） */
+export type DemoSeedMode =
+  | { kind: "local"; persist: string }
+  | { kind: "remote-demo"; wipe: boolean };
+
+/**
+ * seed適用のwranglerコマンド列（argv。「wrangler」本体より後ろ。`sh("npx", ["wrangler", ...args])`で実行する）。
+ * localは従来どおり `--local --persist-to`、remoteは `--env demo --remote`（wrangler 4.150の
+ * d1 execute / d1 migrations apply / r2 object put が同じ形で --env と --local/--remote を受け付ける。
+ * r2 object put は --local を付けない限り --remote で実環境へ置く）。実行はしないため試験が配列を固定できる。
+ */
+export interface SeedCommands {
+  /** D1の読み取り（--json --command）。seed対象の解決と冪等判定に使う */
+  d1Read(sql: string): string[];
+  /** 生成したSQLファイルの適用（--file） */
+  d1File(file: string): string[];
+  /** migrationの適用（remoteのみ。localは scripts/demo.ts が wrangler d1 migrations apply を行うためnull） */
+  d1Migrate(): string[] | null;
+  /** R2へのオブジェクトput（写真・文書の架空実体。--forceで同じキーを上書きする） */
+  r2Put(key: string, contentType: string, file: string): string[];
+}
+
+export function buildSeedCommands(mode: DemoSeedMode, opts: { bucket: string }): SeedCommands {
+  const target = mode.kind === "local" ? ["--local", "--persist-to", mode.persist] : ["--env", "demo", "--remote"];
+  return {
+    d1Read: (sql) => ["d1", "execute", "DB", ...target, "--json", "--command", sql],
+    d1File: (file) => ["d1", "execute", "DB", ...target, "--file", file],
+    d1Migrate: () => (mode.kind === "remote-demo" ? ["d1", "migrations", "apply", "DB", "--env", "demo", "--remote"] : null),
+    r2Put: (key, contentType, file) =>
+      ["r2", "object", "put", `${opts.bucket}/${key}`, ...target, "--file", file, "--content-type", contentType, "--force"],
+  };
+}
+
+/** DROP対象から除外する内部表の名前（sqlite自身の表〔sqlite_%〕と_で始まるCloudflare管理の表〔_cf_KV等〕） */
+export function isInternalTableName(name: string): boolean {
+  return name.startsWith("sqlite_") || name.startsWith("_");
+}
+
+/**
+ * リモートdemo D1のwipe用SQL（全表DROP。sqlite_masterの実表一覧を受ける純関数）。
+ * d1_migrations もDROPする（直後の `wrangler d1 migrations apply` が全件を適用しschemaを作り直す）。
+ * PRAGMA foreign_keys=OFF は親表DROP時の参照制約違反を避けるため（wrangler d1 execute --remote --file で適用する）。
+ */
+export function buildRemoteWipeSql(tables: readonly string[]): string {
+  const lines = [
+    "-- scripts/seed-demo.ts が生成（demo D1のwipe。全表DROP。schemaは直後のmigrationで作り直す）",
+    "PRAGMA foreign_keys=OFF;",
+    "BEGIN TRANSACTION;",
+  ];
+  for (const t of tables) {
+    if (isInternalTableName(t)) continue;
+    lines.push(`DROP TABLE IF EXISTS "${t.replaceAll('"', '""')}";`);
+  }
+  lines.push("COMMIT;", "PRAGMA foreign_keys=ON;");
+  return lines.join("\n") + "\n";
+}
+
+/** seed実体を置くR2 bucket名（wrangler.jsoncのパース結果から。localは最上位設定、remoteはenv.demoの設定） */
+export function pickSeedBucket(
+  config: WranglerEnvConfig & { env?: Record<string, WranglerEnvConfig> },
+  mode: DemoSeedMode,
+): string | undefined {
+  return mode.kind === "local" ? config.r2_buckets?.[0]?.bucket_name : config.env?.demo?.r2_buckets?.[0]?.bucket_name;
+}
 
 const sqlLiteral = (v: unknown): string => {
   if (v === null || v === undefined) return "NULL";
@@ -940,38 +1014,82 @@ const inlineBinds = (sql: string, binds: unknown[]): string => {
 /** CLI引数の解析結果。usageErrorのときは使い方の誤り（標準エラー出力へ出して終了コード2で止める） */
 export type DemoSeedArgs =
   | { persist: string; fixedDemoPassword?: string }
+  | { remoteDemo: true; wipe: boolean; fixedDemoPassword?: string }
   | { usageError: string };
 
 /**
- * CLI引数の解析（純関数。tests/demo-accounts.test.tsが使い方の誤りを固定する）。
- * `--demo-password` を値なしで渡したときは黙ってランダム生成へ落とさず使い方の誤りとして拒否する
- * （demo:reset後に同じ資格情報へ戻す運用が、静かに別パスワードで通ってしまう事故を防ぐ）。
+ * CLI引数の解析（純関数。tests/demo-accounts.test.ts・tests/demo-reset.test.tsが使い方の誤りを固定する）。
+ * - local（従来経路）: `--persist-to` が必須。`--demo-password` を値なしで渡したときは黙ってランダム生成へ
+ *   落とさず使い方の誤りとして拒否する（demo:reset後に同じ資格情報へ戻す運用が、静かに別パスワードで
+ *   通ってしまう事故を防ぐ）。
+ * - remote（Task5）: `--remote` は `--env demo --confirm demo` が無いと動かない（bootstrap-admin.ts:26-28と
+ *   同じ確認規律）。**demo環境以外への書込みは拒絶する**（staging/productionは--confirmが一致しても拒否）。
+ *   `--wipe` を付けると全表DROPからのやり直し（週次リセット。無しは既存unitへの追加seed）。
+ *   `--persist-to` はローカル専用（remoteではローカルのpersistを使わない）。
  */
 export function parseDemoSeedArgs(args: readonly string[]): DemoSeedArgs {
   const flagValue = (flag: string): string | undefined => {
     const i = args.indexOf(flag);
     return i < 0 ? undefined : args[i + 1];
   };
+  // --demo-password の検査（local/remote共通。メッセージはlocal時代から変えない）
+  const fixedPassword = (): { fixedDemoPassword?: string } | { usageError: string } => {
+    if (!args.includes("--demo-password")) return {};
+    const value = flagValue("--demo-password");
+    if (value === undefined) {
+      return {
+        usageError:
+          "--demo-password の後に値がありません。--demo-password <値> の形で12文字以上のパスワードを指定してください（better-authの下限）",
+      };
+    }
+    if (value.length < 12) {
+      return { usageError: "--demo-password には12文字以上のパスワードを指定してください（better-authの下限）" };
+    }
+    return { fixedDemoPassword: value };
+  };
+
+  if (args.includes("--remote")) {
+    const env = flagValue("--env");
+    const confirm = flagValue("--confirm");
+    if (env === undefined || confirm === undefined) {
+      return {
+        usageError:
+          "--remote は実環境のdemo D1/R2へ書きます。--env demo --confirm demo を両方指定してください（demo環境以外への書込みは拒否します）\n" +
+          "週次リセット（全表DROPからのやり直し）: npm run demo:reset:remote -- --confirm demo",
+      };
+    }
+    if (env !== "demo") {
+      return { usageError: `--env demo 以外は --remote の対象外です（demo環境以外への書込みは拒否します）: ${env}` };
+    }
+    if (confirm !== "demo") {
+      return { usageError: "--remote は実環境のdemoへ書きます。--confirm には同じ環境名 demo を指定してください" };
+    }
+    if (args.includes("--persist-to")) {
+      return { usageError: "--persist-to はローカル専用です（--remote ではローカルのpersistを使わないため指定できません）" };
+    }
+    const password = fixedPassword();
+    if ("usageError" in password) return password;
+    return { remoteDemo: true, wipe: args.includes("--wipe"), ...password };
+  }
+  if (args.includes("--env") || args.includes("--confirm") || args.includes("--wipe")) {
+    return {
+      usageError:
+        "--env / --confirm / --wipe は --remote と一緒にだけ使えます。ローカルへのseedは --persist-to .wrangler/demo の形で指定してください",
+    };
+  }
+
   const persist = flagValue("--persist-to");
   if (!persist) {
     return {
       usageError:
         "使い方: npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo [--demo-password <12文字以上のパスワード>]\n" +
-        "実デモの初回起動（scripts/demo.ts）から自動で呼ばれる（架空データ＋体験アカウントのみ。実データは入れない）",
+        "実デモの初回起動（scripts/demo.ts）から自動で呼ばれる（架空データ＋体験アカウントのみ。実データは入れない）\n" +
+        "実環境（demo）への投入・週次リセットは --remote --env demo --confirm demo（--wipeで全表DROPからやり直す）",
     };
   }
-  if (!args.includes("--demo-password")) return { persist };
-  const fixedDemoPassword = flagValue("--demo-password");
-  if (fixedDemoPassword === undefined) {
-    return {
-      usageError:
-        "--demo-password の後に値がありません。--demo-password <値> の形で12文字以上のパスワードを指定してください（better-authの下限）",
-    };
-  }
-  if (fixedDemoPassword.length < 12) {
-    return { usageError: "--demo-password には12文字以上のパスワードを指定してください（better-authの下限）" };
-  }
-  return { persist, fixedDemoPassword };
+  const password = fixedPassword();
+  if ("usageError" in password) return password;
+  return { persist, ...password };
 }
 
 async function main(): Promise<void> {
@@ -981,26 +1099,26 @@ async function main(): Promise<void> {
     process.exitCode = 2;
     return;
   }
-  const persist = parsed.persist;
+  const mode: DemoSeedMode =
+    "remoteDemo" in parsed ? { kind: "remote-demo", wipe: parsed.wipe } : { kind: "local", persist: parsed.persist };
   const fixedDemoPassword = parsed.fixedDemoPassword;
+
+  // seed実体を置くR2 bucket（localは最上位設定、remoteはdemo環境の設定。bucket名はwrangler.jsoncの正本から読む）
+  const wranglerConfig = JSON.parse(
+    stripJsonComments(readFileSync("wrangler.jsonc", "utf8")),
+  ) as WranglerEnvConfig & { env?: Record<string, WranglerEnvConfig> };
+  const bucket = pickSeedBucket(wranglerConfig, mode);
+  if (!bucket) {
+    throw new Error(mode.kind === "local" ? "wrangler.jsoncにlocalのR2 bucketがありません" : "wrangler.jsoncのdemo環境にR2 bucketがありません");
+  }
+  const cmds = buildSeedCommands(mode, { bucket });
   const sh = (cmd: string, cmdArgs: string[]) => spawnSync(cmd, cmdArgs, { encoding: "utf8" });
   const d1Json = (sql: string) => {
-    const r = sh("npx", ["wrangler", "d1", "execute", "DB", "--local", "--persist-to", persist, "--json", "--command", sql]);
+    const r = sh("npx", ["wrangler", ...cmds.d1Read(sql)]);
     if (r.status !== 0) throw new Error(`D1読み込みに失敗: ${r.stderr || r.stdout}`);
     return (JSON.parse(r.stdout) as { results: Record<string, unknown>[] }[])[0]?.results ?? [];
   };
 
-  const unitRow = d1Json(`SELECT id FROM units WHERE name = '${DEMO_UNIT_NAME}' LIMIT 1`)[0] as { id: string } | undefined;
-  if (!unitRow) {
-    console.error("宮之浦分団が見つかりません。npm run demo の初回起動（bootstrap-admin）より前です");
-    process.exitCode = 1;
-    return;
-  }
-  const unitId = unitRow.id;
-  // 冪等: seed済みなら架空データの適用だけスキップする（体験アカウントは下で独立に判定する）
-  const officerSeeded = d1Json(`SELECT 1 AS x FROM members WHERE id = '${DEMO_OFFICER_MEMBER}'`).length > 0;
-
-  // SQLへ直列化して適用（bindingの値は固定UUIDのためquote処理だけ）
   const dir = mkdtempSync(join(tmpdir(), "fireos-seed-demo-"));
   try {
     const applySql = async (name: string, stmts: readonly { sql: string; binds: unknown[] }[]): Promise<void> => {
@@ -1009,43 +1127,62 @@ async function main(): Promise<void> {
       for (const s of stmts) lines.push(inlineBinds(s.sql, s.binds) + ";");
       lines.push("COMMIT;");
       writeFileSync(sqlFile, lines.join("\n") + "\n");
-      const applied = sh("npx", ["wrangler", "d1", "execute", "DB", "--local", "--persist-to", persist, "--file", sqlFile]);
+      const applied = sh("npx", ["wrangler", ...cmds.d1File(sqlFile)]);
       if (applied.status !== 0) throw new Error(`seed SQLの適用に失敗（${name}）: ${applied.stderr || applied.stdout}`);
     };
+
+    // --- remote（demo環境）: --wipeのときは全表DROP → migration適用（schemaを作り直してからseedする） ---
+    if (mode.kind === "remote-demo") {
+      if (mode.wipe) {
+        const tables = d1Json("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").map((r) => String(r.name));
+        const wipeFile = join(dir, "wipe-demo.sql");
+        writeFileSync(wipeFile, buildRemoteWipeSql(tables));
+        const wiped = sh("npx", ["wrangler", ...cmds.d1File(wipeFile)]);
+        if (wiped.status !== 0) throw new Error(`demo D1のwipeに失敗: ${wiped.stderr || wiped.stdout}`);
+        console.log(`demo D1の全表をDROPしました（${tables.filter((t) => !isInternalTableName(t)).length}表）。schemaを作り直して架空データを入れ直します`);
+      }
+      const mig = sh("npx", ["wrangler", ...cmds.d1Migrate()!]);
+      if (mig.status !== 0) throw new Error(`demo D1へのmigration適用に失敗: ${mig.stderr || mig.stdout}`);
+    }
+
+    const unitRow = d1Json(`SELECT id FROM units WHERE name = '${DEMO_UNIT_NAME}' LIMIT 1`)[0] as { id: string } | undefined;
+    if (!unitRow && mode.kind === "local") {
+      console.error("宮之浦分団が見つかりません。npm run demo の初回起動（bootstrap-admin）より前です");
+      process.exitCode = 1;
+      return;
+    }
+    // 冪等: seed済みなら架空データの適用だけスキップする（wipe直後のremoteは必ず未seed。体験アカウントは下で独立に判定する）
+    const officerSeeded = unitRow ? d1Json(`SELECT 1 AS x FROM members WHERE id = '${DEMO_OFFICER_MEMBER}'`).length > 0 : false;
+    // 体験アカウントの紐付け先unit（既存の宮之浦分団。無い＝wipe直後の空DBならseed計画がDEMO_UNIT_IDで作る物）
+    const unitId = unitRow ? unitRow.id : DEMO_UNIT_ID;
 
     if (officerSeeded) {
       console.log("デモデータは投入済みです（スキップ）");
     } else {
-      const adminRow =
-        (d1Json(
-          `SELECT m.id AS member_id FROM members m JOIN member_roles r ON r.unit_id = m.unit_id AND r.member_id = m.id ` +
-            `WHERE m.unit_id = '${unitId}' AND r.role_id = '${ROLE_IDS.admin}' LIMIT 1`,
-        )[0] as { member_id: string } | undefined) ??
-        (d1Json(`SELECT id AS member_id FROM members WHERE unit_id = '${unitId}' LIMIT 1`)[0] as { member_id: string } | undefined);
-      if (!adminRow) throw new Error("seed-demo: 宮之浦分団に団員がいません（bootstrap-adminを先に実行してください）");
-      const seqRow = d1Json(`SELECT event_sequence AS n FROM units WHERE id = '${unitId}'`)[0] as { n: number } | undefined;
+      // seed対象の解決。remoteでwipe直後の空DBならunit・管理者もseed計画が作る（試験の空DBと同じcreateUnit経路）
+      let targets: DemoSeedTargets;
+      if (!unitRow) {
+        targets = { unitId: DEMO_UNIT_ID, adminMemberId: DEMO_ADMIN_MEMBER, createUnit: true, sequenceStart: 0 };
+      } else {
+        const adminRow =
+          (d1Json(
+            `SELECT m.id AS member_id FROM members m JOIN member_roles r ON r.unit_id = m.unit_id AND r.member_id = m.id ` +
+              `WHERE m.unit_id = '${unitRow.id}' AND r.role_id = '${ROLE_IDS.admin}' LIMIT 1`,
+          )[0] as { member_id: string } | undefined) ??
+          (d1Json(`SELECT id AS member_id FROM members WHERE unit_id = '${unitRow.id}' LIMIT 1`)[0] as { member_id: string } | undefined);
+        if (!adminRow) throw new Error("seed-demo: 宮之浦分団に団員がいません（bootstrap-adminを先に実行してください）");
+        const seqRow = d1Json(`SELECT event_sequence AS n FROM units WHERE id = '${unitRow.id}'`)[0] as { n: number } | undefined;
+        targets = { unitId: unitRow.id, adminMemberId: adminRow.member_id, createUnit: false, sequenceStart: seqRow?.n ?? 0 };
+      }
 
-      const plan = await buildDemoSeedPlan({
-        unitId,
-        adminMemberId: adminRow.member_id,
-        createUnit: false,
-        sequenceStart: seqRow?.n ?? 0,
-      });
+      const plan = await buildDemoSeedPlan(targets);
       await applySql("seed-demo.sql", plan.groups.flat());
 
-      // 写真・文書原本の実体をローカルR2へ（bucketはwrangler.jsoncのlocal設定から読む）
-      const wrangler = JSON.parse(
-        stripJsonComments(readFileSync("wrangler.jsonc", "utf8")),
-      ) as WranglerEnvConfig & { env?: Record<string, WranglerEnvConfig> };
-      const bucket = wrangler.r2_buckets?.[0]?.bucket_name;
-      if (!bucket) throw new Error("wrangler.jsoncにlocalのR2 bucketがありません");
+      // 写真・文書原本の実体をR2へ（local=手元のpersist、remote=demo環境のbucket。bucket名はwrangler.jsoncから）
       for (const obj of plan.objects) {
         const file = join(dir, obj.key.replaceAll("/", "-"));
         writeFileSync(file, obj.bytes);
-        const put = sh("npx", [
-          "wrangler", "r2", "object", "put", `${bucket}/${obj.key}`, "--local", "--persist-to", persist,
-          "--file", file, "--content-type", obj.contentType, "--force",
-        ]);
+        const put = sh("npx", ["wrangler", ...cmds.r2Put(obj.key, obj.contentType, file)]);
         if (put.status !== 0) throw new Error(`R2への配置に失敗（${obj.key}）: ${put.stderr || put.stdout}`);
       }
       console.log(`デモデータを投入しました（架空のみ）: ${JSON.stringify(plan.stats)}`);

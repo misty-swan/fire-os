@@ -27,7 +27,9 @@
     "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
     "dev:vars": "tsx scripts/ensure-dev-vars.ts",
     "demo": "tsx scripts/demo.ts",
-    "demo:reset": "tsx scripts/demo.ts --reset"
+    "demo:reset": "tsx scripts/demo.ts --reset",
+    "demo:seed:remote": "tsx scripts/seed-demo.ts --remote --env demo",
+    "demo:reset:remote": "tsx scripts/seed-demo.ts --remote --env demo --wipe"
   },
   "dependencies": {
     "better-auth": "1.7.7",
