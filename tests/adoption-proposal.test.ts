@@ -140,5 +140,29 @@ describe("adoption-proposal (T087)", () => {
     expect(check({ decisionLedger: ledgerWithoutD13 }).missingDecisionIds.some((f) => f.includes("D13"))).toBe(true);
     const ledgerWithD99 = decisionLedgerRaw.replace(/^### D21 /m, "### D99 試験の未決項目\n### D21 ");
     expect(check({ decisionLedger: ledgerWithD99 }).missingDecisionIds.some((f) => f.includes("D99"))).toBe(true);
+
+    // ---- 陽性対照8: 丁寧形・受動形・過去丁寧（fix round 2。再レビューの素通り例を全て検出する） ----
+    const politeClaims = [
+      "上記20件はすべて承認されています。",
+      "本提案の内容は確定しています。",
+      "D03 の役割設計は承認しています。",
+      "点検票の正式様式は承認された。",
+      "D11 の月額上限は決定されました。",
+      "本件は承認しております。",
+      "D02 の個人情報の扱いは了承していました。",
+      "運用方針は確定しました。",
+      "D13 の通知方針は了承します。", // 現在丁寧（します形）も主張
+      "本提案は承認されます。", // 受動・非過去
+    ];
+    for (const sentence of politeClaims) {
+      const r = check({ proposal: `${proposalRaw}\n${sentence}\n` });
+      expect(r.unapprovedValuesPresentedAsApproved.some((f) => f.includes(sentence.replace("。", ""))), sentence).toBe(true);
+    }
+    // します形の正当な用法（T088で運用方針ファイルを確定する仕組みの説明）だけは検出しない
+    // （ホワイトリストの字句を外すと、本文書の実例（提案資料§5）とこの対照の両方が落ちる）
+    const policyFinalization = check({
+      proposal: `${proposalRaw}\n回答を記録し、運用方針（production-policy.json）として確定します。\n`,
+    });
+    expect(policyFinalization.unapprovedValuesPresentedAsApproved).toEqual([]);
   });
 });
