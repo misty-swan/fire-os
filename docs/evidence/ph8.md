@@ -372,7 +372,7 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 
 4体並行レビュー（a859e3e..da22779。A正確さ/B完了条件/C prototype準拠/D docs整合。報告はph8-review-t086-{A,B,C,D}.md）→ **fix wave 1**（c374e4c＋e233138。指摘統合task-086-findings-r0.mdのF1〜F16＋R23）→ スコープ付き再レビューで**全指摘ADDRESSED・新規Critical/Important無し**。確認済みの高・中の未解消0件。主な裁定: R18使い方ガイド画面はT086の範囲〔screens.ts ownerTask〕・R19章順序はUSER_GUIDE〔内容の正〕優先・R20/R21 ImportantとMinor語彙をfix wave 1へ・R23 PCのEsc挙動はdocs/03⑥で意図化（構造変更は繰り延べ）・R24 campaign icon/PC導線なしはprototype踏襲で維持・R25コミット粒度は履歴書換え禁止でparked。繰り延べMinorはph8-review.md「T086」と本節の記録どおり。
 
-## T087 完成後の消防団向け提案資料と確認差分表（2026-10-21。実装完了・最終検証待ち）
+## T087 完成後の消防団向け提案資料と確認差分表（2026-10-21。完了）
 
 実行環境はT083〜T086と同じローカル（Node v26 / workerd / vitest / Playwright chromium）。**実Cloudflare・実staging・実端末・実在の団体は使っていない**——提案資料は実在しないURL・実測費用・団体の了承を「未実施」と書くだけで、存在しないものを作らない。src/・migration・API契約の変更は無し（資料2点・例示JSON・検査script・試験・manifestのみ）。
 
@@ -413,3 +413,25 @@ e2eは実施しない（UI・routeの変更が無いため）。D1〜D2で scrip
 1. 実環境の残手順29件（X-DEMO・X-V01/V02/V05・X-COST・X-V04-JEV/LLM/RET・X-AIEVAL・X-V07-RESTORE・X-DEV-4ほか）: 提案資料は「実環境のデモURLは未実施」「実測費用は未実施」「実環境での測定は未実施」を明記。残手順の正は **docs/evidence/acceptance-results.md「実外部・実端末・人の残手順」**（D2で7件の棚卸し注記とowner→T088を実施）。
 2. 提案資料自体の実団体への提出・説明・回答の記録: T088（チェックリストの回答欄は空欄のまま配布。連絡・送信・了承の捏造はしない）。
 3. 正式リリース判定（RG-08〔利用者の了承〕・RG-10〔意思決定の記録〕を含むRG-01〜10）: すべてT088。
+
+### 最終検証（コントローラ実行・2026-10-21確定。HEAD e6e13ce時点）
+
+| 確認 | コマンド | 結果 |
+|---|---|---|
+| 型検査 | `npm run typecheck` | 成功 |
+| 契約検査 | `npm run check:contracts` | 102 API / docs/05 102行 / OpenAPI一致（T087でAPI契約の変更なし） |
+| 網羅（静的） | `npm run check:coverage` | 成功（参照テスト272件・notApplicable 0） |
+| ビルド | `npm run build` | 成功（precache 9 entries） |
+| 資料の静的検査 | `npm run check:adoption-proposal` | exit 0（docs/14 §2の未決D見出しと一致・承認済み主張なし・出典実在） |
+| 単体・結合試験 | `npx vitest --run` | **72ファイル335件成功**（T086最終334＋T087分1） |
+| 証跡の収集 | `npm run collect:evidence` | vitest **335件** passed／load **3件** passed／e2e **75 passed・0 failed・0 skipped**／live **未実施**（Secret未設定・合格に数えない〔R4前例〕）。ゲート内訳: missingReq=0 missingApi=0 missingScr=0 skippedOrUnexecuted=0 criticalOrHigh=0 |
+| 受入ゲート | `npm run test:e2e -- tests/acceptance/all-requirements.spec.ts --grep acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case` | 1 passed（13.4秒） |
+| ブラウザ試験（フル×3） | `npm run test:e2e` | **150 passed ×3＝5.3分/5.3分/5.5分＝3回連続緑・skip 0**（業務75＋受入ゲートspec75） |
+
+- **最終検証中の一過性失敗の記録（正直な記録）**: 業務e2eのみの計測走行（--project指定・4プロジェクト構成）の2回目に `asset-inspection.spec.ts` の `inspection_retry_after_lost_response_registers_once_and_correction_keeps_the_original`〔desktop-1280〕が1回失敗した。単独実行は直後に緑（10.1秒）・その後のフル走行4回（上記3回＋先行1回）で再発なし・T087はsrc/・tests/e2eに無変更のため製品回帰ではあり得ない。応答消失を注入するタイミング依存の試験で、T085b-W1（ProxyWorkerドロップの残存クラス）と同地域の一過性の可能性が高いが**発火時のログは残っておらず根拠は特定できていない**ため、既知フレーク台帳への新規登録はせず本記録のみ残す（再発時はmanifest issuesへの起票とlogsの保存を次の担当へ）。
+- collect:evidenceは最後のsrc/tests/docs/03等の変更（fix wave 1・e6e13ce）の後で実行しており、以後の変更はdocs/16・docs/evidence・manifest（いずれもcodeHash対象外）のみ＝index有効。
+- T087は**完了**（実環境で実施すべき手順は初めからT088/実環境帰属として未実施を明記しているため局所完了ではない。残作業は上記「未実施・未接続」1〜3＝すべてT088/実環境待ち）。
+
+### レビューサイクル（2026-10-21。docs/evidence/ph8-review.md「T087」）
+
+タスクレビュー×3（D1コアTDD〔fix round 2回〕・D2台帳決着〔指摘0〕・D3docs統合〔指摘0〕）→ **4体並行レビュー**（85681e4..57a77a4。A正確さ/B完了条件/C prototype準拠/D docs整合。高1/中7/低19/要確認2→コントローラが高・中を全件実検証）→ **fix wave 1**（e6e13ce。F1=D01質問をdocs/01正本どおり〔MAP-10は「地域単位の点検巡回計画を支援する」が正で「地図の詳細表示」は誤り〕＋JSON↔チェックリスト一致検査新設/F2・F3=否定導入型（「未承認ではなく…本決まり」）と自然文体（「承認を得ている」「合意に至りました」等）の検出追加/F4=example.jsonの型検査（approved厳密boolean false・回答空文字列）/F5=全機能動線へ点検登録（SCR-06）・予定の登録（SCR-10）を追加/F6=manifest external注記の正確化（X-V04系/X-AIEVALからX-COST用のコピー句を除去）/F7=合格表現の時点限定/F8=低8件同梱）→ スコープ付き再レビューで**F1〜F8全ADDRESSED・新規Critical/Important無し**。確認済みの高・中の未解消0件。繰り延べMinorはph8-review.md「T087」「方針で残す」1〜5のとおり。

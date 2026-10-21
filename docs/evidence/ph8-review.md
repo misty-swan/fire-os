@@ -273,3 +273,44 @@ A=正確さ／B=完了条件／C=prototype準拠〔承認〕／D=docs整合。�
 - コミット: **bde6533**（コア実装・指定試験）・**8ec9f26**（reset断言の恒真排除）・**08b523d・198f792・0d2fed3**（issues台帳medium 3件・API-67契約3点）・**ead8421・bcc7404・1b0d76d・f0c4212**（issues台帳low 4件）・**47fdb84・f703c13・d891443・3ed5fc2**（docs一式・X-OUT-9・manifest）・**da22779**（使い方ガイド画面）・**c374e4c・e233138**（fix wave 1）
 - 最終全検証（コントローラ実行・2026-10-21）: typecheck成功／check:contracts「102 API / docs/05 102行 / OpenAPI一致」／check:coverage成功（参照テスト272件）／build成功（precache 9 entries）／collect:evidence〔vitest **71ファイル334件**・load 3・**e2e 75 passed / 0 failed / 0 skipped**・live未実施〕＋**受入ゲート 1 passed**／**フルe2e 3回連続緑〔150 passed ×3＝5.2/5.0/5.1分〕**
 - T086は**局所完了**。issues台帳のT086担当8件を決着（resolved 6＋PH3-C8現状確認の記録〔N2はopen・owner未割当〕＋T085b-W1継続観察へ）。docs/16のT086状態欄・ph8.md「T086」・development-completion.mdに番号付き残作業
+
+# T087 レビュー・修正サイクル（2026-10-21）
+
+T083〜T086と同じ手順。対象はT087「完成後の消防団向け提案資料と確認差分表」。範囲は **85681e4**（T086完了）〜 **e6e13ce**（実装fd7bc72〔本体〕・99a05b8〔fix round 1〕・c54b58d〔fix round 2〕・a157696〔manifest台帳〕・57a77a4〔docs統合〕・e6e13ce〔fix wave 1〕）と関連docs。レビュー担当は読み取りのみ。指摘はコントローラが実ファイル・dry-runで確かめてから分類した。作業記録の副本はworkspace（.superpowers/sdd/16_実装タスク一覧/task-87-*.md・review-*.diff・ph8-review-t087-{A,B,C,D}.md・task-87-findings-r0.md）。
+
+## 工程と実装者サブエージェントの役割分担
+
+実装はサブエージェント3体（①コアTDD〔D1〕＝fd7bc72＋fix 2回〔検出器の語形網羅〕、②台帳決着〔D2〕＝a157696〔PH2-A12・external 7件〕、③docs統合〔D3〕＝57a77a4）。コントローラが裁定（R1〜R7）・4体並行レビューの実検証・fix wave 1の指摘統合・最終検証を担当。タスクレビュー×3（D1のみfix round 2回）＋4体並行レビュー＋fix wave 1＋スコープ付き再レビュー。
+
+## 開始時の裁定（コントローラ。プリフライトスキャンより）
+
+R1 exampleの鍵構造はD01〜D20過不足なく＋推奨案/代替案/回答記入欄/approved既定false（T088のDecisionRecordが参照できる形）／R2 PH2-A12は実コード確認の上でPH3-C8前例（現状確認の記録）またはresolvedで決着／R3 external項目のT087分は棚卸し＝提案資料で未実施と明記しmanifestのowner/basisを実態へ（実行はT088・実環境数値は捏造禁止）／R4 check:adoption-proposalスクリプトをpackage.jsonへ追加（T086 R14前例）／R5 新規試験はmanifestに登録しない（demo-isolation前例）／R6 引用数値は既存証跡の実測のみ＋出典＋「ローカル実測」「概算」の区別／R7 完成版URL＝ローカルdemo手順を実在する確認手段として示し実環境URLは未実施と明記
+
+## 第1回（4体並行。85681e4..57a77a4）
+
+A=正確さ・セキュリティ／B=完了条件・試験妥当性／C=prototype準拠／D=docs整合。合計: **高1 / 中7 / 低19 / 要確認2**（高・中はコントローラが全件実検証）。指摘統合と裁定は workspace の task-87-findings-r0.md、修正はe6e13ce、再レビューで**F1〜F8全てADDRESSED**。
+
+| 指摘 | 内容（代表） | 対応（e6e13ce） |
+|---|---|---|
+| F1（D-高1） | チェックリスト・example.jsonのD01質問「地図の詳細表示（MAP-10）」が要件正本（docs/01:62「地域単位の点検巡回計画を支援する」）と矛盾。AI-06/07も不正確 | docs/01正本どおりの質問へ（両ファイル）＋JSON↔チェックリストの質問一致検査を新設（改変で落ちる対照つき） |
+| F2・F3（A-中1/2） | 検出器が「未承認ではなく$5に本決まり」型（否定導入後に別承認語）と「承認を得ている」「了承が済んだ」「合意に至りました」等の自然文体を素通り（レビューAがdry-runで実証） | 断定語彙+否定導入後の語幹単独形検出+否定随伴語のラベル無効化／活用へを得ている・が済んだ・に至りました等14形を追加。陽性対照9・10で恒久化 |
+| F4（A-中3） | example.jsonの型検査欠落（approvedが1や"false"、回答が数値/配列でも通る） | approvedはboolean false厳密一致・回答は空文字列のみ。対照12で改変検出を実証 |
+| F5（C-中1） | 提案資料§3全機能動線に施設の点検登録（SCR-06）と予定の登録（SCR-10）が無い | 実装語彙どおり2動線を追加（screens.ts・InspectionFormの実ラベルと一致を再レビューが検証） |
+| F6（D-中1） | manifest external のX-V04-JEV/LLM/RET・X-AIEVAL注記にX-COST用の「T086分（デモ費用上限等）…とも実施済み」が不当コピーされ手順本体の実施と誤読される | X-V04系/X-AIEVALは「T087分（提案資料での未実施明記）は完了。実行は未実施・T088」へ。X-COSTはT086分の実態（デモへの費用上限適用とMaps割当手順の整備）を正確に分離。--report-only再生成 |
+| F7（D-中2・C-要確認1） | 提案資料「自動試験が全部通っています」が現HEADのreport（codeHash陳腐化でゲート赤）と瞬間不整合 | 「本資料作成時点〔2026-10-21〕の収集で全て合格。最新は acceptance-results.md」の時点限定+参照へ |
+| F8（低8件同梱） | チェックリスト未知D行検出・英語承認語・局所完了但し書き・SSE/DO・RTO/RPO・p95平易化・影響列「照合用」明示・script出典節名（docs/09→docs/13 §5）・development-completion §4へPH2-A12解消記録・費用表記統一 | 全実施（いずれも小変更。対照11・13つき） |
+
+## 方針で残す（Rulingつきの全リスト）
+
+1. **A-低4 提案§2「ポート8797」の出典にその数値が無い** — Ruling: 出典はe2e環境の説明として正しく、ポート番号の正本（scripts/e2e-port.ts）への依存は文面で足りる。次に提案資料へ触る際に文面候補 — コスト: なし
+2. **A-低5 AT表行末の「・T088」owner重複表示** — Ruling: --report-onlyの生成様式で「未実施。合格に数えない」表内であり誤解を生まない。繰り延べ — コスト: なし
+3. **D-低 example.json各Dに「未承認」の語が無い** — Ruling: meta（版・日付・未承認明記）とapproved:false・チェックリスト側の明記で担保。繰り延べ — コスト: なし
+4. **検出器の記録済み限界**（文単位ホワイトリストの同一文第2主張抑止=安全側・否定構文の正当文誤検出の可能性=安全側・未承認値トークン6種・D04/D05/D18の複合質問=docs/14踏襲・使役形/文末語幹単独/謙譲形/可能形） — Ruling: scriptヘッダーと報告書に文書化済み。文書を機械検査で完全に縛ることはせず、安全側（過検出）に倒している — コスト: 将来の文言変更で検出を抜ける余地が残る
+5. **A-要確認1 X-V04-*/X-AIEVALの提案資料での提示は総称か** — Ruling: 提案資料は利用者向け文書でX-ID羅列は不向き。総称（§4費用・§5のD12・§6残手順）で足りる。ID単位の正はacceptance-results.md — コスト: なし
+
+## 最終状態
+
+- 確認済みの高・中の未解消: **0件**（タスクレビュー×3＋D1 fix round×2→ADDRESSED＋4体並行レビュー→fix wave 1→再レビューF1〜F8全ADDRESSED・新規Critical/Important無し）
+- コミット: **fd7bc72**（本体・指定試験）・**99a05b8**（fix1: 検出器の包括文・変形・否定形）・**c54b58d**（fix2: 丁寧形・受動形・します形）・**a157696**（manifest: PH2-A12 resolved・external 7件）・**57a77a4**（docs/16・ph8.md・development-completion）・**e6e13ce**（fix wave 1）
+- 最終全検証（コントローラ実行・2026-10-21）: typecheck成功／check:contracts「102 API / docs/05 102行 / OpenAPI一致」／check:coverage成功（参照テスト272件）／build成功（precache 9 entries）／check:adoption-proposal exit 0／collect:evidence〔vitest **72ファイル335件**・load 3・**e2e 75 passed / 0 failed / 0 skipped**・live未実施〕＋**受入ゲート 1 passed**／**フルe2e 3回連続緑〔150 passed ×3＝5.3/5.3/5.5分〕**（業務75＋受入75。計測過程でasset-inspection 1件の一過性失敗あり＝単独緑・以後4走行で未再発・ph8.md「T087」最終検証節に記録）
+- T087は**完了**（資料作成タスクで実環境手順はT088/実環境帰属のため局所完了ではない）。提案資料2点とテンプレート・検査・指定試験が揃い、D01〜20を一項目一回答で確認できる。実団体への提出・回答記録・正式リリース判定（RG-08・RG-10）はT088
