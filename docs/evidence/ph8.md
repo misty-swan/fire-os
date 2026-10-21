@@ -371,3 +371,45 @@ documents.spec desktop「題名消失」（`題名を入力してください` �
 ### レビューサイクル（2026-10-21。docs/evidence/ph8-review.md「T086」）
 
 4体並行レビュー（a859e3e..da22779。A正確さ/B完了条件/C prototype準拠/D docs整合。報告はph8-review-t086-{A,B,C,D}.md）→ **fix wave 1**（c374e4c＋e233138。指摘統合task-086-findings-r0.mdのF1〜F16＋R23）→ スコープ付き再レビューで**全指摘ADDRESSED・新規Critical/Important無し**。確認済みの高・中の未解消0件。主な裁定: R18使い方ガイド画面はT086の範囲〔screens.ts ownerTask〕・R19章順序はUSER_GUIDE〔内容の正〕優先・R20/R21 ImportantとMinor語彙をfix wave 1へ・R23 PCのEsc挙動はdocs/03⑥で意図化（構造変更は繰り延べ）・R24 campaign icon/PC導線なしはprototype踏襲で維持・R25コミット粒度は履歴書換え禁止でparked。繰り延べMinorはph8-review.md「T086」と本節の記録どおり。
+
+## T087 完成後の消防団向け提案資料と確認差分表（2026-10-21。実装完了・最終検証待ち）
+
+実行環境はT083〜T086と同じローカル（Node v26 / workerd / vitest / Playwright chromium）。**実Cloudflare・実staging・実端末・実在の団体は使っていない**——提案資料は実在しないURL・実測費用・団体の了承を「未実施」と書くだけで、存在しないものを作らない。src/・migration・API契約の変更は無し（資料2点・例示JSON・検査script・試験・manifestのみ）。
+
+実装コミット: **fd7bc72** `feat: complete T087 proposal`（提案資料2点・config/production-policy.example.json・scripts/check-adoption-proposal.ts・tests/adoption-proposal.test.ts・package.json）→ **99a05b8** `fix: close approval-detector gaps in T087 proposal check`（fix round 1: 承認済み主張の検出を両文書の全ての文の走査へ拡大〔包括文・語形変形・否定形〕＋docs/14 §2の未決D見出しとの一致検査）→ **c54b58d** `fix: cover polite-form approval claims in T087 check`（fix round 2: 丁寧形・受動形・過去丁寧・します形の活用を検出へ追加＋ホワイトリスト1字句）→ **a157696** `chore: settle T087 ledger items in acceptance manifest`（PH2-A12=resolved・external 7件のowner→T088・acceptance-results.mdを--report-onlyで再生成）。
+
+### 検証（実装時点。2026-10-21）
+
+| 確認 | コマンド | 結果 |
+|---|---|---|
+| 型検査 | `npm run typecheck` | 成功 |
+| 指定試験 | `npx vitest --run tests/adoption-proposal.test.ts` | 1 passed（`proposal_distinguishes_measured_product_from_unapproved_operation`） |
+| 資料の静的検査 | `npm run check:adoption-proposal` | exit 0（必須要素11項目・D01〜D20一項目一回答〔docs/14 §2の未決D見出しと一致〕・承認済み主張なし・出典は実在ファイルのみ・未実施3項目の明記あり） |
+| 単体・結合試験 | `npx vitest --run` | **72ファイル335件成功**（T086最終の71/334＋T087分1。fix round 1・2とも件数不変＝対照は同一ケース内への追加） |
+| 網羅（静的） | `npm run check:coverage` | 成功（要件54 / AT54 / CT17 / TC18 / API102 / SCR28 / journey4 / 実外部29 / 参照テスト272件。a157696時点） |
+
+e2eは実施しない（UI・routeの変更が無いため）。D1〜D2で scripts/・tests/・config/・package.json が変わったため受入indexのcodeHashは陳腐化しており、コントローラの最終検証での `npm run collect:evidence` 再実行で解消する（AGENTS.mdの規定どおり。D2レポートに注記済み）。
+
+### 作ったもの
+
+| 部品 | 内容 |
+|---|---|
+| `docs/ADOPTION_PROPOSAL.md` | 消防団向け提案資料（v1・2026-10-21）。§1提案の前提（全架空データ・ローカル検証の範囲・RG-01〜10は全未達・団体了承を開発の条件にしていない）／§2完成版URL（手元のdemo `npm run demo`〔8787〕と受入環境e2e〔8797〕だけ。**実環境のデモURLは未実施**と明記しURLは書かない）／§3全機能動線（28画面・画面→できることの一覧。docs/USER_GUIDE.mdとアプリ内使い方ガイドへ誘導）／§4費用（**実測費用は未実施**。公開価格の試算＋ローカル実測値はすべて条件つき・出典つき）／§5確認事項D01〜D20の要点（データ項目・役割・点検票・保存・AI送信・通知・代替連絡・正副担当）／§6正式運用までの流れ（回答記録T088→残手順29件→RG-01〜10→実データ投入）。docs/16 T087のInterfaces必須要素11語と未実施明記3文は検査scriptで機械強制 |
+| `docs/ADOPTION_CHECKLIST.md` | D01〜D20を一項目一回答で並べた表（ID／確認する質問〔平易な日本語〕／現在の検証設定（未承認）／代替案／影響・意思決定者／回答〔空欄〕）。冒頭に「検証設定はすべて未承認」「回答の記録はT088」「未回答のまま正式リリースはできない（RG-10）」を明記。各Dの正本はdocs/14 §2 |
+| `config/production-policy.example.json` | T088が回答を記録する運用方針テンプレート。キーはmeta＋D01〜D20のみ（meta=版・日付・未承認の明記）。各Dは質問／現在の検証設定／代替案／意思決定者／回答（空欄）／approved:false の6欄。構造・approved全false・回答全空欄は機械検査 |
+| `scripts/check-adoption-proposal.ts` | 純関数 `checkAdoptionProposal`（3検出器＋failures集約）とCLI（`npm run check:adoption-proposal`。実3ファイル＋docs/14を読んで同じ関数へ渡す。check-environment.tsと同じ構成）。検出器1〔unapprovedValuesPresentedAsApproved〕=承認済み主張（語幹{承認,了承,決定,確定,合意}×活用列挙〔済/した/している/されています/されます/します等の常体・丁寧形・受動形・過去丁寧〕を両文書の全ての文で走査。例外は明示的否定「…済みとは扱わない」と「production-policy.jsonとして確定します」の2字句のみで「未承認」などの語では相殺しない）＋未承認値トークン（$5・RTO・RPO・保持7日・500回/日・2,000通/日）の無Label検出＋例示JSONのapproved:true・記入済み回答＋チェックリスト回答欄への記入。検出器2〔missingDecisionIds〕=D01〜D20の一項目一回答（欠落・重複・列数不一致・回答列1列・質問列/検証設定列の存在）＋例示JSONの構造＋docs/14 §2の未決D見出し（最初の「確定した詳細設計」より前）とDECISION_IDSの集合一致。検出器3〔productEvidenceMissing〕=必須要素11語＋未実施明記3文＋出典パス（docs/ops/config配下・拡張子付き）の実在＋実測値らしき数値（ms/秒/分/時間/$等を伴う行）への出典必須 |
+| `tests/adoption-proposal.test.ts` | 指定試験1件。ブリーフの3断言＋陽性対照1〜8（インライン注入で恒久化）を同一ケース内に収める。docs/configは`?raw`で読み、出典として挙げてよい実在パスの集合はimportできたファイルのみ（幽霊出典を検出できる） |
+| `package.json` | `check:adoption-proposal`（tsx scripts/check-adoption-proposal.ts）を追加 |
+| manifest台帳（a157696） | PH2-A12（low）をopen→resolved（basisに4副項目の個別判定: ①API-27の状態別422/404区別と②import解析中の固定は意図した設計で維持、③staging孤児はT085-D7/N1で解決済み、④0バイト等は申請と転送の二段で対応済み。コード不変）。external 29件のうち7件（X-V07-RESTORE・X-DEV-4・X-COST・X-V04-JEV/LLM/RET・X-AIEVAL）は提案資料での未実施明記の棚卸し注記を追記しowner→T088。docs/evidence/acceptance-results.mdを--report-onlyで再生成 |
+
+### 赤→緑の扱い（正当な赤の記録）
+
+- **指定試験（手順2）**: 実装前に試験のみを実行し `Error: ENOENT: no such file or directory, open '../docs/ADOPTION_CHECKLIST.md'`＝検査対象の文書が実装前に存在しないためのファイル不在エラー（T086のseed-demo前例と同じ正統な赤。runner自体の故障ではない）。実装後の最初の実行で断言ベースの赤2件（試験側の実在パス集合に提案資料自身が載っていなかった・対照のD07行削除が行末改行を残して表を分断した）→いずれも試験側を修正して緑（検出器の論理確認であって検査対象文書の修正ではない）。
+- **検出器3種の陽性対照（恒久化）**: コミット済み試験内のインライン注入（対照1〜8）に加えて、実ファイルへの一時注入（注入→赤→復元）を計12件: D1のC1〜C5（D02へ「了承済み」・D05 approved:true・D11回答記入・D07行削除・実在しない出典パス）／fix round 1のR1〜R4（包括文「確定している」・否定形「未承認ではなく承認されている」・「承認済」変形・docs/14からD13見出し削除）／fix round 2のP1〜P3（「承認されています」・「決定されました」・「了承します」）。復元後はすべて緑・注入残骸なし。過検出防止の白紙リスト（明示的否定「…済みとは扱いません」・します形の正当用法「production-policy.jsonとして確定します」）は `toEqual([])` で固定＝ホワイトリストを外すとこの断言と実文書の両方が落ちる（恒真でない）。
+- **検出規則の意図的な限界（文書化済み）**: 語幹単独（「承認」「決定」等の単独形）・使役形（「確定させます」）・文末語幹単独（「…で決定。」）は検出対象外（「承認後」「承認版」「意思決定者」等の機能語との誤検出トレードオフ）。scripts/check-adoption-proposal.ts のヘッダー／定数コメントとD1報告書に記録。
+
+### 未実施・未接続（提案資料が「未実施」と明記したもの。検証済みとして扱わない）
+
+1. 実環境の残手順29件（X-DEMO・X-V01/V02/V05・X-COST・X-V04-JEV/LLM/RET・X-AIEVAL・X-V07-RESTORE・X-DEV-4ほか）: 提案資料は「実環境のデモURLは未実施」「実測費用は未実施」「実環境での測定は未実施」を明記。残手順の正は **docs/evidence/acceptance-results.md「実外部・実端末・人の残手順」**（D2で7件の棚卸し注記とowner→T088を実施）。
+2. 提案資料自体の実団体への提出・説明・回答の記録: T088（チェックリストの回答欄は空欄のまま配布。連絡・送信・了承の捏造はしない）。
+3. 正式リリース判定（RG-08〔利用者の了承〕・RG-10〔意思決定の記録〕を含むRG-01〜10）: すべてT088。

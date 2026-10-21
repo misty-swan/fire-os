@@ -4,7 +4,7 @@ T001〜T086（docs/16）の実装が揃った時点での「何が完成し、�
 
 ## 1. 完成の範囲
 
-- **タスク**: T001〜T086（89タスク: T001〜T088＋枝番T085b。T087〔提案資料〕・T088〔正式判定〕は完成後の別タスク）。このうち完了・局所完了の内訳と各タスクの詳細は docs/16 の状態欄が正。
+- **タスク**: T001〜T086（89タスク: T001〜T088＋枝番T085b。T087〔提案資料〕の資料は2026-10-21に実装済み＝docs/ADOPTION_PROPOSAL.md・docs/ADOPTION_CHECKLIST.md〔回答欄は空欄で配布〕。T088〔正式判定〕は完成後の別タスク）。このうち完了・局所完了の内訳と各タスクの詳細は docs/16 の状態欄が正。
 - **受入の網羅（docs/evidence/acceptance-results.md の機械抽出どおり）**: 要件**54** / AT**54** / CT**17**（AT×CTの組220・うちnotApplicable 0） / 継続TC**18** / API**102** / 画面**SCR28** / 横断journey**4**。参照している実テスト272件。※docs/16のT085/T086本文にある「101 API」は陳腐な初期表記で、契約台帳・docs/05・OpenAPIの一致検査（`npm run check:contracts`）が**102 API**を正とする（T085裁定R9と同じ）。
 - **実装commitとテスト結果**: 各タスクの実装commitはdocs/16の該当行に記録済み。受入の全AT×CT×TC×journeyへの実テストの対応付けと実行結果は **docs/evidence/acceptance-index.json**（testId/reqIds/commit/codeHash/設計版/実行環境/結果/証跡。収集は `npm run collect:evidence`）と **docs/evidence/acceptance-results.md** が正。ゲート（`acceptance_gate_fails_on_skip_missing_route_or_unexecuted_case`）がindexの新しさ（codeHash）とskip・未実施の無いことを機械的に検査する。
 - **画面**: 28画面（SCR-01〜28）すべてがプレースホルダーでなく実装済み（`src/client/routes.tsx` の screenElements。docs/03 が正本）。シェル画面も実装済み（`/app/menu` メニュー・`/app/help` 使い方ガイド〔SHELL-HELP。T086 da22779で実装。docs/03 §1.1-28〕）。
@@ -60,12 +60,12 @@ T086で実施した「できる範囲」の詳細と検証値は docs/evidence/p
 
 1. **docs/13 の正式リリース判定（RG-01〜RG-10）はすべて未達**。上記の局所完了・実外部残手順・下記の了承待ちが解消されるまでは「合格」と主張しない（acceptance-results.md冒頭の注記と同じ規定）。
 2. **実データ・実団体を一切使っていない**（AGENTS.md。名簿・出動・水利・写真は全部架空。公開デモも架空のみ＝RG-09）。
-3. **了承待ちの未決事項**（docs/09・docs/14のD台帳）: データ保存・実災害時の用途・配送手段（D04/D08/D13）・費用の了承（D11）・管理主体と代行（D17）等。T087の提案資料で一項目一回答として確認する。
+3. **了承待ちの未決事項**（docs/09・docs/14のD台帳）: データ保存・実災害時の用途・配送手段（D04/D08/D13）・費用の了承（D11）・管理主体と代行（D17）等。**docs/ADOPTION_CHECKLIST.md（T087・2026-10-21）でD01〜D20を一項目一回答として確認する**（回答欄は空欄のまま配布し、回答の記録はT088。導入提案資料はdocs/ADOPTION_PROPOSAL.md）。
 4. **開発設定のままの値**: レート上限（DEVELOPMENT_SECURITY_POLICY/DEMO_SECURITY_POLICYとも未承認・docs/14 D11で確定予定）・費用上限（approved:false）・RTO/RPO 24時間案（D10未承認）。
 5. **アプリ内のレート計数はisolate内メモリ**であり、厳密な全体上限はCloudflareのWAF/Rate Limiting層の設定が要る（未実施。ops/demo-deploy.md §5.3）。
 6. **既知のフレーキー**: documents.spec「題名消失」の引き金は未特定（回復ループで抑止。FLAKE-1）。ProxyWorkerドロップの残存クラス（T085b-W1）。
 7. **パスワード再設定コード等の配送手段は未実装**（D04未決。ops/account-recovery.md §3）。
 
-## 6. 最終検証（コントローラが最終検証後に追記）
+## 6. 最終検証
 
-> この節は空欄のまま残す。T086の完了条件（`npm run collect:evidence` の再実行〔vitest・load・業務e2e〕・受入ゲート緑・最終HEADでフルe2e **3回連続**緑・レビューサイクル確定）を実施した後に、コントローラが実測値（件数・所要・commit・codeHash）を追記する。
+T086最終検証の実測値は docs/evidence/ph8.md「T086」節「最終検証」（2026-10-21・コミット85681e4時点）が正。
