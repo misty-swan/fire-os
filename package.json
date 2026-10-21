@@ -29,7 +29,8 @@
     "demo": "tsx scripts/demo.ts",
     "demo:reset": "tsx scripts/demo.ts --reset",
     "demo:seed:remote": "tsx scripts/seed-demo.ts --remote --env demo",
-    "demo:reset:remote": "tsx scripts/seed-demo.ts --remote --env demo --wipe"
+    "demo:reset:remote": "tsx scripts/seed-demo.ts --remote --env demo --wipe",
+    "demo:wipe:remote": "tsx scripts/seed-demo.ts --remote --env demo --wipe-only"
   },
   "dependencies": {
     "better-auth": "1.7.7",

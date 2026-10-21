@@ -4,7 +4,10 @@
 # --remote は --env demo --confirm demo が無いと scripts/seed-demo.ts が拒否する
 # （scripts/bootstrap-admin.tsと同じ確認規律。demo以外の環境名は --confirm が一致しても動かない）。
 # Secretの値はこのファイルに書かない。GitHubリポジトリSecretの CLOUDFLARE_API_TOKEN_DEMO
-# （demo環境のD1/R2/Workersだけに権限を狭したtoken）と CLOUDFLARE_ACCOUNT_ID_DEMO を参照する
+# （demo環境のD1/R2/Workersだけに権限を狭したtoken）と CLOUDFLARE_ACCOUNT_ID_DEMO に加え、
+# 体験アカウント3本の固定パスワード DEMO_ACCOUNT_PASSWORD（12文字以上。週次リセット後も同じ
+# 資格情報でログインできる。GitHubがログ中の値を自動マスクする）を参照する。パスワードを
+# --demo-password argvで渡すとログへ出るため、scripts/seed-demo.ts が読む環境変数で渡す
 # （登録手順は ops/demo-provisioning.md §5、運用は ops/demo-deploy.md §3.1）。
 name: demo-reset
 on:
@@ -33,5 +36,6 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_DEMO }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_DEMO }}
+          DEMO_ACCOUNT_PASSWORD: ${{ secrets.DEMO_ACCOUNT_PASSWORD }}
       - name: 成功をジョブサマリーへ記録（失敗時はGitHubの既定の通知。再実行はworkflow_dispatchから）
-        run: echo "demo環境の週次リセットが完了しました（実行 ${{ github.run_id }}）。体験アカウントのログイン情報はこの実行のログに一度だけ表示されます" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "demo環境の週次リセットが完了しました（実行 ${{ github.run_id }}）。体験アカウントのパスワードはSecret DEMO_ACCOUNT_PASSWORD の固定値（メール・役割はこの実行のログに一度だけ表示されます。GitHubがログ中のパスワード値を自動マスクします）" >> "$GITHUB_STEP_SUMMARY"

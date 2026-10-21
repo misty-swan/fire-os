@@ -61,7 +61,7 @@
 | `demo-member@example.test` | 架空 体験団員 | member | 団員の閲覧と自分の操作 |
 
 - **パスワードの値はこの文書にもGitにも書かない。** seed実行時（`npm run demo`の初回）に標準出力へ`demo-accounts`のJSONで**一度だけ**表示されるので、その場でGit管理外の `.env.demo-login`（`.gitignore`の`.env*`）等に控える。表示を閉じた後に失くしたら§3のリセットで作り直す。
-- 生成されるパスワードは16文字以上の英数字（紛らわしい字を除く・実行ごとに新規）。**同じ資格情報を保って作り直したい**（リセット後も台紙を変えたくない）ときは `npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo --demo-password <12文字以上の値>` を使う（3本ともその値になる。`npm run demo`の初回起動からではなく直接CLIで投入するときに使う。値を省いた`--demo-password`は黙ってランダム生成に落とさず使い方の誤りで拒否する）。
+- 生成されるパスワードは16文字以上の英数字（紛らわしい字を除く・実行ごとに新規）。**同じ資格情報を保って作り直したい**（リセット後も台紙を変えたくない）ときは `npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo --demo-password <12文字以上の値>` を使う（3本ともその値になる。`npm run demo`の初回起動からではなく直接CLIで投入するときに使う。値を省いた`--demo-password`は黙ってランダム生成に落とさず使い方の誤りで拒否する）。実環境（`--remote`）では環境変数 `DEMO_ACCOUNT_PASSWORD` でも同じ（GitHub Actionsの週次リセットworkflowがSecretからこの環境変数で渡す。§3.1。フラグと環境変数の併用は拒否される）。
 - `--demo-password <値>` はコマンドライン引数として渡るため、**シェルの履歴や`ps`の一覧に値が残り得る**。あくまでローカルの手元デモ専用の方法とし、共有端末・画面共有中は使わない。ふだんはseed標準出力の一度きりの表示を`.env.demo-login`へ控える方式（前項）を優先する（貼り付けは控え先のファイルから行う）。
 - アカウントは架空データと独立に冪等で判定する（3本とも既に在ればスキップ・一部だけ在れば中止して教える）。既存の初期管理者（admin@example.test・二要素必須）の運用は変わらない。
 
@@ -75,19 +75,25 @@
 ### 3.1 実環境demoの週次リセット（GitHub Actions。Task5。実行確認はTask 7）
 
 - workflow: `.github/workflows/demo-reset.yml`。毎週**月曜 01:00 JST**（cron `0 16 * * 0`＝日曜 16:00 UTC。GitHub ActionsのcronはUTCのみのためJST換算をworkflowのコメントに併記してある）に自動実行。Actionsの画面から手動でも起動できる（`workflow_dispatch`。失敗時の再実行もここから）。同時実行は `concurrency` で禁止している（cronと手動起動が重なると待機する）。
-- 前提（初回だけ。手順の正本はops/demo-provisioning.md §5ステップ22〜25）: GitHubリポジトリSecretの **`CLOUDFLARE_API_TOKEN_DEMO`**（demo環境のD1/R2/Workersだけに権限を狭したtoken）と **`CLOUDFLARE_ACCOUNT_ID_DEMO`** を登録しておく。
+- 前提（初回だけ。手順の正本はops/demo-provisioning.md §5ステップ22〜25）: GitHubリポジトリSecretの **`CLOUDFLARE_API_TOKEN_DEMO`**（demo環境のD1/R2/Workersだけに権限を狭したtoken）と **`CLOUDFLARE_ACCOUNT_ID_DEMO`**、さらに体験アカウント3本の固定パスワード **`DEMO_ACCOUNT_PASSWORD`**（12文字以上。登録手順は同§5ステップ25）を登録しておく。
 - **account-idの答え（Task 1で「要否はTask 5で確定」としていた論点）: 必要。** wrangler.jsoncにはaccount_idを書いていない（設定に実値を書かない方針。database_idと同じ）ため、wranglerの実環境操作はaccountの指定が要る。staging/productionの配置workflow（deploy-staging.yml / deploy-production.yml）と同じ形で、workflowはSecret `CLOUDFLARE_ACCOUNT_ID_DEMO` を環境変数 `CLOUDFLARE_ACCOUNT_ID` へ渡す。アカウントIDは秘密値ではないがGitには載せない（登録先はtokenと同じリポジトリSecretでよい）。
 - workflowがやること（1コマンド。`npm run demo:reset:remote -- --confirm demo`）:
   1. demo D1（`fireos-demo`）の**全表をDROP**（wipe。sqlite内部表〔`sqlite_%`〕とCloudflare管理の表〔`_`始まり〕を除く。`d1_migrations`も消えるため、直後のmigration適用でschemaを全件作り直す）
   2. `wrangler d1 migrations apply DB --env demo --remote`
   3. 架空データのseed（`buildDemoSeedPlan`と同じ計画。wipe直後の空DBなのでunit・架空の幹部も含めて作る）
   4. R2バケット `fireos-demo-files` へ写真・文書の架空実体を上書きput（`--env demo --remote`。同じ2キーなので前週分は上書きされる）
-  5. 体験アカウント3本を作り、ログイン情報（パスワード）を**一度だけ**表示する
+  5. 体験アカウント3本を作る。パスワードはSecret `DEMO_ACCOUNT_PASSWORD` の固定値（workflowが**環境変数**でseedへ渡すためargv・Actionsのログに値は出ない。GitHubがログ中の値を自動マスクする。メール・役割はログに一度だけ表示される）
 - 書込み規律: `--remote` は `--env demo --confirm demo` が無いと動かない（scripts/bootstrap-admin.tsと同じ確認規律）。staging/productionは `--confirm` を揃えても拒否される（scripts/seed-demo.ts）。local/remoteのコマンド列の正本は純関数 `buildSeedCommands` で、tests/demo-reset.test.ts が配列ごと固定している。
 - 失敗時: GitHubの既定の失敗通知を受けたら、Actionsの画面からworkflowを手動起動（workflow_dispatch）して再実行する。データは架空なので最悪のケースは「デモが前週のまま／途中までの投入」で実害は無い。再実行は必ずwipeから始まるため冪等。
-- 体験アカウントのパスワード: 自動リセットでは**新しく生成**され、その実行のログに一度だけ表示される。営業台紙の資格情報を変えたくない週は、wranglerログイン済みの手元端末で `npm run demo:reset:remote -- --confirm demo --demo-password <12文字以上の値>` を実行して同じ資格情報へ戻す（§2.1と同じ規律。workflowへパスワードを渡さないのは、Secretをtokenとaccount-id以外に増やさないため）。
+- 体験アカウントのパスワード: Secret **`DEMO_ACCOUNT_PASSWORD`** の固定値。workflowはその値を環境変数 `DEMO_ACCOUNT_PASSWORD` として `scripts/seed-demo.ts` へ渡す（argvに載せないためActionsのログや`ps`の一覧に出ない。3本ともこの値になる。週次リセット後も営業台紙の資格情報は変わらない）。手元端末から手動実行するときは同じ環境変数を渡すか `--demo-password <12文字以上の値>` を使える（フラグは§2.1と同じくシェル履歴・`ps`に残るため共有端末では使わない。フラグと環境変数の併用は拒否される）。
 - R2の残格納: seedは同じ2キーを上書きするため通常は蓄積しない。wranglerのCLIにprefix一括削除もobject一覧も無いため、キーを増やす変更をした週に古いキーが残っても掃除はできない（**残ってよい運用**とする。どうしても消すときはCloudflareのダッシュボードから）。
-- 初期管理者（bootstrap・二要素必須）のアカウントもwipeで消える。週次リセット後のデモは**体験アカウント3本だけで運用する**（§2.1。二要素必須の管理操作〔PER-06/07/08〕は実管理者の再作成まで行えない）。bootstrapはunitが既にあると `already_bootstrapped` で拒否されるため、実管理者は週次リセット後には作り直せない（初回構築〔§5.1ステップ5〕時に作った物が毎週消える。この限界は「正直な限界」として残し、実管理者での運用が必要になったらTask 7の構築手順を見直す）。
+- 実管理者（bootstrap・二要素必須）のアカウントもwipeで消える。週次リセット後のデモは**体験アカウント3本だけで運用する**（§2.1。二要素必須の管理操作〔PER-06/07/08〕を実管理者で行うときは下の復旧手順で作り直す）。
+- **実管理者を作り直す復旧手順**（wranglerログイン済みの手元端末から。bootstrapはunitが一つでもあると `already_bootstrapped` で拒否されるため、最初にDBを空にする。`--wipe-only` はwipeとmigrationまで行い**seedはしない**復旧専用モード）:
+  1. `npm run demo:wipe:remote -- --confirm demo` — 全表DROP → migration適用まで（D1は空のschemaで止まる。scripts/seed-demo.ts の `--wipe-only`。`--wipe`〔seedまで行う〕との併用は拒否される）
+  2. `npm run bootstrap:admin -- --env demo --remote --confirm demo --unit-name "宮之浦分団" --admin-name "架空 岳志" --email <管理者のメール>` — 初期管理者の招待tokenを一度だけ表示（§5.1ステップ5と同じ。DBが空なので `already_bootstrapped` を通る）
+  3. 管理者が `https://<デモのURL>/login#invite=<token>` で招待を受諾し、二要素認証を設定する
+  4. `npm run demo:seed:remote -- --confirm demo` — 架空データと体験アカウント3本を再投入
+- **この復旧順序が成立することの確認（2026-10-21・実装の確認）**: bootstrapはunit名「宮之浦分団」でunit（実在のUUID）と管理者団員を作る。seedは**unit名で既存の宮之浦分団を引き当てて**その実UUIDに架空データを付け足す（unitの新規作成はしない。新規作成〔固定IDのunit〕はunitが見つからなかったとき＝週次wipe直後の空DBだけの経路）。seed内の管理者の特定は「admin役割付き団員」で探し、招待受諾前で役割がまだ無いときは分団の任意団員での代替があるため、ステップ3より前にseedを実行しても失敗しない（ただし管理者の受信箱・担当タスクの宛先が代替団員になるため、**ステップ3を済ませてからステップ4**が正）。bootstrapが要求する「unitゼロ」はステップ1のwipeが担保するため、この順序以外では `already_bootstrapped` で止まる。初回構築〔§5.1ステップ5→6〕と同じ順序。
 
 ## 4. レート/費用上限の現設定と意図（いずれも**未承認の開発設定**）
 

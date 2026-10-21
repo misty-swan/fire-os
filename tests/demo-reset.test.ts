@@ -17,6 +17,13 @@ import { buildRemoteWipeSql, buildSeedCommands, isInternalTableName, parseDemoSe
  * - ワイプ戦略: 週次リセットは全表DROP（sqlite内部表を除く。d1_migrationsも消えるため直後の
  *   migration適用でschemaを作り直す）→ migration → seed。R2は同じキーの上書きなので残格納は起こらない
  *   （wranglerにprefix一括削除・object一覧は無い。残作業の診はops/demo-deploy.md §3.1）。
+ *   FK回避は `PRAGMA defer_foreign_keys = on`（D1は全クエリを暗黙のトランザクションで実行し、
+ *   `PRAGMA foreign_keys=OFF` は効かない。公式 https://developers.cloudflare.com/d1/sql-api/foreign-keys/
+ *   が案内する唯一の方法。2026-10-21確認）。
+ * - 固定資格情報: workflowはSecret `DEMO_ACCOUNT_PASSWORD` を**環境変数**で渡す（argvに載せない。
+ *   パスワードがActionsのログへ出ない。スクリプトは `--demo-password` フラグも受け付けるが併用は拒否）。
+ * - 復旧用wipe: `--wipe-only` は全表DROPとmigrationだけ行いseedはしない（週次wipeで消えた実管理者〔MFA付き〕を
+ *   作り直す手順の一部。ops/demo-deploy.md §3.1。`npm run demo:wipe:remote`）。
  */
 
 const localMode = { kind: "local", persist: ".wrangler/demo" } as const;
@@ -91,21 +98,26 @@ describe("demo-reset (営業デモTask5)", () => {
       expect(refused.usageError).toContain("demo");
       expect(refused.usageError).toContain(env);
     }
-    // --env / --confirm / --wipe は --remote と一緒にだけ使える（localの使い方を壊さない）
+    // --env / --confirm / --wipe / --wipe-only は --remote と一緒にだけ使える（localの使い方を壊さない）
     const noRemote = parseDemoSeedArgs(["--env", "demo", "--confirm", "demo"]);
     if (!("usageError" in noRemote)) throw new Error("--remote無しの--envは拒否されるべき");
     expect(noRemote.usageError).toContain("--remote");
     const localWipe = parseDemoSeedArgs(["--wipe"]);
     if (!("usageError" in localWipe)) throw new Error("localでの--wipeは拒否されるべき");
     expect(localWipe.usageError).toContain("--persist-to");
+    const localWipeOnly = parseDemoSeedArgs(["--wipe-only"]);
+    if (!("usageError" in localWipeOnly)) throw new Error("localでの--wipe-onlyは拒否されるべき");
+    expect(localWipeOnly.usageError).toContain("--persist-to");
 
     // 正の対照: demo + confirm demo は通る。--wipeの有無がreset（wipeあり）とseed（ wipe無し）の違い
     const reset = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--wipe"]);
     if (!("remoteDemo" in reset)) throw new Error("正しいremote引数は通るべき");
     expect(reset.wipe).toBe(true);
+    expect(reset.wipeOnly).toBe(false);
     const seed = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo"]);
     if (!("remoteDemo" in seed)) throw new Error("wipe無しのremote seedも通るべき");
     expect(seed.wipe).toBe(false);
+    expect(seed.wipeOnly).toBe(false);
     // --demo-password はremoteでも有効（リセット後に同じ資格情報へ戻す運用。検査はlocalと同じ規律）
     const short = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--wipe", "--demo-password", "short"]);
     if (!("usageError" in short)) throw new Error("12文字未満はremoteでも拒否されるべき");
@@ -113,6 +125,41 @@ describe("demo-reset (営業デモTask5)", () => {
     const fixed = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--demo-password", "long-enough-pass"]);
     if (!("remoteDemo" in fixed)) throw new Error("固定パスワード付きのremoteは通るべき");
     expect(fixed.fixedDemoPassword).toBe("long-enough-pass");
+  });
+
+  it("wipe_only_runs_wipe_and_migration_without_seed", () => {
+    // 復旧用wipe（ops/demo-deploy.md §3.1の実管理者作り直し手順）。--wipe-only はDROP+migrationだけでseedをしない
+    const wipeOnly = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--wipe-only"]);
+    if (!("remoteDemo" in wipeOnly)) throw new Error("--wipe-only付きのremoteは通るべき");
+    expect(wipeOnly.wipe).toBe(false);
+    expect(wipeOnly.wipeOnly).toBe(true);
+    // --wipe（DROPからのseed再開）との併用は矛盾するため拒否
+    const both = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--wipe", "--wipe-only"]);
+    if (!("usageError" in both)) throw new Error("--wipeと--wipe-onlyの併用は拒否されるべき");
+    expect(both.usageError).toContain("--wipe-only");
+  });
+
+  it("fixed_demo_password_can_come_from_the_environment_instead_of_argv", () => {
+    // workflow（demo-reset.yml）はSecret DEMO_ACCOUNT_PASSWORD を環境変数で渡す（argvに載せないため値がログへ出ない）
+    const fromEnv = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--wipe"], "env-fixed-pass-123");
+    if (!("remoteDemo" in fromEnv)) throw new Error("環境変数の固定パスワードは通るべき");
+    expect(fromEnv.fixedDemoPassword).toBe("env-fixed-pass-123");
+    // 環境変数が短いときも --demo-password と同じ規律で拒否（黙ってランダム生成へ落とさない）
+    const shortEnv = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo"], "short");
+    if (!("usageError" in shortEnv)) throw new Error("12文字未満の環境変数は拒否されるべき");
+    expect(shortEnv.usageError).toContain("DEMO_ACCOUNT_PASSWORD");
+    expect(shortEnv.usageError).toContain("12文字以上");
+    // フラグと環境変数の併用は矛盾するため拒否（どちらの意図か黙って決めない）
+    const bothSources = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--demo-password", "long-enough-pass"], "env-fixed-pass-123");
+    if (!("usageError" in bothSources)) throw new Error("フラグと環境変数の併用は拒否されるべき");
+    expect(bothSources.usageError).toContain("DEMO_ACCOUNT_PASSWORD");
+    // 環境変数が無ければ従来どおり（フラグ無し＝ランダム生成。フラグ付き＝フラグの値。localの回帰も含む）
+    const random = parseDemoSeedArgs(["--remote", "--env", "demo", "--confirm", "demo", "--wipe"]);
+    if (!("remoteDemo" in random)) throw new Error("環境変数無しのremoteは普通に通るべき");
+    expect(random.fixedDemoPassword).toBeUndefined();
+    const localFlag = parseDemoSeedArgs(["--persist-to", ".wrangler/demo", "--demo-password", "long-enough-pass"], undefined);
+    if (!("persist" in localFlag)) throw new Error("localのフラグ指定は従来どおり通るべき");
+    expect(localFlag.fixedDemoPassword).toBe("long-enough-pass");
   });
 
   it("wipe_sql_drops_all_user_tables_but_skips_sqlite_internals", () => {
@@ -130,9 +177,17 @@ describe("demo-reset (営業デモTask5)", () => {
     expect(sql).toContain('DROP TABLE IF EXISTS "d1_migrations";');
     expect(sql).not.toContain("sqlite_sequence");
     expect(sql).not.toContain("_cf_KV");
-    // 識別子のquote逃し（表名に「"」が入っても文が壊れない）と参照制約の回避
+    // 識別子のquote逃し（表名に「"」が入っても文が壊れない）と参照制約の回避。
+    // FKはPRAGMA defer_foreign_keys = on で延期する（D1は毎トランザクション foreign_keys=on 相当のため
+    // PRAGMA foreign_keys=OFF は効かない。公式の案内どおり脚本の先頭に置き、DROPのトランザクション全体へ効かせる）
     expect(buildRemoteWipeSql(['we"ird'])).toContain('DROP TABLE IF EXISTS "we""ird";');
-    expect(sql).toContain("PRAGMA foreign_keys=OFF;");
+    expect(sql).toContain("PRAGMA defer_foreign_keys = on;");
+    expect(sql).not.toContain("foreign_keys=OFF");
+    expect(sql).not.toContain("PRAGMA foreign_keys=ON;");
+    // deferはスクリプトの先頭（BEGINより前。公式の「at the start of your transaction」どおり）
+    expect(sql.indexOf("PRAGMA defer_foreign_keys")).toBeGreaterThan(-1);
+    expect(sql.indexOf("PRAGMA defer_foreign_keys")).toBeLessThan(sql.indexOf("BEGIN TRANSACTION"));
+    expect(sql.indexOf("PRAGMA defer_foreign_keys")).toBeLessThan(sql.indexOf("DROP TABLE"));
   });
 
   it("workflow_resets_demo_weekly_with_demo_scoped_secrets_only", () => {
@@ -149,10 +204,17 @@ describe("demo-reset (営業デモTask5)", () => {
     expect(demoResetYaml).toContain("group: demo-reset");
     expect(demoResetYaml).toContain("cancel-in-progress: false");
 
-    // 実行コマンドとSecretの参照（wranglerは CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID 環境変数を拾う）
+    // 実行コマンドとSecretの参照（wranglerは CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID 環境変数を拾う。
+    // 体験アカウントの固定パスワードは DEMO_ACCOUNT_PASSWORD 環境変数で渡す（seed-demo.tsが読む。argvに載せない））
     expect(demoResetYaml).toContain("npm run demo:reset:remote -- --confirm demo");
     expect(demoResetYaml).toContain("${{ secrets.CLOUDFLARE_API_TOKEN_DEMO }}");
     expect(demoResetYaml).toContain("${{ secrets.CLOUDFLARE_ACCOUNT_ID_DEMO }}");
+    expect(demoResetYaml).toMatch(/DEMO_ACCOUNT_PASSWORD: \$\{\{ secrets\.DEMO_ACCOUNT_PASSWORD \}\}/);
+    // パスワードはrunコマンド（argv）へ渡さない。環境変数だけで受ける（値がActionsのログへ出ない）
+    for (const line of demoResetYaml.split("\n")) {
+      if (line.trimStart().startsWith("#")) continue;
+      if (line.includes("run:")) expect(line, line).not.toContain("demo-password");
+    }
     for (const line of demoResetYaml.split("\n")) {
       if (line.trimStart().startsWith("#")) continue; // 説明文にSecret名を書くことは許す（値は置けない）
       if (line.includes("CLOUDFLARE_API_TOKEN") || line.includes("CLOUDFLARE_ACCOUNT_ID")) {
@@ -164,9 +226,11 @@ describe("demo-reset (営業デモTask5)", () => {
     expect(demoResetYaml).not.toContain("CLOUDFLARE_API_TOKEN_PRODUCTION");
     expect(demoResetYaml).not.toContain("BETTER_AUTH_SECRET");
 
-    // npm scriptの正本（reset= --wipe付き、seed= wipe無し。Task 7の初回構築〔ops/demo-deploy.md §5.1〕はseedを使う）
+    // npm scriptの正本（reset= --wipe付き、seed= wipe無し、wipe:remote= --wipe-only（seed無しの復旧用wipe）。
+    // Task 7の初回構築〔ops/demo-deploy.md §5.1〕はseedを使う）
     const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
     expect(pkg.scripts["demo:reset:remote"]).toBe("tsx scripts/seed-demo.ts --remote --env demo --wipe");
     expect(pkg.scripts["demo:seed:remote"]).toBe("tsx scripts/seed-demo.ts --remote --env demo");
+    expect(pkg.scripts["demo:wipe:remote"]).toBe("tsx scripts/seed-demo.ts --remote --env demo --wipe-only");
   });
 });

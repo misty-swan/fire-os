@@ -81,7 +81,7 @@
     出典: https://developers.cloudflare.com/fundamentals/api/get-started/create-token/ ＋ https://developers.cloudflare.com/fundamentals/api/reference/permissions/ （2026-10-21確認）
 24. **Continue to summary** → **Create Token** を選び、表示されたtokenの値を**一度だけ**コピーして手元の安全な場所に保存する。→ 何が起きるか: tokenの値はこの画面でしか表示されない（再表示不可）。紛失したら作り直す。
     出典: https://developers.cloudflare.com/fundamentals/api/get-started/create-token/ （2026-10-21確認）
-25. GitHubに登録する: このリポジトリのGitHubページ → **Settings** → **Secrets and variables** → **Actions** → **Secrets** タブ → **New repository secret**。**Name** に `CLOUDFLARE_API_TOKEN_DEMO`、**Secret** にステップ24のtokenの値を入れて **Add secret**。→ 何が起きるか: 週次リセットのworkflow（Task 5が作る）がCloudflareへ安全に接続できる。値はGitHubの画面に再表示されない。既存のstaging／productionと同じ規律（ops/deploy.md §0。環境別Secret）。**併用の `CLOUDFLARE_ACCOUNT_ID_DEMO` も同じ画面・同じ手順で登録する**（要と確定: Task 5。ops/demo-deploy.md §3.1。値はステップ5で控えたアカウントID）。
+25. GitHubに登録する: このリポジトリのGitHubページ → **Settings** → **Secrets and variables** → **Actions** → **Secrets** タブ → **New repository secret**。**Name** に `CLOUDFLARE_API_TOKEN_DEMO`、**Secret** にステップ24のtokenの値を入れて **Add secret**。→ 何が起きるか: 週次リセットのworkflow（Task 5が作る）がCloudflareへ安全に接続できる。値はGitHubの画面に再表示されない。既存のstaging／productionと同じ規律（ops/deploy.md §0。環境別Secret）。**併用の `CLOUDFLARE_ACCOUNT_ID_DEMO` も同じ画面・同じ手順で登録する**（要と確定: Task 5。ops/demo-deploy.md §3.1。値はステップ5で控えたアカウントID）。**さらに同じ画面でもう1つ `DEMO_ACCOUNT_PASSWORD` を登録する**: Name に `DEMO_ACCOUNT_PASSWORD`、Secret に12文字以上の任意の値（自分で決める。体験アカウント3本のログインパスワードとして固定で使われ、週次リセット後も同じ資格情報でログインできる。手元のパスワード管理ツールにも必ず控える。workflowはこの値を環境変数でスクリプトへ渡すため、Actionsのログに値は出ない〔GitHubがSecretの値をログで自動マスクする〕。ops/demo-deploy.md §3.1）。
     出典: https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions （2026-10-21確認）
 
 ### `BETTER_AUTH_SECRET`（CloudflareのWorker側のSecret。Task 7で投入）
@@ -96,8 +96,9 @@
 | `BETTER_AUTH_SECRET` | 認証セッション署名用の乱数（32バイト以上） | CloudflareのWorker（`wrangler secret put --env demo`） | 本人が端末のプロンプトへ（ステップ26） |
 | Maps APIキー | Google Mapsの鍵 | **ビルド変数** `VITE_GOOGLE_MAPS_API_KEY`（ビルドする端末の `.env.local`〔Git管理外〕。CloudflareのSecretではない） | ビルド実行者がビルド時に読み込む（Task 7） |
 | `CLOUDFLARE_API_TOKEN_DEMO` | demo用API token | GitHubのリポジトリSecret | 本人がGitHubの画面へ（ステップ25） |
+| `DEMO_ACCOUNT_PASSWORD` | 体験アカウント3本の固定ログインパスワード（12文字以上。値は自分で決める） | GitHubのリポジトリSecret | 本人がGitHubの画面へ（ステップ25。値は手元のパスワード管理ツールにも控える） |
 | アカウントID | CloudflareアカウントのID（秘密値ではないがGitに載せない） | GitHub Secret `CLOUDFLARE_ACCOUNT_ID_DEMO`（**要**: Task 5で確定。ops/demo-deploy.md §3.1）・設定の実値 | 本人がGitHubの画面へ（ステップ5で控えた値） |
-| 体験アカウント3本のパスワード | デモ用ログイン資格情報 | seed実行時の標準出力に一度だけ表示（ops/demo-deploy.md §2・Task 4） | 実行者が画面から控えて営業時に渡す |
+| 体験アカウント3本のパスワード | デモ用ログイン資格情報 | 実環境demoはGitHub Secret `DEMO_ACCOUNT_PASSWORD` の固定値（上の行）。ローカルの`npm run demo`はseed実行時の標準出力に一度だけ表示（ops/demo-deploy.md §2・Task 4） | 実行者が画面から控えて営業時に渡す（実環境はSecretに登録した値そのもの） |
 
 ## §6 できあがるもの一覧と、後続タスクの対応表
 
@@ -112,6 +113,7 @@
 | Google Maps APIキー（Maps JavaScript API有効・請求先紐付け済み） | §3（ステップ14〜18） | `AIza` で始まる文字列（形の例のみ。実値は手元にだけ） | Task 7: ビルド時の `VITE_GOOGLE_MAPS_API_KEY`（`.env.local`・Git管理外）。**Task 7のあと**ステップ19 |
 | demo用API token（最小権限） | §5（ステップ22〜24） | `cfut_` で始まる形式 | ステップ25を経て **Task 5**（週次リセットworkflow） |
 | GitHub Secret `CLOUDFLARE_API_TOKEN_DEMO` | ステップ25 | — | **Task 5** |
+| GitHub Secret `DEMO_ACCOUNT_PASSWORD` | ステップ25（12文字以上の任意の値） | 手元のパスワード管理ツールにも控える | **Task 5**（週次リセットworkflowが体験アカウント3本のパスワードとして使う。ops/demo-deploy.md §3.1） |
 | wrangler login済みの端末 | §4（ステップ20〜21） | — | Task 7: `wrangler deploy --env demo`・migration・`wrangler secret put` |
 | `BETTER_AUTH_SECRET` | ステップ26（Task 7時） | 乱数64文字程度 | Task 7 |
 

@@ -26,10 +26,13 @@ import type { SeedStatement } from "./seed-load";
  * - CLI: `npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo`（scripts/demo.ts の初回起動から呼ぶ）。
  *   workerd外ではenvが無いため、計画をSQLへ直列化して wrangler d1 execute / r2 object put で適用する。
  *   seed末尾で体験アカウント3本（src/server/auth/demo-accounts.ts。Task4）を独立に冪等で投入し、
- *   資格情報（生成したパスワード）を標準出力へ**一度だけ**JSONで表示する。`--demo-password <値>` で
- *   3本とも既知のパスワードにできる（demo:reset後に同じ資格情報へ戻すための運用。値はGitに書かない）。
+ *   資格情報（生成したパスワード）を標準出力へ**一度だけ**JSONで表示する。3本とも既知のパスワードに
+ *   したいときは `--demo-password <値>` か環境変数 `DEMO_ACCOUNT_PASSWORD` のどちらか一方で渡す
+ *   （demo:reset後に同じ資格情報へ戻すための運用。GitHub ActionsはSecretを環境変数で渡すため
+ *   値がargv・ログに載らない。併用は拒否。値はGitに書かない）。
  *   実環境（demo）への投入は `--remote --env demo --confirm demo`（Task5。`--wipe` で全表DROPからの
- *   週次リセット。.github/workflows/demo-reset.yml が cronで実行する。実環境への接続はしない。実行はTask 7）。
+ *   週次リセット、`--wipe-only` でDROPとmigrationだけの復旧用wipe。.github/workflows/demo-reset.yml が
+ *   cronで週次リセットを実行する。実環境への接続はしない。実行はTask 7）。
  */
 
 // ============================================================================
@@ -919,7 +922,8 @@ export function verifyDemoIsolation(config: DeploymentConfig): IsolationResult {
 // scripts/demo.ts の初回起動（bootstrap-adminの直後）から呼ばれる。workerd外ではenvが無いため
 // 計画をSQLへ直列化して wrangler d1 execute / r2 object put で適用する（seed-load.tsのCLIと同じ方式）。
 // 実環境（demo）への投入は `npm run demo:seed:remote -- --confirm demo`、週次リセット（全表DROPからの
-// やり直し）は `npm run demo:reset:remote -- --confirm demo`（Task5。--remote は --env demo --confirm demo
+// やり直し）は `npm run demo:reset:remote -- --confirm demo`、復旧用のwipeだけ（seed無し）は
+// `npm run demo:wipe:remote -- --confirm demo`（Task5。--remote は --env demo --confirm demo
 // が無いと動かない＝bootstrap-admin.tsと同じ規律。実環境への接続はしない。実行確認はTask 7）。
 // ============================================================================
 
@@ -930,7 +934,8 @@ export function verifyDemoIsolation(config: DeploymentConfig): IsolationResult {
 /** seedの適用先。local=手元のpersist（`npm run demo`経路）。remote-demo=実Cloudflareのdemo環境（引数解析で--env demo --confirm demo確定済み） */
 export type DemoSeedMode =
   | { kind: "local"; persist: string }
-  | { kind: "remote-demo"; wipe: boolean };
+  /** wipeOnly=全表DROPとmigrationだけ行いseedはしない（実管理者の作り直しなど。ops/demo-deploy.md §3.1の復旧手順） */
+  | { kind: "remote-demo"; wipe: boolean; wipeOnly?: boolean };
 
 /**
  * seed適用のwranglerコマンド列（argv。「wrangler」本体より後ろ。`sh("npx", ["wrangler", ...args])`で実行する）。
@@ -968,19 +973,24 @@ export function isInternalTableName(name: string): boolean {
 /**
  * リモートdemo D1のwipe用SQL（全表DROP。sqlite_masterの実表一覧を受ける純関数）。
  * d1_migrations もDROPする（直後の `wrangler d1 migrations apply` が全件を適用しschemaを作り直す）。
- * PRAGMA foreign_keys=OFF は親表DROP時の参照制約違反を避けるため（wrangler d1 execute --remote --file で適用する）。
+ * 参照制約（FK）の回避は `PRAGMA defer_foreign_keys = on`（脚本の先頭。親子表のDROP順序による一時的な
+ * 制約違反をコミットまで延期する。全表DROP後は制約自体が消えるためコミットは通る）。
+ * `PRAGMA foreign_keys=OFF` は使わない: D1は全クエリを暗黙のトランザクションで実行し、FK強制は
+ * 毎トランザクション `PRAGMA foreign_keys = on` 相当のためユーザーqueriesでは変えられない
+ * （Cloudflare D1公式 https://developers.cloudflare.com/d1/sql-api/foreign-keys/ 。2026-10-21確認。
+ * 公式がFK違反を一時的に許す唯一の方法として defer_foreign_keys を案内している）。
  */
 export function buildRemoteWipeSql(tables: readonly string[]): string {
   const lines = [
     "-- scripts/seed-demo.ts が生成（demo D1のwipe。全表DROP。schemaは直後のmigrationで作り直す）",
-    "PRAGMA foreign_keys=OFF;",
+    "PRAGMA defer_foreign_keys = on;",
     "BEGIN TRANSACTION;",
   ];
   for (const t of tables) {
     if (isInternalTableName(t)) continue;
     lines.push(`DROP TABLE IF EXISTS "${t.replaceAll('"', '""')}";`);
   }
-  lines.push("COMMIT;", "PRAGMA foreign_keys=ON;");
+  lines.push("COMMIT;");
   return lines.join("\n") + "\n";
 }
 
@@ -1014,7 +1024,7 @@ const inlineBinds = (sql: string, binds: unknown[]): string => {
 /** CLI引数の解析結果。usageErrorのときは使い方の誤り（標準エラー出力へ出して終了コード2で止める） */
 export type DemoSeedArgs =
   | { persist: string; fixedDemoPassword?: string }
-  | { remoteDemo: true; wipe: boolean; fixedDemoPassword?: string }
+  | { remoteDemo: true; wipe: boolean; wipeOnly: boolean; fixedDemoPassword?: string }
   | { usageError: string };
 
 /**
@@ -1022,30 +1032,48 @@ export type DemoSeedArgs =
  * - local（従来経路）: `--persist-to` が必須。`--demo-password` を値なしで渡したときは黙ってランダム生成へ
  *   落とさず使い方の誤りとして拒否する（demo:reset後に同じ資格情報へ戻す運用が、静かに別パスワードで
  *   通ってしまう事故を防ぐ）。
+ * - 固定パスワードは `--demo-password <値>` か環境変数 `DEMO_ACCOUNT_PASSWORD` の**どちらか一方**で渡す
+ *   （GitHub ActionsのworkflowはSecretを環境変数へ渡す。argvに載せないため値がログへ出ない。併用は矛盾する
+ *   ので拒否し、環境変数が12文字未満のときも `--demo-password` と同じ規律で拒否する）。
  * - remote（Task5）: `--remote` は `--env demo --confirm demo` が無いと動かない（bootstrap-admin.ts:26-28と
  *   同じ確認規律）。**demo環境以外への書込みは拒絶する**（staging/productionは--confirmが一致しても拒否）。
  *   `--wipe` を付けると全表DROPからのやり直し（週次リセット。無しは既存unitへの追加seed）。
- *   `--persist-to` はローカル専用（remoteではローカルのpersistを使わない）。
+ *   `--wipe-only` を付けると全表DROPとmigration適用だけでseedはしない（実管理者の作り直し用。§3.1復旧手順。
+ *   `--wipe` との併用は矛盾するので拒否）。`--persist-to` はローカル専用（remoteではローカルのpersistを使わない）。
  */
-export function parseDemoSeedArgs(args: readonly string[]): DemoSeedArgs {
+export function parseDemoSeedArgs(args: readonly string[], envDemoPassword?: string): DemoSeedArgs {
   const flagValue = (flag: string): string | undefined => {
     const i = args.indexOf(flag);
     return i < 0 ? undefined : args[i + 1];
   };
-  // --demo-password の検査（local/remote共通。メッセージはlocal時代から変えない）
+  // --demo-password の検査（local/remote共通。メッセージはlocal時代から変えない。環境変数との併用は拒否）
   const fixedPassword = (): { fixedDemoPassword?: string } | { usageError: string } => {
-    if (!args.includes("--demo-password")) return {};
-    const value = flagValue("--demo-password");
-    if (value === undefined) {
-      return {
-        usageError:
-          "--demo-password の後に値がありません。--demo-password <値> の形で12文字以上のパスワードを指定してください（better-authの下限）",
-      };
+    if (args.includes("--demo-password")) {
+      const value = flagValue("--demo-password");
+      if (value === undefined) {
+        return {
+          usageError:
+            "--demo-password の後に値がありません。--demo-password <値> の形で12文字以上のパスワードを指定してください（better-authの下限）",
+        };
+      }
+      if (envDemoPassword !== undefined) {
+        return {
+          usageError:
+            "--demo-password と環境変数 DEMO_ACCOUNT_PASSWORD は同時に指定できません（値が矛盾するため、どちらか一方にしてください）",
+        };
+      }
+      if (value.length < 12) {
+        return { usageError: "--demo-password には12文字以上のパスワードを指定してください（better-authの下限）" };
+      }
+      return { fixedDemoPassword: value };
     }
-    if (value.length < 12) {
-      return { usageError: "--demo-password には12文字以上のパスワードを指定してください（better-authの下限）" };
+    if (envDemoPassword !== undefined) {
+      if (envDemoPassword.length < 12) {
+        return { usageError: "環境変数 DEMO_ACCOUNT_PASSWORD には12文字以上のパスワードを指定してください（better-authの下限）" };
+      }
+      return { fixedDemoPassword: envDemoPassword };
     }
-    return { fixedDemoPassword: value };
+    return {};
   };
 
   if (args.includes("--remote")) {
@@ -1067,14 +1095,20 @@ export function parseDemoSeedArgs(args: readonly string[]): DemoSeedArgs {
     if (args.includes("--persist-to")) {
       return { usageError: "--persist-to はローカル専用です（--remote ではローカルのpersistを使わないため指定できません）" };
     }
+    if (args.includes("--wipe") && args.includes("--wipe-only")) {
+      return {
+        usageError:
+          "--wipe と --wipe-only は同時に指定できません（--wipe=DROPからのseed再開、--wipe-only=DROPとmigrationだけ）",
+      };
+    }
     const password = fixedPassword();
     if ("usageError" in password) return password;
-    return { remoteDemo: true, wipe: args.includes("--wipe"), ...password };
+    return { remoteDemo: true, wipe: args.includes("--wipe"), wipeOnly: args.includes("--wipe-only"), ...password };
   }
-  if (args.includes("--env") || args.includes("--confirm") || args.includes("--wipe")) {
+  if (args.includes("--env") || args.includes("--confirm") || args.includes("--wipe") || args.includes("--wipe-only")) {
     return {
       usageError:
-        "--env / --confirm / --wipe は --remote と一緒にだけ使えます。ローカルへのseedは --persist-to .wrangler/demo の形で指定してください",
+        "--env / --confirm / --wipe / --wipe-only は --remote と一緒にだけ使えます。ローカルへのseedは --persist-to .wrangler/demo の形で指定してください",
     };
   }
 
@@ -1084,7 +1118,8 @@ export function parseDemoSeedArgs(args: readonly string[]): DemoSeedArgs {
       usageError:
         "使い方: npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo [--demo-password <12文字以上のパスワード>]\n" +
         "実デモの初回起動（scripts/demo.ts）から自動で呼ばれる（架空データ＋体験アカウントのみ。実データは入れない）\n" +
-        "実環境（demo）への投入・週次リセットは --remote --env demo --confirm demo（--wipeで全表DROPからやり直す）",
+        "実環境（demo）への投入・週次リセットは --remote --env demo --confirm demo（--wipeで全表DROPからやり直す。--wipe-onlyはDROPとmigrationだけ）\n" +
+        "固定パスワードは --demo-password <値> か環境変数 DEMO_ACCOUNT_PASSWORD のどちらか一方（workflowは環境変数で渡す）",
     };
   }
   const password = fixedPassword();
@@ -1093,14 +1128,17 @@ export function parseDemoSeedArgs(args: readonly string[]): DemoSeedArgs {
 }
 
 async function main(): Promise<void> {
-  const parsed = parseDemoSeedArgs(process.argv.slice(2));
+  // 固定パスワードは環境変数 DEMO_ACCOUNT_PASSWORD でも受ける（GitHub ActionsのSecret経由。argvに載せない）
+  const parsed = parseDemoSeedArgs(process.argv.slice(2), process.env.DEMO_ACCOUNT_PASSWORD);
   if ("usageError" in parsed) {
     console.error(parsed.usageError);
     process.exitCode = 2;
     return;
   }
   const mode: DemoSeedMode =
-    "remoteDemo" in parsed ? { kind: "remote-demo", wipe: parsed.wipe } : { kind: "local", persist: parsed.persist };
+    "remoteDemo" in parsed
+      ? { kind: "remote-demo", wipe: parsed.wipe, wipeOnly: parsed.wipeOnly }
+      : { kind: "local", persist: parsed.persist };
   const fixedDemoPassword = parsed.fixedDemoPassword;
 
   // seed実体を置くR2 bucket（localは最上位設定、remoteはdemo環境の設定。bucket名はwrangler.jsoncの正本から読む）
@@ -1131,7 +1169,7 @@ async function main(): Promise<void> {
       if (applied.status !== 0) throw new Error(`seed SQLの適用に失敗（${name}）: ${applied.stderr || applied.stdout}`);
     };
 
-    // --- remote（demo環境）: --wipeのときは全表DROP → migration適用（schemaを作り直してからseedする） ---
+    // --- remote（demo環境）: --wipe / --wipe-only のときは全表DROP → migration適用（schemaを作り直してからseedする） ---
     if (mode.kind === "remote-demo") {
       if (mode.wipe) {
         const tables = d1Json("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").map((r) => String(r.name));
@@ -1139,10 +1177,16 @@ async function main(): Promise<void> {
         writeFileSync(wipeFile, buildRemoteWipeSql(tables));
         const wiped = sh("npx", ["wrangler", ...cmds.d1File(wipeFile)]);
         if (wiped.status !== 0) throw new Error(`demo D1のwipeに失敗: ${wiped.stderr || wiped.stdout}`);
-        console.log(`demo D1の全表をDROPしました（${tables.filter((t) => !isInternalTableName(t)).length}表）。schemaを作り直して架空データを入れ直します`);
+        console.log(`demo D1の全表をDROPしました（${tables.filter((t) => !isInternalTableName(t)).length}表）。schemaをmigrationで作り直します`);
       }
       const mig = sh("npx", ["wrangler", ...cmds.d1Migrate()!]);
       if (mig.status !== 0) throw new Error(`demo D1へのmigration適用に失敗: ${mig.stderr || mig.stdout}`);
+      if (mode.wipeOnly) {
+        // 復旧用のwipe専用モード（ops/demo-deploy.md §3.1）。seedはしない（DBは空のschemaで止まる）
+        console.log("--wipe-only: seedは行いません（D1は空のschemaで止まります）。実管理者を作り直す復旧手順は ops/demo-deploy.md §3.1:");
+        console.log("bootstrap-admin（宮之浦分団・招待tokenを一度だけ表示）→ 招待を受諾して二要素設定 → npm run demo:seed:remote -- --confirm demo（架空データと体験アカウントの再投入）");
+        return;
+      }
     }
 
     const unitRow = d1Json(`SELECT id FROM units WHERE name = '${DEMO_UNIT_NAME}' LIMIT 1`)[0] as { id: string } | undefined;
@@ -1202,7 +1246,7 @@ async function main(): Promise<void> {
       }));
       await applySql("demo-accounts.sql", await demoAccountStatements({ unitId, now: new Date(), credentials }));
       console.log("体験アカウントを作りました（3役割・MFAなし）。下のログイン情報は**一度だけ**表示されます。");
-      console.log("Git管理外の `.env.demo-login` 等に控えてください（demo:reset後に同じ資格情報へ戻すには --demo-password を使う）:");
+      console.log("Git管理外の `.env.demo-login` 等に控えてください（demo:reset後に同じ資格情報へ戻すには --demo-password か環境変数 DEMO_ACCOUNT_PASSWORD を使う）:");
       // 最後の行が資格情報のJSON（scripts/demo.ts がこの行だけを拾って表示する。パスワードをログへ複製しないため）
       console.log(JSON.stringify({ "demo-accounts": credentials.map((c) => ({ email: c.email, password: c.password, role: c.role, displayName: c.memberName })) }));
     }
