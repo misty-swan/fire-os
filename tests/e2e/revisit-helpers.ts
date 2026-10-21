@@ -106,8 +106,10 @@ export async function seedRevisitScene(request: APIRequestContext, tag: string):
     const res = await adminApiData<{ id: string; managementNumber: string }>(request, "POST", "/api/v1/facilities", {
       type,
       managementNumber: `REV-${tag}-${i}`,
-      latitude: 35.05 + i * 0.17 + jitter * 0.01,
-      longitude: 139.05 + i * 0.21 + jitter * 0.012,
+      // DEMO_BBOX（宮之浦周辺の表示範囲）の内側で、実行ごと・施設ごとにずらす（同じ座標のマーカーが
+      // 重なって押せなくならないように。map.specと同じ配慮）
+      latitude: 30.363 + i * 0.013 + jitter * 0.0004,
+      longitude: 130.645 + i * 0.016 + jitter * 0.0005,
       locationSource: "架空市台帳",
       locationNote: `再訪試験の施設${i}（架空）`,
     });

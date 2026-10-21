@@ -6,7 +6,7 @@
 
 ## 1. 分離の考え方（docs/07 §1・RG-09・AGENTS.md）
 
-- **実データ（実名簿・実出動・非公開水利・現場写真）は絶対に入れない。** デモに入れるのは `scripts/seed-demo.ts` が作る架空データ（氏名は「架空」、地名は「架空市…」、メールは@example.test系、座標は実在地図上の実在地点を指さない均等グリッド）だけ。写真・文書の実体も決定的に生成した架空の8x8 PNGと1頁PDF（実在の画像・文書を模さない）。
+- **実データ（実名簿・実出動・非公開水利・現場写真）は絶対に入れない。** デモに入れるのは `scripts/seed-demo.ts` が作る架空データ（氏名は「架空」、地名は「宮之浦の架空地名（デモ用の架空地点）」、メールは@example.test系、座標は宮之浦周辺の表示範囲DEMO_BBOX内の架空の点＝実在の消火栓位置を写さない）だけ。写真・文書の実体も決定的に生成した架空の8x8 PNGと1頁PDF（実在の画像・文書を模さない）。団体名だけは実名「宮之浦分団」（設計§8-2。架空である旨は画面のバッジと台本で併記）。
 - 4環境（local/demo/staging/production）はWorker・D1・R2・Queuesを**共有しない**（wrangler.jsonc。wranglerのenvはbindingを継承しないため各環境に全bindingを書く）。demo環境の資源:
 
 | 項目 | demo環境の値（wrangler.jsonc） | 備考 |
@@ -29,7 +29,7 @@
 
 1. `npx tsx scripts/ensure-dev-vars.ts` — `.dev.vars`（BETTER_AUTH_SECRET等・Git管理外）が無ければ生成。
 2. `npx wrangler d1 migrations apply DB --local --persist-to .wrangler/demo` — D1作成＋migration（起動のたび。適用済みは冪等）。
-3. 初回だけ: `npx tsx scripts/bootstrap-admin.ts --env local --persist-to .wrangler/demo --unit-name "架空市 第一分団" --admin-name "架空 管理者" --email admin@example.test` — 初期管理者の招待リンク（`http://localhost:8787/login#invite=<token>`。**一度しか表示されない**・72時間有効）。
+3. 初回だけ: `npx tsx scripts/bootstrap-admin.ts --env local --persist-to .wrangler/demo --unit-name "宮之浦分団" --admin-name "架空 岳志" --email admin@example.test` — 初期管理者の招待リンク（`http://localhost:8787/login#invite=<token>`。**一度しか表示されない**・72時間有効）。
 4. 初回だけ: `npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo` — 架空データの完成版を投入（下の構成）。投入済みなら「スキップ」（冪等）。
 5. `npm run build` → `npx wrangler dev --port 8787 --persist-to .wrangler/demo`。ログインは `http://localhost:8787/login`（メール admin@example.test・パスワード12文字以上→二要素認証を設定。手元のログイン情報はGit管理外の `.env.demo-login` に控えてある）。
 
@@ -37,8 +37,8 @@
 
 | 表 | 件数 | 内容 |
 |---|---|---|
-| units / users / members | 2 / 4 / 16 | 架空市 第一・第二分団、幹部・担当者・団員の4役割＋未登録団員10名 |
-| facilities | 13 | 消火栓・防火水槽・資器材箱×4（管理番号 DF-0001〜・架空地点） |
+| units / users / members | 2 / 4 / 16 | 宮之浦分団と架空の姉妹分団「宮之浦 第二分団（デモ用）」、幹部・担当者・団員の4役割＋未登録団員10名 |
+| facilities | 13 | 消火栓・防火水槽・資器材箱×4（管理番号 MY-0001〜・宮之浦の架空地点） |
 | inspection_templates / facility_inspections | 1 / 6 | 承認済み様式、月次点検6件（2件は要確認） |
 | issues | 2 | 点検起点1件＋手動起票1件 |
 | vehicles / equipment | 1 / 2 | 架空の資機材運搬車・ホース・投光器 |
@@ -97,7 +97,7 @@ docs/07 §8の試算（本番30人×10ロード＋デモ2,000＝2,300/月）の�
 2. Secret: `npx wrangler secret put BETTER_AUTH_SECRET --env demo`（32バイト以上の乱数。チャット・メール本文・Gitに貼らない。ops/deploy.md §0）。
 3. migration: `npm run migrate -- --env demo --remote --yes-i-know`（`--env` と `--yes-i-know` が無いと実環境へ適用不可＝scripts/migrate.tsのガード）。
 4. AUTH_BASE_URL: wrangler.jsoncのdemo環境の `AUTH_BASE_URL` を実URL（例: `https://<デモのドメイン>`）へ置き換える（仮値 `https://fireos-demo.example.invalid` のまま）。
-5. 初期管理者: `npm run bootstrap:admin -- --env demo --remote --confirm demo --unit-name "架空市 第一分団" --admin-name "架空 管理者" --email <管理者のメール>`。標準出力のJSONの `token` が招待token（一度だけ表示・72時間有効）。ops/bootstrap-admin.md参照。
+5. 初期管理者: `npm run bootstrap:admin -- --env demo --remote --confirm demo --unit-name "宮之浦分団" --admin-name "架空 岳志" --email <管理者のメール>`。標準出力のJSONの `token` が招待token（一度だけ表示・72時間有効）。ops/bootstrap-admin.md参照。
 6. 架空データの投入: **未整備**（残作業3）。seed CLI（scripts/seed-demo.ts）は `--local` 専用（wrangler d1 execute / r2 object put が --local 固定）のため、実環境へ同じ計画（`buildDemoSeedPlan`）を適用する経路が無い。整備するまで実環境デモは初期管理者だけの空の状態で始まる。
 7. 配置: ops/deploy.md §2と同じゲート（typecheck・check:contracts・check:migrations・build・check:environment・vitest・e2e）を通してから `npx wrangler deploy --env demo`。稼働versionを運用記録へ残す。
 8. 確認: ①招待リンク（`https://<URL>/login#invite=<token>`）で初期管理者の登録・二要素設定ができる ②主要動線（§1の3の⑤と同じ19動線）が動く ③未定義APIがJSON 404を返す ④監査に記録が残る ⑤`DEMO_SECURITY_POLICY` が効いている（AI連打が429）。

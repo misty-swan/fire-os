@@ -9,7 +9,7 @@ import type { FacilityItem } from "../src/client/features/map/useFacilities";
 /**
  * 実地図（V05。docs/14）。Google Maps JS APIはキー（VITE_GOOGLE_MAPS_API_KEY）がある環境だけで読み、
  * キーが無い環境では現行の置き換え絵のまま（ローカル・試験・e2eも不変。キーの値はGitに載せない）。
- * ①キー無し: MapPageは置き換え絵（CITY_BBOXベースのマーカーbox）を選ぶ（scriptは挿入しない）
+ * ①キー無し: MapPageは置き換え絵（DEMO_BBOXベースのマーカーbox）を選ぶ（scriptは挿入しない）
  * ②キー無し: useGoogleMapsは loaded:false・error:null のまま（呼び出しは無害）
  * ③キー有り: script（maps.googleapis.com/maps/api/js）は一度だけ挿入。jsdomでは解決しない
  *   （ローダーはPromiseを返すだけで、解決は地図callback待ち＝試験でネットワークを呼ばない）
@@ -100,7 +100,7 @@ describe("マップの実地図（キーがある環境だけ。V05）", () => {
         <MapPage />
       </MemoryRouter>,
     );
-    // 置き換え絵（MAP PLACEHOLDERの板）とCITY_BBOXベースのマーカー
+    // 置き換え絵（MAP PLACEHOLDERの板）とDEMO_BBOXベースのマーカー
     await screen.findByRole("button", { name: "消火栓 F1" });
     expect(document.body.textContent).toContain("MAP PLACEHOLDER");
     expect(mapsScripts().length).toBe(0);

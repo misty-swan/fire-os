@@ -1,8 +1,8 @@
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEMO_BBOX, SelectionSheet } from "../src/client/features/map/FacilityMarkers";
 import { useFacilities, type FacilityItem } from "../src/client/features/map/useFacilities";
-import { SelectionSheet } from "../src/client/features/map/FacilityMarkers";
 
 /**
  * ① 施設一覧の再取得と点滅（PH2-C15・T086。docs/evidence/ph2-review.md C15）。
@@ -36,6 +36,14 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("デモの表示範囲（営業デモTask3。宮之浦周辺）", () => {
+  it("demo_bbox_is_the_miyanoura_viewport_that_seed_facilities_fit_into", () => {
+    // seedの施設座標がこの範囲内の架空の点であることは tests/seed-miyanoura.test.ts（workers側）が固定する。
+    // ここではclientの表示範囲の値そのものを固定し、範囲の意図しない変更（誤値・旧CITY_BBOXへの復帰）を防ぐ
+    expect(DEMO_BBOX).toEqual({ west: 130.64, south: 30.35, east: 130.7, north: 30.42 });
+  });
 });
 
 describe("マップの施設一覧（useFacilities）", () => {

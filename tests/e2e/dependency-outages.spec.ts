@@ -182,7 +182,7 @@ test("outage_never_claims_dispatch_or_saved_success", async ({ page, browser, re
   const adminMemberId = me.data.data.profile.memberId;
   const managementNumber = `OUT-${tag}`;
   const facility = await adminApiData<{ id: string }>(page.request, "POST", "/api/v1/facilities", {
-    type: "hydrant", latitude: 35.31, longitude: 139.31, locationSource: "架空市台帳",
+    type: "hydrant", latitude: 30.377, longitude: 130.664, locationSource: "架空市台帳",
     locationNote: `障害演習 ${tag}`, managementNumber,
   });
   expect(facility.status).toBe(201);

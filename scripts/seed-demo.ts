@@ -49,7 +49,7 @@ export function demoResetRemovals(): string[] {
 // ============================================================================
 
 const U = "00000000-0000-4000-8000-";
-/** 第一分団（実デモではbootstrap-adminが作ったunitを使うため、このIDは試験の空DBでだけ使われる） */
+/** 宮之浦分団（実デモではbootstrap-adminが作ったunitを使うため、このIDは試験の空DBでだけ使われる） */
 const DEMO_UNIT_ID = `${U}000000de0001`;
 const DEMO_UNIT2_ID = `${U}000000de0002`;
 const DEMO_OFFICER_USER = `${U}000000de0012`;
@@ -106,8 +106,10 @@ const ROLE_IDS = {
   member: `${U}000000000101`,
 } as const;
 
-export const DEMO_UNIT_NAME = "架空市 第一分団";
-const DEMO_UNIT2_NAME = "架空市 第二分団";
+/** 設計§8-2: 団体名は実名「宮之浦分団」。データはすべて架空（架空である旨はDEMOバッジと台本で併記） */
+export const DEMO_UNIT_NAME = "宮之浦分団";
+/** 架空の姉妹分団（cross-unit分離のfixtures。名前も架空） */
+const DEMO_UNIT2_NAME = "宮之浦 第二分団（デモ用）";
 
 /** 写真・文書原本のR2キー（demo専用prefix。実写真・実文書は入らない） */
 export const DEMO_PHOTO_KEY = "demo/facility-photo-01.png";
@@ -256,7 +258,7 @@ const bytesSha256Hex = async (bytes: Uint8Array): Promise<string> =>
 // ============================================================================
 
 export interface DemoSeedTargets {
-  /** デモデータを付ける第一分団のunit ID（実デモではbootstrap-adminが作ったunit） */
+  /** デモデータを付ける宮之浦分団のunit ID（実デモではbootstrap-adminが作ったunit） */
   unitId: string;
   /** 管理者団員（通知の宛先・自分のタスクの担当。実デモではbootstrap団員） */
   adminMemberId: string;
@@ -285,7 +287,7 @@ const insert = (table: string, cols: string[], binds: unknown[]): SeedStatement 
 
 /**
  * 架空完成版のseed計画（純関数）。行の内容はすべて架空データ（fixtures作法: 氏名は「架空」、
- * 地名は「架空市…」、実在の座標・住所・メール・電話は入れない）。
+ * 地名は「宮之浦の架空地名（デモ用の架空地点）」、実在の座標・住所・メール・電話は入れない）。
  */
 export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoSeedPlan> {
   const groups: SeedStatement[][] = [];
@@ -305,7 +307,7 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   );
   stats.users = users.length;
 
-  // --- units（第二分団は常に作る＝fixturesの2unit作法。第一分団はcreate modeだけ） ---
+  // --- units（第二分団は常に作る＝fixturesの2unit作法。宮之浦分団はcreate modeだけ） ---
   const unitRows: SeedStatement[] = [
     insert("units", ["id", "name", "status", "created_at", "updated_at", "created_by", "actor_kind"],
       [DEMO_UNIT2_ID, DEMO_UNIT2_NAME, "active", NOW, NOW, creator, "human"]),
@@ -320,16 +322,21 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   stats.units = targets.createUnit ? 2 : 1;
 
   // --- members + roles（4役割＋名簿10名＋第二分団2名。管理者だけ環境差し替え） ---
+  // 氏名はfixtures作法どおり「架空」を含む明白な架空名（実在の人物と結び付かない。detectRealPersonalDataが検査する）
   const people: { memberId: string; userId: string | null; displayName: string; rank: string; role: keyof typeof ROLE_IDS | null }[] = [
     ...(targets.createUnit
-      ? [{ memberId: DEMO_ADMIN_MEMBER, userId: DEMO_ADMIN_USER, displayName: "架空 管理者", rank: "分団長", role: "admin" as const }]
+      ? [{ memberId: DEMO_ADMIN_MEMBER, userId: DEMO_ADMIN_USER, displayName: "架空 岳志", rank: "分団長", role: "admin" as const }]
       : []),
-    { memberId: DEMO_OFFICER_MEMBER, userId: DEMO_OFFICER_USER, displayName: "架空 幹部", rank: "副分団長", role: "officer" },
-    { memberId: DEMO_OPERATOR_MEMBER, userId: DEMO_OPERATOR_USER, displayName: "架空 担当者", rank: "班長", role: "operator" },
-    { memberId: DEMO_MEMBER_MEMBER, userId: DEMO_MEMBER_USER, displayName: "架空 団員", rank: "団員", role: "member" },
+    { memberId: DEMO_OFFICER_MEMBER, userId: DEMO_OFFICER_USER, displayName: "架空 潮見", rank: "副分団長", role: "officer" },
+    { memberId: DEMO_OPERATOR_MEMBER, userId: DEMO_OPERATOR_USER, displayName: "架空 海斗", rank: "班長", role: "operator" },
+    { memberId: DEMO_MEMBER_MEMBER, userId: DEMO_MEMBER_USER, displayName: "架空 森人", rank: "団員", role: "member" },
   ];
+  const ROSTER_NAMES = [
+    "架空 涼太", "架空 美海", "架空 大輔", "架空 千夏", "架空 健一",
+    "架空 春香", "架空 翔太", "架空 由佳", "架空 浩二", "架空 直樹",
+  ] as const;
   for (let i = 1; i <= ROSTER_COUNT; i++) {
-    people.push({ memberId: rosterId(i), userId: null, displayName: `架空 団員${String(i).padStart(2, "0")}`, rank: i % 3 === 0 ? "班長" : "団員", role: null });
+    people.push({ memberId: rosterId(i), userId: null, displayName: ROSTER_NAMES[i - 1]!, rank: i % 3 === 0 ? "班長" : "団員", role: null });
   }
   const memberStmts: SeedStatement[] = [];
   for (const p of people) {
@@ -346,8 +353,8 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   }
   // 第二分団（最小構成。user無し）
   for (const [mid, name, rank] of [
-    [unit2Member1, "架空 二分団長", "分団長"],
-    [unit2Member2, "架空 二分団員01", "団員"],
+    [unit2Member1, "架空 礒野", "分団長"],
+    [unit2Member2, "架空 汐菜", "団員"],
   ] as const) {
     memberStmts.push(
       insert("members", ["id", "unit_id", "user_id", "display_name", "rank", "status", "created_at", "updated_at", "created_by", "actor_kind"],
@@ -357,25 +364,36 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   group(memberStmts);
   stats.members = people.length + 2;
 
-  const rosterAll = people.map((p) => p.memberId); // 通知対象の母数（第一分団の全団員）
+  const rosterAll = people.map((p) => p.memberId); // 通知対象の母数（宮之浦分団の全団員）
 
-  // --- 施設12（消火栓/防火水槽/資器材箱×4。座標はbbox内の均等グリッドで、実在地図上の実在地点を指さない） ---
-  const types = ["hydrant", "cistern", "box"] as const;
-  const typeLabel = { hydrant: "消火栓", cistern: "防火水槽", box: "資器材箱" } as const;
+  // --- 施設13（宮之浦周辺の**架空の点**。実在の消火栓位置を写し取らず、川・港・集落を意識した架空配置。
+  //     番号・地名・座標はすべて架空（表示範囲DEMO_BBOX内。tests/seed-miyanoura.test.tsが範囲と標識を固定）） ---
+  const FACILITY_SEED = [
+    { type: "hydrant", number: "MY-0001", name: "架空の本町消火栓01", lat: 30.3795, lng: 130.6521, note: "宮之浦本町1-2（デモ用の架空地点）" },
+    { type: "cistern", number: "MY-0002", name: "架空の港町防火水槽02", lat: 30.3862, lng: 130.6648, note: "宮之浦港町2-1（デモ用の架空地点）" },
+    { type: "box", number: "MY-0003", name: "架空の川端格納箱03", lat: 30.381, lng: 130.659, note: "宮之浦川端町3-3（デモ用の架空地点）" },
+    { type: "hydrant", number: "MY-0004", name: "架空の浜町消火栓04", lat: 30.3915, lng: 130.6675, note: "宮之浦浜町1-8（デモ用の架空地点）" },
+    { type: "cistern", number: "MY-0005", name: "架空の緑ヶ丘防火水槽05", lat: 30.374, lng: 130.6455, note: "宮之浦緑ヶ丘4-2（デモ用の架空地点）" },
+    { type: "box", number: "MY-0006", name: "架空の公民館格納箱06", lat: 30.3838, lng: 130.656, note: "宮之浦本町2-10（デモ用の架空地点）" },
+    { type: "hydrant", number: "MY-0007", name: "架空の本町消火栓07", lat: 30.3782, lng: 130.6555, note: "宮之浦本町3-5（デモ用の架空地点）" },
+    { type: "cistern", number: "MY-0008", name: "架空の川尻防火水槽08", lat: 30.3878, lng: 130.662, note: "宮之浦川端町1-1（デモ用の架空地点）" },
+    { type: "box", number: "MY-0009", name: "架空の小学校格納箱09", lat: 30.3805, lng: 130.6478, note: "宮之浦緑ヶ丘2-6（デモ用の架空地点）" },
+    { type: "hydrant", number: "MY-0010", name: "架空の港通消火栓10", lat: 30.3855, lng: 130.667, note: "宮之浦港町1-4（デモ用の架空地点）" },
+    { type: "cistern", number: "MY-0011", name: "架空の栄町防火水槽11", lat: 30.3758, lng: 130.663, note: "宮之浦栄町5-2（デモ用の架空地点）" },
+    { type: "box", number: "MY-0012", name: "架空の浜格納箱12", lat: 30.393, lng: 130.66, note: "宮之浦浜町3-1（デモ用の架空地点）" },
+  ] as const;
   const facilityIds: string[] = [];
   const facilityGroup: SeedStatement[] = [];
-  for (let i = 1; i <= 12; i++) {
-    const id = facilityId(i);
-    const type = types[(i - 1) % 3]!;
+  for (const [i, f] of FACILITY_SEED.entries()) {
+    const id = facilityId(i + 1);
     facilityIds.push(id);
     facilityGroup.push(
       insert("facilities",
         ["id", "unit_id", "type", "management_number", "identifying_name", "latitude", "longitude",
           "location_note", "location_source", "location_version", "verification_status", "last_verified_at", "metadata",
           "created_at", "updated_at", "created_by", "actor_kind"],
-        [id, unit, type, `DF-${String(i).padStart(4, "0")}`, `架空の${typeLabel[type]}${String(i).padStart(2, "0")}`,
-          35.0123 + i * 0.0031, 139.0456 + i * 0.0027,
-          `架空市架空町${i}-${i + 1}（デモ用の架空地点）`, "架空の台帳（デモseed）", 1, "verified", NOW, "{}",
+        [id, unit, f.type, f.number, f.name, f.lat, f.lng,
+          f.note, "架空の台帳（デモseed）", 1, "verified", NOW, "{}",
           NOW, NOW, creator, "human"]),
     );
   }
@@ -384,8 +402,8 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
       ["id", "unit_id", "type", "management_number", "identifying_name", "latitude", "longitude",
         "location_note", "location_source", "location_version", "verification_status", "last_verified_at", "metadata",
         "created_at", "updated_at", "created_by", "actor_kind"],
-      [DEMO_UNIT2_FACILITY, DEMO_UNIT2_ID, "hydrant", "DG-0001", "架空の二分団消火栓01",
-        35.05, 139.06, "架空市架空本町1-1（デモ用の架空地点）", "架空の台帳（デモseed）", 1, "verified", NOW, "{}",
+      [DEMO_UNIT2_FACILITY, DEMO_UNIT2_ID, "hydrant", "MZ-0001", "架空の二分団消火栓01",
+        30.3905, 130.642, "宮之浦西浜1-1（デモ用の架空地点）", "架空の台帳（デモseed）", 1, "verified", NOW, "{}",
         NOW, NOW, creator, "human"]),
   );
   group(facilityGroup);
@@ -428,16 +446,16 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
     insert("issues",
       ["id", "unit_id", "facility_id", "source_facility_inspection_id", "title", "description", "reported_by", "assignee_member_id",
         "status", "confirmed_category", "version", "created_at", "updated_at", "created_by", "actor_kind"],
-      [ISSUE_1, unit, facilityIds[4]!, inspectionId(5), "架空の消火栓の劣化（デモ）",
-        "点検で口径の劣化を確認した（架空の記録）。交換の検討が必要。", creator, DEMO_OFFICER_MEMBER,
+      [ISSUE_1, unit, facilityIds[4]!, inspectionId(5), "架空の防火水槽の劣化（デモ）",
+        "宮之浦緑ヶ丘の点検で口径の劣化を確認した（架空の記録）。交換の検討が必要。", creator, DEMO_OFFICER_MEMBER,
         "under_review", "劣化", 1, NOW, NOW, creator, "human"]),
     insert("issue_events", ["id", "unit_id", "issue_id", "action", "before_json", "after_json", "note", "actor_user_id", "actor_kind", "created_at"],
       [crypto.randomUUID(), unit, ISSUE_1, "reported", "{}", JSON.stringify({ status: "under_review" }), "デモseedによる架空の起票", creator, "human", NOW]),
     insert("issues",
       ["id", "unit_id", "facility_id", "title", "description", "reported_by", "assignee_member_id",
         "status", "confirmed_category", "version", "created_at", "updated_at", "created_by", "actor_kind"],
-      [ISSUE_2, unit, facilityIds[5]!, "架空の水槽の蓋の破損（デモ）",
-        "巡回中に蓋の破損を確認した（架空の記録）。仮覆いを設置済み。", creator, DEMO_OPERATOR_MEMBER,
+      [ISSUE_2, unit, facilityIds[5]!, "架空の格納箱の蓋の破損（デモ）",
+        "本町公民館の巡回中に格納箱の蓋の破損を確認した（架空の記録）。仮覆いを設置済み。", creator, DEMO_OPERATOR_MEMBER,
         "in_progress", "破損", 1, NOW, NOW, creator, "human"]),
     insert("issue_events", ["id", "unit_id", "issue_id", "action", "before_json", "after_json", "note", "actor_user_id", "actor_kind", "created_at"],
       [crypto.randomUUID(), unit, ISSUE_2, "status_changed", JSON.stringify({ status: "reported" }), JSON.stringify({ status: "in_progress" }), null, creator, "human", NOW]),
@@ -458,8 +476,8 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
 
   // --- 活動×3（1件は今後の予定、2件は完了＝実績と実参加つき） ---
   const activityPlans = [
-    { i: 1, title: "架空の防災訓練（予定）", scheduled: true, planned: "2026-12-05T01:00:00.000Z", attendees: 6 },
-    { i: 2, title: "架空の水防訓練", scheduled: false, planned: "2026-06-13T01:00:00.000Z", attendees: 12 },
+    { i: 1, title: "架空の防災訓練（宮之浦・予定）", scheduled: true, planned: "2026-12-05T01:00:00.000Z", attendees: 6 },
+    { i: 2, title: "架空の水防訓練（宮之浦川）", scheduled: false, planned: "2026-06-13T01:00:00.000Z", attendees: 12 },
     { i: 3, title: "架空の夜間機材点検訓練", scheduled: false, planned: "2026-08-08T01:00:00.000Z", attendees: 10 },
   ] as const;
   const attendanceIds: string[] = [];
@@ -471,7 +489,7 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
         [opId, unit, "activity", a.scheduled ? "scheduled" : "completed", 1, NOW, NOW, creator, "human"]),
       insert("activities", ["id", "unit_id", "operation_id", "title", "kind", "planned_starts_at", "location_text",
         "owner_member_id", "status", "created_at", "updated_at", "created_by", "actor_kind"],
-        [actId, unit, opId, a.title, "training", a.planned, "架空市の架空広場（デモ）", DEMO_OFFICER_MEMBER,
+        [actId, unit, opId, a.title, "training", a.planned, "宮之浦本町公園の架空広場（デモ）", DEMO_OFFICER_MEMBER,
           a.scheduled ? "scheduled" : "completed", NOW, NOW, creator, "human"]),
     ];
     for (const memberId of rosterAll) {
@@ -518,7 +536,7 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
       [incidentOp, unit, "incident", "closed", 1, NOW, NOW, creator, "human"]),
     insert("incidents", ["id", "unit_id", "operation_id", "kind", "occurred_at", "summary", "status", "version", "created_at", "updated_at", "created_by", "actor_kind"],
       [INCIDENT_1, unit, incidentOp, "training", "2026-07-18T01:00:00.000Z",
-        "架空市での出動訓練（デモ。夜間の水防訓練を記録したもの）", "closed", 1, NOW, NOW, creator, "human"]),
+        "宮之浦港周辺での架空の出動訓練（デモ。夜間の水防訓練を記録したもの）", "closed", 1, NOW, NOW, creator, "human"]),
     insert("incident_events", ["id", "unit_id", "incident_id", "action", "before_json", "after_json", "reason", "actor_user_id", "actor_kind", "created_at"],
       [crypto.randomUUID(), unit, INCIDENT_1, "recorded", "{}", JSON.stringify({ status: "closed" }), null, creator, "human", NOW]),
     ...[0, 1, 2, 3, 4].map((k) =>
@@ -530,16 +548,16 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   ]);
   stats.incidents = 1;
 
-  // --- お知らせ1件（公開済み。対象は第一分団の全団員） ---
+  // --- お知らせ1件（公開済み。対象は宮之浦分団の全団員） ---
   const audienceSnapshot = JSON.stringify([...rosterAll].sort());
   group([
     insert("announcements", ["id", "unit_id", "title", "body", "revision_no", "status", "published_at", "version", "created_at", "updated_at", "created_by", "actor_kind"],
       [ANNOUNCEMENT_1, unit, "架空の訓練日程のお知らせ（デモ）",
-        "12月の防災訓練の日程を案内する（架空のデモ文言）。出席可否は活動の出欠から回答してください。",
+        "12月の防災訓練の日程を案内する（架空のデモ文言）。集合は宮之浦本町公園。出席可否は活動の出欠から回答してください。",
         1, "published", "2026-10-01T00:00:00.000Z", 1, NOW, NOW, creator, "human"]),
     insert("announcement_revisions", ["id", "unit_id", "announcement_id", "revision_no", "title", "body", "audience_snapshot", "actor_user_id", "actor_kind", "created_at"],
       [ANNOUNCEMENT_REV_1, unit, ANNOUNCEMENT_1, 1, "架空の訓練日程のお知らせ（デモ）",
-        "12月の防災訓練の日程を案内する（架空のデモ文言）。出席可否は活動の出欠から回答してください。",
+        "12月の防災訓練の日程を案内する（架空のデモ文言）。集合は宮之浦本町公園。出席可否は活動の出欠から回答してください。",
         audienceSnapshot, creator, "human", NOW]),
     ...rosterAll.map((memberId) =>
       insert("announcement_audience", ["id", "unit_id", "announcement_id", "member_id", "actor_user_id", "actor_kind", "created_at"],
@@ -553,7 +571,7 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   group([
     insert("notifications",
       ["id", "unit_id", "source_type", "source_id", "body_revision", "audience_hash", "status", "approved_by", "approved_at", "version", "last_mutation_token", "created_at", "updated_at", "created_by", "actor_kind"],
-      [NOTIFICATION_1, unit, "activity", activityId(1), JSON.stringify({ body: "架空の防災訓練（12月）の出欠を回答してください（デモ通知）。" }),
+      [NOTIFICATION_1, unit, "activity", activityId(1), JSON.stringify({ body: "架空の防災訓練（12月・本町公園）の出欠を回答してください（デモ通知）。" }),
         audienceHash, "approved", creator, "2026-10-02T00:00:00.000Z", 1, crypto.randomUUID(), NOW, NOW, creator, "human"]),
     insert("notification_recipients", ["id", "unit_id", "notification_id", "member_id", "channel", "address_ref", "actor_user_id", "actor_kind", "created_at"],
       [crypto.randomUUID(), unit, NOTIFICATION_1, targets.adminMemberId, "inapp", `member:${targets.adminMemberId}#inbox`, creator, "human", NOW]),
@@ -569,7 +587,7 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
     insert("report_versions",
       ["id", "unit_id", "report_id", "template_version", "revision_no", "text", "missing_fields", "source_versions", "model_id", "status", "approved_by", "approved_at", "version", "last_mutation_token", "created_at", "updated_at", "created_by", "actor_kind"],
       [REPORT_VERSION_1, unit, REPORT_1, "test-activity-v1", 1,
-        "架空の活動報告（デモ）。水防訓練を実施し、参加団員と記録を整理した。",
+        "架空の活動報告（デモ）。宮之浦川の水防訓練を実施し、参加団員と記録を整理した。",
         "[]", JSON.stringify({ activityVersion: 1, resultVersion: 1, resultRevisionNo: 1 }),
         null, "approved", DEMO_OFFICER_MEMBER, "2026-06-20T00:00:00.000Z", 1, crypto.randomUUID(), NOW, NOW, creator, "human"]),
     { sql: "UPDATE reports SET current_approved_version_id = ? WHERE id = ? AND unit_id = ?", binds: [REPORT_VERSION_1, REPORT_1, unit] },
@@ -591,7 +609,7 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   const photo = demoPhotoPng();
   const pdf = demoDocumentPdf();
   const docChunks = [
-    "堤防の巡視要領（架空・デモ）。豪雨時は請負業者と連絡を取り、水位を確認して本部へ報告する。",
+    "宮之浦川の堤防巡視要領（架空・デモ）。豪雨時は請負業者と連絡を取り、水位を確認して本部へ報告する。",
     "資機材の点検は月次で行う（架空・デモ）。異常は写真を添えて「異常」へ登録する。",
     "活動の記録は実績として残し、帳票は承認後に確定する（架空・デモの運用手順）。",
   ];
@@ -680,7 +698,7 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
 // seedの解決と実行（workerd側の入口。実デモは下のCLIから同じ計画を使う）
 // ============================================================================
 
-/** seed対象の解決。実デモではbootstrap-adminが作った「架空市 第一分団」とその管理者を使う。 */
+/** seed対象の解決。実デモではbootstrap-adminが作った「宮之浦分団」とその管理者を使う。 */
 export async function resolveDemoTargets(db: D1Database): Promise<DemoSeedTargets> {
   const unit = await db.prepare("SELECT id FROM units WHERE name = ?").bind(DEMO_UNIT_NAME).first<{ id: string }>();
   if (!unit) {
@@ -696,7 +714,7 @@ export async function resolveDemoTargets(db: D1Database): Promise<DemoSeedTarget
     .first<{ member_id: string }>();
   const fallback = admin ?? (await db.prepare("SELECT id AS member_id FROM members WHERE unit_id = ? LIMIT 1").bind(unit.id).first<{ member_id: string }>());
   const seq = await db.prepare("SELECT event_sequence AS n FROM units WHERE id = ?").bind(unit.id).first<{ n: number }>();
-  if (!fallback) throw new Error("seed-demo: 第一分団に団員がいません（bootstrap-adminを先に実行してください）");
+  if (!fallback) throw new Error("seed-demo: 宮之浦分団に団員がいません（bootstrap-adminを先に実行してください）");
   return { unitId: unit.id, adminMemberId: fallback.member_id, createUnit: false, sequenceStart: seq?.n ?? 0 };
 }
 
@@ -939,7 +957,7 @@ async function main(): Promise<void> {
   }
   const unitRow = d1Json(`SELECT id FROM units WHERE name = '${DEMO_UNIT_NAME}' LIMIT 1`)[0] as { id: string } | undefined;
   if (!unitRow) {
-    console.error("第一分団が見つかりません。npm run demo の初回起動（bootstrap-admin）より前です");
+    console.error("宮之浦分団が見つかりません。npm run demo の初回起動（bootstrap-admin）より前です");
     process.exitCode = 1;
     return;
   }
@@ -950,7 +968,7 @@ async function main(): Promise<void> {
         `WHERE m.unit_id = '${unitId}' AND r.role_id = '${ROLE_IDS.admin}' LIMIT 1`,
     )[0] as { member_id: string } | undefined) ??
     (d1Json(`SELECT id AS member_id FROM members WHERE unit_id = '${unitId}' LIMIT 1`)[0] as { member_id: string } | undefined);
-  if (!adminRow) throw new Error("第一分団に団員がいません（bootstrap-adminを先に実行してください）");
+  if (!adminRow) throw new Error("seed-demo: 宮之浦分団に団員がいません（bootstrap-adminを先に実行してください）");
   const seqRow = d1Json(`SELECT event_sequence AS n FROM units WHERE id = '${unitId}'`)[0] as { n: number } | undefined;
 
   const plan = await buildDemoSeedPlan({

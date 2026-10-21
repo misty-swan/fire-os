@@ -13,10 +13,10 @@ test.beforeEach(async ({ request }) => {
   const tag = crypto.randomUUID().slice(0, 6);
   const jitter = [...tag].reduce((n, c) => n + c.charCodeAt(0), 0) % 30;
   const facilities = [
-    { type: "hydrant", managementNumber: `E2E-H-${tag}`, latitude: 35.05 + jitter * 0.01, longitude: 139.05 + jitter * 0.012 },
-    { type: "hydrant", managementNumber: `E2E-H2-${tag}`, latitude: 35.55 + jitter * 0.01, longitude: 139.25 + jitter * 0.012 },
-    { type: "cistern", managementNumber: `E2E-S-${tag}`, latitude: 35.3 + jitter * 0.01, longitude: 139.65 + jitter * 0.012 },
-    { type: "box", managementNumber: `E2E-B-${tag}`, latitude: 35.75 + jitter * 0.01, longitude: 139.45 + jitter * 0.012 }, // CITY_BBOX（東端140.1）の内側に収める
+    { type: "hydrant", managementNumber: `E2E-H-${tag}`, latitude: 30.362 + jitter * 0.0004, longitude: 130.645 + jitter * 0.0005 },
+    { type: "hydrant", managementNumber: `E2E-H2-${tag}`, latitude: 30.376 + jitter * 0.0004, longitude: 130.665 + jitter * 0.0005 },
+    { type: "cistern", managementNumber: `E2E-S-${tag}`, latitude: 30.39 + jitter * 0.0004, longitude: 130.647 + jitter * 0.0005 },
+    { type: "box", managementNumber: `E2E-B-${tag}`, latitude: 30.404 + jitter * 0.0004, longitude: 130.669 + jitter * 0.0005 }, // DEMO_BBOX（宮之浦周辺の表示範囲。東端130.70）の内側に収める
   ] as const;
   for (const f of facilities) {
     const res = await adminApi(request, "POST", "/api/v1/facilities", {

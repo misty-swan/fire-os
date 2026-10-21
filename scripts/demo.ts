@@ -27,7 +27,7 @@ if (mig.status !== 0) throw new Error(mig.stderr || mig.stdout);
 if (firstRun) {
   const b = sh("npx", [
     "tsx", "scripts/bootstrap-admin.ts", "--env", "local", "--persist-to", PERSIST,
-    "--unit-name", "架空市 第一分団", "--admin-name", "架空 管理者", "--email", "admin@example.test",
+    "--unit-name", "宮之浦分団", "--admin-name", "架空 岳志", "--email", "admin@example.test",
   ]);
   if (b.status !== 0) throw new Error(b.stderr || b.stdout);
   const { token, expiresAt } = JSON.parse(b.stdout.trim().split("\n").pop()!) as { token: string; expiresAt: string };

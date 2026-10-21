@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Notice } from "../../components/ui";
-import { CITY_BBOX, FacilityMarker, FacilityMarkerFace, toMarkerBox } from "./FacilityMarkers";
+import { DEMO_BBOX, FacilityMarker, FacilityMarkerFace, toMarkerBox } from "./FacilityMarkers";
 import { type FacilityItem } from "./useFacilities";
 import { useGoogleMaps } from "./useGoogleMaps";
 
@@ -39,7 +39,7 @@ export function GoogleMapCanvas({ facilities, selectedId, onSelect }: GoogleMapC
   );
 }
 
-/** 置き換え絵のマーカー層（CITY_BBOX基準の0〜100%位置。キー無しのMapPageと読み込み中・失敗時で共用） */
+/** 置き換え絵のマーカー層（DEMO_BBOX基準の0〜100%位置。キー無しのMapPageと読み込み中・失敗時で共用） */
 export function PlaceholderMarkers({ facilities, selectedId, onSelect }: GoogleMapCanvasProps) {
   return (
     <>
@@ -51,10 +51,10 @@ export function PlaceholderMarkers({ facilities, selectedId, onSelect }: GoogleM
   );
 }
 
-/** 初期中心（CITY_BBOXの中心。起動直後の一瞬だけ使われ、すぐ施設範囲のfitBoundsへ置き換わる） */
+/** 初期中心（DEMO_BBOX＝宮之浦周辺の中心。起動直後の一瞬だけ使われ、すぐ施設範囲のfitBoundsへ置き換わる） */
 const CITY_CENTER = {
-  lat: (CITY_BBOX.north + CITY_BBOX.south) / 2,
-  lng: (CITY_BBOX.east + CITY_BBOX.west) / 2,
+  lat: (DEMO_BBOX.north + DEMO_BBOX.south) / 2,
+  lng: (DEMO_BBOX.east + DEMO_BBOX.west) / 2,
 };
 
 /** ダークスタイル（prototypeの指示。Googleの標準ダーク配色） */

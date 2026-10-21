@@ -23,11 +23,11 @@ export interface MarkerBox {
   facility: FacilityItem;
 }
 
-/** 表示範囲（架空市。実地図の移動はV05で接続するまで固定範囲） */
-export const CITY_BBOX = { west: 138.9, south: 34.9, east: 140.1, north: 36.1 };
+/** 表示範囲（宮之浦周辺。デモseedの架空施設〔MY-番号〕はこの中に収まる。実地図の移動はV05で接続するまで固定範囲） */
+export const DEMO_BBOX = { west: 130.64, south: 30.35, east: 130.70, north: 30.42 };
 
 export function toMarkerBox(f: FacilityItem): MarkerBox {
-  const { west, south, east, north } = CITY_BBOX;
+  const { west, south, east, north } = DEMO_BBOX;
   const x = ((f.longitude - west) / (east - west)) * 100;
   const y = ((north - f.latitude) / (north - south)) * 100;
   return { x: Math.min(97, Math.max(3, x)), y: Math.min(97, Math.max(3, y)), facility: f };
@@ -35,7 +35,7 @@ export function toMarkerBox(f: FacilityItem): MarkerBox {
 
 /**
  * マーカーの本体（種別の形・色・管理番号のボタン。prototypeのTYPESどおり）。
- * 位置（x/y）はCSSのleft/topとして受け取る: 置き換え絵は「12.3%」（CITY_BBOX基準）、
+ * 位置（x/y）はCSSのleft/topとして受け取る: 置き換え絵は「12.3%」（DEMO_BBOX基準）、
  * 実地図はoverlayが画素位置を持つwrapperを置くので「0px」。両キャンバスで同じDOMを使う
  * （google.maps.MarkerのSVG pinは使わない。色だけに頼らないようアイコンも併記）。
  */

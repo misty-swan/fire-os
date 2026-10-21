@@ -120,7 +120,7 @@ describe("demo isolation (T086)", () => {
     expect(
       detectRealPersonalData([{ table: "members", id: "x", values: { note: "連絡先 taro.yamada@gmail.com です" } }]),
     ).not.toEqual([]);
-    expect(detectRealPersonalData([{ table: "members", id: "x", values: { display_name: "架空 団員01" } }])).toEqual([]);
+    expect(detectRealPersonalData([{ table: "members", id: "x", values: { display_name: "架空 涼太" } }])).toEqual([]);
 
     const realPersonalDataFound = detectRealPersonalData(scan.rows);
     expect(realPersonalDataFound).toEqual([]);
@@ -152,15 +152,16 @@ describe("demo isolation (T086)", () => {
         verify: async () => {
           const p = await page("/api/v1/members");
           const rows = p.body.data ?? [];
-          return p.status === 200 && rows.some((m) => (m as { displayName?: string }).displayName === "架空 団員01") ? null : "seed団員が一覧に現れない";
+          return p.status === 200 && rows.some((m) => (m as { displayName?: string }).displayName === "架空 涼太") ? null : "seed団員が一覧に現れない";
         },
       },
       {
         label: "地図データ源・施設一覧（API-10）",
         verify: async () => {
-          const p = await page("/api/v1/facilities?bbox=138.9,34.9,140.1,36.1&limit=100");
+          // bboxはクライアントの表示範囲（FacilityMarkers.tsxのDEMO_BBOX＝宮之浦周辺）と同じ値
+          const p = await page("/api/v1/facilities?bbox=130.64,30.35,130.70,30.42&limit=100");
           const rows = p.body.data ?? [];
-          return p.status === 200 && rows.some((f) => (f as { managementNumber?: string }).managementNumber === "DF-0001") ? null : "seed施設が地図一覧に現れない";
+          return p.status === 200 && rows.some((f) => (f as { managementNumber?: string }).managementNumber === "MY-0001") ? null : "seed施設が地図一覧に現れない";
         },
       },
       {
@@ -179,7 +180,7 @@ describe("demo isolation (T086)", () => {
         verify: async () => {
           const p = await page("/api/v1/issues");
           const rows = p.body.data ?? [];
-          return p.status === 200 && rows.some((i) => String((i as { title?: string }).title).includes("架空の消火栓の劣化")) ? null : "seed異常が一覧に現れない";
+          return p.status === 200 && rows.some((i) => String((i as { title?: string }).title).includes("架空の防火水槽の劣化")) ? null : "seed異常が一覧に現れない";
         },
       },
       {
@@ -195,7 +196,7 @@ describe("demo isolation (T086)", () => {
         verify: async () => {
           const p = await page("/api/v1/incidents");
           const rows = p.body.data ?? [];
-          return p.status === 200 && rows.some((i) => String((i as { summary?: string }).summary).includes("架空市での出動訓練")) ? null : "seed出動が一覧に現れない";
+          return p.status === 200 && rows.some((i) => String((i as { summary?: string }).summary).includes("架空の出動訓練")) ? null : "seed出動が一覧に現れない";
         },
       },
       {
