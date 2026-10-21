@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { DEMO_SEED_IDS, seedDemo } from "../scripts/seed-demo";
+import { DEMO_SEED_IDS, parseDemoSeedArgs, seedDemo } from "../scripts/seed-demo";
 import { DEMO_ACCOUNTS, demoAccountStatements, generateDemoPassword, type DemoCredential } from "../src/server/auth/demo-accounts";
 import { workerBrowser } from "./helpers/auth";
 
@@ -110,5 +110,32 @@ describe("体験アカウント3本（営業デモTask4）", () => {
     ).bind(...DEMO_ACCOUNTS.map((a) => a.ids.authUser)).all<{ email: string }>();
     expect(rows.results).toHaveLength(DEMO_ACCOUNTS.length);
     for (const r of rows.results) expect(r.email.endsWith("@example.test"), r.email).toBe(true);
+  });
+});
+
+describe("seed-demo CLIの引数解析（parseDemoSeedArgs。純関数）", () => {
+  it("demo_password_flag_without_a_value_is_a_usage_error_not_silent_random_generation", () => {
+    const parsed = parseDemoSeedArgs(["--persist-to", ".wrangler/demo", "--demo-password"]);
+    if (!("usageError" in parsed)) throw new Error("値なしの--demo-passwordは拒否されるべき");
+    expect(parsed.usageError).toContain("--demo-password <値>"); // 正しい使い方を案内する
+  });
+
+  it("short_password_and_missing_persist_stay_usage_errors", () => {
+    const short = parseDemoSeedArgs(["--persist-to", ".wrangler/demo", "--demo-password", "short"]);
+    if (!("usageError" in short)) throw new Error("12文字未満は拒否されるべき");
+    expect(short.usageError).toContain("12文字以上");
+    const noPersist = parseDemoSeedArgs(["--demo-password", "long-enough-password"]);
+    if (!("usageError" in noPersist)) throw new Error("--persist-to無しは使い方の誤りになるべき");
+    expect(noPersist.usageError).toContain("使い方:");
+  });
+
+  it("valid_args_parse_to_persist_and_fixed_password_and_omitting_the_flag_stays_random", () => {
+    const fixed = parseDemoSeedArgs(["--persist-to", ".wrangler/demo", "--demo-password", TEST_PASSWORD]);
+    if ("usageError" in fixed) throw new Error("正常な引数は使い方の誤りになってはいけない");
+    expect(fixed.persist).toBe(".wrangler/demo");
+    expect(fixed.fixedDemoPassword).toBe(TEST_PASSWORD);
+    const random = parseDemoSeedArgs(["--persist-to", ".wrangler/demo"]);
+    if ("usageError" in random) throw new Error("--demo-password省略は普通に通るべき");
+    expect(random.fixedDemoPassword).toBeUndefined(); // ランダム生成へ落ちる（既定の経路）
   });
 });

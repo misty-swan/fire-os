@@ -937,23 +937,52 @@ const inlineBinds = (sql: string, binds: unknown[]): string => {
   return out + rest;
 };
 
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const persistIndex = args.indexOf("--persist-to");
-  const persist = persistIndex >= 0 ? args[persistIndex + 1] : undefined;
+/** CLI引数の解析結果。usageErrorのときは使い方の誤り（標準エラー出力へ出して終了コード2で止める） */
+export type DemoSeedArgs =
+  | { persist: string; fixedDemoPassword?: string }
+  | { usageError: string };
+
+/**
+ * CLI引数の解析（純関数。tests/demo-accounts.test.tsが使い方の誤りを固定する）。
+ * `--demo-password` を値なしで渡したときは黙ってランダム生成へ落とさず使い方の誤りとして拒否する
+ * （demo:reset後に同じ資格情報へ戻す運用が、静かに別パスワードで通ってしまう事故を防ぐ）。
+ */
+export function parseDemoSeedArgs(args: readonly string[]): DemoSeedArgs {
+  const flagValue = (flag: string): string | undefined => {
+    const i = args.indexOf(flag);
+    return i < 0 ? undefined : args[i + 1];
+  };
+  const persist = flagValue("--persist-to");
   if (!persist) {
-    console.error("使い方: npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo [--demo-password <12文字以上のパスワード>]");
-    console.error("実デモの初回起動（scripts/demo.ts）から自動で呼ばれる（架空データ＋体験アカウントのみ。実データは入れない）");
+    return {
+      usageError:
+        "使い方: npx tsx scripts/seed-demo.ts --persist-to .wrangler/demo [--demo-password <12文字以上のパスワード>]\n" +
+        "実デモの初回起動（scripts/demo.ts）から自動で呼ばれる（架空データ＋体験アカウントのみ。実データは入れない）",
+    };
+  }
+  if (!args.includes("--demo-password")) return { persist };
+  const fixedDemoPassword = flagValue("--demo-password");
+  if (fixedDemoPassword === undefined) {
+    return {
+      usageError:
+        "--demo-password の後に値がありません。--demo-password <値> の形で12文字以上のパスワードを指定してください（better-authの下限）",
+    };
+  }
+  if (fixedDemoPassword.length < 12) {
+    return { usageError: "--demo-password には12文字以上のパスワードを指定してください（better-authの下限）" };
+  }
+  return { persist, fixedDemoPassword };
+}
+
+async function main(): Promise<void> {
+  const parsed = parseDemoSeedArgs(process.argv.slice(2));
+  if ("usageError" in parsed) {
+    console.error(parsed.usageError);
     process.exitCode = 2;
     return;
   }
-  const demoPasswordIndex = args.indexOf("--demo-password");
-  const fixedDemoPassword = demoPasswordIndex >= 0 ? args[demoPasswordIndex + 1] : undefined;
-  if (fixedDemoPassword !== undefined && fixedDemoPassword.length < 12) {
-    console.error("--demo-password には12文字以上のパスワードを指定してください（better-authの下限）");
-    process.exitCode = 2;
-    return;
-  }
+  const persist = parsed.persist;
+  const fixedDemoPassword = parsed.fixedDemoPassword;
   const sh = (cmd: string, cmdArgs: string[]) => spawnSync(cmd, cmdArgs, { encoding: "utf8" });
   const d1Json = (sql: string) => {
     const r = sh("npx", ["wrangler", "d1", "execute", "DB", "--local", "--persist-to", persist, "--json", "--command", sql]);
