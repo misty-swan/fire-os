@@ -168,7 +168,7 @@ export function buildSeedPlan(profile: LoadProfile): SeedPlan {
       [who.userId, `auth-load-${who.userId}`, "active", NOW, NOW]));
   }
   head.push(insert("units", ["id", "name", "status", "created_at", "updated_at", "created_by", "actor_kind"],
-    [LOAD_UNIT_ID, "架空市 負荷試験分団", "active", NOW, NOW, LOAD_ADMIN.userId, "human"]));
+    [LOAD_UNIT_ID, "負荷試験分団（架空）", "active", NOW, NOW, LOAD_ADMIN.userId, "human"]));
   const people: { identity: typeof LOAD_ADMIN; displayName: string; rank: string; role: keyof typeof ROLE_IDS }[] = [
     { identity: LOAD_ADMIN, displayName: "架空 負荷管理者", rank: "分団長", role: "admin" },
     { identity: LOAD_OFFICER, displayName: "架空 負荷幹部", rank: "副分団長", role: "officer" },
@@ -203,7 +203,7 @@ export function buildSeedPlan(profile: LoadProfile): SeedPlan {
       "created_at", "updated_at", "created_by", "actor_kind"],
     [id, LOAD_UNIT_ID, facilityTypes[i % 3]!, `LF-${String(i).padStart(5, "0")}`, `架空の施設${i}`,
       35.6 + (i % 200) / 1000, 139.7 + (i % 200) / 1000,
-      `架空市${i % 40}丁目（負荷試験の架空施設）`, "架空の台帳（seed）", 1, "verified", NOW, "{}",
+      `負荷試験${i % 40}丁目（負荷試験の架空施設）`, "架空の台帳（seed）", 1, "verified", NOW, "{}",
       NOW, NOW, LOAD_ADMIN.userId, "human"]));
   }
   group(facilityGroup);
@@ -271,7 +271,7 @@ export function buildSeedPlan(profile: LoadProfile): SeedPlan {
       insert("activities", ["id", "unit_id", "operation_id", "title", "kind", "planned_starts_at", "location_text",
         "owner_member_id", "status", "created_at", "updated_at", "created_by", "actor_kind"],
       [activityId, LOAD_UNIT_ID, operationId, `架空の${a % 2 === 0 ? "訓練" : "配備"}活動${a}`, "training",
-        plannedStartsAt, "架空市庁舎駐車場", LOAD_OFFICER.memberId, scheduled ? "scheduled" : "completed",
+        plannedStartsAt, "負荷試験用の庁舎駐車場（架空）", LOAD_OFFICER.memberId, scheduled ? "scheduled" : "completed",
         NOW, NOW, LOAD_ADMIN.userId, "human"]),
     ];
     for (const memberId of rosterIds) {

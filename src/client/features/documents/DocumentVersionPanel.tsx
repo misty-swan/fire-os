@@ -335,7 +335,7 @@ export function DocumentVersionPanel({ detail, canManage, onChanged }: { detail:
             label="許諾の出典（必須）"
             value={licenseRef}
             onChange={(e) => setLicenseRef(e.target.value)}
-            placeholder="例: 架空市消防団 検証用許諾"
+            placeholder="例: 宮之浦分団 検証用許諾（架空）"
             hint="原本の利用許諾の出典（誰の何という許諾か）を短い語で書きます。無い版は作れません。"
           />
           <Button

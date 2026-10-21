@@ -1,5 +1,5 @@
 // 初期管理者の作成CLI（docs/07 §2、ops/bootstrap-admin.md）。通常のAPIからは呼べない運用手順。
-//   npm run bootstrap:admin -- --env local --unit-name "架空市消防団 第一分団" --admin-name "架空 管理者" --email admin@example.test
+//   npm run bootstrap:admin -- --env local --unit-name "宮之浦分団" --admin-name "架空 岳志" --email admin@example.test
 //   （remote）… --env staging --remote --confirm staging
 // 環境の指定は必須。--remote は実環境のD1へ書くので --confirm <同じ環境名> も必要。tokenはこの標準出力に一度だけ表示する。
 import { spawnSync } from "node:child_process";

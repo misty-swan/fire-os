@@ -231,7 +231,7 @@ export function FacilityEditorPage() {
           </Button>
         </div>
         <p className="text-[12px] text-ink-muted">{gpsHint}</p>
-        <TextField name="locationSource" label="位置の出典" value={locationSource} onChange={(e) => setLocationSource(e.target.value)} placeholder="例: 架空市台帳 / 現地測量 / GPS" />
+        <TextField name="locationSource" label="位置の出典" value={locationSource} onChange={(e) => setLocationSource(e.target.value)} placeholder="例: 宮之浦の台帳（架空）/ 現地測量 / GPS" />
         {editing && (
           <p className="text-[12px] font-medium text-attention">
             座標・位置の出典を変えると、この施設の済んでいた位置確認は失効し、再確認になります。

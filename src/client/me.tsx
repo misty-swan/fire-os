@@ -34,7 +34,7 @@ export const roleLabel = (roles: MeData["roles"]): string => {
   return top ? ROLE_LABEL[top] : "役割なし";
 };
 export const initialOf = (name: string): string => [...name.trim()][0] ?? "?";
-/** 「架空市 第一分団」→ 上段「架空市」・下段「第一分団」（空白が無ければ全体を下段に） */
+/** 「宮之浦 第二分団」→ 上段「宮之浦」・下段「第二分団」（空白が無ければ「宮之浦分団」全体を下段に） */
 export function splitUnit(unitName: string): { upper: string; lower: string } {
   const i = unitName.indexOf(" ");
   return i < 0 ? { upper: "", lower: unitName } : { upper: unitName.slice(0, i), lower: unitName.slice(i + 1) };

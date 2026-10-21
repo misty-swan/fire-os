@@ -21,7 +21,7 @@ run("npx", ["wrangler", "d1", "migrations", "apply", "DB", "--local", "--persist
 const email = "admin@example.test";
 const out = run("npx", [
   "tsx", "scripts/bootstrap-admin.ts", "--env", "local", "--persist-to", PERSIST,
-  "--unit-name", "架空市 第一分団", "--admin-name", "架空 管理者", "--email", email,
+  "--unit-name", "宮之浦分団", "--admin-name", "架空 管理者", "--email", email,
 ]);
 const json = JSON.parse(out.trim().split("\n").pop()!) as { token: string };
 writeFileSync("tests/e2e/.state/bootstrap.json", JSON.stringify({ email, token: json.token }), { mode: 0o600 });
