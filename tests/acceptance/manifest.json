@@ -3039,7 +3039,7 @@
    "summary": "wrangler 4.150のdevサーバーがProxyWorker→UserWorker接続を希に切断し〔kj keep-alive約5秒境界・「Network connection lost」。#14926/#15252〕、awaitedな書き込み要求の応答を失って試験が赤になり得る",
    "severity": "low",
    "status": "open",
-   "basis": "GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。対策は署名限定・有界3回・同一冪等鍵の再送ヘルパ〔issues 6書き込み＋documents作成に適用済み〕。他specのawaited書き込みには残存。docs/evidence/e2e-speed.md「残存クラス」。T086最終検証（2026-10-21）: collect:evidenceのe2e＋フルe2e 3回＝計4走行（75〜150件/回）で失敗0・ヘルパ適用外specでの赤は観測されず。上流（wrangler #14926/#15252）は未解決のため継続観察。発火時はclickUntilWriteArrivesヘルパ適用を検討",
+   "basis": "GETは自動再試行・PATCH/POSTは非冪等のため再試行されず。対策は署名限定・有界3回・同一冪等鍵の再送ヘルパ〔issues 6書き込み＋documents作成に適用済み〕。他specのawaited書き込みには残存。docs/evidence/e2e-speed.md「残存クラス」。T086最終検証（2026-10-21）: collect:evidenceのe2e＋フルe2e 3回＝計4走行（75〜150件/回）で失敗0・ヘルパ適用外specでの赤は観測されず。上流（wrangler #14926/#15252）は未解決のため継続観察。発火時はclickUntilWriteArrivesヘルパ適用を検討。T088最終検証（2026-10-21）: フルe2e第1バッチ3走行で3回発火（incidents.spec incident_new_draft_usage_rows…が2回・ai-review.spec stale_proposal…が1回。いずれも単独実行は緑・src・tests/e2eはT087の3回連続緑から不変・ai-reviewは再生成POST落下の署名〔v2候補が90秒待っても出現せず〕）。ai-review.specの再生成クリックへclickUntilWriteArrivesを適用。incidents側はUI上のawaited書き込みが無く失敗行を捕捉できていないため適用せず継続観察。発火時ログは .superpowers/sdd/16_実装タスク一覧/t088-final-e2e-firings.log",
    "owner": "-"
   },
   {

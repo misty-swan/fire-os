@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { adminApi, adminApiData, BASE } from "./helpers";
+import { adminApi, adminApiData, BASE, clickUntilWriteArrives } from "./helpers";
 
 /**
  * AIレビュー（T055、SCR-18 /app/ai/reviews。docs/03 §2 SCR-18「元版変化はstale、効果対象を承認前に表示」、
@@ -122,7 +122,14 @@ test("stale_proposal_requires_regeneration_not_forced_approval", async ({ page }
   expect(tasksAfterStale.data.data.filter((t) => t.title === taskTitle)).toHaveLength(0);
 
   // --- 10) 現行版で再生成（API-29の再依頼。新しいjob/候補。旧候補はstale表示のまま残る＝docs/11） ---
-  await page.getByRole("button", { name: "現行版で再生成" }).click();
+  // 押下はclickUntilWriteArrivesで包む: T085b-W1発火（2026-10-21 T088最終検証・run3）のため適用 —
+  // wrangler devのProxyWorkerが再生成POST（API-29＝/api/v1/ai/classifications）を落とすと
+  // v2候補が90秒待っても出現しない（issues.spec.tsと同じ署名のときだけ・同じ冪等鍵で押し直す）。
+  await clickUntilWriteArrives(
+    page,
+    () => page.getByRole("button", { name: "現行版で再生成" }).click(),
+    { urlIncludes: "/api/v1/ai/classifications", method: "POST" },
+  );
   await expect(page.getByText(/処理中/).first()).toBeVisible({ timeout: 15_000 });
   const regeneratedLink = page.getByRole("link", { name: /分類の候補 v2/ }).first();
   await expect(async () => {
