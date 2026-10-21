@@ -131,8 +131,12 @@ function checkApiRouting(config: DeploymentConfig): CheckResult {
     failures.push("assets.not_found_handling は single-page-application にしてください（アプリ配下だけSPA fallback）");
   }
   const workerFirst = assets?.run_worker_first ?? [];
-  if (!workerFirst.includes("/api") || !workerFirst.includes("/api/*")) {
-    failures.push("assets.run_worker_first に /api と /api/* の両方が必要です（未定義APIがSPAのHTMLを返して成功に見えない防止。設定側はWorker側のJSON 404と二重）");
+  // 全経路の /*（demoのdocument CSP配信。wrangler.jsonc T089）でも /api と /api/* の明示（他環境の既定）
+  // でも良い: どちらも「API要求は必ずWorkerへ届き、未定義APIがSPAのHTMLで成功に見えない」を満たす。
+  const apiWorkerFirst = workerFirst.includes("/api") && workerFirst.includes("/api/*");
+  const allWorkerFirst = workerFirst.includes("/*");
+  if (!apiWorkerFirst && !allWorkerFirst) {
+    failures.push("assets.run_worker_first に /api と /api/* の両方（または全経路の /*）が必要です（未定義APIがSPAのHTMLを返して成功に見えない防止。設定側はWorker側のJSON 404と二重）");
   }
   if (assets?.directory !== "./dist/client") failures.push("assets.directory は ./dist/client にしてください（WorkerとSPAを同一originに同居させる）");
   return { ok: failures.length === 0, failures };

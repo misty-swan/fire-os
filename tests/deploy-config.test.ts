@@ -104,6 +104,20 @@ describe("deploy-config (T078)", () => {
     expect(spaFallbackCheck.ok).toBe(false);
     expect(spaFallbackCheck.apiRouting.ok).toBe(false);
 
+    // 2b) run_worker_firstの許容形（T089 計画Task 6）: demoの全経路 /*（document CSPをWorkerで付けるため。
+    // wranglerは /api との併記をredundantで拒否する）は「API要求も必ずWorkerへ届く」ので合格。
+    // 一方、片方だけ（/api のみ）や空配列は従来どおり不合格（未定義APIがHTMLで成功に見える恐れ）。
+    const allWorkerFirstCheck = checkEnvironment(config("demo", {
+      ...demoEnv,
+      assets: { directory: "./dist/client", binding: "ASSETS", not_found_handling: "single-page-application", run_worker_first: ["/*"] },
+    }));
+    expect(allWorkerFirstCheck.apiRouting.ok, allWorkerFirstCheck.apiRouting.failures.join(" / ")).toBe(true);
+    const apiOnlyCheck = checkEnvironment(config("demo", {
+      ...demoEnv,
+      assets: { directory: "./dist/client", binding: "ASSETS", not_found_handling: "single-page-application", run_worker_first: ["/api"] },
+    }));
+    expect(apiOnlyCheck.apiRouting.ok).toBe(false);
+
     // 3) 破壊migration（旧workerが必要とする列を、新workerの配備前に削除）
     const destructiveNext = historyManifest();
     destructiveNext.entries.push(...parseManifest({ "0003_breaking.sql": "-- 旧workerが必要とする列を削除する\nALTER TABLE units DROP COLUMN name;" }).entries);

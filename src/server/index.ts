@@ -3,6 +3,7 @@ import { assertEnvName, type AppBindings, type AppEnv, type JobMessage } from ".
 import { handleQueueBatch, handleScheduled } from "./jobs/dispatch";
 import { errorResponse, notFound, onError } from "./http";
 import { registerRoutes } from "./routes";
+import { responseWithDemoCsp } from "./security/csp";
 import { applySecurity, securityPolicyForEnv, type SecurityPolicy } from "./security/limits";
 
 /**
@@ -50,7 +51,9 @@ export function createApp(env: Pick<AppEnv, "APP_ENV">, securityPolicy?: Securit
   app.all("/api/*", (c) => notFound(c));
   app.onError(onError);
 
-  app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
+  // 静的配信（React）。demoのときだけ、HTML（document）応答へCSPを付ける（security/csp.ts。T089 計画Task 6）。
+  // localは無しで不変（試験・e2eの契約）。subresourceの個別assetには付けない（最小面）。
+  app.all("*", async (c) => responseWithDemoCsp(c.env.APP_ENV, await c.env.ASSETS.fetch(c.req.raw)));
   return app;
 }
 

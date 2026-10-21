@@ -35,7 +35,13 @@
     "demo": {
       "name": "fireos-demo",
       "vars": { "APP_ENV": "demo", "AUTH_BASE_URL": "https://fireos-demo.example.invalid" },
-      "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api", "/api/*"] },
+      // run_worker_first を /*（全経路Worker-first。demoのみ）: 既定のasset-first配信ではHTML（/ もSPA
+      // fallbackも）がasset層から直接返りWorkerを通らないため、security/csp.tsのdemo CSPが実要求に
+      // 1つも付かない。全要求をWorker経由にしてHTML(document)へだけCSPを付ける（T089 計画Task 6）。
+      // /apiは/*に含まれる（APIのJSON 404契約はWorker側 app.all("/api/*") が担う。配列へ併記すると
+      // wranglerが「redundant」で拒否する）。local/staging/productionはrouting不変=試験・e2e・本番の
+      // 配信経路に影響しない。cost: demoの静的assetもWorker課金になるが公開デモの規模では無視できる。
+      "assets": { "directory": "./dist/client", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/*"] },
       "d1_databases": [{ "binding": "DB", "database_name": "fireos-demo", "database_id": "00000000-0000-0000-0000-000000000002", "migrations_dir": "drizzle" }],
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "fireos-demo-files" }],
       "ai": { "binding": "AI" },
