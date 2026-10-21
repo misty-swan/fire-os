@@ -22,6 +22,9 @@
 
 ## §2 ドメイン取得とCloudflareへの登録（zone）
 
+> **⚠️ 2026-10-22 ユーザー裁定: ドメインは取得しない。本節の作業は不要（将来読み替えて使うために残す）。**
+> デモのURLはCloudflareが無料で付ける `https://fireos-demo.<アカウントサブドメイン>.workers.dev` を使う（アカウントサブドメインはCloudflareのダッシュボードで初回に決める）。**代わりに、zoneがないと設定できない外側の防御（WAF/Rate Limitingのカスタムルール）は使えない**＝防御はアプリ内のDEMO_SECURITY_POLICYとCloudflareの自動DDoS保護のみ。この限界は ops/demo-deploy.md §5.3-1 と設計書§8-1に記録した。将来ドメインを取れば本節の手順で zone を追加し、WAF層を後から足せる（デプロイし直しは不要）。
+
  Cloudflare Registrarで直接買うのが最短。購入したドメインは**同じアカウントのzoneとして自動で登録**され、ネームサーバーの変更作業が不要になる（RegistrarのドメインはCloudflareネームサーバー固定）。既に別の事業者で取得済みのドメインを使う場合は、この§の末尾の注記の手順になる。
 
 6. Cloudflareダッシュボードで **Register domains**（`https://dash.cloudflare.com/?to=/:account/registrar/register`）を開く。→ 何が起きるか: ドメイン検索の画面が出る。

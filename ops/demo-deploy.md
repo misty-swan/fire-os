@@ -136,7 +136,7 @@ docs/07 §8の試算（本番30人×10ロード＋デモ2,000＝2,300/月）の�
 1. 資源の作成: D1 `fireos-demo`・R2バケット `fireos-demo-files`・Queue `fireos-demo-jobs` をCloudflareに作成し、D1の実database_idをwrangler.jsoncのdemo環境へ反映する（仮値 …0002と置き換える。R2/Queuesは名前参照のため設定変更不要）。
 2. Secret: `npx wrangler secret put BETTER_AUTH_SECRET --env demo`（32バイト以上の乱数。チャット・メール本文・Gitに貼らない。ops/deploy.md §0）。
 3. migration: `npm run migrate -- --env demo --remote --yes-i-know`（`--env` と `--yes-i-know` が無いと実環境へ適用不可＝scripts/migrate.tsのガード）。
-4. AUTH_BASE_URL: wrangler.jsoncのdemo環境の `AUTH_BASE_URL` を実URL（例: `https://<デモのドメイン>`）へ置き換える（仮値 `https://fireos-demo.example.invalid` のまま）。
+4. AUTH_BASE_URL: wrangler.jsoncのdemo環境の `AUTH_BASE_URL` を実URLへ置き換える（仮値 `https://fireos-demo.example.invalid` のまま。**2026-10-22裁定: ドメイン不取得**のため実URLは `https://fireos-demo.<アカウントサブドメイン>.workers.dev`。アカウントサブドメインはCloudflareダッシュボードのWorkersページで初回に決める）。
 5. 初期管理者: `npm run bootstrap:admin -- --env demo --remote --confirm demo --unit-name "宮之浦分団" --admin-name "架空 岳志" --email <管理者のメール>`。標準出力のJSONの `token` が招待token（一度だけ表示・72時間有効）。ops/bootstrap-admin.md参照。
 6. 架空データの投入: `npm run demo:seed:remote -- --confirm demo`（Task 5で実装。wipe無しの `--remote` seed。ステップ5のbootstrapが作ったunit〔実在のUUID・実在の管理者〕に架空データと体験アカウント3本を付け、R2 `fireos-demo-files` へも架空実体を置く。冪等なので再実行で重複しない。**初回の実行・確認はTask 7**）。週次の作り直し（全表DROPからのやり直し）は§3.1の `demo:reset:remote` を使う。
 7. 配置: ops/deploy.md §2と同じゲート（typecheck・check:contracts・check:migrations・build・check:environment・vitest・e2e）を通してから `npx wrangler deploy --env demo`。稼働versionを運用記録へ残す。
@@ -152,7 +152,7 @@ docs/07 §8の試算（本番30人×10ロード＋デモ2,000＝2,300/月）の�
 
 ### 5.3 番号付き残作業（実Cloudflare接続後に確定するもの。局所完了の理由）
 
-1. **WAF/Rate Limiting設定とレート上限値の実環境確定**（docs/05 §1・docs/07 §2・docs/evidence/security.md §6限界節）: アプリ内のisolate別計数は防衛線に過ぎないため、Cloudflareの製品層でIP/経路ごとの全体上限を設定し、実測で確定する。値はdocs/14 D11の承認材料にする。
+1. **WAF/Rate Limiting設定とレート上限値の実環境確定**（docs/05 §1・docs/07 §2・docs/evidence/security.md §6限界節）: アプリ内のisolate別計数は防衛線に過ぎないため、Cloudflareの製品層でIP/経路ごとの全体上限を設定し、実測で確定する。値はdocs/14 D11の承認材料にする。**→ 2026-10-22ユーザー裁定（ドメイン不取得・`*.workers.dev`で公開）により実施不能**: zone系のWAF/Rate Limitingカスタムルールは独自ドメイン（zone）でのみ設定可能なため。公開デモの防御はアプリ内`DEMO_SECURITY_POLICY`（isolate別計数の緩み=docs/05 §1の記載どおり）とCloudflareの自動DDoS保護のみとし、この限界を承知の上で公開する（対象は少数・直渡し）。将来ドメインを取得した時は ops/demo-provisioning.md §2 の手順でzoneを追加し、本項を再実施する。
 2. **security headers/CSPの実CDN設定判断**（docs/evidence/security.md §6）: API応答のsecurity headersは実装済み（T081）だが、SPAのHTML（ASSETS経由）へのCSPは未設定。実CDN/ホスティングの構成が確定してから判断する。
 3. **seed CLIの実環境（--remote）対応**（§5.1の6）: 実装済み（Task 5。`npm run demo:seed:remote`〔投入〕と `npm run demo:reset:remote`〔週次リセット＝全表DROPからのやり直し〕。コマンド列と拒否規律は試験が静的に固定〔tests/demo-reset.test.ts〕）。この環境に実Cloudflareが無いため実行実績は無く、初回の実行・確認はTask 7（X-DEMOの実地確認と合わせる）。
 4. **X-DEMO（RG-09の実地確認）**: 公開デモ（分離した実環境）の構築と本番データとの完全分離の実地確認。未実施（acceptance-results.md「実外部の残手順」。この環境に実Cloudflareが無いため局所完了＝§1の3層の検査とローカル実測だけ実施）。
