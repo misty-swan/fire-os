@@ -9,6 +9,8 @@ import type { ExtraCondition, MutationContext, RootGuard } from "../mutations/ex
  * - draftId: 予約を一回消費し（prepared→consumed）、その予約に紐づく全添付をリンクする
  * - attachmentIds: 既にreadyの添付を個別にリンクする（未検査は422 ATTACHMENT_NOT_READY）
  * - 分類: sensitive（現場写真等）を基本の対象へ付ける操作は拒否する（分類の引下げはしない。docs/10 §4）
+ * - 元添付の認可（T091-S2）: 紐付けてよいのは、本人が上げ・文書原本でなく・有効なリンクが「上げた時の対象への
+ *   自動紐付け」か「今回の紐付け先」だけの添付に限る（他人の可視添付の再共有はしない）。予約（draftId）は作った人だけが使える
  */
 export interface AttachmentLinkInput {
   /** リンク先の業務対象（facility/vehicle/equipment等。存在を確認できる種別だけ） */
@@ -53,6 +55,21 @@ export const insertLinkSql = (allowSensitive: boolean) =>
   "SELECT ?, ?, a.id, ?, ?, ?, ?, ?, ?, 'human' FROM attachments a WHERE a.unit_id = ? AND a.status = 'ready' " +
   (allowSensitive ? "" : "AND a.classification <> 'sensitive' ") + "AND ";
 
+/**
+ * 元添付が「本人の未使用アップロード」であることのSQL（T091-S2。docs/16 T091 手順2）。
+ * 先頭のFROM/WHEREに続けて使い、binds は [actorUserId, target.type, target.id]。
+ * - 本人（owner_user_id）が上げたもの
+ * - 文書原本でない（document_versionsが参照しない・documentのリンクを持たない＝取消済みのリンクも含めて見る）
+ * - 有効なリンクは、上げた時の対象への自動紐付け（検査jobが作る。intent_target）か今回の紐付け先（再送）だけ
+ */
+const OWN_UNUSED_UPLOAD_SQL =
+  "a.owner_user_id = ? " +
+  "AND NOT EXISTS (SELECT 1 FROM document_versions dv WHERE dv.attachment_id = a.id) " +
+  "AND NOT EXISTS (SELECT 1 FROM attachment_links l2 WHERE l2.attachment_id = a.id AND l2.entity_type = 'document') " +
+  "AND NOT EXISTS (SELECT 1 FROM attachment_links l WHERE l.attachment_id = a.id AND l.unlinked_at IS NULL " +
+  "AND NOT (l.entity_type = a.intent_target_type AND l.entity_id = a.intent_target_id) " +
+  "AND NOT (l.entity_type = ? AND l.entity_id = ?))";
+
 export async function planAttachmentLinks(
   env: Pick<AppEnv, "DB">,
   unitId: string,
@@ -71,10 +88,12 @@ export async function planAttachmentLinks(
   // 予約の消費は版ガードで一回に限る。現在の版を読んでおく（作成直後は1。消費は最初で最後）
   let draftRoot: RootGuard | undefined;
   if (input.draftId) {
-    const draft = await env.DB.prepare("SELECT id, unit_id, version, status, expires_at, intended_entity_type FROM attachment_drafts WHERE id = ?")
+    const draft = await env.DB.prepare("SELECT id, unit_id, owner_user_id, version, status, expires_at, intended_entity_type FROM attachment_drafts WHERE id = ?")
       .bind(input.draftId)
-      .first<{ id: string; unit_id: string; version: number; status: string; expires_at: string; intended_entity_type: string }>();
+      .first<{ id: string; unit_id: string; owner_user_id: string; version: number; status: string; expires_at: string; intended_entity_type: string }>();
     if (!draft || draft.unit_id !== unitId) throw new HttpError("NOT_FOUND");
+    // 予約は作った人だけが使える（API-26 upload.tsと同じ照合。T091 H5）
+    if (draft.owner_user_id !== actorUserId) throw new HttpError("FORBIDDEN");
     if (draft.status !== "prepared") {
       throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "attachmentDraftId", reason: "draft_already_consumed" }]);
     }
@@ -92,6 +111,18 @@ export async function planAttachmentLinks(
         "SELECT 1 FROM (SELECT COUNT(*) AS n FROM attachments a WHERE a.draft_id = ? AND a.unit_id = ? AND a.status <> 'ready') WHERE n = 0",
       binds: [input.draftId, unitId],
       failCode: "ATTACHMENT_NOT_READY",
+    });
+    // 予約の所有者と、予約由来の各添付が本人の未使用アップロードであることを書込と同じbatchで確かめる（T091-S2/H5）
+    conditions.push({
+      existsSql: "SELECT 1 FROM attachment_drafts WHERE id = ? AND unit_id = ? AND owner_user_id = ?",
+      binds: [input.draftId, unitId, actorUserId],
+      failCode: "FORBIDDEN",
+    });
+    conditions.push({
+      existsSql:
+        "SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM attachments a WHERE a.draft_id = ? AND a.unit_id = ? AND NOT (" + OWN_UNUSED_UPLOAD_SQL + "))",
+      binds: [input.draftId, unitId, actorUserId, input.target.type, input.target.id],
+      failCode: "FORBIDDEN",
     });
   }
 
@@ -111,6 +142,12 @@ export async function planAttachmentLinks(
       failCode: "NOT_FOUND",
     });
     conditions.push({
+      // 元添付の認可（T091-S2）: 他人の添付・文書原本・既に別の対象で使われた添付は403（存在は上の条件で確認済み）
+      existsSql: "SELECT 1 FROM attachments a WHERE a.id = ? AND a.unit_id = ? AND " + OWN_UNUSED_UPLOAD_SQL,
+      binds: [id, unitId, actorUserId, input.target.type, input.target.id],
+      failCode: "FORBIDDEN",
+    });
+    conditions.push({
       // 点検・異常へのリンクはsensitiveを基本とするため、basicの引上げ対象にもする（docs/10 §3）
       existsSql: sensitiveTarget
         ? "SELECT 1 FROM attachments WHERE id = ? AND unit_id = ? AND status = 'ready'"
@@ -123,20 +160,25 @@ export async function planAttachmentLinks(
   const statements = (ctx: MutationContext): D1PreparedStatement[] => {
     const stmts: D1PreparedStatement[] = [];
     if (sensitiveTarget) {
-      // 移動セマンティクス: sensitiveの対象へリンクするときは、同じ添付の他の有効リンクを先に外す
-      // （写真の所在を1つの対象へ決定論化。jobの自動リンクで施設へ付いた写真を点検保存で移す等。docs/10 §3。
-      //   自動リンクの移動のための無条件DELETEで、手動のunlink（tombstone）の規則は適用しない。
-      //   条件（ready検査）が同じbatchの前提で通っているため、INSERTが0行のままリンクだけ消えることはない）
+      // 移動セマンティクス: sensitiveの対象へリンクするときは、上げた時の対象への自動リンクを先に外す
+      // （写真の所在を1つの対象へ決定論化。jobの自動リンクで施設へ付いた写真を点検保存で移す等。docs/10 §3）。
+      //   消すのは自動リンク（entity = 添付のintent_target）だけ（T091-S2）。それ以外のリンクの解除は監査付きの
+      //   API-101だけが行う（元添付の条件で、自動リンク・今回の対象以外の有効リンクを持つ添付はそもそも拒否される）。
+      //   条件（ready・元添付の認可）が同じbatchの前提で通っているため、INSERTが0行のままリンクだけ消えることはない
+      const autoLinkOnly =
+        "AND entity_type = (SELECT intent_target_type FROM attachments WHERE id = attachment_links.attachment_id) " +
+        "AND entity_id = (SELECT intent_target_id FROM attachments WHERE id = attachment_links.attachment_id)";
       if (input.draftId) {
         stmts.push(
           env.DB.prepare(
-            "DELETE FROM attachment_links WHERE unit_id = ? AND unlinked_at IS NULL AND attachment_id IN (SELECT id FROM attachments WHERE draft_id = ? AND unit_id = ?)",
+            "DELETE FROM attachment_links WHERE unit_id = ? AND unlinked_at IS NULL AND attachment_id IN (SELECT id FROM attachments WHERE draft_id = ? AND unit_id = ?) " +
+              autoLinkOnly,
           ).bind(unitId, input.draftId, unitId),
         );
       }
       for (const id of ids) {
         stmts.push(
-          env.DB.prepare("DELETE FROM attachment_links WHERE attachment_id = ? AND unit_id = ? AND unlinked_at IS NULL").bind(id, unitId),
+          env.DB.prepare("DELETE FROM attachment_links WHERE attachment_id = ? AND unit_id = ? AND unlinked_at IS NULL " + autoLinkOnly).bind(id, unitId),
         );
       }
       // basicの添付をsensitiveへ引き上げる（引下げはしない。docs/10 §4と矛盾しない）

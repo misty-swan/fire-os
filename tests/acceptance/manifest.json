@@ -3479,8 +3479,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "添付の再紐付けで文書ACL・お知らせ対象を迂回できる。課題起票（API-16）・活動結果（API-09/42）・点検登録が呼出者指定のattachmentIdsを元添付の所有・可視性を見ずに紐付け、API-27がPER-01（全role）で配信するため、閲覧を許された（取消後を含む）団員が文書原本を全団員へ再公開できる。機微対象では他のリンクを監査無しで物理削除する",
    "severity": "medium",
-   "status": "open",
-   "basis": "src/server/attachments/link.ts planAttachmentLinks（同一unit・ready・分類のみ検査、機微対象のmoveでDELETE）、src/server/routes/attachments.ts（文書以外のリンクはPER-01）。監査fingerprint fireos:attachments/link.ts:planAttachmentLinks:unauthorized-source-attachment-relink。修正はT091手順2",
+   "status": "resolved",
+   "basis": "T091手順2で修正: src/server/attachments/link.ts planAttachmentLinksの各attachmentIdsと予約由来の添付へ、本人（owner_user_id）が上げ・文書原本でなく（document_versions参照もdocumentリンクも無し）・有効リンクが自動紐付け（intent_target）か今回の紐付け先だけ、というin-batch条件（失敗は403 FORBIDDEN）を追加。draftIdは作成者だけ（H5。JSとin-batchの両方）。機微対象のmove DELETEは自動紐付けだけに限定。試験 tests/attachment-links.test.ts document_original_cannot_be_relinked_to_an_issue_by_an_acl_member・revoked_member_cannot_relink_document_original_to_activity_results・someone_elses_unlinked_upload_cannot_be_linked・draft_id_of_another_user_is_forbidden・own_autolinked_photo_still_moves_and_only_its_autolink_is_removed（修正前は5件とも再紐付け・他人の予約消費・他人の写真の移動が201で赤→緑）",
    "owner": "T091"
   },
   {
