@@ -288,6 +288,52 @@ test("inputs_stay_inside_the_search_card_at_narrow_widths", async ({ page }) => 
 });
 
 /**
+ * スマホ（実機360幅）で発見された欠陥の回帰（T090-D8・GitHub issue #8・利用者報告）:
+ * 予定詳細の出欠一覧（幹部用）は、名前だけが min-w-0 flex-1 truncate で幅を吸収し、
+ * 回答チップ・日付（w-[118px] flex-none）・「代理で回答」ボタン（flex-none）は縮まない。
+ * 360pxでは固定幅の合計≈340pxとなり名前に≈0〜20pxしか残らず、団員名が約1文字につぶれて
+ * 誰の行か判別できなかった。狭幅（max-lg）では行を2段に積み（1段目=アバタ+名前、
+ * 2段目=回答チップ+日付+代理で回答）、名前の可読幅を保証する。広幅（lg:）は従来どおり一行。
+ */
+// 幅: phone限定（名前の押しつぶしは1024px未満でのみ起こる。768/1280では名前が広く取れて恒真）
+test("attendance_list_keeps_member_names_readable_at_phone_width", async ({ page }) => {
+  test.setTimeout(180_000);
+  const tag = crypto.randomUUID().slice(0, 6);
+  const longName = `架空 ${"名".repeat(24)}${tag}`;
+
+  // 長い名前の架空団員を作り、公開済み予定の対象にする（データ量に頼らず決定的に再現。
+  // 出欠の一覧は幹部/管理者にだけ見える表示。pageは管理者の固定セッション）
+  const member = await adminApiData<{ id: string }>(page.request, "POST", "/api/v1/members", {
+    displayName: longName, status: "active", rank: "団員", squad: "1班",
+  });
+  expect(member.status).toBe(201);
+  const act = await adminApiData<{ id: string }>(page.request, "POST", "/api/v1/activities", {
+    title: `出欠幅確認 ${tag}`, kind: `attendance-width-${tag}`, plannedStartsAt: "2026-12-01T01:00:00.000Z",
+    locationText: "架空市公園（デモ）", ownerMemberId: member.data.data.id, audienceMemberIds: [member.data.data.id],
+  });
+  expect(act.status).toBe(201);
+  expect((await adminApiData(page.request, "PATCH", `/api/v1/activities/${act.data.data.id}`, {
+    version: 1, status: "scheduled", reason: "対象を確定して公開",
+  })).status).toBe(200);
+
+  await page.goto(`/app/activities/${act.data.data.id}`);
+  await expect(page.locator('[aria-label="出欠の一覧"]')).toBeVisible();
+  await expect(page.locator('[aria-label="出欠の一覧"] li').filter({ hasText: longName })).toBeAttached();
+
+  // 名前のspanの描画幅（修正前は≈0〜20px。2段に積んだ修正後はアバタ以外の第一段をほぼ使える）
+  const nameWidth = await page.evaluate((needle) => {
+    const row = [...document.querySelectorAll<HTMLElement>('[aria-label="出欠の一覧"] li')].find((li) => li.textContent?.includes(needle))!;
+    const span = [...row.querySelectorAll<HTMLElement>("span")].find((s) => s.textContent?.startsWith(needle))!;
+    return Math.round(span.getBoundingClientRect().width);
+  }, longName);
+  expect(nameWidth).toBeGreaterThanOrEqual(150);
+
+  // ページ全体は横スクロールしない（モバイルのエミュレーションで内容が広いとinnerWidthも広がるため設定幅と比較）
+  const scroll = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(scroll).toBeLessThanOrEqual(360);
+});
+
+/**
  * 実機（iPhone Safari）で発見されたWebKit Bug 301648（未修正・iOSのみ）の回帰（T083実機確認）:
  * date/time系inputはネイティブ描画（appearance:auto）のままだとauthorのbox-sizing（box-border）が
  * 無効になり、padding込みの幅計算が誤ってカードからはみ出す。アプリ共通のフィールド様式で描画させる

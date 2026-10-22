@@ -8,9 +8,9 @@
 
 | 項目 | 値 |
 |---|---|
-| 収集日時 | 2026-10-22T05:57:12.329Z |
-| commit | 7d3898e99a8dd6cca3e89d51cef50bdbf4e7429d（未コミットのコード変更 2件を含む作業木で実行。内容はcodeHashで固定） |
-| codeHash | c5b0d88ddd952c0cc56b101edc5781c051cd66e01f501dba0faae649dd2f918d |
+| 収集日時 | 2026-10-22T06:58:53.577Z |
+| commit | 25b7735cbaccc526f5ca012d645b8acece0f9308（未コミットのコード変更 4件を含む作業木で実行。内容はcodeHashで固定） |
+| codeHash | fc9c6177abeca3b5119f29299fae5345c5bbbd7b1776c3afe6b69923b9f1762d |
 | 設計版 | 08:v0.3 / 2026-10-13 12:v0.3 / 2026-10-15 |
 | 実行環境 | node v26.8.2 / linux-x64 / Playwright 1.64.0 / vitest/4.1.11 linux-x64 node-v26.8.2 / wrangler 4.150.0 |
 | ゲート判定 | **緑**（開発版の範囲） |
@@ -19,10 +19,10 @@
 
 | スイート | 結果 | passed | failed | skipped | 開始 | 終了 | コマンド |
 |---|---|---|---|---|---|---|---|
-| vitest | passed | 381 | 0 | 0 | 2026-10-22T05:50:39.935Z | 2026-10-22T05:51:29.694Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T05-50-39-472Z/vitest.json` |
-| load | passed | 3 | 0 | 0 | 2026-10-22T05:51:29.694Z | 2026-10-22T05:51:58.769Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T05-50-39-472Z/load.json` |
-| e2e | passed | 75 | 0 | 0 | 2026-10-22T05:51:58.769Z | 2026-10-22T05:57:12.309Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
-| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-22T05:57:12.309Z | 2026-10-22T05:57:12.309Z | `npm run test:live` |
+| vitest | passed | 381 | 0 | 0 | 2026-10-22T06:51:58.112Z | 2026-10-22T06:52:47.382Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T06-51-57-647Z/vitest.json` |
+| load | passed | 3 | 0 | 0 | 2026-10-22T06:52:47.382Z | 2026-10-22T06:53:15.173Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T06-51-57-647Z/load.json` |
+| e2e | passed | 76 | 0 | 0 | 2026-10-22T06:53:15.173Z | 2026-10-22T06:58:53.557Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
+| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-22T06:58:53.557Z | 2026-10-22T06:58:53.557Z | `npm run test:live` |
 
 ## 件数（正本から機械抽出）
 
@@ -213,4 +213,4 @@
 | T089-D5 | medium | resolved | ホームのタイル（未回答・確認待ち異常・点検期限・タスク・通知）が全て0で並ぶ。初期データに「未回答/確認待ち/期限臨近」を作っていない | 調査C | T090で修正: ①未回答=体験3本とownerを対象へ加え出欠回答を作らない（D2の増幅。ローカルdemo実測 experience_answered_rows=0） ②確認待ち=手動起票の異常をreported（未確認）のままに（試験 manual_issue_is_reported_until_confirmed） ③期限=車両1台のscheduleを過去日2026-10-19で（NOW固定2026-10-20より前=常に超過。試験 vehicle_inspection_schedule_is_overdue） ④タスク=体験団員の担当タスク1件を増幅SQLで（in_progress） ⑤通知=D4の未読1通。ローカルdemo実DBで reported=1・schedules=1・open_tasks=2 を実測 | T090 |
 | T089-D6 | low | resolved | seedのプライバシー走査（collectDemoPrivacyRows）が固定ID参照のため、実環境（bootstrap由来のUUIDが異なるunit）では0行を走査して恒真に戻る | 調査A（investigation-A.md） | T090で修正: 走査対象のunitを固定IDでなく名前（宮之浦分団/第二分団）で解決（units.nameに一意制約が無いため同名は全て走査）。usersはplanが実環境でも固定IDで作るため固定ID引きを維持。試験 tests/demo-isolation.test.ts privacy_scan_follows_unit_names_not_fixed_ids（固定IDでないUUIDの同名unit＋団員1名を挿入し走査が拾うこと=17名を断言。後片付けで16名へ戻ることも断言） | T090 |
 | T089-D7 | low | resolved | seedの管理者解決（member_roles LIMIT 1）が非決定的。bootstrap管理者と体験管理者の両方が該当し得る | 調査A | T090で修正: 解決クエリへ ORDER BY m.created_at ASC, m.id ASC を付け、最初に作られた管理者（=bootstrap由来。体験アカウントはseed後に作られるため必ず後）へ決定的に解決。workerd側（resolveDemoTargets）とCLI側（demoAdminPickSqlLiteral へ共通化）の両方。試験 tests/demo-isolation.test.ts seed_admin_resolution_prefers_the_earliest_created_admin（2026-01-01作成の管理者を後から足しても選ばれること）＋tests/seed-miyanoura.test.ts admin_resolution_sql_orders_deterministically | T090 |
-| T090-D8 | medium | open | スマホ幅で予定詳細の出欠一覧（幹部用・対象者一覧）の団員名が約1文字につぶれる。行の幅が日付の固定118pxと回答チップ・「代理で回答」ボタン（いずれもflex-none）に占有され、名前だけがmin-w-0 flex-1 truncateで吸収される | T090反映後の実機利用（利用者報告・2026-10-22。GitHub issue #8） | src/client/features/activities/ActivityPage.tsx AttendanceList の行（flex flex-wrap items-center）。360pxでの固定幅合計≈340px（アバタ26+チップ≈55+日付118+ボタン≈86+gap32+行padding24）で名前に≈0〜20px。flex-wrapは名前が縮んで一行に収まるため発動しない。代理回答の対象者一覧はprototypeに対応物が無い（実装側レイアウト）。操作は可能だが実機スマホで見せるデモの見栄えを大きく損なう | 未割当 |
+| T090-D8 | medium | resolved | スマホ幅で予定詳細の出欠一覧（幹部用・対象者一覧）の団員名が約1文字につぶれる。行の幅が日付の固定118pxと回答チップ・「代理で回答」ボタン（いずれもflex-none）に占有され、名前だけがmin-w-0 flex-1 truncateで吸収される | T090反映後の実機利用（利用者報告・2026-10-22。GitHub issue #8） | T090手順8で修正: 行を狭幅（max-lg）で2段に積み（1段目=アバタ+名前〔min-w-0 truncate〕、2段目=回答チップ+日付+「代理で回答」〔flex-wrapで240px未満も段を追加〕）、広幅（lg:contents）は従来どおり一行。押下領域44px（max-lg:min-h-11）は維持。採用形はdocs/03 §1.1-29へ記録（対象者一覧はprototypeに対応物が無い実装側レイアウト）。試験 e2e tests/e2e/accessibility.spec.ts attendance_list_keeps_member_names_readable_at_phone_width（長い名前の架空団員で名前の描画幅≥150px・ページ横スクロールなしを断言。修正前は名前幅≈0〜20pxで赤→緑） | T090 |

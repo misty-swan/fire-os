@@ -659,17 +659,24 @@ function AttendanceList({
       </div>
       <ul aria-label="出欠の一覧" className="flex flex-col gap-1.5">
         {shown.map(({ memberId, row }) => (
-          <li key={memberId} className="flex flex-wrap items-center gap-2 rounded-[14px] bg-white/[.05] px-3 py-1.5">
-            <span aria-hidden="true" className="grid size-[26px] flex-none place-items-center rounded-full bg-[#1a2740] text-[11px] font-bold text-[#c3cad6]">
-              {initialOf(nameOf(memberId) ?? "?")}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-              {nameOf(memberId) ?? "読み込み中…"}
-              {memberId === me && <span className="ml-1 text-[12px] text-ink-muted">（自分）</span>}
-            </span>
-            <Chip tone={RESPONSE_META[responseOf(memberId)].tone}>{RESPONSE_META[responseOf(memberId)].label}</Chip>
-            <span className="w-[118px] flex-none text-right font-mono text-[11px] text-ink-muted">{row?.respondedAt ? fmtInstant(row.respondedAt) : "—"}</span>
-            {memberId !== me && <ProxyAnswer activityId={activityId} memberId={memberId} displayName={nameOf(memberId) ?? "対象者"} version={row?.version ?? 0} onSaved={onChanged} />}
+          // T090-D8（GitHub issue #8）: 狭幅では名前だけが flex-1 truncate で幅を吸収し、チップ・日付の固定118px・
+          // 「代理で回答」ボタン（いずれもflex-none）に押しつぶされて約1文字になっていた。狭幅（max-lg）は
+          // 2段に積み（1段目=アバタ+名前、2段目=回答チップ+日付+代理で回答）、広幅（lg:contents）は従来の一行。
+          <li key={memberId} className="rounded-[14px] bg-white/[.05] px-3 py-1.5 lg:flex lg:flex-wrap lg:items-center lg:gap-2">
+            <div className="flex items-center gap-2 lg:contents">
+              <span aria-hidden="true" className="grid size-[26px] flex-none place-items-center rounded-full bg-[#1a2740] text-[11px] font-bold text-[#c3cad6]">
+                {initialOf(nameOf(memberId) ?? "?")}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                {nameOf(memberId) ?? "読み込み中…"}
+                {memberId === me && <span className="ml-1 text-[12px] text-ink-muted">（自分）</span>}
+              </span>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 lg:contents">
+              <Chip tone={RESPONSE_META[responseOf(memberId)].tone}>{RESPONSE_META[responseOf(memberId)].label}</Chip>
+              <span className="w-[118px] flex-none text-right font-mono text-[11px] text-ink-muted">{row?.respondedAt ? fmtInstant(row.respondedAt) : "—"}</span>
+              {memberId !== me && <ProxyAnswer activityId={activityId} memberId={memberId} displayName={nameOf(memberId) ?? "対象者"} version={row?.version ?? 0} onSaved={onChanged} />}
+            </div>
           </li>
         ))}
         {shown.length === 0 && <li className="text-[12px] text-ink-muted">該当する団員はいません。</li>}
