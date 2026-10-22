@@ -19,8 +19,8 @@
    出典: https://developers.cloudflare.com/billing/get-started/create-billing-profile/ （2026-10-21確認）
 4. **Workers Paid**（月5ドル〜。D1・R2・Queues・Workers AIはこのプランで使う）への契約を、ダッシュボードの **Workers & Pages** 画面の案内に従って行います。→ このアカウントでD1（データベース）・R2（ファイル保管）・Queues（ジョブ）が使えるようになります。デモの月額は ops/demo-deploy.md §4 の上限内に収まる想定です。**正直な注記**: この契約のクリックの手順を書いた公式ページは存在しないことを確認済みです（2026-10-21）。金額と内容の正本は下記の参照ページ、支払い方法の登録はステップ3の参照ページです。ボタンの配置は、その時点のダッシュボードの案内に従ってください。
    出典: https://developers.cloudflare.com/workers/platform/pricing/ （2026-10-21確認）
-5. ダッシュボードの **Workers & Pages** を開き、**Account Details** の **Account ID** の横のコピーボタンで、自分のアカウントIDをコピーして手元に控えます。→ 後続の作業（Task 5・Task 7）が使う16進の文字列が手元に揃います。アカウントIDは秘密の値ではありませんが、Gitには載せません。
-   出典: https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/ （2026-10-21確認）
+5. アカウントIDをコピーします: ダッシュボードの**検索（Search）**を開いて（どの画面でもキーボードの `Ctrl`/`⌘` + `K` で開けます）、`Copy account ID` と入力し、出てきた項目を選びます。→ アカウントIDがクリップボードにコピーされます。手元に控えてください。後続の作業（Task 5・Task 7）が使う32桁の英数字です。**代替の探し方**: **Workers & Pages** 画面の右側にある **Account Details** にも同じコピーがあります（画面が狭いと右側の欄が隠れることがあります。見つからなければ検索コマンドの方を使ってください）。アカウントIDは秘密の値ではありませんが、Gitには載せません。
+   出典: https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/ （2026-10-22確認）
 
 ## §2 ドメイン取得とCloudflareへの登録（zone）
 
