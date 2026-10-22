@@ -979,18 +979,22 @@ export function isInternalTableName(name: string): boolean {
  * 毎トランザクション `PRAGMA foreign_keys = on` 相当のためユーザーqueriesでは変えられない
  * （Cloudflare D1公式 https://developers.cloudflare.com/d1/sql-api/foreign-keys/ 。2026-10-21確認。
  * 公式がFK違反を一時的に許す唯一の方法として defer_foreign_keys を案内している）。
+ * `BEGIN TRANSACTION` / `COMMIT` は出さない: D1のリモートAPI（`wrangler d1 execute --remote --file`）は
+ * 明示的なトランザクション文を拒否する（"instead of the SQL BEGIN TRANSACTION or SAVEPOINT statements"。
+ * Task 7の実デモ投入で確認。localのsqlite実装は黙って通すため試験では捕まらなかった）。脚本の原子性は
+ * D1側の暗黙トランザクション（batched statements）に任せる。単一トランザクションで包む方法は無いので、
+ * 途中で失敗したときの復旧は `--wipe` / `--wipe-only`（全表DROP→migrationのやり直し。ops/demo-deploy.md
+ * §3.1）で行う。seed側の生成も同じ規律（buildSeedSqlFile）。
  */
 export function buildRemoteWipeSql(tables: readonly string[]): string {
   const lines = [
     "-- scripts/seed-demo.ts が生成（demo D1のwipe。全表DROP。schemaは直後のmigrationで作り直す）",
     "PRAGMA defer_foreign_keys = on;",
-    "BEGIN TRANSACTION;",
   ];
   for (const t of tables) {
     if (isInternalTableName(t)) continue;
     lines.push(`DROP TABLE IF EXISTS "${t.replaceAll('"', '""')}";`);
   }
-  lines.push("COMMIT;");
   return lines.join("\n") + "\n";
 }
 
@@ -1020,6 +1024,19 @@ const inlineBinds = (sql: string, binds: unknown[]): string => {
   if (rest.includes("?")) throw new Error("seed-demo: placeholderの数とbindsの数が一致しません");
   return out + rest;
 };
+
+/**
+ * seed SQLファイル（`wrangler d1 execute --file` へ渡す内容。bindsを展開する純関数。mainのapplySqlが使う）。
+ * `BEGIN TRANSACTION` / `COMMIT` を含めない: D1のリモートAPIは明示的なトランザクション文を拒否する
+ * （wipe側のbuildRemoteWipeSqlの説明どおり。Task 7の実デモ投入で確認）。文の原子性はD1の暗黙トランザクション
+ * に任せるため単一トランザクションの原子性は無く、seedのINSERTは冪等でない。途中失敗の復旧は
+ * `--wipe`（全表DROP→migration→seedの再実行。ops/demo-deploy.md §3.1）で行う。
+ */
+export function buildSeedSqlFile(header: string, stmts: readonly { sql: string; binds: unknown[] }[]): string {
+  const lines = [header];
+  for (const s of stmts) lines.push(inlineBinds(s.sql, s.binds) + ";");
+  return lines.join("\n") + "\n";
+}
 
 /** CLI引数の解析結果。usageErrorのときは使い方の誤り（標準エラー出力へ出して終了コード2で止める） */
 export type DemoSeedArgs =
@@ -1166,10 +1183,7 @@ async function main(): Promise<void> {
   try {
     const applySql = async (name: string, stmts: readonly { sql: string; binds: unknown[] }[]): Promise<void> => {
       const sqlFile = join(dir, name);
-      const lines = [`-- scripts/seed-demo.ts が生成（${name}。実データは含まない）`, "BEGIN TRANSACTION;"];
-      for (const s of stmts) lines.push(inlineBinds(s.sql, s.binds) + ";");
-      lines.push("COMMIT;");
-      writeFileSync(sqlFile, lines.join("\n") + "\n");
+      writeFileSync(sqlFile, buildSeedSqlFile(`-- scripts/seed-demo.ts が生成（${name}。実データは含まない）`, stmts));
       const applied = sh("npx", ["wrangler", ...cmds.d1File(sqlFile)]);
       if (applied.status !== 0) throw new Error(`seed SQLの適用に失敗（${name}）: ${applied.stderr || applied.stdout}`);
     };

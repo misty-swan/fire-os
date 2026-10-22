@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import demoResetYaml from "../.github/workflows/demo-reset.yml?raw";
 import pkgRaw from "../package.json?raw";
-import { buildRemoteWipeSql, buildSeedCommands, isInternalTableName, parseDemoSeedArgs } from "../scripts/seed-demo";
+import { buildRemoteWipeSql, buildSeedCommands, buildSeedSqlFile, isInternalTableName, parseDemoSeedArgs } from "../scripts/seed-demo";
 
 /**
  * demo seedの`--remote`対応と週次リセットworkflow（営業デモTask5）。
  *
  * - **実環境（実Cloudflare）には接続しない**。検査はすべて静的: ①scripts純関数（`buildSeedCommands` /
- *   `parseDemoSeedArgs` / `buildRemoteWipeSql`）が作るwranglerコマンド列と使い方の誤りの拒否、
+ *   `parseDemoSeedArgs` / `buildRemoteWipeSql` / `buildSeedSqlFile`）が作るwranglerコマンド列と使い方の誤りの拒否、
  *   ②workflow yaml（`.github/workflows/demo-reset.yml`）の内容。yamlの読み込みはviteの?raw
  *   （tests/deploy-config.test.tsと同じ様式。実行ファイルには載らない）。
  * - 規律の固定（Task 1のGlobal Constraints）: `--remote` は `--env demo --confirm demo` が無いと動かない
@@ -20,6 +20,9 @@ import { buildRemoteWipeSql, buildSeedCommands, isInternalTableName, parseDemoSe
  *   FK回避は `PRAGMA defer_foreign_keys = on`（D1は全クエリを暗黙のトランザクションで実行し、
  *   `PRAGMA foreign_keys=OFF` は効かない。公式 https://developers.cloudflare.com/d1/sql-api/foreign-keys/
  *   が案内する唯一の方法。2026-10-21確認）。
+ * - 明示的なトランザクション文（`BEGIN TRANSACTION` / `COMMIT` / `SAVEPOINT`）は生成SQL（wipe・seedとも）
+ *   に入れない: D1リモートAPIが拒否する（Task 7の実デモ投入で確認。localのsqlite実装は黙って通すため
+ *   試験では捕まらなかった）。正の対照として「含まれない」ことをwipe・seedの各SQL検査で断言する。
  * - 固定資格情報: workflowはSecret `DEMO_ACCOUNT_PASSWORD` を**環境変数**で渡す（argvに載せない。
  *   パスワードがActionsのログへ出ない。スクリプトは `--demo-password` フラグも受け付けるが併用は拒否）。
  * - 復旧用wipe: `--wipe-only` は全表DROPとmigrationだけ行いseedはしない（週次wipeで消えた実管理者〔MFA付き〕を
@@ -190,10 +193,31 @@ describe("demo-reset (営業デモTask5)", () => {
     expect(sql).toContain("PRAGMA defer_foreign_keys = on;");
     expect(sql).not.toContain("foreign_keys=OFF");
     expect(sql).not.toContain("PRAGMA foreign_keys=ON;");
-    // deferはスクリプトの先頭（BEGINより前。公式の「at the start of your transaction」どおり）
+    // deferはスクリプトの先頭（DROPより前。公式の「at the start of your transaction」どおり）
     expect(sql.indexOf("PRAGMA defer_foreign_keys")).toBeGreaterThan(-1);
-    expect(sql.indexOf("PRAGMA defer_foreign_keys")).toBeLessThan(sql.indexOf("BEGIN TRANSACTION"));
     expect(sql.indexOf("PRAGMA defer_foreign_keys")).toBeLessThan(sql.indexOf("DROP TABLE"));
+    // 正の対照: D1リモートAPIは明示的なトランザクション文を拒否する（Task 7実デモ投入で確認）。
+    // 誰かがBEGIN/COMMIT/SAVEPOINTを戻してきたらこの断言が落ちて気付ける（大文字小文字も問わず禁止）
+    expect(sql).not.toMatch(/begin transaction/i);
+    expect(sql).not.toMatch(/\bcommit\b/i);
+    expect(sql).not.toMatch(/\bsavepoint\b/i);
+  });
+
+  it("seed_sql_file_contains_no_explicit_transaction_statements", () => {
+    // seed本文（mainのapplySqlが `wrangler d1 execute --file` へ渡すファイル。buildSeedSqlFileが生成）も
+    // wipeと同じ規律。D1リモートAPIは明示的なトランザクション文を拒否するため含めない。
+    // seedのINSERTは冪等でないため、途中失敗の復旧は --wipe からのやり直し（ops/demo-deploy.md §3.1）
+    const sql = buildSeedSqlFile("-- scripts/seed-demo.ts が生成（01_units.sql。実データは含まない）", [
+      { sql: "INSERT INTO units (id, name) VALUES (?, ?)", binds: ["unit-demo", "宮之浦分団"] },
+      { sql: "UPDATE units SET event_sequence = ? WHERE id = ?", binds: [7, "unit-demo"] },
+    ]);
+    // bindsは従来どおり1文1行へ展開される
+    expect(sql).toContain("INSERT INTO units (id, name) VALUES ('unit-demo', '宮之浦分団');");
+    expect(sql).toContain("UPDATE units SET event_sequence = 7 WHERE id = 'unit-demo';");
+    // 正の対照: BEGIN/COMMIT/SAVEPOINTが再び足されたらこの断言が落とす（wipe側の検査と対）
+    expect(sql).not.toMatch(/begin transaction/i);
+    expect(sql).not.toMatch(/\bcommit\b/i);
+    expect(sql).not.toMatch(/\bsavepoint\b/i);
   });
 
   it("workflow_resets_demo_weekly_with_demo_scoped_secrets_only", () => {
