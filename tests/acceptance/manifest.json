@@ -3399,7 +3399,7 @@
    "summary": "デモで点検登録を開始できない: seedが様式版をapprovedで直接INSERTする一方で inspection_templates.current_version_id を設定しないため、選択条件（現行版が承認済み）をどの様式も通らない。加えて承認版のitem_schemaが空配列",
    "severity": "high",
    "status": "resolved",
-   "basis": "T090で修正: seed計画が様式3種（facility/vehicle/equipment）の承認版を実項目付き（item_schema≥2項目）で作り、rootへ current_version_id のUPDATE（承認APIと同じ形）を設定。増幅SQL（buildDemoAccountAugmentation）は実環境の既存データにも「実項目を持つ承認版が無い様式へ追い版（承認済み版は不変トリガーのためUPDATE不可）＋ポインタ付け替え」で同じ結果へ導く。試験 tests/seed-miyanoura.test.ts approved_templates_point_at_versions_with_real_items＋ローカルdemo実DBで3様式とも ptr=1/items=4 を実測",
+   "basis": "T090で修正: seed計画が様式3種（facility/vehicle/equipment）の承認版を実項目付き（item_schema≥2項目）で作り、rootへ current_version_id のUPDATE（承認APIと同じ形）を設定。増幅SQL（buildDemoTemplateHealing）は実環境の既存データにも「実項目を持つ承認版が無い様式へ追い版（承認済み版は不変トリガーのためUPDATE不可）＋ポインタ付け替え」で同じ結果へ導く。試験 tests/seed-miyanoura.test.ts approved_templates_point_at_versions_with_real_items＋demo-isolation template_healing_appends_an_items_bearing_revision_to_a_stale_seed（旧seed状態の実DBへ適用・冪等・直接UPDATEのトリガー拒否まで断言）＋ローカルdemo実DBで3様式とも ptr=1/items=4 を実測",
    "owner": "T090"
   },
   {
@@ -3408,7 +3408,7 @@
    "summary": "体験アカウント3本とownerが予定の回答対象（activity_audience）から外れており出欠回答が403。お知らせも対象がseed名簿のみで体験アカウントの一覧が空",
    "severity": "high",
    "status": "resolved",
-   "basis": "T090で修正: activity_audience/notification_recipients/tasks は members へのFK(RESTRICT)があり体験団員（demoAccountStatementsがplan適用後に作る）をplanに書けないため、体験アカウント投入直後にCLIが増幅SQL（対象を「その時の全団員active」へ広げる。issue本文の代替案「audienceを全団員にする」）を当てる。試験 tests/seed-miyanoura.test.ts experience_accounts_and_owner_join_the_demo_after_account_creation＋ローカルdemo実DBで体験3本・ownerとも audience_rows=3（予定3本ぶん）を出欠回答0件のまま実測（＝未回答1以上も保証）",
+   "basis": "T090で修正: activity_audience/notification_recipients/tasks は members へのFK(RESTRICT)があり体験団員（demoAccountStatementsがplan適用後に作る）をplanに書けないため、体験アカウント投入直後にCLIが増幅SQL（対象を「その時の全団員active」へ広げる。issue本文の代替案「audienceを全団員にする」）を当てる。試験 tests/seed-miyanoura.test.ts experience_accounts_and_owner_join_the_demo_after_account_creation＋demo-isolation account_augmentation_applies_to_real_rows_and_is_idempotent（実DBへ適用・再適用で件数不変まで断言）＋ローカルdemo実DBで体験3本・ownerとも audience_rows=3（予定3本ぶん）を出欠回答0件のまま実測（＝未回答1以上も保証）",
    "owner": "T090"
   },
   {

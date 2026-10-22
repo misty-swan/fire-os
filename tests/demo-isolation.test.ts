@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import demoSource from "../scripts/demo.ts?raw";
 import { stripJsonComments, type DeploymentConfig, type WranglerEnvConfig } from "../scripts/check-environment";
+import { DEMO_ACCOUNTS } from "../src/server/auth/demo-accounts";
 import {
   DEMO_DOC_KEY,
   DEMO_PERSIST_DIR,
@@ -10,6 +11,8 @@ import {
   DEMO_PROFILE,
   DEMO_SEED_IDS,
   DEMO_UNIT_NAME,
+  buildDemoAccountAugmentation,
+  buildDemoTemplateHealing,
   collectDemoPrivacyRows,
   demoPhotoPng,
   demoResetRemovals,
@@ -373,6 +376,113 @@ describe("demo isolation (T086)", () => {
       await env.DB.batch([
         env.DB.prepare("DELETE FROM member_roles WHERE member_id = ?").bind(earlyAdmin),
         env.DB.prepare("DELETE FROM members WHERE id = ?").bind(earlyAdmin),
+      ]);
+    }
+  });
+
+  it("template_healing_appends_an_items_bearing_revision_to_a_stale_seed (T090-D1)", async () => {
+    // レビュー指摘（Important 1）: 増幅SQLのヒーリング経路を実DBで検証する。旧seed状態
+    // （承認版のitem_schemaが空・current_version_id がNULL）へ buildDemoTemplateHealing を当てると、
+    // ①実項目を持つ追い版（承認済み）が足り ②ポインタがそれへ替わり ③再適用は何も変えない。
+    // 承認済み版は不変トリガーでUPDATE/DELETEできないため「追い版」が唯一の直し方であることも固定する。
+    const officerUser = "00000000-0000-4000-8000-000000de0012";
+    const stale = {
+      id: crypto.randomUUID(), versionId: crypto.randomUUID(), fixVersionId: crypto.randomUUID(),
+      name: "架空の旧様式（ヒーリング試験・デモ）", targetType: "vehicle" as const,
+      items: [{ code: "damage", label: "本体の破損", valueType: "boolean" as const, required: true }],
+    };
+    const apply = async (stmts: readonly { sql: string; binds: unknown[] }[]) => {
+      await env.DB.batch(stmts.map((s) => env.DB.prepare(s.sql).bind(...(s.binds as unknown[]))));
+    };
+    await apply([
+      // 旧seedと同じ形: root（ポインタ無し）＋承認版（item_schema空）
+      { sql: "INSERT INTO inspection_templates (id, unit_id, name, target_type, status, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, ?, 'active', '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z', ?, 'human')", binds: [stale.id, DEMO_SEED_IDS.unit, stale.name, stale.targetType, officerUser] },
+      { sql: "INSERT INTO inspection_template_versions (id, unit_id, template_id, revision_no, item_schema, status, approved_by_member_id, approved_at, version, created_at, updated_at, created_by, actor_kind) VALUES (?, ?, ?, 1, '[]', 'approved', '00000000-0000-4000-8000-000000de0022', '2026-10-01T00:00:00.000Z', 1, '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z', ?, 'human')", binds: [stale.versionId, DEMO_SEED_IDS.unit, stale.id, officerUser] },
+    ]);
+    try {
+      await apply(buildDemoTemplateHealing(stale, DEMO_SEED_IDS.unit));
+      const healed = await env.DB.prepare(
+        "SELECT t.current_version_id AS ptr, (SELECT json_array_length(v.item_schema) FROM inspection_template_versions v WHERE v.id = t.current_version_id) AS items, " +
+          "(SELECT COUNT(*) FROM inspection_template_versions v WHERE v.template_id = t.id) AS versions " +
+          "FROM inspection_templates t WHERE t.id = ?",
+      ).bind(stale.id).first<{ ptr: string; items: number; versions: number }>();
+      expect(healed!.ptr).toBe(stale.fixVersionId); // ポインタは追い版（実項目付き）へ
+      expect(healed!.items).toBe(1);
+      expect(healed!.versions).toBe(2); // 旧版（空・不変のまま残る）＋追い版
+
+      // 再適用は何も変えない（冪等）
+      await apply(buildDemoTemplateHealing(stale, DEMO_SEED_IDS.unit));
+      const again = await env.DB.prepare(
+        "SELECT t.current_version_id AS ptr, (SELECT COUNT(*) FROM inspection_template_versions v WHERE v.template_id = t.id) AS versions FROM inspection_templates t WHERE t.id = ?",
+      ).bind(stale.id).first<{ ptr: string; versions: number }>();
+      expect(again!.ptr).toBe(stale.fixVersionId);
+      expect(again!.versions).toBe(2);
+
+      // 対照: 空の承認版を直接UPDATEは不変トリガーで拒否される＝追い版が唯一の直し方
+      const direct = await env.DB.batch([
+        env.DB.prepare("UPDATE inspection_template_versions SET item_schema = ? WHERE id = ?").bind(JSON.stringify(stale.items), stale.versionId),
+      ]).then(() => "applied", () => "rejected");
+      expect(direct).toBe("rejected");
+    } finally {
+      // 後片引き: 追い版も承認済みでDELETEはトリガー拒否のため、行は消せない。様式をretiredへ戻して
+      // 以降の一覧・走査から外す（本試験は主試験より後に走るため件数照合への影響なし）
+      await env.DB.batch([env.DB.prepare("UPDATE inspection_templates SET status = 'retired' WHERE id = ?").bind(stale.id)]);
+    }
+  });
+
+  it("account_augmentation_applies_to_real_rows_and_is_idempotent (T090-D2/D4/D5)", async () => {
+    // レビュー指摘（Important 1）: 増幅SQL（対象の拡充・体験宛の通知/タスク）を実DBへ適用して検証する。
+    // 体験団員3名（demoAccountStatementsが作る固定IDと同じ物）を先に作り、増幅を当て、再適用で増えないことまで見る
+    const officerUser = "00000000-0000-4000-8000-000000de0012";
+    const experienceMembers = DEMO_ACCOUNTS.map((a) => a.ids.member) as [string, string, string];
+    await env.DB.batch(
+      experienceMembers.map((mid) =>
+        env.DB.prepare(
+          "INSERT INTO members (id, unit_id, display_name, status, qualifications, version, created_at, updated_at, created_by, actor_kind) " +
+            "VALUES (?, ?, '架空 体験（増幅試験）', 'active', '[]', 1, '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z', ?, 'human')",
+        ).bind(mid, DEMO_SEED_IDS.unit, officerUser),
+      ),
+    );
+    const apply = async () => {
+      const aug = await buildDemoAccountAugmentation({ unitId: DEMO_SEED_IDS.unit });
+      await env.DB.batch(
+        [...aug.audience, ...aug.notification, ...aug.task].map((s) => env.DB.prepare(s.sql).bind(...(s.binds as unknown[]))),
+      );
+    };
+    const count = async (sql: string, ...binds: unknown[]) =>
+      (await env.DB.prepare(sql).bind(...binds).first<{ n: number }>())!.n;
+    try {
+      await apply();
+      // 対象: 体験3名は予定3本ぶんのaudienceを得る（出欠回答は作らない=未回答のまま）
+      for (const mid of experienceMembers) {
+        expect(await count("SELECT COUNT(*) AS n FROM activity_audience WHERE member_id = ?", mid)).toBe(3);
+      }
+      expect(await count("SELECT COUNT(*) AS n FROM activity_attendance WHERE member_id IN (?, ?, ?)", ...experienceMembers)).toBe(0);
+      // お知らせの対象も体験3名へ（1件のお知らせ×3名=3行）
+      expect(await count("SELECT COUNT(*) AS n FROM announcement_audience WHERE member_id IN (?, ?, ?)", ...experienceMembers)).toBe(3);
+      // 通知: 3宛先・既読1（体験幹部）・未読2
+      expect(await count("SELECT COUNT(*) AS n FROM notification_recipients WHERE member_id IN (?, ?, ?)", ...experienceMembers)).toBe(3);
+      expect(await count("SELECT COUNT(*) AS n FROM notification_recipients WHERE member_id IN (?, ?, ?) AND read_at IS NOT NULL", ...experienceMembers)).toBe(1);
+      // タスク: 体験団員の担当・進行中
+      expect(await count("SELECT COUNT(*) AS n FROM tasks WHERE assignee_member_id = ? AND status = 'in_progress'", experienceMembers[2]!)).toBe(1);
+
+      // 再適用しても件数は増えない（冪等）
+      await apply();
+      for (const mid of experienceMembers) {
+        expect(await count("SELECT COUNT(*) AS n FROM activity_audience WHERE member_id = ?", mid)).toBe(3);
+      }
+      expect(await count("SELECT COUNT(*) AS n FROM notification_recipients WHERE member_id IN (?, ?, ?)", ...experienceMembers)).toBe(3);
+      expect(await count("SELECT COUNT(*) AS n FROM tasks WHERE assignee_member_id = ?", experienceMembers[2]!)).toBe(1);
+    } finally {
+      // 後片付け（FK順。体験宛の通知は本文の目印で識別して本体まで消す）
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM activity_audience WHERE id LIKE 'demo-aud-%'"),
+        env.DB.prepare("DELETE FROM announcement_audience WHERE id LIKE 'demo-ann-%'"),
+        env.DB.prepare("DELETE FROM tasks WHERE assignee_member_id IN (?, ?, ?)").bind(...experienceMembers),
+        env.DB.prepare("DELETE FROM notification_events WHERE notification_id IN (SELECT id FROM notifications WHERE body_revision LIKE '%体験アカウント宛%')"),
+        env.DB.prepare("DELETE FROM notification_recipients WHERE member_id IN (?, ?, ?)").bind(...experienceMembers),
+        env.DB.prepare("DELETE FROM notifications WHERE body_revision LIKE '%体験アカウント宛%'"),
+        env.DB.prepare("DELETE FROM members WHERE id IN (?, ?, ?)").bind(...experienceMembers),
       ]);
     }
   });
