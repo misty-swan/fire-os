@@ -3392,6 +3392,69 @@
    "status": "open",
    "basis": "docs/05 API-51行に残作業として記録",
    "owner": "未割当"
+  },
+  {
+   "id": "T089-D1",
+   "source": "T089営業デモの実機利用（利用者報告）＋調査A/B/C（.superpowers/sdd/2026-10-21-public-demo-miyanoura/investigation-A.md,B,C）",
+   "summary": "デモで点検登録を開始できない: seedが様式版をapprovedで直接INSERTする一方で inspection_templates.current_version_id を設定しないため、選択条件（現行版が承認済み）をどの様式も通らない。加えて承認版のitem_schemaが空配列",
+   "severity": "high",
+   "status": "open",
+   "basis": "seed-demo.tsの様式groupは直接INSERTで承認API（routes/inspection-templates.ts の current_version_id 設定）を通らない。ピッカー条件は InspectionForm.tsx の t.currentVersion?.status==='approved'。リモート・ローカル両方で壊れ、行数比較では検出不能（調査A/B実測）。DEMO_SCRIPT④⑤（点検→異常→AI）が壊れる",
+   "owner": "T089修正"
+  },
+  {
+   "id": "T089-D2",
+   "source": "調査C（investigation-C.md）",
+   "summary": "体験アカウント3本とownerが予定の回答対象（activity_audience）から外れており出欠回答が403。お知らせも対象がseed名簿のみで体験アカウントの一覧が空",
+   "severity": "high",
+   "status": "open",
+   "basis": "activity_audience はseedの架空名簿16名のみ（体験3本＋ownerは対象外を実測）。DEMO_SCRIPT⑥（出欠回答）が壊れる",
+   "owner": "T089修正"
+  },
+  {
+   "id": "T089-D3",
+   "source": "調査C",
+   "summary": "資産（車両・資機材）点検用の様式がゼロ（施設用1件のみ）。資産点検の導線が様式選択から始まらない",
+   "severity": "medium",
+   "status": "open",
+   "basis": "inspection_templates はfacility用1件のみ（両側実測）。車両・資機材点検ができない",
+   "owner": "T089修正"
+  },
+  {
+   "id": "T089-D4",
+   "source": "調査C",
+   "summary": "通知の受信箱が体験アカウント全員で空（唯一の1通はowner宛）。AIレビュー一覧も初期空",
+   "severity": "medium",
+   "status": "open",
+   "basis": "notificationsの対象がseed名簿のみ（C実測）。営業台本の通知タブとAI画面の初見表示が空で壊れたように見える",
+   "owner": "T089修正"
+  },
+  {
+   "id": "T089-D5",
+   "source": "調査C",
+   "summary": "ホームのタイル（未回答・確認待ち異常・点検期限・タスク・通知）が全て0で並ぶ。初期データに「未回答/確認待ち/期限臨近」を作っていない",
+   "severity": "medium",
+   "status": "open",
+   "basis": "C実測: 未回答0・確認待ち0（reportedのみカウント・実データは確認中/対応中）・期限0・タスク0・通知0。DEMO_SCRIPT②（ホーム見せ）が機能しない",
+   "owner": "T089修正"
+  },
+  {
+   "id": "T089-D6",
+   "source": "調査A（investigation-A.md）",
+   "summary": "seedのプライバシー走査（collectDemoPrivacyRows）が固定ID参照のため、実環境（bootstrap由来のUUIDが異なるunit）では0行を走査して恒真に戻る",
+   "severity": "low",
+   "status": "open",
+   "basis": "固定DEMO_*_IDで行を引くため実unitでは検査対象が存在しない（A実測）",
+   "owner": "T089修正"
+  },
+  {
+   "id": "T089-D7",
+   "source": "調査A",
+   "summary": "seedの管理者解決（member_roles LIMIT 1）が非決定的。bootstrap管理者と体験管理者の両方が該当し得る",
+   "severity": "low",
+   "status": "open",
+   "basis": "seed-demo.tsのtargets解決。どちらのmemberに紐くaudience/文書等が作られるか環境で揺れる",
+   "owner": "T089修正"
   }
  ],
  "knownSkips": []

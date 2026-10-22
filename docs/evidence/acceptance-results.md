@@ -13,7 +13,7 @@
 | codeHash | cb9f2d0db4f57ba1ee02c3083d12591a8d69db675c192a98523281e7f07050c9 |
 | 設計版 | 08:v0.3 / 2026-10-13 12:v0.3 / 2026-10-15 |
 | 実行環境 | node v26.8.2 / linux-x64 / Playwright 1.64.0 / vitest/4.1.11 linux-x64 node-v26.8.2 / wrangler 4.150.0 |
-| ゲート判定 | **緑**（開発版の範囲） |
+| ゲート判定 | **赤**（ok） |
 
 ## スイート
 
@@ -206,3 +206,10 @@
 | PH7-L | low | resolved | ai.calls計上位置・Retry-After固定・理由コード不統一・ラベル語彙ほか | docs/evidence/ph7-review.md「方針で残す」1〜9 | T086（low対応）で9項目を個別判定。修正4: ①A低1 ai.calls計上位置=classification.ts・report.tsともenv.AI存在確認より前で計上していたのを呼び出し可能を確認した後へ移動（RAG・アシスタントと同じ位置。AI無し環境のmanual_reviewで枠の母数が汚れない。jev.test.ts/report-generation.test.tsのai_unavailable試験へ「ai.callsが増えない」断言を追加し旧実装で赤→緑）②A低2 user次元429のRetry-After=enforceUserRateLimitが窓計算値をHttpErrorの追加headersで渡し、共通onError→errorResponseに出す（IP次元と同じ計算値。abuse.test.ts user次元試験の窓を5秒にして「Retry-After≤5秒」断言を追加し旧実装の包括既定60秒で赤→緑）③再レビュー軽微1 budget_stoppedラベル=「AIの月次上限に達したため」を中立語彙「AIの呼び出しが上限により停止されているため」へ（serverは全停止理由〔日次枠・通知枠・429許容・費用試算・手動停止〕で同コードを返すため理由を断定しない。client-job-error-labels.test.tsxへ「月次上限を含まない」断言を追加し赤→緑）④再レビュー軽微3 limits.ts開発設定コメントの「負荷検証」をdocs/05 §1・docs/07 §2と同じ「公開設定時の検証」へ統一。他タスクで既に解消2: C低4（OperationsPanelの403=FORBIDDEN Banner統一）はT083 R3で解消、#9（documents.specトースト断言のフレーク）はT083 R4で応答待ち＋role=statusスコープ待ちへ作り直し済み（T085b以降フルe2e 3回連続緑で未再発）。記録で決着3: B低2（報告書のtest:load数え間違い）はリポジトリ外のため修正しない（証跡正本はph7.md）・C低3（OperationsPanel内の理由コード扱い）は評価実行の失敗=生コード提示がAiEvaluationPanel前例・監査の停止理由=BUDGET_REASON_CODES閉集合の日本語化で領域別の整理として現状維持・再レビュー軽微2（docs/16 T086節対応行へのNFR-08追記）はdocs/16が本対応の対象外のためT086本体のdocs更新時に残す→T086 docs担当が追記済み（2026-10-20） | T086 |
 | PH8-L | low | open | sync_recoverの手動再送の非決定性・FORBIDDEN語彙・注記の文体差・Google Fonts停止時のアイコン表示ほか | docs/evidence/ph8-review.md「方針で残す」（T083・T084） | ph8-review「方針で残す」（低・軽微） | - |
 | T085-O1 | low | open | API-51の異常の子Pageは未接続（APIはT032で完了） | T085で観察 | docs/05 API-51行に残作業として記録 | 未割当 |
+| T089-D1 | high | open | デモで点検登録を開始できない: seedが様式版をapprovedで直接INSERTする一方で inspection_templates.current_version_id を設定しないため、選択条件（現行版が承認済み）をどの様式も通らない。加えて承認版のitem_schemaが空配列 | T089営業デモの実機利用（利用者報告）＋調査A/B/C（.superpowers/sdd/2026-10-21-public-demo-miyanoura/investigation-A.md,B,C） | seed-demo.tsの様式groupは直接INSERTで承認API（routes/inspection-templates.ts の current_version_id 設定）を通らない。ピッカー条件は InspectionForm.tsx の t.currentVersion?.status==='approved'。リモート・ローカル両方で壊れ、行数比較では検出不能（調査A/B実測）。DEMO_SCRIPT④⑤（点検→異常→AI）が壊れる | T089修正 |
+| T089-D2 | high | open | 体験アカウント3本とownerが予定の回答対象（activity_audience）から外れており出欠回答が403。お知らせも対象がseed名簿のみで体験アカウントの一覧が空 | 調査C（investigation-C.md） | activity_audience はseedの架空名簿16名のみ（体験3本＋ownerは対象外を実測）。DEMO_SCRIPT⑥（出欠回答）が壊れる | T089修正 |
+| T089-D3 | medium | open | 資産（車両・資機材）点検用の様式がゼロ（施設用1件のみ）。資産点検の導線が様式選択から始まらない | 調査C | inspection_templates はfacility用1件のみ（両側実測）。車両・資機材点検ができない | T089修正 |
+| T089-D4 | medium | open | 通知の受信箱が体験アカウント全員で空（唯一の1通はowner宛）。AIレビュー一覧も初期空 | 調査C | notificationsの対象がseed名簿のみ（C実測）。営業台本の通知タブとAI画面の初見表示が空で壊れたように見える | T089修正 |
+| T089-D5 | medium | open | ホームのタイル（未回答・確認待ち異常・点検期限・タスク・通知）が全て0で並ぶ。初期データに「未回答/確認待ち/期限臨近」を作っていない | 調査C | C実測: 未回答0・確認待ち0（reportedのみカウント・実データは確認中/対応中）・期限0・タスク0・通知0。DEMO_SCRIPT②（ホーム見せ）が機能しない | T089修正 |
+| T089-D6 | low | open | seedのプライバシー走査（collectDemoPrivacyRows）が固定ID参照のため、実環境（bootstrap由来のUUIDが異なるunit）では0行を走査して恒真に戻る | 調査A（investigation-A.md） | 固定DEMO_*_IDで行を引くため実unitでは検査対象が存在しない（A実測） | T089修正 |
+| T089-D7 | low | open | seedの管理者解決（member_roles LIMIT 1）が非決定的。bootstrap管理者と体験管理者の両方が該当し得る | 調査A | seed-demo.tsのtargets解決。どちらのmemberに紐くaudience/文書等が作られるか環境で揺れる | T089修正 |
