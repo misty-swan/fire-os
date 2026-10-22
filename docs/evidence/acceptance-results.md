@@ -8,9 +8,9 @@
 
 | 項目 | 値 |
 |---|---|
-| 収集日時 | 2026-10-21T15:14:12.100Z |
-| commit | 52ae2ab9b1cfdfc76284e70185dc7769c1c0eb4a |
-| codeHash | d1519833451541d47612c455b1113d7fd32f44e5dda6e78d40d606814eae303c |
+| 収集日時 | 2026-10-22T01:40:20.049Z |
+| commit | c1973daab3973153fb6ca689531c13cdc057c32d |
+| codeHash | cb9f2d0db4f57ba1ee02c3083d12591a8d69db675c192a98523281e7f07050c9 |
 | 設計版 | 08:v0.3 / 2026-10-13 12:v0.3 / 2026-10-15 |
 | 実行環境 | node v26.8.2 / linux-x64 / Playwright 1.64.0 / vitest/4.1.11 linux-x64 node-v26.8.2 / wrangler 4.150.0 |
 | ゲート判定 | **緑**（開発版の範囲） |
@@ -19,14 +19,10 @@
 
 | スイート | 結果 | passed | failed | skipped | 開始 | 終了 | コマンド |
 |---|---|---|---|---|---|---|---|
-| load | passed | 3 | 0 | 0 | 2026-10-21T14:53:19.175Z | 2026-10-21T14:53:48.251Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-21T14-52-35-778Z/load.json` |
-| e2e | passed | 75 | 0 | 0 | 2026-10-21T14:53:48.251Z | 2026-10-21T14:58:52.987Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
-| vitest | passed | 370 | 0 | 0 | 2026-10-21T15:13:30.966Z | 2026-10-21T15:14:12.078Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-21T15-13-30-500Z/vitest.json` |
-| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-21T15:14:12.078Z | 2026-10-21T15:14:12.078Z | `npm run test:live` |
-
-差し替えた過去の実行（同じコードでスイート全体を再実行した。フレーキーの記録として残す）:
-
-- vitest 2026-10-21T14:52:36.245Z: failed（passed 369 / failed 1 / skipped 0）
+| vitest | passed | 371 | 0 | 0 | 2026-10-22T01:33:07.346Z | 2026-10-22T01:34:14.702Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T01-33-06-874Z/vitest.json` |
+| load | passed | 3 | 0 | 0 | 2026-10-22T01:34:14.702Z | 2026-10-22T01:34:47.542Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T01-33-06-874Z/load.json` |
+| e2e | passed | 75 | 0 | 0 | 2026-10-22T01:34:47.542Z | 2026-10-22T01:40:20.028Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
+| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-22T01:40:20.028Z | 2026-10-22T01:40:20.028Z | `npm run test:live` |
 
 ## 件数（正本から機械抽出）
 
