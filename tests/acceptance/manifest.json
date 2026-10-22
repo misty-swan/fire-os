@@ -3455,6 +3455,15 @@
    "status": "resolved",
    "basis": "T090で修正: 解決クエリへ ORDER BY m.created_at ASC, m.id ASC を付け、最初に作られた管理者（=bootstrap由来。体験アカウントはseed後に作られるため必ず後）へ決定的に解決。workerd側（resolveDemoTargets）とCLI側（demoAdminPickSqlLiteral へ共通化）の両方。試験 tests/demo-isolation.test.ts seed_admin_resolution_prefers_the_earliest_created_admin（2026-01-01作成の管理者を後から足しても選ばれること）＋tests/seed-miyanoura.test.ts admin_resolution_sql_orders_deterministically",
    "owner": "T090"
+  },
+  {
+   "id": "T090-D8",
+   "source": "T090反映後の実機利用（利用者報告・2026-10-22。GitHub issue #8）",
+   "summary": "スマホ幅で予定詳細の出欠一覧（幹部用・対象者一覧）の団員名が約1文字につぶれる。行の幅が日付の固定118pxと回答チップ・「代理で回答」ボタン（いずれもflex-none）に占有され、名前だけがmin-w-0 flex-1 truncateで吸収される",
+   "severity": "medium",
+   "status": "open",
+   "basis": "src/client/features/activities/ActivityPage.tsx AttendanceList の行（flex flex-wrap items-center）。360pxでの固定幅合計≈340px（アバタ26+チップ≈55+日付118+ボタン≈86+gap32+行padding24）で名前に≈0〜20px。flex-wrapは名前が縮んで一行に収まるため発動しない。代理回答の対象者一覧はprototypeに対応物が無い（実装側レイアウト）。操作は可能だが実機スマホで見せるデモの見栄えを大きく損なう",
+   "owner": "未割当"
   }
  ],
  "knownSkips": []
