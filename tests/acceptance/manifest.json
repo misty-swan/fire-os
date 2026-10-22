@@ -3464,6 +3464,96 @@
    "status": "resolved",
    "basis": "T090手順8で修正: 行を狭幅（max-lg）で2段に積み（1段目=アバタ+名前〔min-w-0 truncate〕、2段目=回答チップ+日付+「代理で回答」〔flex-wrapで240px未満も段を追加〕）、広幅（lg:contents）は従来どおり一行。押下領域44px（max-lg:min-h-11）は維持。採用形はdocs/03 §1.1-29へ記録（対象者一覧はprototypeに対応物が無い実装側レイアウト）。試験 e2e tests/e2e/accessibility.spec.ts attendance_list_keeps_member_names_readable_at_phone_width（長い名前の架空団員で名前の描画幅≥150px・ページ横スクロールなしを断言。修正前は名前幅≈0〜20pxで赤→緑）",
    "owner": "T090"
+  },
+  {
+   "id": "T091-S1",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "体験アカウント（共有パスワードの体験管理者）が二要素を自己登録でき、PER-06(member)/07/08のmfa_requiredが外れて管理操作が通る。登録で他セッションが消え以後のサインインは登録者のTOTPを要する（他の訪問者を締め出す）。週次の再投入は既存アカウントを飛ばすため残る",
+   "severity": "medium",
+   "status": "open",
+   "basis": "/api/auth/two-factor/enable・verify-totp・change-passwordが全identityに許可（src/shared/contracts/auth.ts・src/server/routes/auth.ts）、hooks.before（src/server/auth/config.ts）に体験アカウントの例外なし、MFA判定はアカウント単位のtwoFactorEnabled（principal.ts）。監査fingerprint demo-shared-account-mfa-self-enrollment。修正はT091手順1",
+   "owner": "T091"
+  },
+  {
+   "id": "T091-S2",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "添付の再紐付けで文書ACL・お知らせ対象を迂回できる。課題起票（API-16）・活動結果（API-09/42）・点検登録が呼出者指定のattachmentIdsを元添付の所有・可視性を見ずに紐付け、API-27がPER-01（全role）で配信するため、閲覧を許された（取消後を含む）団員が文書原本を全団員へ再公開できる。機微対象では他のリンクを監査無しで物理削除する",
+   "severity": "medium",
+   "status": "open",
+   "basis": "src/server/attachments/link.ts planAttachmentLinks（同一unit・ready・分類のみ検査、機微対象のmoveでDELETE）、src/server/routes/attachments.ts（文書以外のリンクはPER-01）。監査fingerprint fireos:attachments/link.ts:planAttachmentLinks:unauthorized-source-attachment-relink。修正はT091手順2",
+   "owner": "T091"
+  },
+  {
+   "id": "T091-S3",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "API-37の自己昇格ガードが権限scopeの期限を比較しないため、期限付きPER-06を持つ管理者が自分宛てに同じscopeを期限延長・無期限で再申請できる",
+   "severity": "low",
+   "status": "open",
+   "basis": "src/server/routes/member-roles.ts の保持scope比較キー（entityType:entityId:permissions）にexpiresAtが無く、resolvePrincipalもscopeの期限を持たない。監査fingerprint fireos:member-roles:self-escalation-scope-key-ignores-expiry。修正はT091手順3",
+   "owner": "T091"
+  },
+  {
+   "id": "T091-S4",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "担当者のrole=memberがAPI-87で自分のタスクを任意の団員（またはnull）へ付け替えられる。新しい担当者は認可されない",
+   "severity": "low",
+   "status": "open",
+   "basis": "src/server/routes/tasks.ts のrequireTaskPermissionが現担当者をownerとして1回だけ。API-46（点検者変更・T085 A-I3）は新旧両方を認可している。監査fingerprint tasks-api87-self-rule-assignee-transfer。修正はT091手順4",
+   "owner": "T091"
+  },
+  {
+   "id": "T091-S5",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "取消済み（閲覧専用）の出動に参加記録（API-23・同期API-81の再生）と資機材使用（API-57）を書き込める",
+   "severity": "low",
+   "status": "open",
+   "basis": "src/server/routes/incident-participants.ts・src/server/routes/resource-usages.ts が親の状態を見ない（API-69/71は422）。docs/11で取消は終端・閲覧専用。監査fingerprint incident-voided-child-writes-participants-resource-usages。修正はT091手順5",
+   "owner": "T091"
+  },
+  {
+   "id": "T091-S6",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "API-71（出動↔活動リンク）が出動側のPER-04だけを認可し活動の版・履歴・operationを書き換える。活動を直接編集できない出動担当scopeのoperatorでもリンクでき、活動の出動1件の枠を消費する",
+   "severity": "low",
+   "status": "open",
+   "basis": "src/server/operations/link.ts のrequirePermissionがtype incidentのみ。監査fingerprint operation-link-api71-activity-side-unauthorized。修正はT091手順6（docs/05 API-71も補う）",
+   "owner": "T091"
+  },
+  {
+   "id": "T091-S7",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "お知らせ添付を対象外・対象から外れた団員・公開前の下書き段階でもAPI-27で取得できる",
+   "severity": "low",
+   "status": "open",
+   "basis": "src/server/routes/attachments.ts がannouncementリンクを役割だけのPER-01で判定し、API-24の対象者・状態規則を見ない。監査fingerprint fireos:routes/attachments.ts:API-27:announcement-link-ignores-audience。修正はT091手順7",
+   "owner": "T091"
+  },
+  {
+   "id": "T091-S8",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "AIレビュー一覧（API-30）が見えない文書から作られたアシスタント回答本文を、その文書のACL外の幹部へ返す（readResultsだけマスク）",
+   "severity": "low",
+   "status": "open",
+   "basis": "src/server/routes/ai-classification.ts toDtoがanswer・references・proposedEffectsをそのまま返す。監査fingerprint fireos:routes/ai-classification.ts:api30-assistant-answer-unmasked-vs-document-acl。修正はT091手順8",
+   "owner": "T091"
+  },
+  {
+   "id": "T091-S9",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "イベント配信（API-80）が下書き通知・下書きお知らせの存在と、他の宛先のnotification.read（recipientMemberIdと時刻）を一般団員へ配る",
+   "severity": "low",
+   "status": "open",
+   "basis": "src/server/events/snapshot.ts visibleFlagsOfBatchが宛先・対象者の行の有無だけで判定し、読み取りAPIの状態規則（API-65 RECIPIENT_VISIBLE・API-24）と不一致。監査fingerprint fireos:events-snapshot:visibleFlagsOfBatch:notification-announcement-status-and-payload-ungated。修正はT091手順9（docs/05 API-80も補う）",
+   "owner": "T091"
+  },
+  {
+   "id": "T091-S10",
+   "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
+   "summary": "PDF抽出の展開上限（32MiB）がストリーム単位で、同じストリームを繰り返し参照させると文書全体の展開量が上限の何倍にもなる（手元workerdで4参照=120MiBを誤りなく完了）",
+   "severity": "medium",
+   "status": "open",
+   "basis": "src/server/documents/extract.ts inflateの上限が呼出ごと、extractPdfPagesが別名参照を再展開。入口は文書管理者のAPI-74。監査では要検証（実Workersのメモリ・CPU制限次第）で深刻度未確定＝本欄のmediumは台帳の必須欄のための暫定値。監査fingerprint fireos:documents/extract.ts:inflate-cap-per-stream-not-aggregate。修正はT091手順10",
+   "owner": "T091"
   }
  ],
  "knownSkips": []
