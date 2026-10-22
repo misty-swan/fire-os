@@ -143,6 +143,15 @@ docs/07 §8の試算（本番30人×10ロード＋デモ2,000＝2,300/月）の�
 8. 確認: ①招待リンク（`https://<URL>/login#invite=<token>`）で初期管理者の登録・二要素設定ができる ②主要動線（§1の3の⑤と同じ19動線）が動く ③未定義APIがJSON 404を返す ④監査に記録が残る ⑤`DEMO_SECURITY_POLICY` が効いている（AI連打が429） ⑥実URLで**地図ページのコンソールにCSP違反が出ないか**確認（特に `worker-src blob:`。Google公式のMaps CSP例は `worker-src blob:` を含む — 出典 https://developers.google.com/maps/documentation/javascript/content-security-policy。違反が出る場合は `cspHeaderValue`〔src/server/security/csp.ts〕の許可リストを見直してから再配置する）。
 9. Googleコンソール側の上限（§4.3）を設定する（Maps接続後でもよいが、公開前に済ませる）。
 
+### 5.1.1 体験アカウントの二要素・パスワードの状態確認と戻し（T091-S1）
+
+体験アカウントは `/two-factor/*` と `/change-password` をhooks.beforeで拒否する（T091-S1）。それ以前の配置で訪問者が二要素を登録していないか（登録されると他の訪問者が締め出される）を確かめる手順。wranglerログイン済みの手元端末から行い、書き込み（手順4）は実施前に責任者の確認を取る。
+
+1. 読み取り: `npx wrangler d1 execute DB --env demo --remote --command "SELECT id, email, two_factor_enabled FROM auth_users WHERE id IN ('00000000-0000-4000-8000-000000de0015','00000000-0000-4000-8000-000000de0018','00000000-0000-4000-8000-000000de001b'); SELECT user_id, COUNT(*) FROM auth_two_factors WHERE user_id LIKE '00000000-0000-4000-8000-000000de%' GROUP BY user_id;"`
+2. 3本とも `two_factor_enabled=0` かつ auth_two_factors が0行なら終わり（戻し不要）。
+3. 体験パスワードでサインインできない報告があれば、パスワード変更の疑い（T091-S1以前の配置では変更できた）。週次の再投入は既存アカウントを飛ばすため直らない——責任者と相談のうえ手順4と同じ要領で該当行を扱う。
+4. 戻し（該当idだけ・確認後）: `DELETE FROM auth_two_factors WHERE user_id = '<id>'; UPDATE auth_users SET two_factor_enabled = 0 WHERE id = '<id>'; DELETE FROM auth_sessions WHERE user_id = '<id>';` を `--remote --command` で実行し、手順1で再確認する。
+
 ### 5.2 外部公開の実行（明示的な依頼があるときだけ）
 
 1. 依頼の内容（対象URL・公開期間・窓口）を運用記録へ残す。

@@ -41,3 +41,11 @@
 - **実環境（fireos-demo）への反映**: 承認済み様式版は不変トリガーでUPDATEできないため、反映は**全表DROPからのseed再構築**で行う（`demo:reset:remote --wipe` または `demo:wipe:remote`＋手順）。**2026-10-22の実施**: T090のpush後、demo-reset workflowをdispatchして完全反映した（run 39727264080・成功）。wipe無しの `demo:seed:remote` は緊急回避策で、増幅SQL（対象の拡充・体験宛通知/タスク・様式の追い版+ポインタ付け替え）で①様式選択・②出欠403・③通知/タスクの導線は回復するが、**plan適用をスキップするため初期データの追加分（AIレビュー候補・reported異常・期限超過schedule）は入らない**点に注意。
 - **事故と復旧（2026-10-22）**: 上記のdispatchで**実管理者（owner@miyanoura.example.test・二要素必須）がwipeで消え、ログインできなくなった**（週次リセットが毎回ownerを消す設計だった）。ops/demo-deploy.md §3.1の復旧手順（wipe-only→bootstrap-admin→seed）でownerを作り直した（招待tokenは72時間有効）。これを受けて**週次workflowをwipe無しの再投入（demo-refresh）へ変更**した——owner・体験アカウント・営業中の入力（出欠回答等）は毎週残る。全消去が欲しいときだけ手動wipe（ownerの作り直しは§3.1）。
 - **週次リセット後の初回確認（営業前チェックリストへ）**: 体験アカウントで①ホームの数字タイルが0でない ②点検登録の様式選択に3様式が出て項目が入力できる ③予定の出欠回答が403にならない ④通知タブとAIレビュー一覧が空でない。
+
+## T091-S1 体験アカウントの二要素自己登録の封鎖（2026-10-23・security-audit run-1）
+
+- **修正内容**: hooks.before（src/server/auth/config.ts）で、セッション利用者が体験アカウント（`DEMO_ACCOUNTS` の固定authUser id）なら `/two-factor/*` と `/change-password` を403 `DEMO_ACCOUNT_LOCKED` で拒否（commit 7d1c87b）。試験 tests/demo-accounts.test.ts `demo_admin_cannot_enable_two_factor_or_change_password`。
+- **配置前ゲート**（commit 7d1c87b）: typecheck・check:contracts（102 API一致）・check:migrations（32件）・build・check:environment・vitest 78ファイル/382件・業務e2e 4project 76件、いずれも合格。
+- **実環境の事前確認（読み取りのみ・`wrangler d1 execute --remote`）**: 体験3本（de0015/de0018/de001b）とも `two_factor_enabled=0`、`auth_two_factors` の行0件＝**悪用の痕跡なし**。正準状態への戻し（ops/demo-deploy.md §5.1.1の手順4）は不要だったため未実施。
+- **配置**: `npx wrangler deploy --env demo`（2026-10-22T23:42Z UTC）。稼働version `919642a5-759b-4597-8b96-4ed0c3f2c3ef`（100%）。
+- **実URLでの拒否確認は未実施**: 体験アカウントのパスワードはGitHub Secretにだけあり手元に無いため、利用者判断で省略した。根拠は配置前ゲートの自動試験（実workerdでのログイン→enable/verify-totp/change-passwordが403・API-33が引き続きmfa_required）と稼働versionの一致まで。次に体験管理者でログインする機会に、設定画面の二要素設定がエラーになることを目視で確かめて本節へ追記する。
