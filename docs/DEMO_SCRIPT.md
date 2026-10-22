@@ -4,7 +4,7 @@
 
 ## 0. はじめる前に（前提）
 
-1. **URL**: `＜デモURL＞` — Task 7のデプロイで実URLが確定しだい、本書の`＜デモURL＞`をすべて置換する。お客様のスマホは事前にWi-Fiか4G/5Gへ。配置・公開手順の正本は `ops/demo-deploy.md` §5。
+1. **URL**: `https://fireos-demo.hiromu1018ks.workers.dev` — Task 7のデプロイで実URLが確定しだい、本書の`https://fireos-demo.hiromu1018ks.workers.dev`をすべて置換する。お客様のスマホは事前にWi-Fiか4G/5Gへ。配置・公開手順の正本は `ops/demo-deploy.md` §5。
 2. **体験アカウント3本**（氏名・役割は固定。**パスワードの値は本書にもGitにも書かない**。Git管理外の `.env.demo-login` か、営業資材の紙の台紙から渡す〔出典: ops/demo-deploy.md §2.1〕）:
 
    | メールアドレス | 役割 | 使う場面 |
@@ -21,7 +21,7 @@
 
 ### ① ログイン（0:00〜。一般団員で入る）
 
-1. `＜デモURL＞/login` を開き、`demo-member@example.test` とパスワードでログインする（デモ用アカウントは二要素なし・パスワードだけ）。
+1. `https://fireos-demo.hiromu1018ks.workers.dev/login` を開き、`demo-member@example.test` とパスワードでログインする（デモ用アカウントは二要素なし・パスワードだけ）。
 2. 一言: 「本番は分団の管理者からの招待リンクと二要素認証で始めます。今日は触っていただくための特別なデモ用アカウントです」〔出典: docs/USER_GUIDE.md §1・ops/demo-deploy.md §2.1〕
 
    見せどころ: ログインにアプリの登録や手続きが要らず、招待があれば当日から使い始められる。
@@ -80,10 +80,10 @@
 
 ## 3. QRコード（URL確定後に作る）
 
-1. **いまは作らない。** Task 7のデプロイで実URLが確定してから作る（URLが変わると作り直し）。案内先は `＜デモURL＞/login`（ログイン直行。ランディングを挟まない）。
-2. 手早く作る（端末で）: `qrencode -t UTF8i '＜デモURL＞/login'` — 端末にQRが文字でその場表示される（黒背景の端末向けの反転表示。読み取りに難があるときは `-t UTF8` へ。インストール例: `sudo apt install qrencode`）。表示をコピーして台紙に貼る。
+1. **いまは作らない。** Task 7のデプロイで実URLが確定してから作る（URLが変わると作り直し）。案内先は `https://fireos-demo.hiromu1018ks.workers.dev/login`（ログイン直行。ランディングを挟まない）。
+2. 手早く作る（端末で）: `qrencode -t UTF8i 'https://fireos-demo.hiromu1018ks.workers.dev/login'` — 端末にQRが文字でその場表示される（黒背景の端末向けの反転表示。読み取りに難があるときは `-t UTF8` へ。インストール例: `sudo apt install qrencode`）。表示をコピーして台紙に貼る。
 3. 無料のWeb生成サービスを使う場合: そのサービスの利用規約（商用利用の可否・生成したコードの扱い・広告表示の有無）の**直近の版を必ず確認してから**使う。営業印刷物への掲載が許可されているかを、担当ごとに必ず確認する。
-4. 印刷物への配置例: チラシの右下に1辺2cm以上で配置。QRの下に「ログイン: ＜デモURL＞ ／ メール: demo-member@example.test」と文字でも併記（読めない端末向け）。**「データはすべて架空です（検証版）」の一文をQRの近くに必ず入れる。** 印刷後に実機2台（iPhone・Android）で読み取りからログインまでを確認する。
+4. 印刷物への配置例: チラシの右下に1辺2cm以上で配置。QRの下に「ログイン: https://fireos-demo.hiromu1018ks.workers.dev ／ メール: demo-member@example.test」と文字でも併記（読めない端末向け）。**「データはすべて架空です（検証版）」の一文をQRの近くに必ず入れる。** 印刷後に実機2台（iPhone・Android）で読み取りからログインまでを確認する。
 
 ## 4. 想定QA（8問）
 

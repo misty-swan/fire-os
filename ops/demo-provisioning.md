@@ -19,6 +19,7 @@
    出典: https://developers.cloudflare.com/billing/get-started/create-billing-profile/ （2026-10-21確認）
 4. **Workers Paid**（月5ドル〜。D1・R2・Queues・Workers AIはこのプランで使う）への契約を、ダッシュボードの **Workers & Pages** 画面の案内に従って行います。→ このアカウントでD1（データベース）・R2（ファイル保管）・Queues（ジョブ）が使えるようになります。デモの月額は ops/demo-deploy.md §4 の上限内に収まる想定です。**正直な注記**: この契約のクリックの手順を書いた公式ページは存在しないことを確認済みです（2026-10-21）。金額と内容の正本は下記の参照ページ、支払い方法の登録はステップ3の参照ページです。ボタンの配置は、その時点のダッシュボードの案内に従ってください。
    出典: https://developers.cloudflare.com/workers/platform/pricing/ （2026-10-21確認）
+   **補足（R2の有効化）**: このアカウントで初めてR2（ファイル置き場）を使うときは、先にダッシュボードの **Storage & databases > R2 > Overview**（`https://dash.cloudflare.com/?to=/:account/r2/overview`）で有効化（checkout）が要る（有効化自体は無料・無料枠あり。デプロイ時に判明）。出典: https://developers.cloudflare.com/r2/get-started/ （2026-10-22確認）
 5. アカウントIDをコピーします: ダッシュボードの**検索（Search）**を開いて（どの画面でもキーボードの `Ctrl`/`⌘` + `K` で開けます）、`Copy account ID` と入力し、出てきた項目を選びます。→ アカウントIDがクリップボードにコピーされます。手元に控えてください。後続の作業（Task 5・Task 7）が使う32桁の英数字です。**代替の探し方**: **Workers & Pages** 画面の右側にある **Account Details** にも同じコピーがあります（画面が狭いと右側の欄が隠れることがあります。見つからなければ検索コマンドの方を使ってください）。アカウントIDは秘密の値ではありませんが、Gitには載せません。
    出典: https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/ （2026-10-22確認）
 
@@ -105,7 +106,7 @@
 | 名前 | 何の値か | 登録先 | 値を入れる人と方法 |
 |---|---|---|---|
 | `BETTER_AUTH_SECRET` | 認証セッション署名用の乱数（32バイト以上） | CloudflareのWorker（`wrangler secret put --env demo`） | 本人が端末のプロンプトへ（ステップ26） |
-| Maps APIキー | Google Mapsの鍵 | **ビルド変数** `VITE_GOOGLE_MAPS_API_KEY`（アプリを作るときだけ使う設定値。ビルドする端末の `.env.local`〔Git管理外〕。CloudflareのSecretではない） | ビルド実行者がビルド時に読み込む（Task 7） |
+| Maps APIキー | Google Mapsの鍵 | **ビルド変数** `VITE_GOOGLE_MAPS_API_KEY`（アプリを作るときだけ使う設定値。ビルドする端末の `src/client/.env.local`〔Git管理外〕。CloudflareのSecretではない） | ビルド実行者がビルド時に読み込む（Task 7） |
 | `CLOUDFLARE_API_TOKEN_DEMO` | demo用API token | GitHubのリポジトリSecret | 本人がGitHubの画面へ（ステップ25①） |
 | `DEMO_ACCOUNT_PASSWORD` | 体験アカウント3本の固定ログインパスワード（12文字以上。値は自分で決める） | GitHubのリポジトリSecret | 本人がGitHubの画面へ（ステップ25③。値は手元のパスワード管理ツールにも控える） |
 | アカウントID | CloudflareアカウントのID（秘密値ではないがGitに載せない） | GitHub Secret `CLOUDFLARE_ACCOUNT_ID_DEMO`（**要**: Task 5で確定。ops/demo-deploy.md §3.1）・設定の実値 | 本人がGitHubの画面へ（ステップ25②。値はステップ5で控えたもの） |
@@ -121,7 +122,7 @@
 | Cloudflareアカウント（Workers Paid・カード登録済み・メール確認済み） | §1（ステップ1〜4） | — | Task 7（デプロイ実行）: D1/R2/Queueの作成と `database_id` の実値反映 |
 | CloudflareアカウントID | ステップ5 | 32桁の英数字 | Task 7・GitHub（`CLOUDFLARE_ACCOUNT_ID_DEMO`〔**要**: Task 5で確定〕） |
 | ドメイン名（同じアカウントのzone登録済み） | §2（ステップ6〜13）**※2026-10-22裁定で不要** | `<例: fireos-demo.example.com>` | Task 7: route/custom_domain設定・`AUTH_BASE_URL` の実URL化・WAF/Rate Limiting。**Task 7のあと**ステップ19（参照元制限） |
-| Google Maps APIキー（Maps JavaScript API有効・請求先紐付け済み） | §3（ステップ14〜18） | `AIza` で始まる文字列（形の例のみ。実値は手元にだけ） | Task 7: ビルド時の `VITE_GOOGLE_MAPS_API_KEY`（`.env.local`・Git管理外）。**Task 7のあと**ステップ19 |
+| Google Maps APIキー（Maps JavaScript API有効・請求先紐付け済み） | §3（ステップ14〜18） | `AIza` で始まる文字列（形の例のみ。実値は手元にだけ） | Task 7: ビルド時の `VITE_GOOGLE_MAPS_API_KEY`（`src/client/.env.local`・Git管理外）。**Task 7のあと**ステップ19 |
 | demo用API token（最小権限） | §5（ステップ22〜24） | `cfut_` で始まる形式 | ステップ25①を経て **Task 5**（週次リセットworkflow） |
 | GitHub Secret `CLOUDFLARE_API_TOKEN_DEMO` | ステップ25① | — | **Task 5** |
 | GitHub Secret `DEMO_ACCOUNT_PASSWORD` | ステップ25③（12文字以上の任意の値） | 手元のパスワード管理ツールにも控える | **Task 5**（週次リセットworkflowが体験アカウント3本のパスワードとして使う。ops/demo-deploy.md §3.1） |
