@@ -1,28 +1,35 @@
-# demo環境の週次リセット（営業デモTask5）。書き込み先はdemo環境（fireos-demo）のD1/R2だけ。
+# demo環境の週次メンテナンス（営業デモTask5。2026-10-22の運用変更で**wipe無しの再投入**になった）。
 # GitHub ActionsのcronはUTCのみのためJST（UTC+9）換算で書く: 日曜 16:00 UTC ＝ 月曜 01:00 JST。
 # 手動起動（workflow_dispatch）でも同じ処理を行う（失敗時の再実行はActionsの画面から）。
 # --remote は --env demo --confirm demo が無いと scripts/seed-demo.ts が拒否する
 # （scripts/bootstrap-admin.tsと同じ確認規律。demo以外の環境名は --confirm が一致しても動かない）。
 # Secretの値はこのファイルに書かない。GitHubリポジトリSecretの CLOUDFLARE_API_TOKEN_DEMO
-# （demo環境のD1/R2/Workersだけに権限を狭したtoken）と CLOUDFLARE_ACCOUNT_ID_DEMO に加え、
-# 体験アカウント3本の固定パスワード DEMO_ACCOUNT_PASSWORD（12文字以上。週次リセット後も同じ
+# （demo環境のD1/R2/Workersだけに権限を狭めたtoken）と CLOUDFLARE_ACCOUNT_ID_DEMO に加え、
+# 体験アカウント3本の固定パスワード DEMO_ACCOUNT_PASSWORD（12文字以上。週次実行後も同じ
 # 資格情報でログインできる。GitHubがログ中の値を自動マスクする）を参照する。パスワードを
 # --demo-password argvで渡すとログへ出るため、scripts/seed-demo.ts が読む環境変数で渡す
-# （登録手順は ops/demo-provisioning.md §5、運用は ops/demo-deploy.md §3.1）。
-name: demo-reset
+# （登録手順はops/demo-provisioning.md §5、運用はops/demo-deploy.md §3.1）。
+#
+# なぜwipeをやめたか: 全表DROPは実管理者（bootstrap由来のowner・二要素必須）も消すため、
+# 週次のたびにownerのログインが壊れた（2026-10-22の実働で確認）。週次は冪等な再投入だけにして、
+# owner・体験アカウント・営業中の入力（出欠回答等）を残す。デモデータを最初から作り直したいときは
+# 手元端末から npm run demo:reset:remote -- --confirm demo（全消去。ownerの作り直しは
+# ops/demo-deploy.md §3.1の復旧手順）を実行する。seedは投入済みの行を飛越すため、週次実行は
+# 増幅SQL（対象の拡充・通知/タスク・様式の補正）の再適用だけが実際の書き込みになる（全て空振り安全）。
+name: demo-refresh
 on:
   schedule:
     - cron: "0 16 * * 0" # 日曜 16:00 UTC ＝ 月曜 01:00 JST
   workflow_dispatch:
-# 同時実行の禁止（前のリセットが終わる前に次のwipeを始めない。cronと手動起動の重複も待機させる）
+# 同時実行の禁止（前のメンテナンスが終わる前に次を始めない。cronと手動起動の重複も待機させる）
 concurrency:
-  group: demo-reset
+  group: demo-refresh
   cancel-in-progress: false
 # 権限は最小限（checkoutのみ）。CloudflareのtokenはSecret経由の参照だけで受け、wranglerが拾う環境変数へ渡す
 permissions:
   contents: read
 jobs:
-  reset:
+  refresh:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,11 +38,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: demo D1の全表wipe → migration → 架空データと体験アカウントの再seed（R2実体も上書き）
-        run: npm run demo:reset:remote -- --confirm demo
+      - name: demo D1/R2への冪等な再投入（wipe無し。ownerと営業中の入力は残る）
+        run: npm run demo:seed:remote -- --confirm demo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_DEMO }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID_DEMO }}
           DEMO_ACCOUNT_PASSWORD: ${{ secrets.DEMO_ACCOUNT_PASSWORD }}
       - name: 成功をジョブサマリーへ記録（失敗時はGitHubの既定の通知。再実行はworkflow_dispatchから）
-        run: echo "demo環境の週次リセットが完了しました（実行 ${{ github.run_id }}）。体験アカウントのパスワードはSecret DEMO_ACCOUNT_PASSWORD の固定値（メール・役割はこの実行のログに一度だけ表示されます。GitHubがログ中のパスワード値を自動マスクします）" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "demo環境の週次メンテナンス（再投入）が完了しました（実行 ${{ github.run_id }}）。体験アカウントのパスワードはSecret DEMO_ACCOUNT_PASSWORD の固定値。全消去（wipe）は手元端末からの手動実行（ops/demo-deploy.md §3.1）" >> "$GITHUB_STEP_SUMMARY"

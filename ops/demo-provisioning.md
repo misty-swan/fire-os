@@ -80,20 +80,20 @@
 
 ## §5 token・Secretの作成と登録先一覧
 
-### demo用のAPI token（GitHubの週次リセットworkflowが使う。Task 5で登録）
+### demo用のAPI token（GitHubの週次メンテナンスworkflowが使う。Task 5で登録）
 
- tokenは、GitHubの自動処理（週次リセット）がCloudflareへ接続するための鍵です。
+ tokenは、GitHubの自動処理（週次メンテナンス＝データ再投入。全消去はしない）がCloudflareへ接続するための鍵です。
 
 22. `https://dash.cloudflare.com/profile/api-tokens` を開き（**My Profile > API Tokens**）、**Create Token** で **Custom token** を選びます。→ token作成の画面に入ります。テンプレートは使わず、自分で権限を絞めます。
     出典: https://developers.cloudflare.com/fundamentals/api/get-started/create-token/ （2026-10-21確認）
-23. tokenに名前を付け（例: demo-reset）、権限を**最小**に設定します: **Account / D1 / Edit** ＋ **Account / Workers R2 Storage / Edit** ＋ **Account / Workers Scripts / Edit** の3つ。対象リソースは自分のアカウント（Include）にします。→ このtokenでできるのは、demo環境のデータベースとファイルの書き換え（週次リセット）だけになります。staging・production用のtokenとは別物として扱い、共有しません。権限の正式なグループ名は、下記の「Available token permissions」ページで確認できます。
+23. tokenに名前を付け（例: demo-reset）、権限を**最小**に設定します: **Account / D1 / Edit** ＋ **Account / Workers R2 Storage / Edit** ＋ **Account / Workers Scripts / Edit** の3つ。対象リソースは自分のアカウント（Include）にします。→ このtokenでできるのは、demo環境のデータベースとファイルの書き換え（週次メンテナンス）だけになります。staging・production用のtokenとは別物として扱い、共有しません。権限の正式なグループ名は、下記の「Available token permissions」ページで確認できます。
     出典: https://developers.cloudflare.com/fundamentals/api/get-started/create-token/ ＋ https://developers.cloudflare.com/fundamentals/api/reference/permissions/ （2026-10-21確認）
 24. **Continue to summary** → **Create Token** を選び、表示されたtokenの値を**一度だけ**コピーして、手元の安全な場所に保存します。→ tokenの値はこの画面でしか表示されません（再表示不可）。紛失したら作り直しです。
     出典: https://developers.cloudflare.com/fundamentals/api/get-started/create-token/ （2026-10-21確認）
 25. GitHubにSecretを3つ登録します。このリポジトリのGitHubページ → **Settings** → **Secrets and variables** → **Actions** → **Secrets** タブ → **New repository secret** で、次の3つを登録します（値はGitHubの画面に再表示されません。staging／productionと同じ規律=ops/deploy.md §0・環境別Secret）。
-    ① **Name** `CLOUDFLARE_API_TOKEN_DEMO`／**Secret** ステップ24のtokenの値 → 週次リセットのworkflow（Task 5が作る）が、Cloudflareへ安全に接続できるようになります。
+    ① **Name** `CLOUDFLARE_API_TOKEN_DEMO`／**Secret** ステップ24のtokenの値 → 週次メンテナンスのworkflow（Task 5が作る）が、Cloudflareへ安全に接続できるようになります。
     ② **Name** `CLOUDFLARE_ACCOUNT_ID_DEMO`／**Secret** ステップ5で控えたアカウントID（要と確定したのはTask 5。ops/demo-deploy.md §3.1）。
-    ③ **Name** `DEMO_ACCOUNT_PASSWORD`／**Secret** 12文字以上の任意の値（自分で決める）→ 体験アカウント3本のログインパスワードとして固定で使われ、週次リセット後も同じ資格情報でログインできます。手元のパスワード管理ツールにも必ず控えてください。workflowはこの値を環境変数でスクリプトへ渡すため、Actionsのログに値は出ません（GitHubがSecretの値をログで自動マスクします。ops/demo-deploy.md §3.1）。
+    ③ **Name** `DEMO_ACCOUNT_PASSWORD`／**Secret** 12文字以上の任意の値（自分で決める）→ 体験アカウント3本のログインパスワードとして固定で使われ、毎週のメンテナンス後も同じ資格情報でログインできます。手元のパスワード管理ツールにも必ず控えてください。workflowはこの値を環境変数でスクリプトへ渡すため、Actionsのログに値は出ません（GitHubがSecretの値をログで自動マスクします。ops/demo-deploy.md §3.1）。
     出典: https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions （2026-10-21確認）
 
 ### `BETTER_AUTH_SECRET`（CloudflareのWorker側のSecret。Task 7で投入）
@@ -123,9 +123,9 @@
 | CloudflareアカウントID | ステップ5 | 32桁の英数字 | Task 7・GitHub（`CLOUDFLARE_ACCOUNT_ID_DEMO`〔**要**: Task 5で確定〕） |
 | ドメイン名（同じアカウントのzone登録済み） | §2（ステップ6〜13）**※2026-10-22裁定で不要** | `<例: fireos-demo.example.com>` | Task 7: route/custom_domain設定・`AUTH_BASE_URL` の実URL化・WAF/Rate Limiting。**Task 7のあと**ステップ19（参照元制限） |
 | Google Maps APIキー（Maps JavaScript API有効・請求先紐付け済み） | §3（ステップ14〜18） | `AIza` で始まる文字列（形の例のみ。実値は手元にだけ） | Task 7: ビルド時の `VITE_GOOGLE_MAPS_API_KEY`（`src/client/.env.local`・Git管理外）。**Task 7のあと**ステップ19 |
-| demo用API token（最小権限） | §5（ステップ22〜24） | `cfut_` で始まる形式 | ステップ25①を経て **Task 5**（週次リセットworkflow） |
+| demo用API token（最小権限） | §5（ステップ22〜24） | `cfut_` で始まる形式 | ステップ25①を経て **Task 5**（週次メンテナンスworkflow） |
 | GitHub Secret `CLOUDFLARE_API_TOKEN_DEMO` | ステップ25① | — | **Task 5** |
-| GitHub Secret `DEMO_ACCOUNT_PASSWORD` | ステップ25③（12文字以上の任意の値） | 手元のパスワード管理ツールにも控える | **Task 5**（週次リセットworkflowが体験アカウント3本のパスワードとして使う。ops/demo-deploy.md §3.1） |
+| GitHub Secret `DEMO_ACCOUNT_PASSWORD` | ステップ25③（12文字以上の任意の値） | 手元のパスワード管理ツールにも控える | **Task 5**（週次メンテナンスworkflowが体験アカウント3本のパスワードとして使う。ops/demo-deploy.md §3.1） |
 | wrangler login済みの端末 | §4（ステップ20〜21） | — | Task 7: `wrangler deploy --env demo`・migration・`wrangler secret put` |
 | `BETTER_AUTH_SECRET` | ステップ26（Task 7時） | 乱数64文字程度 | Task 7 |
 

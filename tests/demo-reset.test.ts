@@ -220,8 +220,11 @@ describe("demo-reset (営業デモTask5)", () => {
     expect(sql).not.toMatch(/\bsavepoint\b/i);
   });
 
-  it("workflow_resets_demo_weekly_with_demo_scoped_secrets_only", () => {
-    // 週1回のcron（GitHub ActionsはUTCのみのためJST換算をコメントに書く）と手動起動の両方を持つ
+  it("workflow_refreshes_demo_weekly_without_wipe", () => {
+    // 週1回のcron（GitHub ActionsはUTCのみのためJST換算をコメントに書く）と手動起動の両方を持つ。
+    // 2026-10-22の運用変更: 週次の実行は**wipe（全表DROP）をしない** seedのみの冪等再投入にした
+    // （wipeは実管理者〔bootstrap由来のowner〕も消すため、dispatchのたびにownerのログインが壊れた事故を受け。
+    // 全消去が欲しいときは手元端末から demo:reset:remote / demo:wipe:remote を手動実行する）
     expect(demoResetYaml).toContain("workflow_dispatch");
     expect(demoResetYaml).toContain("JST");
     const cronLine = demoResetYaml.split("\n").find((l) => l.includes("cron:"))!;
@@ -231,12 +234,18 @@ describe("demo-reset (営業デモTask5)", () => {
 
     // 権限は最小限（deploy-config.test.tsと同じ断言）。同時実行の禁止
     expect(demoResetYaml).toMatch(/^permissions:\n {2}contents: read$/m);
-    expect(demoResetYaml).toContain("group: demo-reset");
+    expect(demoResetYaml).toContain("group: demo-refresh");
     expect(demoResetYaml).toContain("cancel-in-progress: false");
 
     // 実行コマンドとSecretの参照（wranglerは CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID 環境変数を拾う。
     // 体験アカウントの固定パスワードは DEMO_ACCOUNT_PASSWORD 環境変数で渡す（seed-demo.tsが読む。argvに載せない））
-    expect(demoResetYaml).toContain("npm run demo:reset:remote -- --confirm demo");
+    expect(demoResetYaml).toContain("npm run demo:seed:remote -- --confirm demo");
+    // wipe系コマンド（demo:reset:remote）は実行行に現れない（説明コメントでの言及は可。ownerが消えるため運用から外した）
+    for (const line of demoResetYaml.split("\n")) {
+      if (line.trimStart().startsWith("#")) continue;
+      expect(line, line).not.toContain("demo:reset:remote");
+      expect(line, line).not.toContain("--wipe");
+    }
     expect(demoResetYaml).toContain("${{ secrets.CLOUDFLARE_API_TOKEN_DEMO }}");
     expect(demoResetYaml).toContain("${{ secrets.CLOUDFLARE_ACCOUNT_ID_DEMO }}");
     expect(demoResetYaml).toMatch(/DEMO_ACCOUNT_PASSWORD: \$\{\{ secrets\.DEMO_ACCOUNT_PASSWORD \}\}/);
@@ -257,7 +266,8 @@ describe("demo-reset (営業デモTask5)", () => {
     expect(demoResetYaml).not.toContain("BETTER_AUTH_SECRET");
 
     // npm scriptの正本（reset= --wipe付き、seed= wipe無し、wipe:remote= --wipe-only（seed無しの復旧用wipe）。
-    // Task 7の初回構築〔ops/demo-deploy.md §5.1〕はseedを使う）
+    // Task 7の初回構築〔ops/demo-deploy.md §5.1〕はseedを使う。**週次workflowもseedの方を使う（2026-10-22）**。
+    // reset/wipeはownerを消す手動コマンドとして残る（ops/demo-deploy.md §3.1の復旧手順と一緒に使う））
     const pkg = JSON.parse(pkgRaw) as { scripts: Record<string, string> };
     expect(pkg.scripts["demo:reset:remote"]).toBe("tsx scripts/seed-demo.ts --remote --env demo --wipe");
     expect(pkg.scripts["demo:seed:remote"]).toBe("tsx scripts/seed-demo.ts --remote --env demo");
