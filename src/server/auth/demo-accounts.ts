@@ -13,7 +13,7 @@ import type { Stmt } from "./bootstrap";
  *   機械保証する。値はsourceに書かず、seed実行時に生成して標準出力へ一度だけ表示する（scripts/seed-demo.ts）。
  * - **認可規則は変えない**: 二要素は未有効（two_factor_enabled=0・auth_two_factorsも作らない）のままなので、
  *   admin体験アカウントでもPER-06/07/08の管理操作は `mfa_required` で拒否される（src/server/auth/authorize.ts）。
- *   解除経路は公開しないため、この状態は後から変わらない。
+ *   二要素の自己登録・パスワード変更は auth の hooks.before が拒否する（T091-S1）ため、この状態は後から変わらない。
  */
 
 export interface DemoCredential {
@@ -62,6 +62,11 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     ids: { authUser: `${U}000000de001b`, user: `${U}000000de001c`, member: `${U}000000de001d` },
   },
 ];
+
+/** 認証identity（auth_users.id）が体験アカウントか（T091-S1。hooks.before が二要素登録・パスワード変更を拒否する判定） */
+export function isDemoAccountUserId(authUserId: string): boolean {
+  return DEMO_ACCOUNTS.some((a) => a.ids.authUser === authUserId);
+}
 
 /** パスワードの文字種（紛らわしい字 0/O/1/l/I と記号を除く。口頭で伝えられる資格情報にする） */
 const PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";

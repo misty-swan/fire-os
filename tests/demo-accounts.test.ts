@@ -79,6 +79,30 @@ describe("体験アカウント3本（営業デモTask4）", () => {
     expect(denied.data.error?.details?.[0]?.reason).toBe("mfa_required");
   });
 
+  it("demo_admin_cannot_enable_two_factor_or_change_password", async () => {
+    // T091-S1: 共有パスワードの体験アカウントが二要素を自己登録すると mfa_required が外れ、他の訪問者を締め出せた
+    const { b } = await signIn(DEMO_ACCOUNTS[0]!.email);
+    const enable = await b.json<{ code?: string }>("POST", "/api/auth/two-factor/enable", { password: TEST_PASSWORD });
+    expect(enable.status).toBe(403);
+    expect(enable.data.code).toBe("DEMO_ACCOUNT_LOCKED");
+    const verify = await b.json("POST", "/api/auth/two-factor/verify-totp", { code: "000000" });
+    expect(verify.status).toBe(403);
+    const change = await b.json("POST", "/api/auth/change-password", { currentPassword: TEST_PASSWORD, newPassword: "another-pass-12345" });
+    expect(change.status).toBe(403);
+    // two_factor_enabled は 0 のまま、API-33 は引き続き mfa_required
+    const row = await env.DB.prepare("SELECT two_factor_enabled AS e FROM auth_users WHERE email = ?").bind(DEMO_ACCOUNTS[0]!.email).first<{ e: number }>();
+    expect(row!.e).toBe(0);
+    const inv = await b.json<{ error?: { details?: { reason?: string }[] } }>("POST", "/api/v1/invitations", {
+      memberId: DEMO_ACCOUNTS[2]!.ids.member,
+      email: "invitee2@example.test",
+      expiresInHours: 24,
+    }, { "idempotency-key": crypto.randomUUID() });
+    expect(inv.status).toBe(403);
+    expect(inv.data.error?.details?.[0]?.reason).toBe("mfa_required");
+    // パスワードも変わらず、同じ資格情報で再サインインできる
+    expect((await signIn(DEMO_ACCOUNTS[0]!.email)).res.status).toBe(200);
+  });
+
   it("member_account_creates_roster_role_and_audit_rows", async () => {
     const m = DEMO_ACCOUNTS[2]!;
     const row = await env.DB.prepare(

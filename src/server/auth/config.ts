@@ -3,6 +3,7 @@ import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/a
 import { twoFactor } from "better-auth/plugins";
 import type { AppEnv } from "../env";
 import { authErrorCode, recordAuthAudit } from "./audit";
+import { isDemoAccountUserId } from "./demo-accounts";
 import { sha256Hex } from "../mutations/hash";
 
 /**
@@ -248,6 +249,14 @@ export function createAuth(env: AuthEnv, deps: AuthDeps = {}) {
         }
       }),
       before: createAuthMiddleware(async (ctx) => {
+        // 体験アカウント（共有パスワード）は二要素の自己登録・パスワード変更をできない（T091-S1）。
+        // 登録されるとmfa_requiredが外れ、他の訪問者を締め出せるため。セッションが無い経路は従来どおり素通し
+        if (ctx.path.startsWith("/two-factor/") || ctx.path === "/change-password") {
+          const demoSession = await getSessionFromCtx(ctx).catch(() => null);
+          if (demoSession && isDemoAccountUserId(demoSession.user.id)) {
+            throw APIError.from("FORBIDDEN", { code: "DEMO_ACCOUNT_LOCKED", message: "体験アカウントでは二要素認証とパスワードを変更できません" });
+          }
+        }
         // 有効化の確認かどうか（呼び出し時点で二要素が未有効）を、確認の前に控える
         if (ctx.path === "/two-factor/verify-totp") {
           const session = await getSessionFromCtx(ctx).catch(() => null);

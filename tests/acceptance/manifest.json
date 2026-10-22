@@ -3470,8 +3470,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "体験アカウント（共有パスワードの体験管理者）が二要素を自己登録でき、PER-06(member)/07/08のmfa_requiredが外れて管理操作が通る。登録で他セッションが消え以後のサインインは登録者のTOTPを要する（他の訪問者を締め出す）。週次の再投入は既存アカウントを飛ばすため残る",
    "severity": "medium",
-   "status": "open",
-   "basis": "/api/auth/two-factor/enable・verify-totp・change-passwordが全identityに許可（src/shared/contracts/auth.ts・src/server/routes/auth.ts）、hooks.before（src/server/auth/config.ts）に体験アカウントの例外なし、MFA判定はアカウント単位のtwoFactorEnabled（principal.ts）。監査fingerprint demo-shared-account-mfa-self-enrollment。修正はT091手順1",
+   "status": "resolved",
+   "basis": "T091手順1で修正: hooks.before（src/server/auth/config.ts）でセッション利用者が体験アカウント（isDemoAccountUserId）なら /two-factor/* と /change-password を403 DEMO_ACCOUNT_LOCKED。試験 tests/demo-accounts.test.ts demo_admin_cannot_enable_two_factor_or_change_password（修正前はenableが200で赤→緑）",
    "owner": "T091"
   },
   {
