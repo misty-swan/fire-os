@@ -3488,8 +3488,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "API-37の自己昇格ガードが権限scopeの期限を比較しないため、期限付きPER-06を持つ管理者が自分宛てに同じscopeを期限延長・無期限で再申請できる",
    "severity": "low",
-   "status": "open",
-   "basis": "src/server/routes/member-roles.ts の保持scope比較キー（entityType:entityId:permissions）にexpiresAtが無く、resolvePrincipalもscopeの期限を持たない。監査fingerprint fireos:member-roles:self-escalation-scope-key-ignores-expiry。修正はT091手順3",
+   "status": "resolved",
+   "basis": "T091手順3で修正: src/server/routes/member-roles.ts の自己昇格ガードを、principalのscopes（期限なし）でなく有効な保持行（revoked_at無し・期限内）を期限付きでD1から読み直して比べる形へ。保持していない担当、または保持より遅い・無い期限は403 self_escalation（短縮・削除は可）。試験 tests/revocation.test.ts admin_cannot_extend_or_remove_expiry_of_own_scope（修正前は期限延長が200で赤→緑）",
    "owner": "T091"
   },
   {

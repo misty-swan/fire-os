@@ -55,12 +55,28 @@ export function registerRoleRoutes(app: ApiApp): void {
 
     // 自己昇格の禁止：自分自身には、今持っている以上の役割・担当を付けられない（降格や取消は可）
     if (params.id === p.memberId) {
-      const heldScopes = new Set(p.scopes.map((s) => `${s.entityType}:${s.entityId}:${[...s.permissions].sort().join(",")}`));
+      // 担当は期限も含めて比べる（principalのscopesは期限を持たないので、有効な保持行を期限付きで読み直す）。
+      // 保持していない担当、または保持より遅い・無い期限は昇格（短縮・削除は可）
+      const heldRows = await c.env.DB.prepare(
+        "SELECT entity_type, entity_id, permissions, expires_at FROM scope_assignments WHERE member_id = ? AND unit_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
+      ).bind(p.memberId, p.unitId, nowIso).all<{ entity_type: string; entity_id: string; permissions: string; expires_at: string | null }>();
+      const heldScopes = new Map<string, string | null>();
+      for (const r of heldRows.results) {
+        const key = `${r.entity_type}:${r.entity_id}:${(JSON.parse(r.permissions) as string[]).sort().join(",")}`;
+        const prev = heldScopes.get(key);
+        // 同じ担当が複数行あるときは最も遅い（無期限が最大）期限を保持とみなす
+        heldScopes.set(key, prev === undefined ? r.expires_at : prev === null || r.expires_at === null ? null : prev > r.expires_at ? prev : r.expires_at);
+      }
       // 今持っている最上位より上の役割を付けるのが昇格（降格や、より低い役割への置換は可）
       const rank = (r: string) => (roleCodes as readonly string[]).indexOf(r);
       const held = Math.max(-1, ...p.roles.map(rank));
       const addsRole = newRoles.some((r) => rank(r) > held);
-      const addsScope = scopes.some((s) => !heldScopes.has(`${s.entityType}:${s.entityId}:${s.permissions.join(",")}`));
+      const addsScope = scopes.some((s) => {
+        const key = `${s.entityType}:${s.entityId}:${s.permissions.join(",")}`;
+        if (!heldScopes.has(key)) return true;
+        const heldExpiry = heldScopes.get(key)!;
+        return heldExpiry !== null && (s.expiresAt === null || s.expiresAt > heldExpiry);
+      });
       if (addsRole || addsScope) throw new HttpError("FORBIDDEN", undefined, [{ field: "permission", reason: "self_escalation" }]);
     }
     // 最後の管理者の降格の禁止

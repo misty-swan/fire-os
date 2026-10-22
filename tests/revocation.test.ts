@@ -86,6 +86,29 @@ describe("権限変更・利用停止・失効 (T012)", () => {
     expect(revocationRecoveryJobCount).toBe(1);
   });
 
+  it("admin_cannot_extend_or_remove_expiry_of_own_scope", async () => {
+    // T091-S3: 期限付きの担当を自分宛てに延長・無期限化できない。短縮と削除は通る
+    const fx = await createFixture("two-units");
+    const { admin, operator } = fx.units.a.people;
+    const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+    await env.DB.prepare(
+      "INSERT INTO scope_assignments (id, unit_id, member_id, entity_type, entity_id, permissions, expires_at, created_at, updated_at, created_by, actor_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    ).bind(crypto.randomUUID(), admin.unitId, admin.memberId, "member", operator.memberId, '["PER-06"]', inHours(1), "2026-10-13T00:00:00.000Z", "2026-10-13T00:00:00.000Z", admin.userId, "human").run();
+    const scopeWith = (expiresAt?: string) => [{ entityType: "member", entityId: operator.memberId, permissions: ["PER-06"], ...(expiresAt ? { expiresAt } : {}) }];
+    const reasonOf = async (r: Response) => ((await r.json()) as { error: { details: { reason: string }[] } }).error.details[0]!.reason;
+
+    const extended = await putRoles(fx, admin, admin, { roleCodes: ["admin"], scopes: scopeWith(inHours(24 * 365)) });
+    expect(extended.status).toBe(403);
+    expect(await reasonOf(extended)).toBe("self_escalation");
+    const unlimited = await putRoles(fx, admin, admin, { roleCodes: ["admin"], scopes: scopeWith() });
+    expect(unlimited.status).toBe(403);
+    expect(await reasonOf(unlimited)).toBe("self_escalation");
+
+    // 対照：短縮と削除は通る
+    expect((await putRoles(fx, admin, admin, { roleCodes: ["admin"], scopes: scopeWith(inHours(0.5)) })).status).toBe(200);
+    expect((await putRoles(fx, admin, admin, { roleCodes: ["admin"], scopes: [] })).status).toBe(200);
+  });
+
   it("stop_without_fault_revokes_sessions_immediately_and_records_the_reason_on_the_row", async () => {
     const fx = await createFixture("two-units");
     const { admin, member } = fx.units.a.people;
