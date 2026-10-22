@@ -9,10 +9,12 @@ import {
   DEMO_PHOTO_KEY,
   DEMO_PROFILE,
   DEMO_SEED_IDS,
+  DEMO_UNIT_NAME,
   collectDemoPrivacyRows,
   demoPhotoPng,
   demoResetRemovals,
   detectRealPersonalData,
+  resolveDemoTargets,
   seedDemo,
   verifyDemoIsolation,
 } from "../scripts/seed-demo";
@@ -314,5 +316,64 @@ describe("demo isolation (T086)", () => {
     expect(realPersonalDataFound).toEqual([]);
     expect(demoResetLeavesProductionUntouched).toBe(true);
     expect(developmentIncompleteFeatures).toEqual([]);
+  });
+
+  it("privacy_scan_follows_unit_names_not_fixed_ids (T090-D6)", async () => {
+    // D6: 実環境（bootstrap-admin経由）のunitは固定IDと異なるUUIDで作られる。走査はunit名で解決するため、
+    // 固定IDに無いunitの行も走査対象になる（固定ID引きでは0行になって恒真に戻る欠陥）。
+    const strayUnit = crypto.randomUUID();
+    const strayMember = crypto.randomUUID();
+    const officerUser = "00000000-0000-4000-8000-000000de0012"; // seedが作る架空幹部（units/membersの作成者として有効）
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO units (id, name, status, dataset_revision, event_sequence, version, created_at, updated_at, created_by, actor_kind) " +
+          "VALUES (?, ?, 'active', 1, 0, 1, '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z', ?, 'human')",
+      ).bind(strayUnit, DEMO_UNIT_NAME, officerUser),
+      env.DB.prepare(
+        "INSERT INTO members (id, unit_id, display_name, status, qualifications, version, created_at, updated_at, created_by, actor_kind) " +
+          "VALUES (?, ?, '架空 走査確認', 'active', '[]', 1, '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z', ?, 'human')",
+      ).bind(strayMember, strayUnit, officerUser),
+    ]);
+    try {
+      const scan = await collectDemoPrivacyRows(env);
+      // 名前解決なら新しいunit（固定IDでは無いUUID）の行も見つかる。件数はDEMO_PROFILE+1名ぶん
+      expect(scan.tableCounts["members"] ?? 0).toBe(DEMO_PROFILE.members + 1);
+      expect(scan.rows.some((r) => r.id === strayMember)).toBe(true);
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM members WHERE id = ?").bind(strayMember),
+        env.DB.prepare("DELETE FROM units WHERE id = ?").bind(strayUnit),
+      ]);
+    }
+    // 後片付けが済んだら元の件数へ戻る（他試験への影響なし）
+    const after = await collectDemoPrivacyRows(env);
+    expect(after.tableCounts["members"] ?? 0).toBe(DEMO_PROFILE.members);
+  });
+
+  it("seed_admin_resolution_prefers_the_earliest_created_admin (T090-D7)", async () => {
+    // D7: 管理者が複数（bootstrap由来+体験管理者）居るとき、解決はLIMIT 1だけでは環境で揺れる。
+    // 最初に作られた管理者（=bootstrap由来。created_at順）へ決定的に解決することを固定する。
+    const earlyAdmin = crypto.randomUUID();
+    const officerUser = "00000000-0000-4000-8000-000000de0012";
+    const adminRole = "00000000-0000-4000-8000-000000000104"; // migration固定のadmin役割（seedと同じ値）
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO members (id, unit_id, display_name, status, qualifications, version, created_at, updated_at, created_by, actor_kind) " +
+          "VALUES (?, ?, '架空 先任管理者', 'active', '[]', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', ?, 'human')",
+      ).bind(earlyAdmin, DEMO_SEED_IDS.unit, officerUser),
+      env.DB.prepare(
+        "INSERT INTO member_roles (id, unit_id, member_id, role_id, granted_by, created_at, updated_at, created_by, actor_kind) " +
+          "VALUES (?, ?, ?, ?, ?, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', ?, 'human')",
+      ).bind(crypto.randomUUID(), DEMO_SEED_IDS.unit, earlyAdmin, adminRole, officerUser, officerUser),
+    ]);
+    try {
+      const targets = await resolveDemoTargets(env.DB);
+      expect(targets.adminMemberId).toBe(earlyAdmin); // seedの管理者（2026-10-20作成）より早い作成者が選ばれる
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM member_roles WHERE member_id = ?").bind(earlyAdmin),
+        env.DB.prepare("DELETE FROM members WHERE id = ?").bind(earlyAdmin),
+      ]);
+    }
   });
 });

@@ -106,6 +106,19 @@ const DOC_ATTACHMENT = `${U}000000de02e2`;
 const PHOTO_LINK = `${U}000000de02e3`;
 const DOC_LINK = `${U}000000de02e4`;
 const chunkId = (i: number) => `${U}000000de02f${i}`;
+// --- T090（デモ欠陥修正。GitHub issues #1〜#7）で追加する固定ID ---
+const TEMPLATE_VEHICLE_ID = `${U}000000de0203`;
+const TEMPLATE_VEHICLE_VERSION_ID = `${U}000000de0204`;
+const TEMPLATE_EQUIPMENT_ID = `${U}000000de0205`;
+const TEMPLATE_EQUIPMENT_VERSION_ID = `${U}000000de0206`;
+/** 実環境の既存データへ後から実項目の版を足すときの行ID（増幅SQLだけで使う） */
+const TEMPLATE_FIX_VERSION_IDS = [`${U}000000de0207`, `${U}000000de0208`, `${U}000000de0209`] as const;
+const NOTIFICATION_2 = `${U}000000de02b4`;
+const NOTIFICATION_2_RECIPIENTS = [`${U}000000de02b5`, `${U}000000de02b6`, `${U}000000de02b7`] as const;
+const TASK_3 = `${U}000000de02c3`;
+const AI_JOB_1 = `${U}000000de0301`;
+const AI_EVALUATION_1 = `${U}000000de0302`;
+const SCHEDULE_VEHICLE_1 = `${U}000000de0304`;
 
 /** migrationが固定IDで作る役割（drizzle/0001。tests/fixtures/core.tsと同じ値） */
 const ROLE_IDS = {
@@ -132,7 +145,7 @@ export const DEMO_PROFILE = {
   users: 4,
   members: 16,
   facilities: 13,
-  inspection_templates: 1,
+  inspection_templates: 3,
   facility_inspections: 6,
   issues: 2,
   vehicles: 1,
@@ -155,6 +168,56 @@ export const DEMO_SEED_IDS = {
   photoAttachment: PHOTO_ATTACHMENT,
   report: REPORT_1,
 } as const;
+
+/**
+ * 点検様式の定義正本（T090-D1/D3。plan〔新規seed〕と増幅SQL〔実環境の既存データへの補正〕の両方が使う）。
+ * item_schemaはvalidateItems（src/server/inspections/validate-items.ts）と同じ形で、**空にしない**
+ * （D1: 承認版の項目が空だと点検登録の様式選択が空になり、点検を開始できない）。
+ * 様式は検証設定であり正式な点検票ではない（D06未承認。名称に（デモ）を付ける）。
+ */
+interface DemoTemplateDef {
+  id: string;
+  /** planが作る初版の承認版行ID */
+  versionId: string;
+  /** 増幅SQLが実環境へ足す「実項目の版」の行ID（plan適用環境では使われない） */
+  fixVersionId: string;
+  name: string;
+  targetType: "facility" | "vehicle" | "equipment";
+  items: readonly { code: string; label: string; valueType: "boolean" | "number" | "text" | "select"; required: boolean; allowedResults?: string[] }[];
+}
+
+const DEMO_TEMPLATES: readonly DemoTemplateDef[] = [
+  {
+    id: TEMPLATE_ID, versionId: TEMPLATE_VERSION_ID, fixVersionId: TEMPLATE_FIX_VERSION_IDS[0]!,
+    name: "架空の施設点検様式（デモ）", targetType: "facility",
+    items: [
+      { code: "damage", label: "外観の破損・劣化", valueType: "boolean", required: true },
+      { code: "leak", label: "漏水・浸水の有無", valueType: "boolean", required: true },
+      { code: "operation", label: "操作確認の結果", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] },
+      { code: "note", label: "特記事項", valueType: "text", required: false },
+    ],
+  },
+  {
+    id: TEMPLATE_VEHICLE_ID, versionId: TEMPLATE_VEHICLE_VERSION_ID, fixVersionId: TEMPLATE_FIX_VERSION_IDS[1]!,
+    name: "架空の車両点検様式（デモ）", targetType: "vehicle",
+    items: [
+      { code: "engine", label: "エンジンの始動", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] },
+      { code: "lights", label: "警光灯・尾灯の点灯", valueType: "boolean", required: true },
+      { code: "tires", label: "タイヤの損傷", valueType: "boolean", required: true },
+      { code: "note", label: "特記事項", valueType: "text", required: false },
+    ],
+  },
+  {
+    id: TEMPLATE_EQUIPMENT_ID, versionId: TEMPLATE_EQUIPMENT_VERSION_ID, fixVersionId: TEMPLATE_FIX_VERSION_IDS[2]!,
+    name: "架空の資機材点検様式（デモ）", targetType: "equipment",
+    items: [
+      { code: "damage", label: "本体の破損", valueType: "boolean", required: true },
+      { code: "accessories", label: "付属品の欠品", valueType: "boolean", required: true },
+      { code: "function", label: "動作確認の結果", valueType: "select", required: true, allowedResults: ["ok", "needs_review"] },
+      { code: "note", label: "特記事項", valueType: "text", required: false },
+    ],
+  },
+];
 
 // ============================================================================
 // 決定的なダミー実体（写真PNG・文書PDF。実在の画像・文書を模さない小さな生成物）
@@ -418,15 +481,21 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   group(facilityGroup);
   stats.facilities = 13;
 
-  // --- 点検様式（承認済み版。item_schemaは空の検証用） ---
-  group([
-    insert("inspection_templates", ["id", "unit_id", "name", "target_type", "status", "created_at", "updated_at", "created_by", "actor_kind"],
-      [TEMPLATE_ID, unit, "架空の施設点検様式（デモ）", "facility", "active", NOW, NOW, creator, "human"]),
-    insert("inspection_template_versions", ["id", "unit_id", "template_id", "revision_no", "item_schema", "status",
-      "approved_by_member_id", "approved_at", "created_at", "updated_at", "created_by", "actor_kind"],
-      [TEMPLATE_VERSION_ID, unit, TEMPLATE_ID, 1, "[]", "approved", DEMO_OFFICER_MEMBER, NOW, NOW, NOW, creator, "human"]),
-  ]);
-  stats.inspection_templates = 1;
+  // --- 点検様式（T090-D1/D3: 施設・車両・資機材の3様式。承認済み版を実項目付きで作り、rootの現行版ポインタを
+  //     承認APIと同じ形で設定する。ポインタがNULLの様式は点検登録の様式選択に出ないため） ---
+  const templateGroup: SeedStatement[] = [];
+  for (const t of DEMO_TEMPLATES) {
+    templateGroup.push(
+      insert("inspection_templates", ["id", "unit_id", "name", "target_type", "status", "created_at", "updated_at", "created_by", "actor_kind"],
+        [t.id, unit, t.name, t.targetType, "active", NOW, NOW, creator, "human"]),
+      insert("inspection_template_versions", ["id", "unit_id", "template_id", "revision_no", "item_schema", "status",
+        "approved_by_member_id", "approved_at", "version", "created_at", "updated_at", "created_by", "actor_kind"],
+        [t.versionId, unit, t.id, 1, JSON.stringify(t.items), "approved", DEMO_OFFICER_MEMBER, NOW, 1, NOW, NOW, creator, "human"]),
+      { sql: "UPDATE inspection_templates SET current_version_id = ? WHERE id = ? AND unit_id = ?", binds: [t.versionId, t.id, unit] },
+    );
+  }
+  group(templateGroup);
+  stats.inspection_templates = DEMO_TEMPLATES.length;
 
   // --- 点検（最初の6施設に月次点検。2件は要確認） ---
   const inspectionGroup: SeedStatement[] = [];
@@ -464,10 +533,12 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
       ["id", "unit_id", "facility_id", "title", "description", "reported_by", "assignee_member_id",
         "status", "confirmed_category", "version", "created_at", "updated_at", "created_by", "actor_kind"],
       [ISSUE_2, unit, facilityIds[5]!, "架空の格納箱の蓋の破損（デモ）",
-        "本町公民館の巡回中に格納箱の蓋の破損を確認した（架空の記録）。仮覆いを設置済み。", creator, DEMO_OPERATOR_MEMBER,
-        "in_progress", "破損", 1, NOW, NOW, creator, "human"]),
+        "本町公民館の巡回中に格納箱の蓋の破損を確認した（架空の記録）。仮覆いを設置済み。", creator, null,
+        // T090-D5: 手動起票直後のreported（未確認）で残す（ホームの「確認待ち」=status='reported'だけを数えるため。
+        // 幹部の体験アカウントで「確認する」操作を台本⑤で動かせる）
+        "reported", null, 1, NOW, NOW, creator, "human"]),
     insert("issue_events", ["id", "unit_id", "issue_id", "action", "before_json", "after_json", "note", "actor_user_id", "actor_kind", "created_at"],
-      [crypto.randomUUID(), unit, ISSUE_2, "status_changed", JSON.stringify({ status: "reported" }), JSON.stringify({ status: "in_progress" }), null, creator, "human", NOW]),
+      [crypto.randomUUID(), unit, ISSUE_2, "reported", "{}", JSON.stringify({ status: "reported" }), "デモseedによる架空の起票", creator, "human", NOW]),
   ]);
   stats.issues = 2;
 
@@ -482,6 +553,15 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   ]);
   stats.vehicles = 1;
   stats.equipment = 2;
+
+  // --- 点検期限（T090-D5: 期限が過ぎた資産点検のschedule。ホームの「点検期限」=next_due_date < 今日(JST)の
+  //     件数のため、seedのNOW固定2026-10-20より前の業務日を置く=いつ再seedしても超過している） ---
+  group([
+    insert("inspection_schedules",
+      ["id", "unit_id", "vehicle_id", "next_due_date", "interval_days", "timezone", "version", "last_mutation_token", "created_at", "updated_at", "created_by", "actor_kind"],
+      [SCHEDULE_VEHICLE_1, unit, VEHICLE_1, "2026-10-19", 90, "Asia/Tokyo", 1, null, NOW, NOW, creator, "human"]),
+  ]);
+  stats.inspection_schedules = 1;
 
   // --- 活動×3（1件は今後の予定、2件は完了＝実績と実参加つき） ---
   const activityPlans = [
@@ -614,6 +694,34 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
   ]);
   stats.tasks = 2;
 
+  // --- AIレビュー候補（T090-D4: 「要確認」の点検への分類提案をpendingで置く=AIレビュー一覧の初期データ。
+  //     評価はjob経由で作られるためjobs行も作る（FK (unit_id, job_id)）） ---
+  const aiOutput = {
+    model: "demo-seed@2026-10-22",
+    answers: {
+      category: {
+        choice: "equipment_issue",
+        probabilities: { equipment_issue: 0.8, access_obstruction: 0.1, missing_equipment: 0.05, no_issue: 0.03, other: 0.02 },
+        confidence: 0.8,
+      },
+      needs_check: { noul: 0.1 },
+    },
+    usage: { prompt_tokens: 48, completion_tokens: 24 },
+  };
+  group([
+    insert("jobs",
+      ["id", "unit_id", "kind", "source_type", "source_id", "source_version", "config_version", "dedupe_key", "status",
+        "attempts", "max_attempts", "next_attempt_at", "requested_by", "created_at", "updated_at"],
+      [AI_JOB_1, unit, "ai.classify", "facility_inspection", inspectionId(5), 1, "demo-seed-v1",
+        `demo-ai-classify-${inspectionId(5)}`, "succeeded", 1, 3, NOW, creator, NOW, NOW]),
+    insert("ai_evaluations",
+      ["id", "unit_id", "job_id", "source_type", "source_id", "source_version", "input_hash", "input_snapshot_ref",
+        "question_version", "model_id", "actual_model_version", "output_json", "status", "usage_json", "actor_user_id", "actor_kind", "created_at"],
+      [AI_EVALUATION_1, unit, AI_JOB_1, "facility_inspection", inspectionId(5), 1, "3".repeat(64), null,
+        "classification-demo-v1", "demo-seed", null, JSON.stringify(aiOutput), "pending", JSON.stringify(aiOutput.usage), creator, "human", NOW]),
+  ]);
+  stats.ai_evaluations = 1;
+
   // --- 文書1件（承認済み。索引済みchunkも作る＝検索・RAGのデモが動く） ---
   const photo = demoPhotoPng();
   const pdf = demoDocumentPdf();
@@ -704,8 +812,157 @@ export async function buildDemoSeedPlan(targets: DemoSeedTargets): Promise<DemoS
 }
 
 // ============================================================================
+// 体験アカウント投入後の増幅（T090-D2/D4/D5。GitHub issues #2・#4・#5）
+// ============================================================================
+
+export interface DemoAugmentation {
+  /** 様式の補正（planが作った環境では空振りするguarded文。実環境のplan適用済み旧データにも当てる） */
+  templates: SeedStatement[];
+  /** 出欠・お知らせの対象を「その時の全団員（active）」へ広げる（体験3本とownerを含める） */
+  audience: SeedStatement[];
+  /** 体験3本宛の通知（1通だけ既読・ほかは未読） */
+  notification: SeedStatement[];
+  /** 体験団員の担当タスク（進行中） */
+  task: SeedStatement[];
+}
+
+/**
+ * 体验アカウント（demoAccountStatements）とownerを出欠・お知らせの対象へ加え、体験アカウントの
+ * 受信箱・ホームの数字タイルを埋める増幅SQL（純関数）。activity_audience/notification_recipients/tasksは
+ * membersへのFK(RESTRICT)を持つため、plan（体験団員がまだ存在しない時点で適用される）には書けない。
+ * CLIが体験アカウントの投入直後に適用する。全てNOT EXISTS / 相関UPDATEで冪等（再実行・週次リセットで
+ * 二重に行を作らない）。
+ */
+export async function buildDemoAccountAugmentation(targets: { unitId: string }): Promise<DemoAugmentation> {
+  const unit = targets.unitId;
+  const creator = DEMO_OFFICER_USER;
+  const activityIds = [activityId(1), activityId(2), activityId(3)];
+
+  // --- 様式の補正: planが作った環境（初版から実項目付き）では全て空振り。実環境の旧データ
+  //     （初版のitem_schemaが空・ポインタNULL）にも同じ結果へ導く:
+  //     ①無い様式は作り ②実項目を持つ承認版が無い様式には追い版を足し（承認済み版は不変トリガーで
+  //     UPDATE不可のため追記で直す） ③ポインタを「実項目を持つ最新の承認版」へ向ける ---
+  const templates: SeedStatement[] = [];
+  for (const t of DEMO_TEMPLATES) {
+    templates.push({
+      sql:
+        "INSERT INTO inspection_templates (id, unit_id, name, target_type, status, created_at, updated_at, created_by, actor_kind) " +
+        "SELECT ?, ?, ?, ?, 'active', ?, ?, ?, 'human' " +
+        "WHERE NOT EXISTS (SELECT 1 FROM inspection_templates WHERE unit_id = ? AND id = ?)",
+      binds: [t.id, unit, t.name, t.targetType, NOW, NOW, creator, unit, t.id],
+    });
+    templates.push({
+      sql:
+        "INSERT INTO inspection_template_versions (id, unit_id, template_id, revision_no, item_schema, status, " +
+        "approved_by_member_id, approved_at, version, created_at, updated_at, created_by, actor_kind) " +
+        "SELECT ?, ?, ?, COALESCE((SELECT MAX(v.revision_no) FROM inspection_template_versions v WHERE v.template_id = ? AND v.unit_id = ?), 0) + 1, " +
+        "?, 'approved', ?, ?, 1, ?, ?, ?, 'human' " +
+        "WHERE NOT EXISTS (SELECT 1 FROM inspection_template_versions v WHERE v.unit_id = ? AND v.template_id = ? " +
+        "AND v.status = 'approved' AND json_array_length(v.item_schema) > 0)",
+      binds: [t.fixVersionId, unit, t.id, t.id, unit, JSON.stringify(t.items), DEMO_OFFICER_MEMBER, NOW, NOW, NOW, creator, unit, t.id],
+    });
+    templates.push({
+      sql:
+        "UPDATE inspection_templates SET current_version_id = (SELECT v.id FROM inspection_template_versions v " +
+        "WHERE v.unit_id = inspection_templates.unit_id AND v.template_id = inspection_templates.id " +
+        "AND v.status = 'approved' AND json_array_length(v.item_schema) > 0 ORDER BY v.revision_no DESC LIMIT 1) " +
+        "WHERE unit_id = ? AND id = ?",
+      binds: [unit, t.id],
+    });
+  }
+
+  // --- 対象の拡充: 予定3本の出欠対象とお知らせ1件の対象を「その時の全団員（active）」へ広げる。
+  //     体験3本（demoAccountStatementsが作る固定IDの団員）とowner（bootstrap由来）はそれだけで入る。
+  //     行IDは決定的（'demo-aud-'||memberId）なので再実行で重複しない ---
+  const audience: SeedStatement[] = [];
+  for (const actId of activityIds) {
+    audience.push({
+      sql:
+        "INSERT INTO activity_audience (id, unit_id, activity_id, member_id, actor_user_id, actor_kind, created_at) " +
+        "SELECT 'demo-aud-' || ? || '-' || m.id, m.unit_id, ?, m.id, ?, 'human', ? FROM members m " +
+        "WHERE m.unit_id = ? AND m.status = 'active' " +
+        "AND NOT EXISTS (SELECT 1 FROM activity_audience a WHERE a.unit_id = m.unit_id AND a.activity_id = ? AND a.member_id = m.id)",
+      binds: [actId, actId, creator, NOW, unit, actId],
+    });
+  }
+  audience.push({
+    sql:
+      "INSERT INTO announcement_audience (id, unit_id, announcement_id, member_id, actor_user_id, actor_kind, created_at) " +
+      "SELECT 'demo-ann-' || ? || '-' || m.id, m.unit_id, ?, m.id, ?, 'human', ? FROM members m " +
+      "WHERE m.unit_id = ? AND m.status = 'active' " +
+      "AND NOT EXISTS (SELECT 1 FROM announcement_audience a WHERE a.unit_id = m.unit_id AND a.announcement_id = ? AND a.member_id = m.id)",
+    binds: [ANNOUNCEMENT_1, ANNOUNCEMENT_1, creator, NOW, unit, ANNOUNCEMENT_1],
+  });
+
+  // --- 通知: 体验3本宛（体验幹部だけ既読・他は未読）。ホームの「通知」=自分宛・未読の件数 ---
+  const experienceMemberIds = DEMO_ACCOUNTS.map((a) => a.ids.member);
+  const audienceHash = await sha256Hex(canonicalJson([...experienceMemberIds].sort()));
+  const notification: SeedStatement[] = [
+    {
+      sql:
+        "INSERT INTO notifications (id, unit_id, source_type, source_id, body_revision, audience_hash, status, " +
+        "approved_by, approved_at, version, last_mutation_token, created_at, updated_at, created_by, actor_kind) " +
+        "SELECT ?, ?, 'activity', ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'human' " +
+        "WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE unit_id = ? AND id = ?)",
+      binds: [
+        NOTIFICATION_2, unit, activityId(1),
+        JSON.stringify({ body: "架空の防災訓練（12月・本町公園）の下見と出欠の確認（デモ通知・体験アカウント宛）。" }),
+        audienceHash, "approved", creator, "2026-10-02T00:00:00.000Z", crypto.randomUUID(), NOW, NOW, creator, unit, NOTIFICATION_2,
+      ],
+    },
+    ...DEMO_ACCOUNTS.map((a, i) => ({
+      sql:
+        "INSERT INTO notification_recipients (id, unit_id, notification_id, member_id, channel, address_ref, read_at, actor_user_id, actor_kind, created_at) " +
+        "SELECT ?, ?, ?, ?, 'inapp', ?, ?, ?, 'human', ? " +
+        "WHERE NOT EXISTS (SELECT 1 FROM notification_recipients WHERE unit_id = ? AND notification_id = ? AND member_id = ?)",
+      binds: [
+        NOTIFICATION_2_RECIPIENTS[i]!, unit, NOTIFICATION_2, a.ids.member, `member:${a.ids.member}#inbox`,
+        a.role === "officer" ? "2026-10-21T00:00:00.000Z" : null, // 体験幹部だけ既読（未読1通以上を保証する対）
+        creator, NOW, unit, NOTIFICATION_2, a.ids.member,
+      ] as unknown[],
+    })),
+    {
+      sql:
+        "INSERT INTO notification_events (id, unit_id, notification_id, action, details, actor_user_id, actor_kind, created_at) " +
+        "SELECT ?, ?, ?, 'approved', ?, ?, 'human', ? " +
+        "WHERE NOT EXISTS (SELECT 1 FROM notification_events WHERE unit_id = ? AND notification_id = ? AND action = 'approved')",
+      binds: [crypto.randomUUID(), unit, NOTIFICATION_2, JSON.stringify({ audienceCount: 3, channels: "inapp" }), creator, NOW, unit, NOTIFICATION_2],
+    },
+  ];
+
+  // --- タスク: 体验団員の担当で進行中（ホームの「タスク」=自分が担当の活動中タスク） ---
+  const task: SeedStatement[] = [
+    {
+      sql:
+        "INSERT INTO tasks (id, unit_id, title, assignee_member_id, status, due_date, version, created_at, updated_at, created_by, actor_kind) " +
+        "SELECT ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'human' " +
+        "WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE unit_id = ? AND id = ?)",
+      binds: [
+        TASK_3, unit, "架空の防災訓練の下見（デモ・体験団員）", DEMO_ACCOUNTS[2]!.ids.member, "in_progress", "2026-10-26",
+        NOW, NOW, creator, unit, TASK_3,
+      ],
+    },
+  ];
+
+  return { templates, audience, notification, task };
+}
+
+// ============================================================================
 // seedの解決と実行（workerd側の入口。実デモは下のCLIから同じ計画を使う）
 // ============================================================================
+
+/**
+ * 管理者解決のSELECT本文（T090-D7）。`ORDER BY m.created_at ASC, m.id ASC LIMIT 1`で**最初に作られた
+ * 管理者**（=bootstrap-admin由来。体験管理者demo-adminより必ず先に出来る）へ決定的に解決する。
+ * ORDER BYが無いLIMIT 1は、管理者が複数（bootstrap+体験）居るとき環境によってどちらかへ揺れた
+ * （issue #7）。CLI（wrangler経由・binds無し）はこのリテラル版を使い、workerd側は同じ並びでbindする。
+ */
+export function demoAdminPickSqlLiteral(unitId: string): string {
+  return (
+    "SELECT m.id AS member_id FROM members m JOIN member_roles r ON r.unit_id = m.unit_id AND r.member_id = m.id " +
+    `WHERE m.unit_id = '${unitId}' AND r.role_id = '${ROLE_IDS.admin}' ORDER BY m.created_at ASC, m.id ASC LIMIT 1`
+  );
+}
 
 /** seed対象の解決。実デモではbootstrap-adminが作った「宮之浦分団」とその管理者を使う。 */
 export async function resolveDemoTargets(db: D1Database): Promise<DemoSeedTargets> {
@@ -714,14 +971,20 @@ export async function resolveDemoTargets(db: D1Database): Promise<DemoSeedTarget
     // 空DB（試験）。unitと管理者もseed計画が作る
     return { unitId: DEMO_UNIT_ID, adminMemberId: DEMO_ADMIN_MEMBER, createUnit: true, sequenceStart: 0 };
   }
+  // T090-D7: LIMIT 1の前に作成順で並べ、bootstrap由来（最初に作られた管理者）へ決定的に解決する
   const admin = await db
     .prepare(
       "SELECT m.id AS member_id FROM members m JOIN member_roles r ON r.unit_id = m.unit_id AND r.member_id = m.id " +
-        "WHERE m.unit_id = ? AND r.role_id = ? LIMIT 1",
+        "WHERE m.unit_id = ? AND r.role_id = ? ORDER BY m.created_at ASC, m.id ASC LIMIT 1",
     )
     .bind(unit.id, ROLE_IDS.admin)
     .first<{ member_id: string }>();
-  const fallback = admin ?? (await db.prepare("SELECT id AS member_id FROM members WHERE unit_id = ? LIMIT 1").bind(unit.id).first<{ member_id: string }>());
+  const fallback =
+    admin ??
+    (await db
+      .prepare("SELECT id AS member_id FROM members WHERE unit_id = ? ORDER BY created_at ASC, id ASC LIMIT 1")
+      .bind(unit.id)
+      .first<{ member_id: string }>());
   const seq = await db.prepare("SELECT event_sequence AS n FROM units WHERE id = ?").bind(unit.id).first<{ n: number }>();
   if (!fallback) throw new Error("seed-demo: 宮之浦分団に団員がいません（bootstrap-adminを先に実行してください）");
   return { unitId: unit.id, adminMemberId: fallback.member_id, createUnit: false, sequenceStart: seq?.n ?? 0 };
@@ -796,13 +1059,21 @@ export async function collectDemoPrivacyRows(env: Pick<AppEnv, "DB">): Promise<P
       rows.push({ table, id: String(id), values });
     }
   };
+  // 走査対象のunitは**名前**で解決する（T090-D6）。実環境（bootstrap-admin経由）のunitは固定ID
+  // （DEMO_*_ID）と異なるUUIDで作られるため、固定ID引きでは0行を走査して検査が恒真に戻った（issue #6）。
+  // units.nameに一意制約は無いため、同名のunitが複数あれば全て走査する
+  const unitRows = await env.DB.prepare("SELECT * FROM units WHERE name IN (?, ?)").bind(DEMO_UNIT_NAME, DEMO_UNIT2_NAME).all();
+  const unitIds = (unitRows.results as { id: string }[]).map((r) => r.id);
+  push("units", unitRows.results as Record<string, unknown>[]);
+  const unitPlaceholders = unitIds.map(() => "?").join(", ");
   for (const table of PRIVACY_SCAN_UNIT_TABLES) {
-    const res = await env.DB.prepare(`SELECT * FROM ${table} WHERE unit_id IN (?, ?)`).bind(DEMO_UNIT_ID, DEMO_UNIT2_ID).all();
+    const res =
+      unitIds.length > 0
+        ? await env.DB.prepare(`SELECT * FROM ${table} WHERE unit_id IN (${unitPlaceholders})`).bind(...unitIds).all()
+        : { results: [] as Record<string, unknown>[] };
     push(table, res.results as Record<string, unknown>[]);
   }
-  // units（unit_id列が無い）と users（unitに属さない）は主键で絞る
-  const units = await env.DB.prepare("SELECT * FROM units WHERE id IN (?, ?)").bind(DEMO_UNIT_ID, DEMO_UNIT2_ID).all();
-  push("units", units.results as Record<string, unknown>[]);
+  // users（unitに属さない）はseedが作る固定ID（実環境でも同じIDで作られるため固定ID引きで正しい）
   const users = await env.DB.prepare("SELECT * FROM users WHERE id IN (?, ?, ?, ?)")
     .bind(DEMO_ADMIN_USER, DEMO_OFFICER_USER, DEMO_OPERATOR_USER, DEMO_MEMBER_USER).all();
   push("users", users.results as Record<string, unknown>[]);
@@ -1227,12 +1498,12 @@ async function main(): Promise<void> {
       if (!unitRow) {
         targets = { unitId: DEMO_UNIT_ID, adminMemberId: DEMO_ADMIN_MEMBER, createUnit: true, sequenceStart: 0 };
       } else {
+        // T090-D7: 管理者の解決は作成順（bootstrap由来=最初に作られた管理者）で決定的に並べてからLIMIT 1
         const adminRow =
+          (d1Json(demoAdminPickSqlLiteral(unitRow.id))[0] as { member_id: string } | undefined) ??
           (d1Json(
-            `SELECT m.id AS member_id FROM members m JOIN member_roles r ON r.unit_id = m.unit_id AND r.member_id = m.id ` +
-              `WHERE m.unit_id = '${unitRow.id}' AND r.role_id = '${ROLE_IDS.admin}' LIMIT 1`,
-          )[0] as { member_id: string } | undefined) ??
-          (d1Json(`SELECT id AS member_id FROM members WHERE unit_id = '${unitRow.id}' LIMIT 1`)[0] as { member_id: string } | undefined);
+            `SELECT id AS member_id FROM members WHERE unit_id = '${unitRow.id}' ORDER BY created_at ASC, id ASC LIMIT 1`,
+          )[0] as { member_id: string } | undefined);
         if (!adminRow) throw new Error("seed-demo: 宮之浦分団に団員がいません（bootstrap-adminを先に実行してください）");
         const seqRow = d1Json(`SELECT event_sequence AS n FROM units WHERE id = '${unitRow.id}'`)[0] as { n: number } | undefined;
         targets = { unitId: unitRow.id, adminMemberId: adminRow.member_id, createUnit: false, sequenceStart: seqRow?.n ?? 0 };
@@ -1269,6 +1540,13 @@ async function main(): Promise<void> {
       // 最後の行が資格情報のJSON（scripts/demo.ts がこの行だけを拾って表示する。パスワードをログへ複製しないため）
       console.log(JSON.stringify({ "demo-accounts": credentials.map((c) => ({ email: c.email, password: c.password, role: c.role, displayName: c.memberName })) }));
     }
+
+    // --- 体験アカウントとownerを出欠・お知らせの対象へ加え、体験宛の通知/タスクと様式の補正を当てる
+    //     （T090。体験アカウントは上で作られている〔または既にある〕ため、membersへのFKが成立する。
+    //     全てNOT EXISTS / 相関UPDATEで冪等=再実行しても二重に作らない） ---
+    const aug = await buildDemoAccountAugmentation({ unitId });
+    await applySql("demo-augmentation.sql", [...aug.templates, ...aug.audience, ...aug.notification, ...aug.task]);
+    console.log("体験アカウントの対象拡充・体験宛の通知/タスク・様式の補正を当てました（T090。全て空振り安全）");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

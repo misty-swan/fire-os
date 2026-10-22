@@ -3398,63 +3398,63 @@
    "source": "T089営業デモの実機利用（利用者報告）＋調査A/B/C（.superpowers/sdd/2026-10-21-public-demo-miyanoura/investigation-A.md,B,C）",
    "summary": "デモで点検登録を開始できない: seedが様式版をapprovedで直接INSERTする一方で inspection_templates.current_version_id を設定しないため、選択条件（現行版が承認済み）をどの様式も通らない。加えて承認版のitem_schemaが空配列",
    "severity": "high",
-   "status": "open",
-   "basis": "seed-demo.tsの様式groupは直接INSERTで承認API（routes/inspection-templates.ts の current_version_id 設定）を通らない。ピッカー条件は InspectionForm.tsx の t.currentVersion?.status==='approved'。リモート・ローカル両方で壊れ、行数比較では検出不能（調査A/B実測）。DEMO_SCRIPT④⑤（点検→異常→AI）が壊れる",
-   "owner": "T089修正"
+   "status": "resolved",
+   "basis": "T090で修正: seed計画が様式3種（facility/vehicle/equipment）の承認版を実項目付き（item_schema≥2項目）で作り、rootへ current_version_id のUPDATE（承認APIと同じ形）を設定。増幅SQL（buildDemoAccountAugmentation）は実環境の既存データにも「実項目を持つ承認版が無い様式へ追い版（承認済み版は不変トリガーのためUPDATE不可）＋ポインタ付け替え」で同じ結果へ導く。試験 tests/seed-miyanoura.test.ts approved_templates_point_at_versions_with_real_items＋ローカルdemo実DBで3様式とも ptr=1/items=4 を実測",
+   "owner": "T090"
   },
   {
    "id": "T089-D2",
    "source": "調査C（investigation-C.md）",
    "summary": "体験アカウント3本とownerが予定の回答対象（activity_audience）から外れており出欠回答が403。お知らせも対象がseed名簿のみで体験アカウントの一覧が空",
    "severity": "high",
-   "status": "open",
-   "basis": "activity_audience はseedの架空名簿16名のみ（体験3本＋ownerは対象外を実測）。DEMO_SCRIPT⑥（出欠回答）が壊れる",
-   "owner": "T089修正"
+   "status": "resolved",
+   "basis": "T090で修正: activity_audience/notification_recipients/tasks は members へのFK(RESTRICT)があり体験団員（demoAccountStatementsがplan適用後に作る）をplanに書けないため、体験アカウント投入直後にCLIが増幅SQL（対象を「その時の全団員active」へ広げる。issue本文の代替案「audienceを全団員にする」）を当てる。試験 tests/seed-miyanoura.test.ts experience_accounts_and_owner_join_the_demo_after_account_creation＋ローカルdemo実DBで体験3本・ownerとも audience_rows=3（予定3本ぶん）を出欠回答0件のまま実測（＝未回答1以上も保証）",
+   "owner": "T090"
   },
   {
    "id": "T089-D3",
    "source": "調査C",
    "summary": "資産（車両・資機材）点検用の様式がゼロ（施設用1件のみ）。資産点検の導線が様式選択から始まらない",
    "severity": "medium",
-   "status": "open",
-   "basis": "inspection_templates はfacility用1件のみ（両側実測）。車両・資機材点検ができない",
-   "owner": "T089修正"
+   "status": "resolved",
+   "basis": "T090で修正: 様式をtarget_typeごとに3種（facility/vehicle/equipment）作成（issue本文の「1件」は台数でなく種別の読み替え。車両・資機材の両導線に必要）。DEMO_PROFILE.inspection_templates 1→3。試験はD1と同じ approved_templates_point_at_versions_with_real_items（target_typeの3種ちょうどを断言）",
+   "owner": "T090"
   },
   {
    "id": "T089-D4",
    "source": "調査C",
    "summary": "通知の受信箱が体験アカウント全員で空（唯一の1通はowner宛）。AIレビュー一覧も初期空",
    "severity": "medium",
-   "status": "open",
-   "basis": "notificationsの対象がseed名簿のみ（C実測）。営業台本の通知タブとAI画面の初見表示が空で壊れたように見える",
-   "owner": "T089修正"
+   "status": "resolved",
+   "basis": "T090で修正: ①体験3本宛の通知1通（体験幹部だけ既読・他は未読）を増幅SQLで追加 ②AIレビュー候補1件（ai_evaluations status=pending・源はneeds_reviewの点検・jobs行succeeded付きでFK成立）をseed計画に追加。試験 tests/seed-miyanoura.test.ts ai_review_candidate_is_pending_on_a_needs_review_inspection＋experience_accounts_…（既読1通・未読2通を断言）＋ローカルdemo実DBで ai_pending=1・recipients=4（owner+体験3）・read=1 を実測",
+   "owner": "T090"
   },
   {
    "id": "T089-D5",
    "source": "調査C",
    "summary": "ホームのタイル（未回答・確認待ち異常・点検期限・タスク・通知）が全て0で並ぶ。初期データに「未回答/確認待ち/期限臨近」を作っていない",
    "severity": "medium",
-   "status": "open",
-   "basis": "C実測: 未回答0・確認待ち0（reportedのみカウント・実データは確認中/対応中）・期限0・タスク0・通知0。DEMO_SCRIPT②（ホーム見せ）が機能しない",
-   "owner": "T089修正"
+   "status": "resolved",
+   "basis": "T090で修正: ①未回答=体験3本とownerを対象へ加え出欠回答を作らない（D2の増幅。ローカルdemo実測 experience_answered_rows=0） ②確認待ち=手動起票の異常をreported（未確認）のままに（試験 manual_issue_is_reported_until_confirmed） ③期限=車両1台のscheduleを過去日2026-10-19で（NOW固定2026-10-20より前=常に超過。試験 vehicle_inspection_schedule_is_overdue） ④タスク=体験団員の担当タスク1件を増幅SQLで（in_progress） ⑤通知=D4の未読1通。ローカルdemo実DBで reported=1・schedules=1・open_tasks=2 を実測",
+   "owner": "T090"
   },
   {
    "id": "T089-D6",
    "source": "調査A（investigation-A.md）",
    "summary": "seedのプライバシー走査（collectDemoPrivacyRows）が固定ID参照のため、実環境（bootstrap由来のUUIDが異なるunit）では0行を走査して恒真に戻る",
    "severity": "low",
-   "status": "open",
-   "basis": "固定DEMO_*_IDで行を引くため実unitでは検査対象が存在しない（A実測）",
-   "owner": "T089修正"
+   "status": "resolved",
+   "basis": "T090で修正: 走査対象のunitを固定IDでなく名前（宮之浦分団/第二分団）で解決（units.nameに一意制約が無いため同名は全て走査）。usersはplanが実環境でも固定IDで作るため固定ID引きを維持。試験 tests/demo-isolation.test.ts privacy_scan_follows_unit_names_not_fixed_ids（固定IDでないUUIDの同名unit＋団員1名を挿入し走査が拾うこと=17名を断言。後片付けで16名へ戻ることも断言）",
+   "owner": "T090"
   },
   {
    "id": "T089-D7",
    "source": "調査A",
    "summary": "seedの管理者解決（member_roles LIMIT 1）が非決定的。bootstrap管理者と体験管理者の両方が該当し得る",
    "severity": "low",
-   "status": "open",
-   "basis": "seed-demo.tsのtargets解決。どちらのmemberに紐くaudience/文書等が作られるか環境で揺れる",
-   "owner": "T089修正"
+   "status": "resolved",
+   "basis": "T090で修正: 解決クエリへ ORDER BY m.created_at ASC, m.id ASC を付け、最初に作られた管理者（=bootstrap由来。体験アカウントはseed後に作られるため必ず後）へ決定的に解決。workerd側（resolveDemoTargets）とCLI側（demoAdminPickSqlLiteral へ共通化）の両方。試験 tests/demo-isolation.test.ts seed_admin_resolution_prefers_the_earliest_created_admin（2026-01-01作成の管理者を後から足しても選ばれること）＋tests/seed-miyanoura.test.ts admin_resolution_sql_orders_deterministically",
+   "owner": "T090"
   }
  ],
  "knownSkips": []

@@ -33,3 +33,10 @@
 - `wrangler d1 execute --remote` はSQLの `BEGIN TRANSACTION` を拒否する（D1の仕様）。seed/wipeのSQLから明示的トランザクションを除去（**e7cba90**・正の対照つき）。ローカルでは許容されるため従来の試験では発見できなかった。`scripts/seed-load.ts`（local専用）は未変更。
 - R2はアカウントで初回のみダッシュボードでの有効化（checkout）が必要（code 10042）。 ops/demo-provisioning.md §1へ補足追記済み。
 - Mapsキーはビルドルート（`src/client`）の `.env.local` から読まれる（リポジト直下ではない）。opsの該当箇所を修正済み。
+
+## T090 デモ欠陥修正の反映（2026-10-22・GitHub issues #1〜#7）
+
+- **修正内容**: seed計画の様式3種（施設・車両・資機材）を実項目付き承認版+現行版ポインタ設定で作り直し、体験アカウント3本とownerを出欠・お知らせの対象へ加え（増幅SQL=`buildDemoAccountAugmentation`。体験宛の通知1通〔1通だけ既読〕と体験団員の担当タスク1件を含む）、AIレビュー候補1件（pending）と期限超過の車両点検schedule、手動起票異常のreported（未確認）を初期データに追加。プライバシー走査はunit名解決へ、seedの管理者解決は作成順（bootstrap由来優先）で決定的に（D1〜D7）。詳細はdocs/16 T090・課題台帳（tests/acceptance/manifest.json）の各basis。
+- **ローカル実証**: `demo:reset` 相当（persist作り直し→migration→bootstrap-admin→seed CLI）で実DBを確認 — 様式3種とも current_version_id 設定・item_schema 4項目 / 体験3本+ownerとも activity_audience 3行（出欠回答0行=未回答1以上）/ 通知 recipients=4（既読1）/ 進行中タスク2（体験団員の担当を含む）/ reported異常1 / schedule 1（2026-10-19で超過）/ ai_evaluations pending=1。
+- **実環境（fireos-demo）への反映**: 承認済み様式版は不変トリガーでUPDATEできないため、**週次リセット（demo:reset:remote --wipe＝全表DROP→migration→seed。demo-reset.yml）で完全反映**する。本修正のpush後、workflow_dispatch（または次回月曜01:00 JSTのcron）で実行する。wipe無しの `demo:seed:remote` でも増幅SQL（対象の拡充・体験宛通知/タスク・様式の追い版+ポインタ付け替え）で主要導線は回復するが、既存の空項目・対象ずれの行が残るため、正規の手順は週次リセットどおり。
+- **週次リセット後の初回確認（営業前チェックリストへ）**: 体験アカウントで①ホームの数字タイルが0でない ②点検登録の様式選択に3様式が出て項目が入力できる ③予定の出欠回答が403にならない ④通知タブとAIレビュー一覧が空でない。

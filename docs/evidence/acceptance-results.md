@@ -8,21 +8,21 @@
 
 | 項目 | 値 |
 |---|---|
-| 収集日時 | 2026-10-22T01:40:20.049Z |
-| commit | c1973daab3973153fb6ca689531c13cdc057c32d |
-| codeHash | cb9f2d0db4f57ba1ee02c3083d12591a8d69db675c192a98523281e7f07050c9 |
+| 収集日時 | 2026-10-22T04:43:48.213Z |
+| commit | b7ba2dac561f44d3418ceb8cd2d4c56b8f6049e1（未コミットのコード変更 3件を含む作業木で実行。内容はcodeHashで固定） |
+| codeHash | 9a7189b57c083428be955534dbcc83aaec61c0c96079900220baeec47b591432 |
 | 設計版 | 08:v0.3 / 2026-10-13 12:v0.3 / 2026-10-15 |
 | 実行環境 | node v26.8.2 / linux-x64 / Playwright 1.64.0 / vitest/4.1.11 linux-x64 node-v26.8.2 / wrangler 4.150.0 |
-| ゲート判定 | **赤**（ok） |
+| ゲート判定 | **緑**（開発版の範囲） |
 
 ## スイート
 
 | スイート | 結果 | passed | failed | skipped | 開始 | 終了 | コマンド |
 |---|---|---|---|---|---|---|---|
-| vitest | passed | 371 | 0 | 0 | 2026-10-22T01:33:07.346Z | 2026-10-22T01:34:14.702Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T01-33-06-874Z/vitest.json` |
-| load | passed | 3 | 0 | 0 | 2026-10-22T01:34:14.702Z | 2026-10-22T01:34:47.542Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T01-33-06-874Z/load.json` |
-| e2e | passed | 75 | 0 | 0 | 2026-10-22T01:34:47.542Z | 2026-10-22T01:40:20.028Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
-| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-22T01:40:20.028Z | 2026-10-22T01:40:20.028Z | `npm run test:live` |
+| vitest | passed | 379 | 0 | 0 | 2026-10-22T04:37:03.608Z | 2026-10-22T04:37:50.654Z | `npx vitest --run --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T04-37-03-152Z/vitest.json` |
+| load | passed | 3 | 0 | 0 | 2026-10-22T04:37:50.654Z | 2026-10-22T04:38:20.564Z | `npx vitest --run --config vitest.load.config.ts --reporter=default --reporter=json --outputFile.json=test-results/acceptance/2026-10-22T04-37-03-152Z/load.json` |
+| e2e | passed | 75 | 0 | 0 | 2026-10-22T04:38:20.564Z | 2026-10-22T04:43:48.192Z | `npx playwright test --project=setup --project=phone-360 --project=desktop-1280 --project=tablet-768 --reporter=list,json` |
+| live | **未実施**（未実施: 実Cloudflare(staging)のSecret未設定（LIVE_BASE_URL, LIVE_BOOTSTRAP_TOKEN, LIVE_BOOTSTRAP_EMAIL）。合格に数えない（コントローラ裁定R4）） | 0 | 0 | 0 | 2026-10-22T04:43:48.192Z | 2026-10-22T04:43:48.192Z | `npm run test:live` |
 
 ## 件数（正本から機械抽出）
 
@@ -206,10 +206,10 @@
 | PH7-L | low | resolved | ai.calls計上位置・Retry-After固定・理由コード不統一・ラベル語彙ほか | docs/evidence/ph7-review.md「方針で残す」1〜9 | T086（low対応）で9項目を個別判定。修正4: ①A低1 ai.calls計上位置=classification.ts・report.tsともenv.AI存在確認より前で計上していたのを呼び出し可能を確認した後へ移動（RAG・アシスタントと同じ位置。AI無し環境のmanual_reviewで枠の母数が汚れない。jev.test.ts/report-generation.test.tsのai_unavailable試験へ「ai.callsが増えない」断言を追加し旧実装で赤→緑）②A低2 user次元429のRetry-After=enforceUserRateLimitが窓計算値をHttpErrorの追加headersで渡し、共通onError→errorResponseに出す（IP次元と同じ計算値。abuse.test.ts user次元試験の窓を5秒にして「Retry-After≤5秒」断言を追加し旧実装の包括既定60秒で赤→緑）③再レビュー軽微1 budget_stoppedラベル=「AIの月次上限に達したため」を中立語彙「AIの呼び出しが上限により停止されているため」へ（serverは全停止理由〔日次枠・通知枠・429許容・費用試算・手動停止〕で同コードを返すため理由を断定しない。client-job-error-labels.test.tsxへ「月次上限を含まない」断言を追加し赤→緑）④再レビュー軽微3 limits.ts開発設定コメントの「負荷検証」をdocs/05 §1・docs/07 §2と同じ「公開設定時の検証」へ統一。他タスクで既に解消2: C低4（OperationsPanelの403=FORBIDDEN Banner統一）はT083 R3で解消、#9（documents.specトースト断言のフレーク）はT083 R4で応答待ち＋role=statusスコープ待ちへ作り直し済み（T085b以降フルe2e 3回連続緑で未再発）。記録で決着3: B低2（報告書のtest:load数え間違い）はリポジトリ外のため修正しない（証跡正本はph7.md）・C低3（OperationsPanel内の理由コード扱い）は評価実行の失敗=生コード提示がAiEvaluationPanel前例・監査の停止理由=BUDGET_REASON_CODES閉集合の日本語化で領域別の整理として現状維持・再レビュー軽微2（docs/16 T086節対応行へのNFR-08追記）はdocs/16が本対応の対象外のためT086本体のdocs更新時に残す→T086 docs担当が追記済み（2026-10-20） | T086 |
 | PH8-L | low | open | sync_recoverの手動再送の非決定性・FORBIDDEN語彙・注記の文体差・Google Fonts停止時のアイコン表示ほか | docs/evidence/ph8-review.md「方針で残す」（T083・T084） | ph8-review「方針で残す」（低・軽微） | - |
 | T085-O1 | low | open | API-51の異常の子Pageは未接続（APIはT032で完了） | T085で観察 | docs/05 API-51行に残作業として記録 | 未割当 |
-| T089-D1 | high | open | デモで点検登録を開始できない: seedが様式版をapprovedで直接INSERTする一方で inspection_templates.current_version_id を設定しないため、選択条件（現行版が承認済み）をどの様式も通らない。加えて承認版のitem_schemaが空配列 | T089営業デモの実機利用（利用者報告）＋調査A/B/C（.superpowers/sdd/2026-10-21-public-demo-miyanoura/investigation-A.md,B,C） | seed-demo.tsの様式groupは直接INSERTで承認API（routes/inspection-templates.ts の current_version_id 設定）を通らない。ピッカー条件は InspectionForm.tsx の t.currentVersion?.status==='approved'。リモート・ローカル両方で壊れ、行数比較では検出不能（調査A/B実測）。DEMO_SCRIPT④⑤（点検→異常→AI）が壊れる | T089修正 |
-| T089-D2 | high | open | 体験アカウント3本とownerが予定の回答対象（activity_audience）から外れており出欠回答が403。お知らせも対象がseed名簿のみで体験アカウントの一覧が空 | 調査C（investigation-C.md） | activity_audience はseedの架空名簿16名のみ（体験3本＋ownerは対象外を実測）。DEMO_SCRIPT⑥（出欠回答）が壊れる | T089修正 |
-| T089-D3 | medium | open | 資産（車両・資機材）点検用の様式がゼロ（施設用1件のみ）。資産点検の導線が様式選択から始まらない | 調査C | inspection_templates はfacility用1件のみ（両側実測）。車両・資機材点検ができない | T089修正 |
-| T089-D4 | medium | open | 通知の受信箱が体験アカウント全員で空（唯一の1通はowner宛）。AIレビュー一覧も初期空 | 調査C | notificationsの対象がseed名簿のみ（C実測）。営業台本の通知タブとAI画面の初見表示が空で壊れたように見える | T089修正 |
-| T089-D5 | medium | open | ホームのタイル（未回答・確認待ち異常・点検期限・タスク・通知）が全て0で並ぶ。初期データに「未回答/確認待ち/期限臨近」を作っていない | 調査C | C実測: 未回答0・確認待ち0（reportedのみカウント・実データは確認中/対応中）・期限0・タスク0・通知0。DEMO_SCRIPT②（ホーム見せ）が機能しない | T089修正 |
-| T089-D6 | low | open | seedのプライバシー走査（collectDemoPrivacyRows）が固定ID参照のため、実環境（bootstrap由来のUUIDが異なるunit）では0行を走査して恒真に戻る | 調査A（investigation-A.md） | 固定DEMO_*_IDで行を引くため実unitでは検査対象が存在しない（A実測） | T089修正 |
-| T089-D7 | low | open | seedの管理者解決（member_roles LIMIT 1）が非決定的。bootstrap管理者と体験管理者の両方が該当し得る | 調査A | seed-demo.tsのtargets解決。どちらのmemberに紐くaudience/文書等が作られるか環境で揺れる | T089修正 |
+| T089-D1 | high | resolved | デモで点検登録を開始できない: seedが様式版をapprovedで直接INSERTする一方で inspection_templates.current_version_id を設定しないため、選択条件（現行版が承認済み）をどの様式も通らない。加えて承認版のitem_schemaが空配列 | T089営業デモの実機利用（利用者報告）＋調査A/B/C（.superpowers/sdd/2026-10-21-public-demo-miyanoura/investigation-A.md,B,C） | T090で修正: seed計画が様式3種（facility/vehicle/equipment）の承認版を実項目付き（item_schema≥2項目）で作り、rootへ current_version_id のUPDATE（承認APIと同じ形）を設定。増幅SQL（buildDemoAccountAugmentation）は実環境の既存データにも「実項目を持つ承認版が無い様式へ追い版（承認済み版は不変トリガーのためUPDATE不可）＋ポインタ付け替え」で同じ結果へ導く。試験 tests/seed-miyanoura.test.ts approved_templates_point_at_versions_with_real_items＋ローカルdemo実DBで3様式とも ptr=1/items=4 を実測 | T090 |
+| T089-D2 | high | resolved | 体験アカウント3本とownerが予定の回答対象（activity_audience）から外れており出欠回答が403。お知らせも対象がseed名簿のみで体験アカウントの一覧が空 | 調査C（investigation-C.md） | T090で修正: activity_audience/notification_recipients/tasks は members へのFK(RESTRICT)があり体験団員（demoAccountStatementsがplan適用後に作る）をplanに書けないため、体験アカウント投入直後にCLIが増幅SQL（対象を「その時の全団員active」へ広げる。issue本文の代替案「audienceを全団員にする」）を当てる。試験 tests/seed-miyanoura.test.ts experience_accounts_and_owner_join_the_demo_after_account_creation＋ローカルdemo実DBで体験3本・ownerとも audience_rows=3（予定3本ぶん）を出欠回答0件のまま実測（＝未回答1以上も保証） | T090 |
+| T089-D3 | medium | resolved | 資産（車両・資機材）点検用の様式がゼロ（施設用1件のみ）。資産点検の導線が様式選択から始まらない | 調査C | T090で修正: 様式をtarget_typeごとに3種（facility/vehicle/equipment）作成（issue本文の「1件」は台数でなく種別の読み替え。車両・資機材の両導線に必要）。DEMO_PROFILE.inspection_templates 1→3。試験はD1と同じ approved_templates_point_at_versions_with_real_items（target_typeの3種ちょうどを断言） | T090 |
+| T089-D4 | medium | resolved | 通知の受信箱が体験アカウント全員で空（唯一の1通はowner宛）。AIレビュー一覧も初期空 | 調査C | T090で修正: ①体験3本宛の通知1通（体験幹部だけ既読・他は未読）を増幅SQLで追加 ②AIレビュー候補1件（ai_evaluations status=pending・源はneeds_reviewの点検・jobs行succeeded付きでFK成立）をseed計画に追加。試験 tests/seed-miyanoura.test.ts ai_review_candidate_is_pending_on_a_needs_review_inspection＋experience_accounts_…（既読1通・未読2通を断言）＋ローカルdemo実DBで ai_pending=1・recipients=4（owner+体験3）・read=1 を実測 | T090 |
+| T089-D5 | medium | resolved | ホームのタイル（未回答・確認待ち異常・点検期限・タスク・通知）が全て0で並ぶ。初期データに「未回答/確認待ち/期限臨近」を作っていない | 調査C | T090で修正: ①未回答=体験3本とownerを対象へ加え出欠回答を作らない（D2の増幅。ローカルdemo実測 experience_answered_rows=0） ②確認待ち=手動起票の異常をreported（未確認）のままに（試験 manual_issue_is_reported_until_confirmed） ③期限=車両1台のscheduleを過去日2026-10-19で（NOW固定2026-10-20より前=常に超過。試験 vehicle_inspection_schedule_is_overdue） ④タスク=体験団員の担当タスク1件を増幅SQLで（in_progress） ⑤通知=D4の未読1通。ローカルdemo実DBで reported=1・schedules=1・open_tasks=2 を実測 | T090 |
+| T089-D6 | low | resolved | seedのプライバシー走査（collectDemoPrivacyRows）が固定ID参照のため、実環境（bootstrap由来のUUIDが異なるunit）では0行を走査して恒真に戻る | 調査A（investigation-A.md） | T090で修正: 走査対象のunitを固定IDでなく名前（宮之浦分団/第二分団）で解決（units.nameに一意制約が無いため同名は全て走査）。usersはplanが実環境でも固定IDで作るため固定ID引きを維持。試験 tests/demo-isolation.test.ts privacy_scan_follows_unit_names_not_fixed_ids（固定IDでないUUIDの同名unit＋団員1名を挿入し走査が拾うこと=17名を断言。後片付けで16名へ戻ることも断言） | T090 |
+| T089-D7 | low | resolved | seedの管理者解決（member_roles LIMIT 1）が非決定的。bootstrap管理者と体験管理者の両方が該当し得る | 調査A | T090で修正: 解決クエリへ ORDER BY m.created_at ASC, m.id ASC を付け、最初に作られた管理者（=bootstrap由来。体験アカウントはseed後に作られるため必ず後）へ決定的に解決。workerd側（resolveDemoTargets）とCLI側（demoAdminPickSqlLiteral へ共通化）の両方。試験 tests/demo-isolation.test.ts seed_admin_resolution_prefers_the_earliest_created_admin（2026-01-01作成の管理者を後から足しても選ばれること）＋tests/seed-miyanoura.test.ts admin_resolution_sql_orders_deterministically | T090 |
