@@ -274,4 +274,55 @@ describe("参集・到着・帰還の本人/代理記録 (T041)", () => {
     );
     expect(ok2000.status).toBe(201);
   });
+
+  it("participant_record_on_voided_incident_is_rejected", async () => {
+    const admin = fx.units.a.people.admin;
+    const member = fx.units.a.people.member;
+    const createRes = await fx.client(admin).request("POST", "/api/v1/incidents", {
+      kind: "training", occurredAt: "2026-10-12T22:00:00.000Z", summary: "取消済み出動への参集記録の試験（架空）",
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const inc = (await json(createRes)).data! as unknown as { id: string; version: number };
+    const put = (body: Record<string, unknown>, headers = idem()) =>
+      fx.client(member).request("PUT", `/api/v1/incidents/${inc.id}/participants/${member.memberId}`, body, headers);
+
+    // 取消前に記録（対照: 同じキーの再送は取消後も保存済み応答を返す）
+    const key = crypto.randomUUID();
+    const before = await put({ version: 0, attendanceStatus: "mobilizing" }, { "idempotency-key": key });
+    expect(before.status).toBe(201);
+    const beforeData = (await json(before)).data;
+
+    const voidRes = await fx.client(admin).request("PATCH", `/api/v1/incidents/${inc.id}`, {
+      version: inc.version, status: "voided", reason: "誤登録のため取消（架空）",
+    }, idem());
+    expect(voidRes.status).toBe(200);
+
+    const replay = await put({ version: 0, attendanceStatus: "mobilizing" }, { "idempotency-key": key });
+    expect(replay.status).toBe(201);
+    expect((await json(replay)).data).toEqual(beforeData);
+
+    // 取消後の新しい記録は422（行は増えない・状態も進まない）
+    const res = await put({ version: 1, attendanceStatus: "arrived" });
+    expect(res.status).toBe(422);
+    const err = (await json(res)).error;
+    expect(err?.code).toBe("INVALID_TRANSITION");
+    expect(err?.details?.[0]?.reason).toBe("voided_is_terminal");
+    const rows = await fx.rows("incident_participants", { incident_id: inc.id });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.attendance_status).toBe("mobilizing");
+
+    // 取消後の新規行（別団員の代理でなく、行の無い本人分）も作れない
+    const inc2Res = await fx.client(admin).request("POST", "/api/v1/incidents", {
+      kind: "training", occurredAt: "2026-10-12T23:00:00.000Z", summary: "取消直後の新規参集の試験（架空）",
+    }, idem());
+    const inc2 = (await json(inc2Res)).data! as unknown as { id: string; version: number };
+    await fx.client(admin).request("PATCH", `/api/v1/incidents/${inc2.id}`, {
+      version: inc2.version, status: "voided", reason: "誤登録のため取消（架空）",
+    }, idem());
+    const fresh = await fx.client(member).request("PUT", `/api/v1/incidents/${inc2.id}/participants/${member.memberId}`,
+      { version: 0, attendanceStatus: "arrived" }, idem());
+    expect(fresh.status).toBe(422);
+    expect((await json(fresh)).error?.details?.[0]?.reason).toBe("voided_is_terminal");
+    expect(await fx.rows("incident_participants", { incident_id: inc2.id })).toHaveLength(0);
+  });
 });

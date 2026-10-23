@@ -124,6 +124,13 @@ export async function buildResourceUsageMutation(
     if (op.version !== input.operationVersion) {
       throw new HttpError("VERSION_CONFLICT", undefined, [{ field: "version", reason: "operation_version_mismatch" }]);
     }
+    // 取消済み(voided)の出動に紐づく出来事は読み取り専用（T091-S5。リンク後はincidents.operation_idが活動のoperationを指す）
+    const voided = await c.env.DB.prepare(
+      "SELECT 1 FROM incidents WHERE unit_id = ? AND operation_id = ? AND status = 'voided'",
+    ).bind(p.unitId, input.operationId).first();
+    if (voided) {
+      throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "voided_is_terminal" }]);
+    }
   }
 
   // 2) 入力の検査（docs/04:100。対象ちょうど一つ/quantity>0/時間順序/重複id。違反は通ってから500にしない）。
@@ -152,6 +159,16 @@ export async function buildResourceUsageMutation(
   // batch内でも同じ条件を検査し、読み取り後の廃止・削除は500のFK違反でなく404になるようにする。
   // 再送（鍵あり）では状態前提の読み取りをしない（その間の廃止で再送が404になるのを避ける。docs/05 §2）
   const conditions: ExtraCondition[] = [];
+  if (!knownKey) {
+    // 読み取り後に取り消された出動への書き込みも落とす（T091-S5）
+    conditions.push({
+      existsSql:
+        "SELECT 1 FROM units u WHERE u.id = ? AND NOT EXISTS " +
+        "(SELECT 1 FROM incidents i WHERE i.unit_id = u.id AND i.operation_id = ? AND i.status = 'voided')",
+      binds: [p.unitId, input.operationId],
+      failCode: "INVALID_TRANSITION",
+    });
+  }
   const targets = new Map<string, { type: "vehicle" | "equipment"; id: string }>();
   if (!knownKey) {
     for (const u of input.usages) {

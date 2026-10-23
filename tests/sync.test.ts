@@ -364,4 +364,27 @@ describe("保留操作の同期 (T076)", () => {
     const restored = await fx.client(member).request("GET", `/api/v1/sync/operations/${applied.id}`);
     expect(restored.status).toBe(200);
   });
+
+  it("sync_participant_record_on_voided_incident_is_rejected", async () => {
+    const admin = fx.units.a.people.admin;
+    const member = fx.units.a.people.member;
+    const incRes = await fx.client(admin).request("POST", "/api/v1/incidents", {
+      kind: "training", occurredAt: "2026-10-15T02:00:00.000Z", summary: "取消済み出動への参集同期の試験（架空）",
+    }, idem());
+    expect(incRes.status).toBe(201);
+    const inc = (await json(incRes)).data! as unknown as { id: string; version: number };
+    const voidRes = await fx.client(admin).request("PATCH", `/api/v1/incidents/${inc.id}`, {
+      version: inc.version, status: "voided", reason: "誤登録のため取消（架空）",
+    }, idem());
+    expect(voidRes.status).toBe(200);
+
+    const cmd = await syncCmd({
+      operationCode: "incident.participant.record", targetId: inc.id, baseVersion: 0,
+      payload: { attendanceStatus: "mobilizing", times: { mobilizedAt: "2026-10-15T02:05:00.000Z" } },
+    });
+    const res = await postSync(member, cmd);
+    expect(res.status).toBe(422);
+    expect((await json(res)).error?.code).toBe("INVALID_TRANSITION");
+    expect(await fx.rows("incident_participants", { incident_id: inc.id })).toHaveLength(0);
+  });
 });

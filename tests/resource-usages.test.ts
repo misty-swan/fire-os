@@ -316,4 +316,36 @@ describe("車両/機材の使用履歴と訂正 (T042)", () => {
     expect((await fx.rows("operations", { id: inc.operationId }))[0]!.version).toBe(opBefore); // 版も進まない
     expect((await put()).status).toBe(200);
   });
+
+  it("resource_usage_replace_on_voided_incident_is_rejected", async () => {
+    const admin = fx.units.a.people.admin;
+    const vehicleRes = await fx.client(admin).request("POST", "/api/v1/vehicles", {
+      assetCode: "VEH-S5-VOID", name: "取消試験用ポンプ車（架空）", status: "運用",
+    }, idem());
+    expect(vehicleRes.status).toBe(201);
+    const vehicleId = ((await json(vehicleRes)).data! as { id: string }).id;
+    const incRes = await fx.client(admin).request("POST", "/api/v1/incidents", {
+      kind: "training", occurredAt: "2026-10-12T22:00:00.000Z", summary: "取消済み出動への資機材使用の試験（架空）",
+    }, idem());
+    expect(incRes.status).toBe(201);
+    const inc = (await json(incRes)).data! as unknown as { id: string; version: number; operationId: string };
+    const put = (version: number, headers = idem()) =>
+      fx.client(admin).request("PUT", `/api/v1/operations/${inc.operationId}/resource-usages`, {
+        version, reason: "取消後の使用記録（架空）", usages: [{ target: { type: "vehicle", id: vehicleId }, quantity: 1 }],
+      }, headers);
+
+    const voidRes = await fx.client(admin).request("PATCH", `/api/v1/incidents/${inc.id}`, {
+      version: inc.version, status: "voided", reason: "誤登録のため取消（架空）",
+    }, idem());
+    expect(voidRes.status).toBe(200);
+    const opVersion = (await fx.rows("operations", { id: inc.operationId }))[0]!.version as number;
+
+    const res = await put(opVersion);
+    expect(res.status).toBe(422);
+    const err = (await json(res)).error;
+    expect(err?.code).toBe("INVALID_TRANSITION");
+    expect(err?.details?.[0]?.reason).toBe("voided_is_terminal");
+    expect(await fx.rows("resource_usages", { operation_id: inc.operationId, status: "active" })).toHaveLength(0);
+    expect((await fx.rows("operations", { id: inc.operationId }))[0]!.version).toBe(opVersion);
+  });
 });

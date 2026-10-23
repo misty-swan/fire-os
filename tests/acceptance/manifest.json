@@ -3506,8 +3506,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "取消済み（閲覧専用）の出動に参加記録（API-23・同期API-81の再生）と資機材使用（API-57）を書き込める",
    "severity": "low",
-   "status": "open",
-   "basis": "src/server/routes/incident-participants.ts・src/server/routes/resource-usages.ts が親の状態を見ない（API-69/71は422）。docs/11で取消は終端・閲覧専用。監査fingerprint incident-voided-child-writes-participants-resource-usages。修正はT091手順5",
+   "status": "resolved",
+   "basis": "T091手順5で修正: API-23（同期API-81の再生も同じbuilder）とAPI-57で、取消済み(voided)の出動への新規書き込みを422 INVALID_TRANSITION（voided_is_terminal）で拒否。早期検査に加えてbatch内conditionsでも再検査し、同じ鍵の再送は保存済み応答を返す。試験 tests/incident-participants.test.ts participant_record_on_voided_incident_is_rejected・tests/resource-usages.test.ts resource_usage_replace_on_voided_incident_is_rejected・tests/sync.test.ts sync_participant_record_on_voided_incident_is_rejected（修正前は200で赤→緑）",
    "owner": "T091"
   },
   {

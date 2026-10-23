@@ -68,8 +68,8 @@ export async function buildRecordParticipation(
   key: string,
   requestPath: string,
 ): Promise<BuiltParticipation> {
-  const incident = await env.DB.prepare("SELECT id, unit_id FROM incidents WHERE id = ?").bind(incidentId)
-    .first<{ id: string; unit_id: string }>();
+  const incident = await env.DB.prepare("SELECT id, unit_id, status FROM incidents WHERE id = ?").bind(incidentId)
+    .first<{ id: string; unit_id: string; status: string }>();
   if (!incident || incident.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
 
   const isSelf = targetMemberId === p.memberId;
@@ -106,6 +106,10 @@ export async function buildRecordParticipation(
     "SELECT 1 FROM idempotency_records WHERE actor_user_id = ? AND operation_code = ? AND idempotency_key = ?",
   ).bind(p.userId, OPERATION_CODE, key).first();
   if (!knownKey) {
+    // 取消済み(voided)の出動は終端で読み取り専用（T091-S5。API-69と同じ422。batch内でも下のconditionsで再検査する）
+    if (incident.status === "voided") {
+      throw new HttpError("INVALID_TRANSITION", undefined, [{ field: "status", reason: "voided_is_terminal" }]);
+    }
     if (!existing && body.version !== 0) {
       throw new HttpError("VERSION_CONFLICT", undefined, [{ field: "version", reason: "participant_row_missing" }]);
     }
@@ -172,6 +176,14 @@ export async function buildRecordParticipation(
       // INSERT(未作成, version=0)は作成後のversion=1、UPDATEはversion=期待+1を同じguardで検査する。
       // 行ありにversion=0を送った場合も、0行更新をassertionが検出して旧版の409になる
       { table: "incident_participants", id: participantId, expectedVersion: body.version },
+    ],
+    // 読み取り後に取り消された出動への書き込みも落とす（T091-S5。再送は上のknownKeyで先に解決される）
+    conditions: [
+      {
+        existsSql: "SELECT 1 FROM incidents WHERE id = ? AND unit_id = ? AND status <> 'voided'",
+        binds: [incidentId, p.unitId],
+        failCode: "INVALID_TRANSITION",
+      },
     ],
     statements: (ctx) => [
       existing
