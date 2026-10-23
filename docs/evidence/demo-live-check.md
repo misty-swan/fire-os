@@ -49,3 +49,10 @@
 - **実環境の事前確認（読み取りのみ・`wrangler d1 execute --remote`）**: 体験3本（de0015/de0018/de001b）とも `two_factor_enabled=0`、`auth_two_factors` の行0件＝**悪用の痕跡なし**。正準状態への戻し（ops/demo-deploy.md §5.1.1の手順4）は不要だったため未実施。
 - **配置**: `npx wrangler deploy --env demo`（2026-10-22T23:42Z UTC）。稼働version `919642a5-759b-4597-8b96-4ed0c3f2c3ef`（100%）。
 - **実URLでの拒否確認は未実施**: 体験アカウントのパスワードはGitHub Secretにだけあり手元に無いため、利用者判断で省略した。根拠は配置前ゲートの自動試験（実workerdでのログイン→enable/verify-totp/change-passwordが403・API-33が引き続きmfa_required）と稼働versionの一致まで。次に体験管理者でログインする機会に、設定画面の二要素設定がエラーになることを目視で確かめて本節へ追記する。
+
+## T091 S2〜S10 の反映（2026-10-23）
+
+- **対象**: commit 032ad0e（T091 S1〜S10の全修正。S2〜S10とS10の非圧縮stream計上を含む）。migrationなし（DBの形は不変）。
+- **配置前ゲート**: collect:evidence（vitest 398・load 3・業務e2e 76 合格・ゲート欠落0）と受入ゲート試験 合格。以後の変更はdocsのみ。typecheck・check:contracts・check:migrations・build・check:environment 合格。
+- **配置**: `npx wrangler deploy --env demo`（2026-10-23T00:48Z UTC）。稼働version `c384281b-8fc4-4229-94d6-a7148c01aa53`（100%）。
+- **配置後の確認（認証なしで行える範囲）**: `/` 200・`/login` 200・未定義API `/api/v1/no-such-route` がJSONの404（NOT_FOUND）。体験アカウントでの機能確認は、次の営業前チェック（上記T090節の4項目）と合わせて行う。
