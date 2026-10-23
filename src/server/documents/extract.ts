@@ -393,7 +393,8 @@ async function extractPdfPages(bytes: Uint8Array): Promise<ExtractedPage[]> {
   if (objects.size === 0) throw new DocumentExtractError("unextractable_document", "no_objects");
 
   // ObjStm（PDF1.5以降の圧縮オブジェクトコンテナ）を展開する
-  await expandObjectStreams(src, bytes, objects);
+  const budget: InflateBudget = { remaining: MAX_INFLATED_BYTES };
+  await expandObjectStreams(src, bytes, objects, budget);
 
   // 暗号化PDFは対象外（複合せず保留へ）
   for (const obj of objects.values()) {
@@ -436,12 +437,12 @@ async function extractPdfPages(bytes: Uint8Array): Promise<ExtractedPage[]> {
     for (const ref of contentRefs) {
       const obj = resolveObject(objects, ref);
       if (!obj) throw new DocumentExtractError("unextractable_document", "content_missing");
-      const decoded = await decodeStream(obj);
+      const decoded = await decodeStream(obj, budget);
       parts.push(new TextDecoder("latin1").decode(decoded));
     }
     pages.push({
       pageNo: index + 1,
-      text: await extractTextFromContent(parts.join(""), node.resources, objects, fontCache, src, bytes),
+      text: await extractTextFromContent(parts.join(""), node.resources, objects, fontCache, src, bytes, budget),
     });
   }
   return pages;
@@ -459,7 +460,7 @@ function resolveDict(objects: Map<number, PdfObject>, value: PdfValue | undefine
 }
 
 /** ObjStmの中に格納されたオブジェクトを展開してobjectsへ加える（PDF1.5以降の一般的な保存形） */
-async function expandObjectStreams(src: string, bytes: Uint8Array, objects: Map<number, PdfObject>): Promise<void> {
+async function expandObjectStreams(src: string, bytes: Uint8Array, objects: Map<number, PdfObject>, budget: InflateBudget): Promise<void> {
   for (const obj of [...objects.values()]) {
     if (obj.dict?.getName("Type") !== "ObjStm") continue;
     const count = obj.dict.get("N");
@@ -467,7 +468,7 @@ async function expandObjectStreams(src: string, bytes: Uint8Array, objects: Map<
     if (typeof count !== "number" || typeof first !== "number" || !obj.stream) continue;
     let data: string;
     try {
-      data = new TextDecoder("latin1").decode(await decodeStream(obj));
+      data = new TextDecoder("latin1").decode(await decodeStream(obj, budget));
     } catch (err) {
       if (err instanceof DocumentExtractError) throw err;
       throw new DocumentExtractError("unextractable_document", "objstm_decode_failed");
@@ -519,7 +520,7 @@ function collectPages(
 
 // --- ストリームの伸長（FlateDecodeのみ。予測子は未対応=例外にする） ---
 
-async function decodeStream(obj: PdfObject): Promise<Uint8Array> {
+async function decodeStream(obj: PdfObject, budget: InflateBudget): Promise<Uint8Array> {
   if (!obj.stream) throw new DocumentExtractError("unextractable_document", "no_stream");
   const dict = obj.dict;
   const filter = dict?.get("Filter");
@@ -539,7 +540,7 @@ async function decodeStream(obj: PdfObject): Promise<Uint8Array> {
     if (typeof predictor === "number" && predictor > 1) throw new DocumentExtractError("unextractable_document", "flate_predictor");
   }
   if (filters.length === 0) return obj.stream;
-  return inflate(obj.stream);
+  return inflate(obj.stream, budget);
 }
 
 /** zlib（FlateDecode）の展開。zlib形式で失敗したらraw deflateを試す（壊れたPDFは両方で失敗する）。
@@ -547,12 +548,19 @@ async function decodeStream(obj: PdfObject): Promise<Uint8Array> {
  *  メモリを大量消費させない。超過はunextractable_documentで例外→jobはmanual_review） */
 const MAX_INFLATED_BYTES = 32 * 1024 * 1024;
 
-async function inflate(stream: Uint8Array): Promise<Uint8Array> {
+/** 文書全体で共有する展開量の残り（T091-S10。/Contentsの同一ref反復や多数のToUnicodeで
+ *  streamごとの上限を掛け算で超えないよう、extractPdfPagesが1文書につき1つ作って全展開で使い回す） */
+interface InflateBudget {
+  remaining: number;
+}
+
+async function inflate(stream: Uint8Array, budget: InflateBudget): Promise<Uint8Array> {
   // DOM型のDecompressionStream.writableはBufferSource受けておりUint8ArrayのpipeThroughと合わないため、
   // 実行時の実型（Uint8Arrayをそのまま受ける）に揃えて使う
   const inflateStream = (format: "deflate" | "deflate-raw"): ReadableWritablePair<Uint8Array, Uint8Array> =>
     new DecompressionStream(format) as unknown as ReadableWritablePair<Uint8Array, Uint8Array>;
   for (const format of ["deflate", "deflate-raw"] as const) {
+    let charged = 0; // この試行で予算から引いた量（失敗時に戻す）
     try {
       const input = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -568,7 +576,9 @@ async function inflate(stream: Uint8Array): Promise<Uint8Array> {
         if (done) break;
         if (value && value.length) {
           total += value.length;
-          if (total > MAX_INFLATED_BYTES) {
+          charged += value.length;
+          budget.remaining -= value.length;
+          if (budget.remaining < 0) {
             throw new DocumentExtractError("unextractable_document", "inflate_limit_exceeded");
           }
           parts.push(value);
@@ -584,7 +594,8 @@ async function inflate(stream: Uint8Array): Promise<Uint8Array> {
     } catch (err) {
       // 上限超過などの抽出不能の確定は次の形式へ落とさずそのまま通知する
       if (err instanceof DocumentExtractError) throw err;
-      // 次の形式を試す
+      // 次の形式を試す。失敗した試行で引いた分は予算へ戻す（同じ予算を二重に引かない）
+      budget.remaining += charged;
     }
   }
   throw new DocumentExtractError("unextractable_document", "flate_decode_failed");
@@ -601,11 +612,11 @@ interface FontDecoder {
   directUcs2: boolean;
 }
 
-async function buildFontDecoder(objects: Map<number, PdfObject>, fontValue: PdfValue | undefined, src: string, bytes: Uint8Array): Promise<FontDecoder> {
+async function buildFontDecoder(objects: Map<number, PdfObject>, fontValue: PdfValue | undefined, src: string, bytes: Uint8Array, budget: InflateBudget): Promise<FontDecoder> {
   const obj = fontValue instanceof PdfDict ? { dict: fontValue, stream: null } : resolveObject(objects, fontValue);
   const dict = obj?.dict ?? null;
   if (!dict || dict.getName("Type") !== "Font") throw new DocumentExtractError("unextractable_document", "font_missing");
-  const toUnicode = await loadToUnicodeMap(objects, dict, src, bytes);
+  const toUnicode = await loadToUnicodeMap(objects, dict, src, bytes, budget);
   if (dict.getName("Subtype") === "Type0") {
     const encoding = dict.get("Encoding");
     const encName = encoding instanceof PdfName ? encoding.name : null;
@@ -632,11 +643,12 @@ async function loadToUnicodeMap(
   dict: PdfDict,
   src: string,
   bytes: Uint8Array,
+  budget: InflateBudget,
 ): Promise<{ map: Map<number, string>; codeWidth: 1 | 2 } | null> {
   const ref = dict.get("ToUnicode");
   const obj = resolveObject(objects, ref);
   if (!obj) return null;
-  const cmapSrc = new TextDecoder("latin1").decode(await decodeStream(obj));
+  const cmapSrc = new TextDecoder("latin1").decode(await decodeStream(obj, budget));
   const map = new Map<number, string>();
   let codeWidth: 1 | 2 = 2;
   // codespacerange（コードのバイト幅）
@@ -745,6 +757,7 @@ async function extractTextFromContent(
   fontCache: Map<number, FontDecoder>,
   src: string,
   bytes: Uint8Array,
+  budget: InflateBudget,
 ): Promise<string> {
   let text = "";
   let lastY: number | null = null;
@@ -762,7 +775,7 @@ async function extractTextFromContent(
     const decoder =
       cacheKey >= 0 && fontCache.has(cacheKey)
         ? fontCache.get(cacheKey)!
-        : await buildFontDecoder(objects, value, src, bytes);
+        : await buildFontDecoder(objects, value, src, bytes, budget);
     if (cacheKey >= 0) fontCache.set(cacheKey, decoder);
     fonts.set(name, decoder);
     return decoder;

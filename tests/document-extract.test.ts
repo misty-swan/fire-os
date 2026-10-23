@@ -342,6 +342,38 @@ describe("文書抽出・ページ/段落/offset付きchunk (T064)", () => {
     expect(job.error_code).toBe("unextractable_document"); // 展開上限超過は既存のshort code系
     expect(await chunkRows(created.version.id)).toEqual([]);
   });
+
+  /**
+   * T091-S10: 展開量の上限は文書全体で共有する。10MiB（単独上限32MiB内）のstreamを
+   * /Contents [4 0 R 4 0 R 4 0 R 4 0 R]で4回参照すると合計40MiB。旧実装はstreamごとに数えるため
+   * 成功し、同一refの反復で展開量を掛け算できた。
+   */
+  it("repeated_content_stream_refs_share_one_inflate_budget", async () => {
+    const admin = fx.units.a.people.admin;
+    const mb = new Uint8Array(1024 * 1024);
+    const input = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < 10; i++) controller.enqueue(mb);
+        controller.close();
+      },
+    });
+    const reader = input.pipeThrough(new CompressionStream("deflate") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>).getReader();
+    const parts: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.length) parts.push(value);
+    }
+    const pdf = buildMinimalPdfWithFlateStream(concatBytes(parts), "[4 0 R 4 0 R 4 0 R 4 0 R]");
+    const doc = await createPublicDocument(admin, "同一内容参照の反復（架空版）");
+    const originalId = await uploadPdfOriginal(admin, doc.id, pdf);
+    const created = await createVersion(admin, doc.id, originalId);
+    await runJobs();
+    const job = (await fx.rows("jobs", { id: created.job.id }))[0]!;
+    expect(job.status).toBe("manual_review");
+    expect(job.error_code).toBe("unextractable_document");
+    expect(await chunkRows(created.version.id)).toEqual([]);
+  });
 });
 
 /** 複数のバイト列の結合（展開上限試験のPDF組立て用） */
@@ -357,12 +389,12 @@ const concatBytes = (parts: Uint8Array[]): Uint8Array => {
 };
 
 /** 展開上限試験用の最小PDF（Catalog→Pages→Page→Contents=FlateDecode stream。%%EOF付きで検査jobを通る） */
-const buildMinimalPdfWithFlateStream = (streamBytes: Uint8Array): Uint8Array => {
+const buildMinimalPdfWithFlateStream = (streamBytes: Uint8Array, contents = "4 0 R"): Uint8Array => {
   const head = new TextEncoder().encode(
     "%PDF-1.4\n" +
       "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
       "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
-      "3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << >> >>\nendobj\n" +
+      `3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents ${contents} /Resources << >> >>\nendobj\n` +
       `4 0 obj\n<< /Length ${streamBytes.length} /Filter /FlateDecode >>\nstream\n`,
   );
   const tail = new TextEncoder().encode("\nendstream\nendobj\n%%EOF\n");

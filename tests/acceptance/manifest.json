@@ -3551,8 +3551,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "PDF抽出の展開上限（32MiB）がストリーム単位で、同じストリームを繰り返し参照させると文書全体の展開量が上限の何倍にもなる（手元workerdで4参照=120MiBを誤りなく完了）",
    "severity": "medium",
-   "status": "open",
-   "basis": "src/server/documents/extract.ts inflateの上限が呼出ごと、extractPdfPagesが別名参照を再展開。入口は文書管理者のAPI-74。監査では要検証（実Workersのメモリ・CPU制限次第）で深刻度未確定＝本欄のmediumは台帳の必須欄のための暫定値。監査fingerprint fireos:documents/extract.ts:inflate-cap-per-stream-not-aggregate。修正はT091手順10",
+   "status": "resolved",
+   "basis": "T091手順10で修正: src/server/documents/extract.ts に InflateBudget（文書あたり MAX_INFLATED_BYTES=32MiB）を設け、extractPdfPagesが1つ作ってexpandObjectStreams・/Contents・ToUnicode（buildFontDecoder経由）の全decodeで共有、inflateは読んだchunkごとに予算を引き超過で inflate_limit_exceeded（deflate→deflate-raw再試行では失敗した試行分を戻す。非圧縮streamは計上しない）。試験 tests/document-extract.test.ts repeated_content_stream_refs_share_one_inflate_budget（修正前は4参照×10MiBが成功しdocument_ocr_required=赤→緑）。stagingでの実メモリ/CPU観察は実Cloudflare未構築のため残作業",
    "owner": "T091"
   }
  ],
