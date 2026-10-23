@@ -374,6 +374,23 @@ describe("文書抽出・ページ/段落/offset付きchunk (T064)", () => {
     expect(job.error_code).toBe("unextractable_document");
     expect(await chunkRows(created.version.id)).toEqual([]);
   });
+
+  /**
+   * T091-S10（最終レビュー指摘）: 非圧縮streamも同じ文書全体の予算へ計上する。
+   * 10MiBの/Filterなしstreamを/Contentsで4回参照すると、旧実装は予算を引かず40MiB分の文字列を作れた。
+   */
+  it("repeated_uncompressed_content_stream_refs_share_one_budget", async () => {
+    const admin = fx.units.a.people.admin;
+    const pdf = buildMinimalPdfWithFlateStream(new Uint8Array(10 * 1024 * 1024), "[4 0 R 4 0 R 4 0 R 4 0 R]", "");
+    const doc = await createPublicDocument(admin, "非圧縮内容参照の反復（架空版）");
+    const originalId = await uploadPdfOriginal(admin, doc.id, pdf);
+    const created = await createVersion(admin, doc.id, originalId);
+    await runJobs();
+    const job = (await fx.rows("jobs", { id: created.job.id }))[0]!;
+    expect(job.status).toBe("manual_review");
+    expect(job.error_code).toBe("unextractable_document");
+    expect(await chunkRows(created.version.id)).toEqual([]);
+  });
 });
 
 /** 複数のバイト列の結合（展開上限試験のPDF組立て用） */
@@ -388,14 +405,14 @@ const concatBytes = (parts: Uint8Array[]): Uint8Array => {
   return out;
 };
 
-/** 展開上限試験用の最小PDF（Catalog→Pages→Page→Contents=FlateDecode stream。%%EOF付きで検査jobを通る） */
-const buildMinimalPdfWithFlateStream = (streamBytes: Uint8Array, contents = "4 0 R"): Uint8Array => {
+/** 展開上限試験用の最小PDF（Catalog→Pages→Page→Contents=FlateDecode stream〔filter=""なら非圧縮〕。%%EOF付きで検査jobを通る） */
+const buildMinimalPdfWithFlateStream = (streamBytes: Uint8Array, contents = "4 0 R", filter = " /Filter /FlateDecode"): Uint8Array => {
   const head = new TextEncoder().encode(
     "%PDF-1.4\n" +
       "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
       "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
       `3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents ${contents} /Resources << >> >>\nendobj\n` +
-      `4 0 obj\n<< /Length ${streamBytes.length} /Filter /FlateDecode >>\nstream\n`,
+      `4 0 obj\n<< /Length ${streamBytes.length}${filter} >>\nstream\n`,
   );
   const tail = new TextEncoder().encode("\nendstream\nendobj\n%%EOF\n");
   return concatBytes([head, streamBytes, tail]);

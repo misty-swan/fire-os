@@ -3552,7 +3552,7 @@
    "summary": "PDF抽出の展開上限（32MiB）がストリーム単位で、同じストリームを繰り返し参照させると文書全体の展開量が上限の何倍にもなる（手元workerdで4参照=120MiBを誤りなく完了）",
    "severity": "medium",
    "status": "resolved",
-   "basis": "T091手順10で修正: src/server/documents/extract.ts に InflateBudget（文書あたり MAX_INFLATED_BYTES=32MiB）を設け、extractPdfPagesが1つ作ってexpandObjectStreams・/Contents・ToUnicode（buildFontDecoder経由）の全decodeで共有、inflateは読んだchunkごとに予算を引き超過で inflate_limit_exceeded（deflate→deflate-raw再試行では失敗した試行分を戻す。非圧縮streamは計上しない）。試験 tests/document-extract.test.ts repeated_content_stream_refs_share_one_inflate_budget（修正前は4参照×10MiBが成功しdocument_ocr_required=赤→緑）。stagingでの実メモリ/CPU観察は実Cloudflare未構築のため残作業",
+   "basis": "T091手順10で修正: src/server/documents/extract.ts に InflateBudget（文書あたり MAX_INFLATED_BYTES=32MiB）を設け、extractPdfPagesが1つ作ってexpandObjectStreams・/Contents・ToUnicode（buildFontDecoder経由）の全decodeで共有、inflateは読んだchunkごとに予算を引き超過で inflate_limit_exceeded（deflate→deflate-raw再試行では失敗した試行分を戻す。非圧縮streamの使用も同じ予算から引く）。試験 tests/document-extract.test.ts repeated_content_stream_refs_share_one_inflate_budget（修正前は4参照×10MiBが成功しdocument_ocr_required=赤→緑）・repeated_uncompressed_content_stream_refs_share_one_budget（非圧縮streamも予算へ計上（最終レビュー指摘）。修正前は4参照×10MiBが成功しdocument_ocr_required=赤→緑）。stagingでの実メモリ/CPU観察は実Cloudflare未構築のため残作業",
    "owner": "T091"
   }
  ],

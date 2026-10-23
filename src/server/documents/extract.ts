@@ -539,13 +539,19 @@ async function decodeStream(obj: PdfObject, budget: InflateBudget): Promise<Uint
     const predictor = p.get("Predictor");
     if (typeof predictor === "number" && predictor > 1) throw new DocumentExtractError("unextractable_document", "flate_predictor");
   }
-  if (filters.length === 0) return obj.stream;
+  if (filters.length === 0) {
+    // 非圧縮streamも同じ文書全体の予算へ計上する（同一refの反復で掛け算させない。T091-S10）
+    budget.remaining -= obj.stream.length;
+    if (budget.remaining < 0) throw new DocumentExtractError("unextractable_document", "inflate_limit_exceeded");
+    return obj.stream;
+  }
   return inflate(obj.stream, budget);
 }
 
 /** zlib（FlateDecode）の展開。zlib形式で失敗したらraw deflateを試す（壊れたPDFは両方で失敗する）。
- *  展開の合計はMAX_INFLATED_BYTESまで（PH5レビューA低5。高圧縮ストリーム〔zip爆弾様〕で
- *  メモリを大量消費させない。超過はunextractable_documentで例外→jobはmanual_review） */
+ *  展開の合計はMAX_INFLATED_BYTESまで、1文書ぶんを全decode（非圧縮streamの利用も含む）で共有する
+ *  （PH5レビューA低5・T091-S10。高圧縮ストリーム〔zip爆弾様〕や同一refの反復でメモリを大量消費させない。
+ *  超過はunextractable_documentで例外→jobはmanual_review。fontCacheに載ったdecoderは再計上しない） */
 const MAX_INFLATED_BYTES = 32 * 1024 * 1024;
 
 /** 文書全体で共有する展開量の残り（T091-S10。/Contentsの同一ref反復や多数のToUnicodeで
