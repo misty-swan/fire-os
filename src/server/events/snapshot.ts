@@ -8,6 +8,7 @@ import { systemClock } from "../clock";
 import { HttpError, type ApiContext } from "../http";
 import { requirePermission } from "../routes/invitations";
 import { manageVisibility } from "../routes/announcements";
+import { RECIPIENT_VISIBLE_SQL } from "../routes/notifications";
 import { cursorKey, decodeSyncCursor, encodeSyncCursor, newSyncCursor } from "./cursor";
 
 /**
@@ -89,6 +90,11 @@ const UNIT_WIDE_VISIBLE = new Set([
   "incident_participant", "member",
 ]);
 
+/** notification.read（API-100）のpayloadが本人の既読か（壊れたpayloadは本人でない＝fail-closed） */
+function isOwnRead(row: EventRow, memberId: string): boolean {
+  try { return (JSON.parse(row.payload_minimal) as { recipientMemberId?: unknown }).recipientMemberId === memberId; } catch { return false; }
+}
+
 /**
  * 走査1バッチ（≤SCAN_BATCH行）の可視性をまとめて判定する（T082。旧eventVisible〔1行ずつのSQL〕の
  * バッチ化。判定の語彙と結果は同一＝fail-closed・非可視は走査位置だけ進める）。
@@ -98,8 +104,9 @@ const UNIT_WIDE_VISIBLE = new Set([
  * お知らせは90件ずつ、visibility SQLのbindを伴う文書は80件ずつ。analytics/query.tsと同じ注意）。
  * 判定規則は旧1行版と同じ（docs/05 §8・各読み取りAPIの可視規則）:
  *  - 他unit → 非可視。UNIT_WIDE_VISIBLE → 可視。未収録種別 → 非可視（既定拒否）
- *  - 通知（API-65「PER-12/対象者」）: 宛先本人、または管理権限（幹部・管理者）/明示scopeの保持者
- *  - お知らせ（API-24「可視公開対象のみ」）: 対象者、または管理権限（manageVisibilityと同じ判定）
+ *  - 通知（API-65「PER-12/対象者」）: 状態がapproved/dispatching/finished/failedの宛先本人（下書き・取消は見せない）、
+ *    または管理権限（幹部・管理者）/明示scopeの保持者。notification.readは本人分のみ（管理側は全件。T091-S9）
+ *  - お知らせ（API-24「可視公開対象のみ」）: published/archivedの対象者、または管理権限（manageVisibilityと同じ判定）
  *  - 文書（API-90/91）: deny優先の文書ACLと撤回（authorized.tsと同じWHERE片）
  *  - 出欠（API-07と同じ読み取り規則）: 行の本人、または親活動の管理権（PER-03）
  */
@@ -115,6 +122,7 @@ async function visibleFlagsOfBatch(env: Pick<ApiContext["env"], "DB">, p: AuthzP
       const managed = p.roles.includes("officer") || p.roles.includes("admin") ||
         p.scopes.some((s) => s.entityType === "notification" && s.permissions.includes("PER-12") && s.entityId === row.entity_id);
       if (managed) flags[i] = true;
+      else if (row.event_type === "notification.read" && !isOwnRead(row, p.memberId)) return; // 他の宛先の既読は本人と管理側だけ（T091-S9）
       else pending.notification.push(i);
       return;
     }
@@ -142,7 +150,8 @@ async function visibleFlagsOfBatch(env: Pick<ApiContext["env"], "DB">, p: AuthzP
     const ids = chunk.map((i) => rows[i]!.entity_id);
     const found = new Set(
       (await env.DB.prepare(
-        `SELECT notification_id FROM notification_recipients WHERE unit_id = ? AND member_id = ? AND notification_id IN (${ids.map(() => "?").join(",")})`,
+        `SELECT r.notification_id FROM notification_recipients r JOIN notifications n ON n.id = r.notification_id AND n.unit_id = r.unit_id AND n.status IN ${RECIPIENT_VISIBLE_SQL} ` +
+        `WHERE r.unit_id = ? AND r.member_id = ? AND r.notification_id IN (${ids.map(() => "?").join(",")})`,
       ).bind(p.unitId, p.memberId, ...ids).all<{ notification_id: string }>()).results.map((r) => r.notification_id),
     );
     for (const i of chunk) if (found.has(rows[i]!.entity_id)) flags[i] = true;
@@ -153,7 +162,8 @@ async function visibleFlagsOfBatch(env: Pick<ApiContext["env"], "DB">, p: AuthzP
     const ids = chunk.map((i) => rows[i]!.entity_id);
     const found = new Set(
       (await env.DB.prepare(
-        `SELECT announcement_id FROM announcement_audience WHERE unit_id = ? AND member_id = ? AND announcement_id IN (${ids.map(() => "?").join(",")})`,
+        `SELECT au.announcement_id FROM announcement_audience au JOIN announcements a ON a.id = au.announcement_id AND a.unit_id = au.unit_id AND a.status IN ('published', 'archived') ` +
+        `WHERE au.unit_id = ? AND au.member_id = ? AND au.announcement_id IN (${ids.map(() => "?").join(",")})`,
       ).bind(p.unitId, p.memberId, ...ids).all<{ announcement_id: string }>()).results.map((r) => r.announcement_id),
     );
     for (const i of chunk) if (found.has(rows[i]!.entity_id)) flags[i] = true;

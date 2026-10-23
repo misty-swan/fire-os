@@ -40,7 +40,7 @@ const DELIVER_CONFIG_VERSION = "v1";
 
 /** 対象者に見える承認状態（draft/cancelledは未送信のため対象者に存在を見せない。docs/16 T050裁定） */
 const RECIPIENT_VISIBLE = ["approved", "dispatching", "finished", "failed"] as const;
-const RECIPIENT_VISIBLE_SQL = `('${RECIPIENT_VISIBLE.join("', '")}')`;
+export const RECIPIENT_VISIBLE_SQL = `('${RECIPIENT_VISIBLE.join("', '")}')`;
 
 type NotificationChannel = (typeof notificationChannels)[number];
 

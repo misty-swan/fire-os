@@ -324,3 +324,65 @@ describe("認可済snapshot・イベント再開cursor・差分取得 (T072)", (
     expect(officerIds).toEqual(expect.arrayContaining([ownAttendanceId, otherAttendanceId]));
   });
 });
+
+describe("イベント配信の通知・お知らせの可視規則 (T091-S9)", () => {
+  it("events_hide_drafts_and_other_members_reads", async () => {
+    const a = fx.units.a;
+    const { admin, member, operator } = a.people;
+    const feed = async (who: typeof admin, entityType: string) => {
+      const res = await fx.client(who).request("GET", `/api/v1/events?afterSequence=0&entityType=${entityType}`);
+      expect(res.status).toBe(200);
+      return ((await json(res)).data! as unknown as EventPage).events;
+    };
+
+    // 通知の下書き（member・operator宛。source用の活動を作る）
+    const actRes = await fx.client(admin).request("POST", "/api/v1/activities", {
+      title: "イベント可視規則の確認訓練", kind: "活動", plannedStartsAt: "2099-11-01T01:00:00.000Z",
+      locationText: "架空市河川敷", ownerMemberId: admin.memberId!,
+      audienceMemberIds: [admin.memberId!, member.memberId!, operator.memberId!],
+    }, idem());
+    expect(actRes.status).toBe(201);
+    const activityId = ((await json(actRes)).data! as { id: string }).id;
+    const draftRes = await fx.client(admin).request("POST", "/api/v1/notifications/drafts", {
+      source: { type: "activity", id: activityId }, body: "下書き段階の架空通知",
+      audienceMemberIds: [member.memberId!, operator.memberId!], channels: ["inapp"],
+    }, idem());
+    expect(draftRes.status).toBe(201);
+    const draft = (await json(draftRes)).data! as unknown as { id: string; bodyHash: string; audienceHash: string };
+
+    // 下書き中は宛先の一般団員にイベントが出ない（読み取りAPI-65は下書きを見せない）。管理者には出る
+    expect((await feed(member, "notification")).filter((e) => e.entityId === draft.id)).toEqual([]);
+    expect((await feed(admin, "notification")).filter((e) => e.entityId === draft.id).length).toBeGreaterThan(0);
+
+    // 承認後は宛先に出る（対照）
+    const approve = await fx.client(admin).request("POST", `/api/v1/notifications/${draft.id}/approval`, {
+      version: 1, bodyHash: draft.bodyHash, audienceHash: draft.audienceHash, decision: "approve",
+    }, idem());
+    expect(approve.status).toBe(202);
+    const approvedVersion = ((await json(approve)).data! as unknown as { version: number }).version;
+    expect((await feed(member, "notification")).filter((e) => e.entityId === draft.id).length).toBeGreaterThan(0);
+
+    // operatorが既読 → memberには他人のnotification.readが出ない。operator本人とadminには出る
+    const opRead = await fx.client(operator).request("PUT", `/api/v1/notifications/${draft.id}/read`, { notificationVersion: approvedVersion }, idem());
+    expect(opRead.status).toBeLessThan(300);
+    const readsOf = (events: SyncEvent[]) => events.filter((e) => e.entityId === draft.id && e.eventType === "notification.read");
+    expect(readsOf(await feed(member, "notification"))).toEqual([]);
+    expect(readsOf(await feed(operator, "notification")).map((e) => e.payload.recipientMemberId)).toEqual([operator.memberId!]);
+    // memberが自分で既読 → 自分の分は出る（他人の分は出ないまま）
+    const mRead = await fx.client(member).request("PUT", `/api/v1/notifications/${draft.id}/read`, { notificationVersion: approvedVersion + 1 }, idem());
+    expect(mRead.status).toBeLessThan(300);
+    expect(readsOf(await feed(member, "notification")).map((e) => e.payload.recipientMemberId)).toEqual([member.memberId!]);
+    expect(readsOf(await feed(admin, "notification")).map((e) => e.payload.recipientMemberId).sort())
+      .toEqual([member.memberId!, operator.memberId!].sort());
+
+    // お知らせ: 下書き中は対象者に出ない。公開後は出る
+    const annRes = await fx.client(admin).request("POST", "/api/v1/announcements", {
+      title: "イベント可視規則のお知らせ", body: "架空の本文", audienceMemberIds: [member.memberId!],
+    }, idem());
+    expect(annRes.status).toBe(201);
+    const annId = ((await json(annRes)).data! as { id: string }).id;
+    expect((await feed(member, "announcement")).filter((e) => e.entityId === annId)).toEqual([]);
+    expect((await fx.client(admin).request("PATCH", `/api/v1/announcements/${annId}`, { version: 1, status: "published" }, idem())).status).toBe(200);
+    expect((await feed(member, "announcement")).filter((e) => e.entityId === annId).length).toBeGreaterThan(0);
+  });
+});

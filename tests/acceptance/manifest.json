@@ -3542,8 +3542,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "イベント配信（API-80）が下書き通知・下書きお知らせの存在と、他の宛先のnotification.read（recipientMemberIdと時刻）を一般団員へ配る",
    "severity": "low",
-   "status": "open",
-   "basis": "src/server/events/snapshot.ts visibleFlagsOfBatchが宛先・対象者の行の有無だけで判定し、読み取りAPIの状態規則（API-65 RECIPIENT_VISIBLE・API-24）と不一致。監査fingerprint fireos:events-snapshot:visibleFlagsOfBatch:notification-announcement-status-and-payload-ungated。修正はT091手順9（docs/05 API-80も補う）",
+   "status": "resolved",
+   "basis": "T091手順9で修正: src/server/events/snapshot.ts visibleFlagsOfBatchの非管理者の通知判定を notification_recipients JOIN notifications（状態 RECIPIENT_VISIBLE_SQL。notifications.tsからexport）にし、お知らせは announcement_audience JOIN announcements（published/archived）にした。さらに非管理者には他の宛先の notification.read（payloadのrecipientMemberIdが本人でない行・壊れたpayload）を伏せる（管理側は全件。payload形・DTO・契約は不変。docs/05 API-80欄を補記）。試験 tests/events.test.ts events_hide_drafts_and_other_members_reads（修正前は下書き通知のイベントが宛先の一般団員に出て赤→緑）",
    "owner": "T091"
   },
   {
