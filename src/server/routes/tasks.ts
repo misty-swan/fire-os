@@ -291,6 +291,12 @@ export function registerTaskRoutes(app: ApiApp): void {
       .first<{ id: string; unit_id: string; status: string; version: number; assignee_member_id: string | null }>();
     if (!current || current.unit_id !== p.unitId) throw new HttpError("NOT_FOUND");
     requireTaskPermission(p, { unitId: p.unitId, type: "task", id: params.id, ownerMemberId: current.assignee_member_id ?? undefined });
+    // T091-S4: 担当を別の人（nullは「担当なし」）へ変えるときは、新しい担当者をownerとしてもう一度認可する
+    // （API-46の点検者変更と同じ形）。現担当者の本人分だけで他人へ付け替えられないようにする。
+    // 再送でも同じ検査を行う（knownKeyの外）
+    if (body.assigneeMemberId !== undefined && body.assigneeMemberId !== current.assignee_member_id) {
+      requireTaskPermission(p, { unitId: p.unitId, type: "task", id: params.id, ownerMemberId: body.assigneeMemberId ?? undefined });
+    }
 
     // docs/05 §2「同じキー/本文の再送は元HTTP status/dataを返す」: 鍵が既にある（=再送）ときは
     // 状態前提の検査（status遷移・担当の変更可能状態・現在有効）を飛ばし、初回の200と同じ応答を

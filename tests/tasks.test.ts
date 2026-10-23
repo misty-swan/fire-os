@@ -155,6 +155,44 @@ describe("業務タスク (T049)", () => {
     expect(afterCancel.status).toBe(422);
   });
 
+  /** T091-S4: 担当者本人（role=member）は自分のタスクを他人（null含む）へ付け替えられない。新担当者も認可する */
+  it("member_cannot_transfer_own_task_to_someone_else", async () => {
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const member = a.people.member;
+    const officer = a.people.officer;
+    const createRes = await fx.client(admin).request("POST", "/api/v1/tasks", {
+      title: "付け替え試験のタスク（架空）", assigneeMemberId: member.memberId, dueDate: "2026-12-11",
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const id = ((await json(createRes)).data! as { id: string }).id;
+    const url = `/api/v1/tasks/${id}`;
+    const assigneeOf = async () => (await fx.rows("tasks", { id }))[0]!.assignee_member_id;
+
+    // 他人へ付け替え → 403・担当は変わらない
+    const toOther = { version: 1, assigneeMemberId: officer.memberId, reason: "押し付ける" };
+    const deniedKey = idem();
+    const denied = await fx.client(member).request("PATCH", url, toOther, deniedKey);
+    expect(denied.status).toBe(403);
+    expect(await assigneeOf()).toBe(member.memberId);
+    // 担当なし(null)へも不可
+    const toNull = await fx.client(member).request("PATCH", url, { version: 1, assigneeMemberId: null, reason: "外す" }, idem());
+    expect(toNull.status).toBe(403);
+    expect(await assigneeOf()).toBe(member.memberId);
+    // 403になった要求と同じidempotency-keyで再送しても403（再送経路でも認可）
+    const resend = await fx.client(member).request("PATCH", url, toOther, deniedKey);
+    expect(resend.status).toBe(403);
+    expect(await assigneeOf()).toBe(member.memberId);
+
+    // 対照: 自分への付け替え（変化なし）は通る
+    const toSelf = await fx.client(member).request("PATCH", url, { version: 1, assigneeMemberId: member.memberId, reason: "自分のまま" }, idem());
+    expect(toSelf.status).toBe(200);
+    // 対照: 管理者の付け替えは通る
+    const byAdmin = await fx.client(admin).request("PATCH", url, { version: 2, assigneeMemberId: officer.memberId, reason: "引き継ぎ" }, idem());
+    expect(byAdmin.status).toBe(200);
+    expect(await assigneeOf()).toBe(officer.memberId);
+  });
+
   /** T052: 自分の担当タスクの一覧（API-102。docs/03 SCR-21「自分の担当タスク一覧・期限・履歴」。API-28 myTasksと同じ条件） */
   it("my_task_list_serves_active_tasks_with_history", async () => {
     const a = fx.units.a;

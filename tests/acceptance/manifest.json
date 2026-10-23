@@ -3497,8 +3497,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "担当者のrole=memberがAPI-87で自分のタスクを任意の団員（またはnull）へ付け替えられる。新しい担当者は認可されない",
    "severity": "low",
-   "status": "open",
-   "basis": "src/server/routes/tasks.ts のrequireTaskPermissionが現担当者をownerとして1回だけ。API-46（点検者変更・T085 A-I3）は新旧両方を認可している。監査fingerprint tasks-api87-self-rule-assignee-transfer。修正はT091手順4",
+   "status": "resolved",
+   "basis": "T091手順4で修正: src/server/routes/tasks.ts のAPI-87で、担当を現担当者以外（null含む）へ変えるときは新担当者をownerとしてもう一度requireTaskPermissionを通す（再送でも検査。API-46と同形）。試験 tests/tasks.test.ts member_cannot_transfer_own_task_to_someone_else（修正前は付け替えが200で赤→緑）",
    "owner": "T091"
   },
   {
