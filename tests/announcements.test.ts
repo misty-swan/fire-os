@@ -438,4 +438,51 @@ describe("お知らせの公開対象・版・本人既読 (T045)", () => {
     expect(await rowCounts(tables)).toEqual(mid);
     expect((await fx.rows("announcements", { id: created.id }))[0]!.version).toBe(created.version);
   });
+
+  it("announcement_attachment_follows_announcement_visibility (T091-S7)", async () => {
+    // API-27は添付の取得時に、リンク先のお知らせをAPI-24と同じ規則（下書きは管理権限だけ・公開は対象者だけ）で再検査する
+    const a = fx.units.a;
+    const admin = a.people.admin;
+    const member = a.people.member; // 対象者
+    const operator = a.people.operator; // 対象外（役割だけならPER-01を持つ）
+
+    const createRes = await fx.client(admin).request("POST", "/api/v1/announcements", {
+      title: "架空の訓練案内（添付つき）", body: "架空の本文。", audienceMemberIds: [member.memberId!],
+    }, idem());
+    expect(createRes.status).toBe(201);
+    const id = ((await json(createRes)).data! as { id: string }).id;
+
+    const attId = crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    await env.DB.prepare(
+      "INSERT INTO attachments (id, unit_id, owner_user_id, owner_member_id, intent_target_type, intent_target_id, ready_key, content_type, byte_size, sha256, status, expires_at, classification, upload_token_hash, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, ?, ?, 'announcement', ?, ?, 'image/png', 4, ?, 'ready', ?, 'basic', ?, ?, ?, ?, 'human')",
+    ).bind(attId, a.id, admin.userId, admin.memberId!, id, `ready/${attId}`, "a".repeat(64), nowIso, "b".repeat(64), nowIso, nowIso, admin.userId).run();
+    await env.DB.prepare(
+      "INSERT INTO attachment_links (id, unit_id, attachment_id, entity_type, entity_id, linked_by, created_at, updated_at, created_by, actor_kind) " +
+        "VALUES (?, ?, ?, 'announcement', ?, ?, ?, ?, ?, 'human')",
+    ).bind(crypto.randomUUID(), a.id, attId, id, admin.userId, nowIso, nowIso, admin.userId).run();
+    await env.FILES.put(`ready/${attId}`, new Uint8Array([1, 2, 3, 4]));
+    const get = (who: typeof member) => fx.client(who).request("GET", `/api/v1/attachments/${attId}/content`);
+
+    // 公開前（下書き）: 対象者でも取れない。管理権限は取れる
+    expect((await get(member)).status).toBe(404);
+    expect((await get(admin)).status).toBe(200);
+
+    const pubRes = await fx.client(admin).request("PATCH", `/api/v1/announcements/${id}`, { version: 1, status: "published" }, idem());
+    expect(pubRes.status).toBe(200);
+    // 公開後: 対象者は取れる（対照）・対象外は取れない・他団体は取れない
+    expect((await get(member)).status).toBe(200);
+    expect((await get(operator)).status).toBe(404);
+    expect((await get(fx.units.b.people.admin)).status).toBe(404);
+
+    // 対象から外れた団員は取れない
+    const version = ((await json(pubRes)).data! as { version: number }).version;
+    const audRes = await fx.client(admin).request("PATCH", `/api/v1/announcements/${id}`, {
+      version, audienceMemberIds: [operator.memberId!],
+    }, idem());
+    expect(audRes.status).toBe(200);
+    expect((await get(member)).status).toBe(404);
+    expect((await get(operator)).status).toBe(200);
+  });
 });

@@ -3,6 +3,7 @@ import { announcementTransitions, canTransition } from "../../shared/states";
 import { authorize } from "../auth/authorize";
 import { resolvePrincipal, type AuthzPrincipal } from "../auth/principal";
 import { HttpError, defineRoute, ok, parseApiRequest, type ApiApp, type ApiContext } from "../http";
+import type { AppEnv } from "../env";
 import { canonicalRequestHash, sha256Hex } from "../mutations/hash";
 import { executeMutation } from "../mutations/execute";
 import { requirePermission } from "./invitations";
@@ -112,6 +113,37 @@ export function manageVisibility(p: AuthzPrincipal): { all: boolean; scopedIds: 
   };
 }
 
+/**
+ * お知らせの可視条件（docs/11 お知らせ行・T045完了条件。API-24と添付配信API-27の共通の正本。T091-S7）:
+ * - published は対象者だけ（対象外の一覧・件数に現れない）
+ * - draft は PER-03 保持者（作成者/管理権限）だけ
+ * - archived は対象者と PER-03 保持者（公開済の記録。終端のため既読は取れない）
+ * unit_id の絞り込みは含まない（呼び出し側で付ける）。binds は sql の ? の並び順
+ */
+export function announcementVisibilitySql(p: AuthzPrincipal, alias: string): { sql: string; binds: unknown[] } {
+  const manage = manageVisibility(p);
+  const scopedIds = manage.scopedIds;
+  const manageVisible = manage.all ? "1 = 1" : scopedIds.length > 0 ? `${alias}.id IN (${scopedIds.map(() => "?").join(",")})` : "0 = 1";
+  const audienceVisible =
+    `EXISTS (SELECT 1 FROM announcement_audience au WHERE au.announcement_id = ${alias}.id AND au.member_id = ?)`;
+  const scopeBinds = manage.all ? [] : scopedIds;
+  return {
+    sql:
+      `((${alias}.status = 'published' AND ${audienceVisible})` +
+      ` OR (${alias}.status = 'draft' AND ${manageVisible})` +
+      ` OR (${alias}.status = 'archived' AND (${audienceVisible} OR ${manageVisible})))`,
+    binds: [p.memberId, ...scopeBinds, p.memberId, ...scopeBinds],
+  };
+}
+
+/** 単一のお知らせをこの主体が閲覧できるか（API-27の添付配信用。API-24の一覧と同じ条件） */
+export async function isAnnouncementVisible(env: Pick<AppEnv, "DB">, p: AuthzPrincipal, announcementId: string): Promise<boolean> {
+  const vis = announcementVisibilitySql(p, "a");
+  const row = await env.DB.prepare(`SELECT 1 AS ok FROM announcements a WHERE a.id = ? AND a.unit_id = ? AND ${vis.sql}`)
+    .bind(announcementId, p.unitId, ...vis.binds).first();
+  return row !== null;
+}
+
 // --- 署名付きcursor（activities/query.tsと同じ流儀。条件を変えた続き取得・改変cursorは409 SNAPSHOT_CHANGED） ---
 
 interface AnnouncementCursor {
@@ -153,27 +185,11 @@ async function queryAnnouncements(c: ApiContext): Promise<{ items: AnnouncementD
   const { query } = await parseApiRequest(c, "API-24");
   requirePermission(p, "PER-01", { unitId: p.unitId, type: "announcement" });
 
-  // 可視性（docs/11 お知らせ行・T045完了条件）:
-  // - published は対象者だけ（対象外の一覧・件数に現れない）
-  // - draft は PER-03 保持者（作成者/管理権限）だけ
-  // - archived は対象者と PER-03 保持者（公開済の記録。終端のため既読は取れない）
   const manage = manageVisibility(p);
+  const vis = announcementVisibilitySql(p, "a");
+  const where = ["a.unit_id = ?", vis.sql];
+  const binds: unknown[] = [p.unitId, ...vis.binds];
   const scopedIds = manage.scopedIds;
-  const scopedList = () => `a.id IN (${scopedIds.map(() => "?").join(",")})`;
-  const manageVisible = manage.all ? "1 = 1" : scopedIds.length > 0 ? scopedList() : "0 = 1";
-  const audienceVisible =
-    "EXISTS (SELECT 1 FROM announcement_audience au WHERE au.announcement_id = a.id AND au.member_id = ?)";
-
-  const where = [
-    "a.unit_id = ?",
-    `((a.status = 'published' AND ${audienceVisible})` +
-      ` OR (a.status = 'draft' AND ${manageVisible})` +
-      ` OR (a.status = 'archived' AND (${audienceVisible} OR ${manageVisible})))`,
-  ];
-  const binds: unknown[] = [p.unitId, p.memberId];
-  if (!manage.all) binds.push(...scopedIds); // draft句のscope対象
-  binds.push(p.memberId); // archived句の対象判定
-  if (!manage.all) binds.push(...scopedIds); // archived句のscope対象
   if (query.status) {
     where.push("a.status = ?");
     binds.push(query.status);

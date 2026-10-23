@@ -1,5 +1,6 @@
 import { authorize } from "../auth/authorize";
 import { resolvePrincipal } from "../auth/principal";
+import { isAnnouncementVisible } from "./announcements";
 import { isDocumentVisible } from "../documents/authorized";
 import { HttpError, defineRoute, parseApiRequest, type ApiApp } from "../http";
 import { canonicalRequestHash } from "../mutations/hash";
@@ -39,6 +40,9 @@ export function registerAttachmentRoutes(app: ApiApp): void {
     for (const l of links.results) {
       if (l.entity_type === "document") {
         if (await isDocumentVisible(c.env, p, l.entity_id)) { visible = true; break; }
+      } else if (l.entity_type === "announcement") {
+        // お知らせの添付はAPI-24と同じ可視規則（対象者・下書きは管理者のみ。T091-S7）
+        if (await isAnnouncementVisible(c.env, p, l.entity_id)) { visible = true; break; }
       } else if (authorize(p, "PER-01", { unitId: att.unit_id, type: l.entity_type, id: l.entity_id }).allowed) {
         visible = true; break;
       }

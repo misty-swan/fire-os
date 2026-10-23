@@ -3524,8 +3524,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "お知らせ添付を対象外・対象から外れた団員・公開前の下書き段階でもAPI-27で取得できる",
    "severity": "low",
-   "status": "open",
-   "basis": "src/server/routes/attachments.ts がannouncementリンクを役割だけのPER-01で判定し、API-24の対象者・状態規則を見ない。監査fingerprint fireos:routes/attachments.ts:API-27:announcement-link-ignores-audience。修正はT091手順7",
+   "status": "resolved",
+   "basis": "T091手順7で修正: src/server/routes/announcements.ts にAPI-24と共用の可視条件 announcementVisibilitySql（公開は対象者、下書きは管理権限、アーカイブは対象者か管理権限）と isAnnouncementVisible を設け、API-27のannouncementリンクを役割だけのPER-01からこれへ変更（API-24も同じ関数を使い規則の正本を1か所化）。試験 tests/announcements.test.ts announcement_attachment_follows_announcement_visibility（修正前は下書き中の対象者のAPI-27が200で赤→緑）",
    "owner": "T091"
   },
   {
