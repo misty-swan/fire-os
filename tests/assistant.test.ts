@@ -513,18 +513,27 @@ describe("業務横断AIの読取と承認前の書込提案 (T068)", () => {
       expect(res.status, JSON.stringify(j)).toBe(200);
       const row = (j.data ?? []).find((r) => r.id === proposal.proposalId);
       expect(row?.sourceType).toBe("assistant");
+      lastOutput = row!.outputJson as unknown as typeof lastOutput;
       return row!.outputJson.readResults;
     };
+    let lastOutput: { answer: string; proposedEffects: unknown[]; references: { type: string; id: string }[] } = { answer: "", proposedEffects: [], references: [] };
 
     // 幹部（可視でない）には非可視文書の要約が現れない（{type,id,masked:true}だけ。旧コードはFAIL）
     const forOfficer = await readResultsOf(officer);
     expect(forOfficer.find((r) => r.id === hiddenDoc.documentId)).toEqual({ type: "document", id: hiddenDoc.documentId, masked: true });
     // 公開文書の要約は現行どおり全文
     expect(forOfficer.find((r) => r.id === publicDoc.documentId)?.summary).toContain("格納箱の公開の手順");
+    // S8: 見えない文書を参照する行の回答は固定の伏せ文に置換し、提案効果は空、隠し文書の参照も落とす
+    expect(JSON.stringify(lastOutput)).not.toContain("格納箱の非公開メモ");
+    expect(lastOutput.answer).toBe("閲覧できない文書を参照しているため、この回答は表示しません");
+    expect(lastOutput.proposedEffects).toEqual([]);
+    expect(lastOutput.references.some((r) => r.id === hiddenDoc.documentId)).toBe(false);
 
     // 依頼者（管理者。可視）は要約がそのまま見える
     const forAdmin = await readResultsOf(admin);
     expect(forAdmin.find((r) => r.id === hiddenDoc.documentId)?.summary).toContain("格納箱の非公開メモ");
+    expect(lastOutput.answer).not.toBe("閲覧できない文書を参照しているため、この回答は表示しません");
+    expect(lastOutput.references.some((r) => r.id === hiddenDoc.documentId)).toBe(true);
 
     // 撤回済み文書も伏せる（可視性の再検査は毎要求。docs/10 §4）
     await env.DB.prepare("UPDATE documents SET status = 'withdrawn' WHERE id = ? AND unit_id = ?").bind(publicDoc.documentId, a.id).run();

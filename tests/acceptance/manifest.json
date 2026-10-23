@@ -3533,8 +3533,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "AIレビュー一覧（API-30）が見えない文書から作られたアシスタント回答本文を、その文書のACL外の幹部へ返す（readResultsだけマスク）",
    "severity": "low",
-   "status": "open",
-   "basis": "src/server/routes/ai-classification.ts toDtoがanswer・references・proposedEffectsをそのまま返す。監査fingerprint fireos:routes/ai-classification.ts:api30-assistant-answer-unmasked-vs-document-acl。修正はT091手順8",
+   "status": "resolved",
+   "basis": "T091手順8で修正: src/server/routes/ai-classification.ts のAPI-30投影で、行のreadResults・referencesの文書idの可視性をidごと1回判定し、見えない文書が1つでもあれば answer を固定の伏せ文 MASKED_ASSISTANT_ANSWER に置換・proposedEffects を空・隠し文書のreferencesを除外（readResultsは従来のmasked形。保存値・DTO形・契約は不変）。試験 tests/assistant.test.ts api_30_masks_read_results_of_documents_the_viewer_cannot_see（拡張。修正前は回答本文に非公開メモが含まれ赤→緑）",
    "owner": "T091"
   },
   {

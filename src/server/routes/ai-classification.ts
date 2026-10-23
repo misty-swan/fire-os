@@ -92,14 +92,41 @@ async function decodeCursor(key: CryptoKey, value: string): Promise<ReviewCursor
  * unit内の参照（issue/activity/点検。PER-01で可視）は現行どおり全文を返す。保存値（output_json）は
  * 変えない＝API-30の応答投影だけを伏せる（承認のstale検査はreferencesで行うため影響しない）。
  */
-async function maskReadResults(env: AppEnv, viewer: AuthzPrincipal, readResults: readonly AssistantReadResultDto[]): Promise<AssistantReadResultViewDto[]> {
-  return Promise.all(
-    readResults.map(async (r) => {
-      if (r.type !== "document") return r;
-      if (await isDocumentVisible(env, viewer, r.id)) return r;
-      return { type: r.type, id: r.id, masked: true } satisfies AssistantReadResultViewDto;
-    }),
-  );
+async function maskReadResults(
+  readResults: readonly AssistantReadResultDto[],
+  visible: ReadonlyMap<string, boolean>,
+): Promise<AssistantReadResultViewDto[]> {
+  return readResults.map((r) => {
+    if (r.type !== "document") return r;
+    if (visible.get(r.id)) return r;
+    return { type: r.type, id: r.id, masked: true } satisfies AssistantReadResultViewDto;
+  });
+}
+
+/**
+ * T091-S8: 見えない文書を参照した行は、回答本文（answer）が非公開文書の内容を含み得る
+ * （要約を回答へ引用するため）。readResultsだけ伏せても本文が漏れるので、行単位で
+ * answerを固定の伏せ文へ置換し、提案効果を空にし、隠し文書の参照を落とす。
+ * 文書の可視判定はidごとに1回（Map）で、readResultsの伏せと共有する。保存値は変えない。
+ */
+export const MASKED_ASSISTANT_ANSWER = "閲覧できない文書を参照しているため、この回答は表示しません";
+
+async function projectAssistantOutput(env: AppEnv, viewer: AuthzPrincipal, parsed: ReturnType<typeof AssistantCandidateOutput.parse>) {
+  const ids = new Set<string>();
+  for (const r of parsed.readResults) if (r.type === "document") ids.add(r.id);
+  for (const r of parsed.references) if (r.type === "document") ids.add(r.id);
+  const visible = new Map<string, boolean>();
+  await Promise.all([...ids].map(async (id) => visible.set(id, await isDocumentVisible(env, viewer, id))));
+  const readResults = await maskReadResults(parsed.readResults, visible);
+  const hidden = new Set([...ids].filter((id) => !visible.get(id)));
+  if (hidden.size === 0) return { ...parsed, readResults };
+  return {
+    ...parsed,
+    answer: MASKED_ASSISTANT_ANSWER,
+    proposedEffects: [],
+    references: parsed.references.filter((r) => !(r.type === "document" && hidden.has(r.id))),
+    readResults,
+  };
 }
 
 export function registerClassificationRoutes(app: ApiApp): void {  // --- API-29: 分類の依頼（202=永続jobの受付。docs/05 §1「202は業務完了と表示しない」） ---
@@ -182,7 +209,7 @@ export function registerClassificationRoutes(app: ApiApp): void {  // --- API-29
         r.source_type === "assistant"
           ? await (async () => {
               const parsed = AssistantCandidateOutput.parse(raw);
-              return { ...parsed, readResults: await maskReadResults(c.env, p, parsed.readResults) };
+              return projectAssistantOutput(c.env, p, parsed);
             })()
           : raw;
       return AiEvaluation.parse({
