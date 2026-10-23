@@ -86,6 +86,8 @@ export function registerIncidentRoutes(app: ApiApp): void {
     let linkOperation: { operationId: string; operationVersion: number } | null = null;
     if (body.activityId) {
       const target = await resolveActivityForLink(c, p.unitId, body.activityId);
+      // 作成時リンクも活動側を書き換えるため、API-71と同じく活動のPER-03を要求する（T091-S6）
+      requirePermission(p, "PER-03", { unitId: p.unitId, type: "activity", id: target.activityId, ownerMemberId: target.ownerMemberId ?? undefined });
       const dup = knownKey ? null : activityAlreadyLinked(target);
       if (dup) throw dup;
       activityId = target.activityId;

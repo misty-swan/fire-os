@@ -41,6 +41,8 @@ export interface ActivityLinkTarget {
   activityId: string;
   activityVersion: number;
   activityStatus: string;
+  /** 活動の担当者（活動側の認可 PER-03 の本人判定に使う。T091-S6） */
+  ownerMemberId: string | null;
   /** 活動側の出来事root（リンク後の生存operation。docs/04:103「活動側operationへ付替」） */
   operationId: string;
   /** 生存operationの現行版（使用履歴API-57と同じ「operation版」） */
@@ -55,18 +57,18 @@ export interface ActivityLinkTarget {
  */
 export async function resolveActivityForLink(c: ApiContext, unitId: string, activityId: string): Promise<ActivityLinkTarget> {
   const row = await c.env.DB.prepare(
-    "SELECT a.id, a.unit_id, a.status AS activity_status, a.version AS activity_version, a.operation_id, " +
+    "SELECT a.id, a.unit_id, a.status AS activity_status, a.version AS activity_version, a.operation_id, a.owner_member_id, " +
       "o.version AS operation_version, " +
       "(SELECT i.id FROM incidents i WHERE i.unit_id = a.unit_id AND i.activity_id = a.id) AS linked_incident_id " +
       "FROM activities a JOIN operations o ON o.unit_id = a.unit_id AND o.id = a.operation_id WHERE a.id = ?",
   ).bind(activityId)
     .first<{
       id: string; unit_id: string; activity_status: string; activity_version: number;
-      operation_id: string; operation_version: number; linked_incident_id: string | null;
+      operation_id: string; owner_member_id: string | null; operation_version: number; linked_incident_id: string | null;
     }>();
   if (!row || row.unit_id !== unitId) throw new HttpError("NOT_FOUND");
   return {
-    activityId: row.id, activityVersion: row.activity_version, activityStatus: row.activity_status,
+    activityId: row.id, activityVersion: row.activity_version, activityStatus: row.activity_status, ownerMemberId: row.owner_member_id,
     operationId: row.operation_id, operationVersion: row.operation_version, linkedIncidentId: row.linked_incident_id,
   };
 }
@@ -143,6 +145,10 @@ export async function linkIncidentActivity(
 
   // 3) 編集権（docs/05 API-71「PER-04」。一般団員は本人分のみでリンクは本人分ではない）
   requirePermission(p, "PER-04", { unitId: p.unitId, type: "incident", id: params.id });
+  // 活動側root（T091-S6）: リンクは活動の版・履歴・operationも書き換えるため、活動の直接編集と同じPER-03を
+  // 活動対象（担当者付き）で要求する。出動だけに担当scopeを持つ者が活動の「出動1件」枠を消費できない。
+  // knownKey判定より前に置き、再送でも権限を再検査する
+  requirePermission(p, "PER-03", { unitId: p.unitId, type: "activity", id: activity.activityId, ownerMemberId: activity.ownerMemberId ?? undefined });
 
   if (!knownKey) {
     // voidedは終端（docs/11「voidedは閲覧のみ」。リンクも出動の変更なので不可）

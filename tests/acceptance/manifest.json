@@ -3515,8 +3515,8 @@
    "source": "セキュリティ監査 security-audit run-1（2026-10-22・commit 12cde5b・隔離環境と架空データで独立再現）",
    "summary": "API-71（出動↔活動リンク）が出動側のPER-04だけを認可し活動の版・履歴・operationを書き換える。活動を直接編集できない出動担当scopeのoperatorでもリンクでき、活動の出動1件の枠を消費する",
    "severity": "low",
-   "status": "open",
-   "basis": "src/server/operations/link.ts のrequirePermissionがtype incidentのみ。監査fingerprint operation-link-api71-activity-side-unauthorized。修正はT091手順6（docs/05 API-71も補う）",
+   "status": "resolved",
+   "basis": "T091手順6で修正: API-71（再送でも）と同じ活動を結ぶAPI-22の作成時リンクで、出動のPER-04に加えて活動側にもPER-03（type activity・ownerMemberId付き）を要求し両rootを認可。docs/05のAPI-22/71の権限欄も補った（API-22は出動作成にid無しPER-04が要るため元からoperatorは通らず、managerのみ到達する経路の防御的な揃え）。試験 tests/operation-link.test.ts operator_scoped_to_incident_only_cannot_link_activity・operator_scoped_to_incident_only_cannot_create_incident_linked_to_activity（修正前は前者が200で赤→緑。後者は修正前から403で緑＝回帰固定）",
    "owner": "T091"
   },
   {

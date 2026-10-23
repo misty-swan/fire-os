@@ -342,4 +342,73 @@ describe("出動と活動を一つの出来事へ関連付け (T043)", () => {
     expect(await snapshot()).toEqual(before);
     expect((await link()).status).toBe(200);
   });
+
+  // T091-S6: 出動側にだけscope(PER-04)を持つoperatorは、活動を直接編集できない（403）以上、リンクもできない
+  const scopeIncidentOnly = async (incidentId: string) => {
+    const op = fx.units.a.people.operator;
+    const now = "2026-10-23T00:00:00.000Z";
+    await env.DB.prepare(
+      "INSERT INTO scope_assignments (id, unit_id, member_id, entity_type, entity_id, permissions, created_at, updated_at, created_by, actor_kind) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    ).bind(crypto.randomUUID(), fx.units.a.id, op.memberId, "incident", incidentId, '["PER-04"]', now, now, fx.units.a.people.admin.userId, "human").run();
+    return op;
+  };
+  const mkActivity = async (title: string) => {
+    const res = await fx.client(fx.units.a.people.admin).request("POST", "/api/v1/activities", {
+      title, kind: "訓練", plannedStartsAt: "2026-10-25T01:00:00.000Z", locationText: "架空市詰所",
+      ownerMemberId: fx.units.a.people.officer.memberId!, audienceMemberIds: [fx.units.a.people.member.memberId!],
+    }, idem());
+    expect(res.status).toBe(201);
+    return (await json(res)).data! as unknown as ActivityData;
+  };
+
+  it("operator_scoped_to_incident_only_cannot_link_activity", async () => {
+    const admin = fx.units.a.people.admin;
+    const act = await mkActivity("S6 リンク対象の活動（架空）");
+    const inc = (await json(await fx.client(admin).request("POST", "/api/v1/incidents", {
+      kind: "training", occurredAt: "2026-10-25T02:00:00.000Z", summary: "S6 出動（架空）",
+    }, idem()))).data! as unknown as IncidentData;
+    const op = await scopeIncidentOnly(inc.id);
+
+    // 前提: この operator は活動を直接編集できない（403）
+    const patch = await fx.client(op).request("PATCH", `/api/v1/activities/${act.id}`, { version: act.version, title: "書換え（架空）", reason: "確認" }, idem());
+    expect(patch.status).toBe(403);
+
+    const actBefore = (await fx.rows("activities", { id: act.id }))[0]!;
+    const opBefore = (await fx.rows("operations", { id: act.operationId }))[0]!;
+    const eventsBefore = (await fx.rows("activity_events", { activity_id: act.id })).length;
+    const incOp = (await fx.rows("operations", { id: inc.operationId }))[0]!;
+    const body = {
+      version: inc.version, activityId: act.id, activityVersion: act.version,
+      operationVersions: { [inc.operationId]: incOp.version as number, [act.operationId]: opBefore.version as number },
+      reason: "出動側scopeだけで活動へリンク（架空）",
+    };
+    const key = crypto.randomUUID();
+    const res = await fx.client(op).request("PUT", `/api/v1/incidents/${inc.id}/activity`, body, { "idempotency-key": key });
+    expect(res.status).toBe(403);
+    // 再送でも同じ（認可は鍵の既知判定より前）
+    expect((await fx.client(op).request("PUT", `/api/v1/incidents/${inc.id}/activity`, body, { "idempotency-key": key })).status).toBe(403);
+
+    expect((await fx.rows("activities", { id: act.id }))[0]).toEqual(actBefore);
+    expect((await fx.rows("operations", { id: act.operationId }))[0]).toEqual(opBefore);
+    expect((await fx.rows("activity_events", { activity_id: act.id })).length).toBe(eventsBefore);
+    expect((await fx.rows("incidents", { id: inc.id }))[0]!.activity_id).toBeNull();
+    // 対照: 活動の枠は消費されておらず、管理者の正規リンクは通る
+    expect((await fx.client(admin).request("PUT", `/api/v1/incidents/${inc.id}/activity`, body, idem())).status).toBe(200);
+  });
+
+  it("operator_scoped_to_incident_only_cannot_create_incident_linked_to_activity", async () => {
+    const admin = fx.units.a.people.admin;
+    const act = await mkActivity("S6 作成時リンク対象の活動（架空）");
+    const seed = (await json(await fx.client(admin).request("POST", "/api/v1/incidents", {
+      kind: "training", occurredAt: "2026-10-25T03:00:00.000Z", summary: "S6 scope元の出動（架空）",
+    }, idem()))).data! as unknown as IncidentData;
+    const op = await scopeIncidentOnly(seed.id);
+    const before = (await fx.rows("incidents", { unit_id: fx.units.a.id })).length;
+    const res = await fx.client(op).request("POST", "/api/v1/incidents", {
+      kind: "training", occurredAt: "2026-10-25T04:00:00.000Z", summary: "活動へ作成時リンク（架空）", activityId: act.id,
+    }, idem());
+    expect(res.status).toBe(403);
+    expect((await fx.rows("incidents", { unit_id: fx.units.a.id })).length).toBe(before);
+    expect((await fx.rows("activities", { id: act.id }))[0]!.version).toBe(act.version);
+  });
 });
